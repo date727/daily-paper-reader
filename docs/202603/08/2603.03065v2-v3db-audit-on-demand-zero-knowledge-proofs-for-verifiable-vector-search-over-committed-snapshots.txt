@@ -1,0 +1,1053 @@
+Title: V3DB: Audit-on-Demand Zero-Knowledge Proofs for Verifiable Vector Search over Committed Snapshots
+
+URL Source: https://arxiv.org/pdf/2603.03065v2
+
+Published Time: Fri, 06 Mar 2026 01:55:32 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# V3DB: Audit-on-Demand Zero-Knowledge Proofs for Verifiable Vector Search over Committed Snapshots 
+
+## Zipeng Qiu 1,∗, Wenjie Qu 2,∗, Jiaheng Zhang 2, Binhang Yuan 1,†
+
+> 1
+
+Hong Kong University of Science and Technology , 2National University of Singapore 
+
+> ∗
+
+Equal contribution , †Corresponding author 
+
+## Abstract 
+
+Dense retrieval services increasingly underpin semantic search, recommendation, and retrieval-augmented generation, yet clients typically receive only a top-k list with no auditable evidence of how it was produced. We present V3DB , a verifiable, versioned vector-search service that enables audit-on-demand correctness checks for approximate nearest-neighbour (ANN) retrieval executed by a potentially untrusted service provider. V3DB commits to each corpus snapshot and standardises an IVF-PQ search pipeline into a fixed-shape, five-step query semantics. Given a public snapshot commitment and a query embedding, the service returns the top-k payloads and, when challenged, produces a succinct zero-knowledge proof that the output is exactly the result of executing the published semantics on the committed snapshot—without revealing the embedding corpus or private index contents. To make proving practical, V3DB avoids costly in-circuit sorting and random access by combining multiset equality/inclusion checks with lightweight boundary conditions. Our prototype implementation based on Plonky2 achieves up to 22 × faster proving and up to 40% lower peak memory consumption than the circuit-only baseline, with millisecond-level verification time. Github Repo at https://github.com/TabibitoQZP/zk-IVF-PQ .
+
+## 1 Introduction 
+
+Dense retrieval, i.e., similarity search over embedding vectors, has become a standard primitive for various applications such as semantic search, recommendation, and retrieval-augmented generation (RAG) [ 1– 4]. This shift has driven the widespread adoption of vector-search services for approximate nearest-neighbour (ANN) queries over large embedding corpora [ 5–7]. In many real-world deployments, the retrieval pipeline is executed by a remote service provider: a vector-search service maintains the embedding corpus and ANN index and exposes a retrieval API, while clients observe only the returned top-k list. This separation creates a fundamental accountability gap: a retrieval API typically returns only the final ranked list, with little or no evidence of how the search was executed. When a client disputes a result, the service has no efficient way to demonstrate that it executes the mutually agreed-upon ANN procedure—using the promised parameters on the claimed snapshot of its corpus and index. In particular, the service could stealthily reduce the search budget, skip expensive steps, replay a stale snapshot, or introduce subtle ranking biases under operational or business pressure, and such deviations are difficult to detect from the top-k output alone. This raises the essential question: when challenged, can a retrieval service provide a short, efficiently checkable certificate that its returned top-k list is exactly the output of a publicly specified ANN query semantics on a specific committed corpus snapshot, without requiring the client to download the corpus or rerun search from scratch? 
+
+1
+
+> arXiv:2603.03065v2 [cs.DB] 5 Mar 2026
+
+(i) Index Shaping (ii) Versioned 
+
+Snapshot Layer        
+
+> 𝒞 !,!⋯𝒞 !,#$%
+> ⋮⋱⋮
+> 𝒞 &$%,!⋯𝒞 &$%,#$%
+> Codebook
+> Snapshot Commitment com
+
+(iii) Proving Backend                              
+
+> V3DB
+> Prover Proof 𝜋
+> Rebalancing & Padding
+> Trace
+> Original Database
+> 𝑣 !item !
+> !
+> …
+> 𝑣 '!$%
+> 𝑣 %item %
+> !
+> item '!$%
+> !
+> query 𝑞
+> item %
+> item !
+> item ($%
+> …
+> root cb root mk Figure 1 Workflow of V3DB . (i) Index shaping : from the original database {(vt,item 0
+> t)}N0−1
+> t=0 , build a fixed-shape IVF-PQ snapshot via rebalancing and padding. (ii) Versioned snapshot layer : publish a snapshot identifier com = (root mk ,root cb ),where root mk is a Merkle root committing to the fixed-shape IVF layout and root cb is a hash digest of the PQ codebooks. (iii) Proving backend : on query embedding q, return top-kpayloads (item 0, . . . , item k−1)and, upon challenge, a succinct ZK proof πthat the list equals the output of the fixed-shape IVF-PQ semantics on the snapshot committed by com , while hiding snapshot contents and the trace.
+
+The ability to audit disputed retrieval results is important in high-value content settings such as patents, finance, and legal search, where retrieval outputs can directly influence key decisions. Commercial offerings increasingly incorporate semantic search over proprietary corpora (e.g., AI-powered patent semantic search and AI patent search in patent analytics platforms [ 8, 9]) and expose content-retrieval workflows via APIs [ 10 , 11 ]. Moreover, a provider may have incentives to manipulate results in ways that are difficult to diagnose externally—for example, suppressing unfavourable items about a sponsor, boosting favourable coverage, or answering from an older snapshot that omits recent updates. At the same time, the underlying corpora, embeddings, and index structures are often proprietary, licensed, or sensitive (e.g., paywalled archives, internal repositories used for RAG, user preference profiles, or biometric templates). Releasing the corpus or index to “prove innocence” is therefore unacceptable. A practical audit mechanism must be compact and cheap to check, enabling audit-on-demand dispute resolution by clients and third-party auditors, while disclosing only what the application intends to reveal. Achieving private, auditable retrieval at a realistic scale is challenging because of the integrity and privacy requirements. There are two broad approaches. One can run retrieval inside trusted execution environments (TEEs) and use remote attestation to provide integrity guarantees about a measured implementation, which can reduce disclosure but shifts trust to hardware vendors, attestation infrastructure, and side-channel assumptions; it also requires always-on protected execution, regardless of whether a query is ever audited later [ 12 – 14 ]. Alternatively, one can use cryptographic proofs that are generated on demand and can be checked by any party without trusting the operator. We focus on the latter, and in particular on succinct zero-knowledge (ZK) proofs to keep the corpus and index private during verification [ 15 – 18 ]. At a high level, ZK proofs establish that there exists a private witness—including intermediate values of the retrieval execution—that satisfies a fixed set of arithmetic constraints; prover cost is therefore driven by the circuit size. ZK proofs impose two practical constraints that shape verifiable retrieval. First , generating a ZK proof is typically substantially more expensive than plaintext execution and scales poorly with the number of constraints, so the proved computation must have a tightly controlled complexity budget. Second , the proved computation must be expressed as a fixed arithmetic circuit: data-dependent control flow (branching) and irregular memory access must be compiled into static relations, often making such steps expensive. Consequently, certifying an exact full scan over all N D -dimensional vectors would require encoding Θ( N D )
+
+distance computations and would lead to an impractically large circuit. This motivates us to focus on an efficient ANN pipeline that avoids full scans and admits a standardized, fixed-shape query procedure. We therefore target inverted-file indices using product quantization (IVF-PQ) [ 5], whose query execution proceeds in a small sequence of budgeted steps. However, even IVF-PQ contains 2primitives that are expensive in ZK circuits: probe selection and final top-k extraction are comparison-heavy, candidate scoring relies on lookup tables indexed by PQ codes, and binding accessed snapshot values to a specific version requires authentication for soundness (e.g., Merkle paths inside the proof) [19]. To the best of our knowledge, existing verifiable ANN query schemes in outsourced databases primarily rely on authenticated indices and verification objects (VOs). Such approaches can certify soundness and completeness but typically reveal access-dependent metadata, which is undesirable in many practical settings for large-scale dense retrieval over sensitive corpora [20, 21]. We address this integrity–privacy gap by instantiating retrieval evidence with succinct ZK proofs and present 
+
+V3DB , a verifiable, versioned vector database for dense retrieval at scale. In V3DB , we standardize IVF-PQ into a fixed-shape, five-step query semantics that is amenable to proof generation. Given a public snapshot commitment com and a query embedding, the service returns a top-k list of application-defined payloads and, upon challenge from the client, produces a succinct ZK proof certifying that the list is exactly the output of executing this semantics on the snapshot identified by com , while hiding the underlying corpus embeddings and private index contents from the verifier. Figure 1 sketches the end-to-end workflow of V3DB : the operator shapes a raw vector database into a fixed-shape IVF-PQ snapshot, commits to each snapshot version, and supports audit-on-demand ZK proofs for disputed query results. We implement both a circuit-only baseline and our optimized multiset-based instantiation in Plonky2 and evaluate their end-to-end costs in detail; the multiset-based design reduces proving time by up to ∼ 22 × and peak memory by up to ∼ 40% while keeping verification in milliseconds. In summary, we make the following contributions: • System and IVF-PQ instantiation. We present V3DB for verifiable dense retrieval over committed snapshots. We instantiate it for IVF-PQ by standardizing a fixed-shape, five-step query semantics and designing a ZK-friendly index-shaping pipeline that enables fixed-shape execution at scale. • Efficient proving backend. Instead of an impractical circuit-only baseline that directly encodes sorting/selec-tion and random access in-circuit, we avoid these bottlenecks via multiset equality/inclusion checks plus lightweight boundary conditions, and analyze the resulting gate complexity. • Implementation and evaluation. We implement both a baseline and an optimized design, and show through end-to-end evaluation that the optimized design makes audit-on-demand proof generation practical under realistic budgets. 
+
+## 2 Preliminaries 
+
+2.1 ZK Proofs 
+
+Zero-knowledge succinct non-interactive arguments of knowledge (ZK-SNARKs) let a prover convince a verifier that a publicly stated computation is correct, without revealing private witness values beyond what is implied by the public inputs/outputs [ 15 – 17 , 22 ]. In V3DB , the public interface consists of a query embedding q, a snapshot version commitment com , and a returned top-k payload list that the verifier checks against the claimed computation. 
+
+> Circuits as polynomial constraints
+
+. In circuit-based SNARKs, the proved computation is expressed as a fixed constraint system: a set of low-degree algebraic relations over a field F. The prover supplies witness values for intermediate wires, and the verifier checks a short proof that these constraints are satisfiable with the claimed public inputs alone. As a minimal example, suppose a circuit computes two candidate values x0, x 1 ∈ F (e.g., from two alternative branches) and uses a private bit b ∈ { 0, 1} to select the public output y accordingly. One can enforce: b(b − 1) = 0 , y = (1 − b)x0 + bx 1. This encodes conditional behavior without runtime branching. 
+
+> Fixed-shape execution
+
+. A circuit has a predetermined set of constraints and fixed loop bounds across all instances, so data-dependent control flow and irregular memory addressing must be compiled into static relations (e.g., algebraic selection and fixed-size scans). In the example above, if x0 and x1 come from two expensive branches, a plaintext program evaluates only one branch, but a circuit must constrain both branches 3and then select using b. This motivates our fixed-shape IVF-PQ semantics and our focus on avoiding costly in-circuit sorting/selection and random access. 
+
+> Fixed-point representation and range bounds
+
+. Circuit constraints are defined over a finite field F, so we represent real-valued embeddings and centroids using fixed-point integers embedded in F under a public scaling and bit-width chosen per deployment. Our proofs therefore attest to correctness with respect to this encoded representation in the circuit. To make comparisons and distance computations well defined, we range-bound all relevant witness values so that intermediate results do not wrap around modulo F. Our experiments instantiate this encoding in our prototype and quantify its impact on retrieval utility in practice. 
+
+> Gate counts and proving time (binning effect)
+
+. We track circuit size by the number of gate rows G in a PLONK-like system [ 23 ]. Modern provers use FFT-based polynomial operations and pad to a power-of-two evaluation domain [ 24 ], so we define GB := 2 ⌈log 2 G⌉ and approximate proving time as Θ( GB log 2 GB ). As a result, reducing G can yield outsized speedups when it pushes the circuit into a smaller GB bin. For the example constraints above, treating each add/sub/mul as Θ(1) rows gives a crude estimate G ≈ 6 (1 mul + 1 sub for the booleanity constraint and 2 mul + 1 sub + 1 add for the selection constraint), hence GB = 8 .
+
+2.2 IVF-PQ 
+
+IVF-PQ is a widely used ANN index that avoids a full scan by probing a small number of inverted lists and using compact PQ codes for fast approximate scoring [5, 7]. 
+
+> Coarse partition (IVF)
+
+. IVF first trains a set of coarse centroids (e.g., via k-means [ 25 , 26 ]) and assigns each database vector to its nearest centroid, forming one inverted list per centroid. At query time, instead of scanning the database, the search probes only several of the closest inverted lists, yielding a controlled scan budget. 
+
+> Product quantization (PQ) and table-based scoring
+
+. To reduce storage and speed up per-candidate scoring, IVF-PQ applies product quantization to database residuals (database vector minus centroid). Each database vector is stored as a code: the residual is split into blocks, each block is quantized by a small codebook, and the resulting code indices are stored. At query time, the engine builds asymmetric distance computation (ADC) lookup tables from the query residual for each probed list and uses the PQ code indices to fetch and sum table entries, producing approximate distances. 
+
+> From plain IVF-PQ to verifiable semantics
+
+. Together, the IVF and PQ components make IVF-PQ a natural target for audit-on-demand verification: query processing decomposes into a small sequence of steps with explicit budgets (probing and scanning), enabling a well-scoped correctness statement. However, directly proving the plaintext pipeline in a circuit is inefficient. First, inverted lists have variable lengths, inducing data-dependent loop bounds and memory accesses, while circuits require fixed-shape execution. Second, probe selection and final top-k extraction rely on ordering, and PQ scoring uses data-dependent table lookups; both translate to comparison-heavy selection and random access in circuits. To obtain a circuit-friendly statement, V3DB 
+
+standardizes IVF-PQ into a fixed-shape semantics by enforcing a per-list capacity bound via rebalancing and padding each list to a uniform number of slots with a validity flag. We detail index shaping and formalize the five-step semantics in Section 4. 
+
+> Notation and terminology
+
+. For the remainder of the paper, we use the following notation. Let nlist denote the number of inverted lists (coarse centroids) and write the centroid table as μ := ( μ0, . . . , μ nlist −1), where μi is the centroid associated with list i. An IVF layout consists of this centroid table together with the corresponding inverted lists. For PQ, we use M sub-quantizers, each with a codebook of size K; we write the PQ codebooks as 
+
+{C m,k }, where m ∈ { 0, . . . , M − 1} and k ∈ { 0, . . . , K − 1}. Intuitively, each Cm,k is a learned codeword used for table-based scoring. In V3DB , we work with a fixed-shape IVF layout obtained by rebalancing and padding each list to exactly n slots (a public per-list capacity bound) with an explicit validity flag, and we refer to the fixed-shape IVF layout together with the PQ codebooks as a snapshot .
+
+## 3 System Overview 
+
+4Symbol Meaning              
+
+> N0number of vectors in the dataset (before shaping/padding)
+> Dembedding vector dimension
+> nlist number of inverted lists (coarse centroids)
+> nprobe number of lists probed per query
+> nper-list capacity bound (each list padded to exactly nslots)
+> Mnumber of PQ sub-quantizers
+> Kcodebook size per sub-quantizer
+> ktop-kpayload list size
+> tcmp comparison bit-length parameter in circuits
+> Table 1 Key notation for our fixed-shape IVF-PQ configuration, used throughout the paper.
+
+3.1 Workflow and Problem Statement 
+
+This subsection introduces V3DB in four parts. The first three are the workflow components depicted in Figure 1: index shaping, the versioned snapshot commitment layer, and the proving backend. We then specify the public interface and the proved statement that the verifier checks. Throughout, we fix a public IVF-PQ configuration, which determines both the plaintext workflow and the circuit shape; Table 1 summarizes the notation used throughout the paper. 
+
+> Index shaping (offline)
+
+. Given a raw dataset {(vt, item 0 
+
+> t
+
+)}N0−1 
+
+> t=0
+
+of N0 embedding vectors vt with application-defined payloads item 0 
+
+> t
+
+and a public configuration (Table 1), the operator builds a fixed-shape IVF-PQ snapshot by applying capacity-constrained rebalancing so that each list has at most n valid records and then padding to exactly n slots with a validity flag per slot. 
+
+> Versioned snapshot layer (offline)
+
+. The operator commits to each snapshot version by publishing a public version identifier com before serving queries. We detail the commitment construction and snapshot-binding constraints in Section 4. When the database is updated, the operator repeats index shaping and publishes a new commitment, yielding an epoch-style version history. 
+
+> Proving backend (online/audit)
+
+. Given a query embedding q and a claimed snapshot identifier com , the service returns a top-k payload list (item 0, . . . , item k−1). Upon challenge, it produces a succinct proof π certifying that there exists a private snapshot consistent with com such that the returned list is exactly the output of our standardized five-step, fixed-shape IVF-PQ semantics. The ZK property hides the snapshot contents and the execution trace from the verifier during verification. 
+
+> Public interface and proved statement
+
+. Given (com , q ), the service returns (item 0, . . . , item k−1) to the verifier. Upon challenge, it produces a proof π such that 
+
+Verify  com , q, (item 0, . . . , item k−1), π  ∈ { 1, 0}.
+
+The verifier accepts only when the returned list exactly matches the output of the standardized semantics on the snapshot version committed by com . The only disclosed information is what the application reveals through (com , q ) and the returned list. 
+
+3.2 Threat Model 
+
+We focus on the integrity of outsourced dense retrieval. We consider a malicious retrieval operator who controls the corpus, index, and execution and may deviate arbitrarily from the publicly specified workflow while still returning a syntactically valid top-k list. We target integrity violations, including (i) workflow deviation (e.g., downgrading parameters, skipping steps, cherry-picking candidates, or biasing ranking) and (ii) version equivocation (e.g., answering using a stale or mixed snapshot while claiming a committed version). The soundness of proof statement rules out any deviation that would make the returned list differ from the standardized semantics on a snapshot consistent with the claimed commitment com .5Step Circuit-only baseline Multiset instantiation Key idea (i) Centroid distances Θ( nlist D) same —(ii) Probe selection Θ( nprobe nlist tcmp ) Θ( nlist tcmp ) multiset equality + boundary checks (iii) ADC lookup tables Θ( nprobe KD ) same —(iv) Candidate distances Θ( nprobe nM K ) Θ( tcmp nprobe M max {K, n }) multiset inclusion + comparisons (v) Final Top-k selection Θ( kn probe nt cmp ) Θ( nprobe nt cmp ) multiset equality + boundary checks  
+
+> Table 2
+
+Dominant asymptotic arithmetic-gate counts of the query-semantics circuit per standardized IVF-PQ step, comparing the circuit-only baseline and our multiset-based instantiation. Notation follows Table 1. Snapshot binding adds an additional Θ( nprobe log nlist ) Merkle-opening overhead (Equation 3). 
+
+> Scope
+
+. We treat q as a public embedding and focus on proving the retrieval stage. Proving the embedding computation (e.g., the neural inference that produces q) is orthogonal and has been studied by recent ZKML systems [ 27 , 28 ]. We also do not aim to provide access-pattern privacy or prevent denial-of-service (e.g., refusing to answer or refusing to generate a proof); rather, we make incorrect execution detectable whenever a proof is produced. Finally, V3DB proves correctness relative to a public commitment com ; selecting which commitment is current/authorized is handled by the application layer (e.g., signed bulletins or transparency logs). 
+
+3.3 Proving Cost Overview 
+
+In V3DB , the dominant audit-on-demand cost is proof generation rather than plaintext query execution, so we focus on minimizing the gate count needed to express our standardized semantics. A direct circuit-only encoding is expensive because IVF-PQ relies heavily on (i) ordering operations for probe selection and final top-k extraction and (ii) data-dependent table lookups for PQ-based scoring. The circuit-only baseline encodes these primitives directly in-circuit, while our multiset-based design shifts them off-circuit and proves lightweight consistency relations (multiset equality/inclusion plus boundary checks). 
+
+> Budget abstractions
+
+. To discuss configuration trade-offs, we use two standard IVF-PQ tuning notions [ 5]. The 
+
+scan budget is the number of PQ codes evaluated per query, 
+
+Nsel := nprobe · n, 
+
+and the code budget is the number of bits stored per vector, 
+
+B := M log 2 K, 
+
+where we assume K is a power of two as in standard IVF-PQ deployments. When the padded capacity is fixed to N := nlist · n, fixing Nsel is equivalent to fixing the probing ratio r := nprobe /n list = Nsel /N , since 
+
+Nsel = r · N . Accordingly, later references to a “fixed scan budget” may specify either Nsel or (N, r ), depending on context. We use these notions to express both our cost-driven configuration selection and the evaluation sweeps. 
+
+> Five-step semantics and per-step costs
+
+. Under our standardized semantics, query execution follows five steps: (i) compute centroid distances; (ii) select the nprobe closest lists; (iii) construct ADC lookup tables for the probed lists; (iv) score all candidate slots via PQ-table lookups; and (v) extract the final top-k payloads. Table 2 summarizes the dominant gate-count terms of each step under the circuit-only baseline and our multiset-based instantiation. 6Summing the dominant terms yields the gate complexity: 
+
+Gbaseline = Θ 
+
+
+
+nlist D + nprobe nlist tcmp + nprobe KD 
+
++ nprobe nM K + kn probe nt cmp 
+
+
+
+, (1) 
+
+Gmultiset = Θ 
+
+
+
+nlist D + nlist tcmp + nprobe KD 
+
++ tcmp nprobe M max {K, n } + nprobe nt cmp 
+
+
+
+. (2) Let Gcommit denote the gate count of the snapshot commitment-check circuit. Under a hash-cost abstraction, our analysis yields 
+
+Gcommit = Θ 
+
+
+
+KD + nlist D + nprobe (nM + D + log nlist )
+
+
+
+. (3) The end-to-end proof circuit composes the query-semantics constraints (Equations 1–2) with the snapshot-binding constraints (Equation 3). This yields the dominant end-to-end gate complexity: 
+
+Gtotal baseline = Θ 
+
+
+
+nlist D + nprobe nlist tcmp + nprobe KD 
+
++ nprobe nM K + kn probe nt cmp 
+
++ nprobe log nlist 
+
+
+
+, (4) 
+
+Gtotal multiset = Θ 
+
+
+
+nlist D + nlist tcmp + nprobe KD 
+
++ tcmp nprobe M max {K, n }
+
++ nprobe nt cmp + nprobe log nlist 
+
+
+
+. (5) Compared with the query-semantics costs Gbaseline and Gmultiset , snapshot binding introduces an additional 
+
+Θ( nprobe log nlist ) Merkle-authentication term (Equation 3). Experiment 3 shows this overhead is small in our evaluated regimes; we therefore omit the Θ( nprobe log nlist ) term in later scaling discussions unless stated otherwise. We leverage these expressions to derive a configuration-selection procedure under fixed budgets (Section 4.8). 
+
+## 4 Circuit Design 
+
+This section describes how V3DB realizes our standardized fixed-shape IVF-PQ semantics as succinct ZK circuits. We prove the verifiable-retrieval statement from Section 3.1: given public inputs (com , q, (item 0, . . . , item k−1)) ,the prover shows that the returned payload list is exactly the output of the reference semantics on the snapshot version committed by com . The witness includes snapshot values (centroids, PQ codebooks, opened inverted-list records, and Merkle authentication paths) and intermediate trace values required by the semantics; all of these remain hidden by ZK, while verification remains public and cheap. We construct two end-to-end circuit instantiations for the same statement. The circuit-only baseline directly encodes ordering and random access in-circuit, while our multiset-based design shifts these expensive primitives off-circuit and verifies consistency using multiset equality/inclusion plus lightweight boundary checks. Both instantiations prove the same public interface and differ only in how the reference relations are enforced. We use the shorthand [Z] := {0, 1, . . . , Z − 1} to denote integer index ranges. 
+
+4.1 Index Shaping via Rebalancing 
+
+After standard k-means, inverted lists can be highly imbalanced. Let Xi denote the set of database vectors assigned to centroid μi and let ni := |X i| be its size. A naive fixed-shape layout sets the padded list capacity to the maximum cluster size, 
+
+n = max {n0, n 1, . . . , n nlist −1},
+
+7which is unstable: a single outlier cluster inflates padding for all lists and increases both the scan cost and the circuit size. Instead, V3DB fixes a hard capacity bound n in advance and post-processes the initial assignments using a lightweight rebalancing procedure inspired by [29] to enforce a uniform per-list bound: 
+
+|X i| ≤ n for all i ∈ [nlist ].
+
+With N := nlist · n ≥ N0, Algorithm 1 iteratively moves points out of overfull clusters to the nearest available underfull clusters until all clusters satisfy the bound. We then pad each list to exactly n slots and attach a validity flag fi,j ∈ { 0, 1} for each slot. Each padded slot stores a record (fi,j , item i,j , v PQ  
+
+> i,j
+
+), where item i,j is an application-defined payload and vPQ  
+
+> i,j
+
+is the PQ code; for padding slots ( fi,j = 0 ), the remaining fields may be arbitrary. 
+
+Algorithm 1 Capacity-constrained cluster rebalancing to enforce the per-list bound |X i| ≤ n in the fixed-shape IVF layout. 
+
+Require: Centroid table μ = ( μ0, μ 1, . . . , μ nlist −1)
+
+Require: Clustered points Xi = {vi,j | j ∈ [ni]} for each cluster i
+
+Require: Capacity bound n
+
+Ensure: Updated clusters {X i} such that |X i| ≤ n for all i
+
+while ∃ i s.t. ni > n do               
+
+> O← { i|ni> n },F← { t|nt< n }▷overfull / free clusters
+> M ← ∅▷candidate moves
+
+for each i ∈ O do for each v ∈ X i do                 
+
+> t⋆←arg min t∈F∥v−μt∥22
+> ∆( v, i )← ∥ v−μt⋆∥22− ∥ v−μi∥22
+> Add (v, i, t ⋆,∆( v, i )) to M
+
+end for end for    
+
+> Sort Mby increasing ∆
+
+for each (v, i, t, ∆) ∈ M in order do if ni > n and nt < n and v ∈ X i then              
+
+> Xi← X i\ { v},Xt← X t∪ { v}
+> ni←ni−1,nt←nt+ 1
+
+end if end for end while return {X i}nlist −1
+
+> i=0
+
+4.2 Fixed-Shape Five-Step IVF-PQ Semantics 
+
+We specify the fixed-shape snapshot model used by our circuits and by the reference semantics. The parameters are: database size N0, padded capacity N := nlist · n, vector dimension D, number of inverted lists nlist ,number of probed lists nprobe , top-k size k, per-list capacity n, and PQ parameters (M, K ) where D = M d and each block uses a codebook of size K. The committed snapshot contains: • Centroids μ = ( μ0, . . . , μ nlist −1) with μi ∈ FD .• PQ codebooks {C m,k }m∈[M ],k ∈[K] with Cm,k ∈ Fd.• Fixed-shape inverted lists. For each list i ∈ [nlist ] and slot j ∈ [n], the snapshot stores a record (fi,j , item i,j , v PQ  
+
+> i,j
+
+),where fi,j ∈ { 0, 1} is a validity flag, item i,j is an application-defined payload, and vPQ  
+
+> i,j
+
+= ( v(0)  
+
+> i,j
+
+, . . . , v (M −1)  
+
+> i,j
+
+) ∈
+
+[K]M is the PQ code. If fi,j = 0 , the slot is padding and the remaining fields are arbitrary. We use squared ℓ2 distance over F throughout: 
+
+dist (x, y ) := 
+
+> D−1
+
+X
+
+> t=0
+
+(xt − yt)2.
+
+8We now specify the IVF-PQ query computation that our proof system attests to. Given a query q ∈ FD and a public snapshot commitment com , the prover claims that there exists a fixed-shape snapshot consistent with 
+
+com such that the public output is a length-k list of payloads (item 0, . . . , item k−1) produced by the following five-step procedure for that query. 
+
+Step 1. Centroid distances . Define centroid distances 
+
+di := dist (q, μ i), i ∈ [nlist ],
+
+and the index–distance sequence 
+
+Sorig idx ,dist :=  (0 , d 0), (1 , d 1), . . . , (nlist − 1, d nlist −1).
+
+Step 2. Probe selection . Sort Sorig idx ,dist by the distance to obtain 
+
+Ssorted idx ,dist :=  (i0, d i0 ), (i1, d i1 ), . . . , (inlist −1, d inlist −1 ),
+
+where (i0, . . . , i nlist −1) is a permutation of [nlist ]. We only require the first nprobe entries to be ordered and to have distances no larger than the remaining ones: 
+
+di0 ≤ di1 ≤ · · · ≤ dinprobe −1 and 
+
+dinprobe −1 ≤ dit for all t ∈ { nprobe , . . . , n list − 1}.
+
+The probed set is defined as the first nprobe indices, 
+
+P (q) := ( i0, . . . , i nprobe −1), |P (q)| = nprobe .
+
+Step 3. ADC lookup tables . For each probed list i ∈ P (q), form the residual query q − μi, split it into M blocks 
+
+(q − μi)(m) ∈ Fd (recall D = M d ), and define the ADC lookup tables 
+
+LUT i,m,k := dist  Cm,k , (q − μi)(m), m ∈ [M ], k ∈ [K].
+
+Step 4. Candidate distances . For each i ∈ P (q) and each slot j ∈ [n], define the ADC distance 
+
+edi,j :=  
+
+> M−1
+
+X
+
+> m=0
+
+LUT i,m, v (m)
+
+> i,j
+
+.
+
+To ensure padded entries never affect the result, fix a public constant dmax that exceeds any attainable edi,j for valid slots (under the enforced range bounds), and define the masked distance 
+
+Di,j := fi,j · edi,j + (1 − fi,j ) · dmax .
+
+Collect all candidate pairs into the flattened sequence 
+
+Sorig item ,dist :=  (item i,j , D i,j ) i ∈ P (q), j ∈ [n],
+
+which has length Nsel (i.e, the scan budget). 
+
+Step 5. Final top-k selection . View Sorig item ,dist as a length-Nsel sequence of pairs. Sort it by the distance component to obtain 
+
+Ssorted item ,dist :=  (item 0, D 0), (item 1, D 1), . . . , (item Nsel −1, D Nsel −1),
+
+where we only require the first k entries to be ordered and to have distances no larger than the remaining ones: D0 ≤ D1 ≤ · · · ≤ Dk−1 and 
+
+Dk−1 ≤ Dt for all t ∈ { k, . . . , N sel − 1}.
+
+The query output is the first k items in this order: 
+
+(item 0, item 1, . . . , item k−1).
+
+94.3 Snapshot Commitments 
+
+To bind each proof to a fixed IVF-PQ snapshot version while keeping the snapshot contents private, the operator publishes a public commitment com before answering queries. We instantiate com using a SNARK-friendly hash function Hash and Merkle trees [ 19 ]. In Plonky2, Hash is instantiated with Poseidon [ 30 ]. We model 
+
+Hash as mapping a fixed-length sequence of field elements to a single digest in F.We commit to an IVF-PQ snapshot in two parts: (i) a hierarchical Merkle root root mk covering the fixed-shape IVF layout (the centroid table μ and padded inverted lists) and (ii) a hash digest root cb covering the PQ codebooks. We write com := (root mk , root cb ). Figure 2 illustrates the resulting hierarchy of root mk .𝑖 , 𝑗 , 𝑓 !,#, item !,#, 𝑣 !,#   
+
+> PQ
+> …
+> …
+> …
+> …
+> Hash value of left and right leave
+> Hash value of a sequence
+> (𝑖 ,𝜇 !,root !)
+> Figure 2
+
+Hierarchical Merkle commitment for the fixed-shape IVF layout. The top-level root root mk binds the centroid table μ and the padded inverted-list slot records. 
+
+> Inverted-list leaves and list roots
+
+. For each list i ∈ [nlist ] and slot j ∈ [n], define the leaf digest 
+
+hash i,j := Hash  i, j, f i,j , item i,j , v PQ 
+
+> i,j
+
+,
+
+where Hash (·) absorbs the M components of vPQ  
+
+> i,j
+
+(from v(0)  
+
+> i,j
+
+to v(M −1)  
+
+> i,j
+
+) in a fixed canonical order. Let root i
+
+denote the Merkle root of list i, computed as 
+
+root i := MerkleTree (hash i, 0, . . . , hash i,n −1).
+
+For simplicity, we assume n is a power of two so the Merkle tree is full and balanced; otherwise, the snapshot layer can pad to the next power of two. 
+
+> Centroid binding and top-level root
+
+. We bind each centroid together with its list root by defining 
+
+hash i := Hash (i, μ i, root i),
+
+where Hash (i, μ i, root i) absorbs the D coordinates of μi in a fixed canonical order. The top-level commitment to the IVF layout is 
+
+root mk := MerkleTree (hash 0, . . . , hash nlist −1).
+
+Similarly, we assume nlist is a power of two (or pad in the commitment layer when needed). 
+
+> Codebook digest
+
+. Since PQ codebooks are static once trained, we commit to them by hashing a canonical flattening: 
+
+root cb := Hash (C0,0, . . . , C0,K −1, C1,0, . . . , CM −1,K −1).
+
+4.4 Snapshot-Binding Circuit 
+
+> Commitment-check constraints
+
+. Our end-to-end statement binds the private snapshot values used in the five-step semantics to the public commitment com . The query circuit uses witness values for: (i) the centroid table μ
+
+used in Steps 1–2, (ii) the PQ codebooks {C m,k } used in Step 3, and (iii) the padded slot records of the probed inverted lists used in Step 4. The commitment-check subcircuit enforces three groups of constraints:  
+
+> Codebooks.
+
+Recompute root ′ 
+
+> cb
+
+by hashing the canonical flattening of the PQ codebooks and enforce root ′ 
+
+> cb
+
+=root cb .10 Centroids and list digests. Since probe selection depends on centroid distances to all lists, the circuit binds all witness centroids to root mk together with per-list digests. It treats {root i}i∈[nlist ] as witness list-root digests and computes 
+
+hash i := Hash (i, μ i, root i), i ∈ [nlist ],
+
+then recomputes the top-level root 
+
+root ′ 
+
+> mk
+
+:= MerkleTree (hash 0, . . . , hash nlist −1)
+
+and enforces root ′ 
+
+> mk
+
+= root mk inside the circuit. This pins all centroids and fixes the committed list digests 
+
+{root i} without opening any full inverted lists.  
+
+> Opened probed lists.
+
+For each probed list i ∈ P (q) and each slot j ∈ [n], the circuit hashes the opened record 
+
+hash i,j := Hash  i, j, f i,j , item i,j , v (0)  
+
+> i,j
+
+, . . . , v (M −1) 
+
+> i,j
+
+,
+
+recomputes the list root 
+
+root ′ 
+
+> i
+
+:= MerkleTree (hash i, 0, . . . , hash i,n −1),
+
+and authenticates it to root mk at position i via a Merkle opening inside the proof. Concretely, the circuit computes the corresponding top-level leaf digest 
+
+hash ′ 
+
+> i
+
+:= Hash (i, μ i, root ′
+
+> i
+
+),
+
+and, using the witness sibling digests along the path, recomputes the implied root 
+
+root ′′  
+
+> mk
+
+:= MerkleOpen (hash ′
+
+> i
+
+, i ; πi),
+
+enforcing root ′′  
+
+> mk
+
+= root mk . Here πi denotes the Merkle authentication path (sibling digests) for leaf position 
+
+i, and MerkleOpen (·) is the standard iterative hashing procedure determined by the bits of i. Since Step 4 consumes all n slots of each probed list under our fixed-shape semantics, the circuit can recompute root ′
+
+> i
+
+directly from the opened records; no per-slot Merkle authentication paths are needed. Together, these constraints ensure that all snapshot values used by the IVF-PQ trace (centroids, PQ codebooks, and the entries in the probed inverted lists) are consistent with the version identifier com , while keeping the snapshot contents hidden. 
+
+> Cost
+
+. We instantiate the Merkle circuit using a SNARK-friendly hash (Poseidon in our Plonky2 implementation) and analyze it under a standard hash-cost abstraction. The resulting asymptotic gate complexity is summarized by Equation 3 and composes additively with the query-circuit costs. 
+
+4.5 Gadgets and Cost Model 
+
+We express all constraints as arithmetic relations over a field F and track circuit size via arithmetic gate counts. Witness values are range-bounded to avoid wraparound in comparisons; we write tcmp for the bit-length parameter used by our range-bounded comparison gadget in the circuit. Many subcircuits used by V3DB are standard (e.g., fixed-point arithmetic for distance/LUT construction, Poseidon hashing, and Merkle-path verification). Since our main optimization is to replace in-circuit control flow with multiset relations, we highlight the set-oriented gadgets that are central to the multiset-based design and to our gate-count analysis. 
+
+> Tuple compression ( Compress )
+
+. We reduce tuple-valued relations to set relations over single field elements via a transcript-derived challenge β ∈ F. For a tuple x = ( x0, . . . , x L−1), we define 
+
+Compress (x; β) = 
+
+> L−1
+
+X
+
+> i=0
+
+xiβi,
+
+which can be evaluated via Horner’s rule using L − 1 multiplications and L − 1 additions, for a total of 
+
+2L − 2 = Θ( L) arithmetic gates. 11 Gadget Gate complexity Gadget Gate complexity 
+
+Compress Θ( L) SetEq Θ( L)
+
+Cmp Θ( tcmp ) Incl Θ( tcmp nmax )
+
+BubblePass Θ( L t cmp ) LookUp Θ( L)
+
+Permute Θ( L) — — 
+
+> Table 3
+
+Core gadgets and their asymptotic arithmetic-gate complexity. Their informal roles are tuple compression, bounded comparison, one pass of a comparison network, swap propagation to a parallel list, multiset equality, multiset inclusion, and table lookup, respectively. Here L is the tuple/list/table length, tcmp is the comparison bit-length, and 
+
+nmax = max {| X|, |Y |} for Incl .
+
+> Range-bounded comparison (
+
+Cmp ). Let tcmp = ⌊log 2 |F|⌋ and assume x, y ∈ [0 , 2tcmp −1). We form 
+
+∆ = x − y + 2 tcmp −1 ∈ (0 , 2tcmp ).
+
+Enforcing a tcmp -bit decomposition of ∆ yields a boolean output indicating whether x < y . The resulting gate cost is Θ( tcmp ).
+
+> Multiset equality (
+
+SetEq ). After compressing tuples, multiset equality between two size-L sequences X =
+
+{x0, . . . , x L−1} and Y = {y0, . . . , y L−1} can be enforced via a single polynomial identity with a random challenge α ∈ F: L−1Y
+
+> i=0
+
+(α − xi) = 
+
+> L−1
+
+Y
+
+> i=0
+
+(α − yi).
+
+Evaluating one side uses L subtractions and L − 1 multiplications, so evaluating both sides costs 4L − 2 = Θ( L)
+
+arithmetic gates. This captures the essence of permutation-style arguments used in PLONK systems [23]. 
+
+> Multiset inclusion (
+
+Incl ). To prove multiset inclusion X ⊂M Y with multiplicities, let nmax = max {| X|, |Y |} and pad both multisets to length nmax . The prover supplies: (i) a nondecreasing ordering X′′ of the padded X
+
+and (ii) an aligned sequence Y ′′ whose multiset equals the padded Y . The circuit enforces: (a) SetEq (X, X ′′ )
+
+and SetEq (Y, Y ′′ ); (b) nondecreasing order of X′′ via (nmax − 1) comparisons; and (c) multiplicity alignment via x′′  
+
+> 0
+
+= y′′  
+
+> 0
+
+and (x′′  
+
+> i
+
+− x′′ 
+
+> i−1
+
+)( x′′  
+
+> i
+
+− y′′  
+
+> i
+
+) = 0 for all i ≥ 1. Overall, this uses two SetEq relations, (nmax − 1) 
+
+comparisons, and O(nmax ) alignment constraints. The comparisons dominate, giving an asymptotic cost 
+
+Θ( tcmp nmax ). This gadget is a circuit-level abstraction of lookup-style arguments in PLONK systems [31]. Table 3 summarizes the asymptotic gate complexity of the above set-oriented gadgets and also lists a few additional primitives used by the baseline circuit-only instantiation; we treat the latter as standard and do not expand their constraints. We now use these gadgets to describe two query-circuit instantiations: the circuit-only baseline and our multiset-based design. 
+
+4.6 Baseline Circuit-Only Design 
+
+The circuit-only baseline proves the five-step IVF-PQ semantics by encoding all data-dependent operations 
+
+inside the circuit. In particular, it realizes the ordering requirements in probe selection (Step 2) and final top-k
+
+extraction (Step 5) using explicit comparison networks, and realizes PQ-table access in candidate scoring (Step 4) via in-circuit random access. Steps 1 and 3 use standard fixed-point arithmetic constraints for distance computations. 
+
+> In-circuit ordering and selection
+
+. To enforce the Step 2 and Step 5 partial-order conditions, the baseline applies comparison-network passes (e.g., BubblePass ) to partially sort the corresponding distance sequences, while applying the same swaps to the associated index/payload sequences via Permute . This yields a cost of 
+
+Θ( nprobe nlist tcmp ) gates for probe selection and Θ( kn probe nt cmp ) gates for the final top-k extraction. 
+
+> In-circuit PQ-table access
+
+. For each candidate slot and each sub-quantizer, the baseline selects LUT i,m,v (m)
+
+> i,j
+
+from a length-K table via a LookUp gadget and sums the selected entries to obtain the approximate distance, with 12 invalid (padding) slots masked to a public upper bound. These per-candidate table lookups dominate Step 4, contributing Θ( nprobe nM K ) gates. 
+
+> Gate complexity
+
+. Overall, the baseline query-semantics circuit is dominated by comparison networks (Steps 2 and 5) and in-circuit random access (Step 4), leading to the gate complexity summarized in Equation 1. Composing it with snapshot binding (Equation 3) yields the end-to-end total in Equation 4. These bottlenecks motivate our multiset-based instantiation below, which proves the same semantics while avoiding in-circuit sorting and random access. 
+
+4.7 Multiset-Based Design 
+
+Our multiset-based design removes most data-dependent control flow from the circuit. The prover executes the IVF-PQ pipeline off-circuit to obtain the sorted intermediate sequences and the LUT contributions selected by PQ codes. The circuit recomputes the arithmetic kernels (centroid distances and LUT tables) and then verifies that the prover-supplied trace is consistent with these base quantities, using multiset relations plus lightweight order/boundary checks inside the proof. This suffices because, in our reference semantics, sorting/selection and random access only serve to justify partial-order conditions and lookup consistency. We therefore take the sorted sequences and selected LUT contributions as witness values and verify them via multiset equality/inclusion relations together with lightweight comparison. 
+
+> Shared steps (same arithmetic kernels as the baseline)
+
+. Steps 1 and 3 are identical to the baseline: the circuit recomputes all centroid distances di and the full ADC tables LUT i,m,k using fixed-point distance constraints in the same way. Moreover, the arithmetic part of Step 4 (summing M LUT entries and applying the validity mask with dmax ) is unchanged; the only difference in Step 4 is how we justify that the prover-selected LUT entries are consistent with the circuit-recomputed tables. 
+
+> Step 2. Probe selection via multiset equality + boundary checks
+
+. The circuit computes the centroid distances {di}
+
+as in Step 1 and receives a witness sequence: 
+
+Ssorted idx ,dist =  (i0, d i0 ), (i1, d i1 ), . . . , (inlist −1, d inlist −1 ).
+
+It then enforces the Step 2 relation by composing gadgets as follows in the circuit. First, it applies Compress to each pair (it, d it ) (a length-2 tuple) and uses SetEq to prove multiset equality between Ssorted idx ,dist and Sorig idx ,dist ;since indices in Sorig idx ,dist are unique, this implies that (i0, . . . , i nlist −1) is a permutation of [nlist ] and binds each claimed distance to the circuit-computed di. Second, it enforces the Step 2 partial-order conditions using Cmp : (nprobe − 1) comparisons enforce di0 ≤ · · · ≤ dinprobe −1 , and (nlist − nprobe ) comparisons enforce 
+
+dinprobe −1 ≤ dit for all t ∈ { nprobe , . . . , n list − 1}. This realizes Step 2 with Θ( nlist tcmp ) comparisons, matching the probe-selection term in Equation 2 in our analysis. 
+
+> Step 4. Candidate distances via multiset inclusion
+
+. The circuit constructs the full ADC lookup tables LUT i,m,k for all probed lists as in Step 3. Instead of performing an in-circuit LookUp for each PQ index, the prover supplies the selected LUT entries ℓ(m) 
+
+> i,j
+
+= LUT i,m,v (m)
+
+> i,j
+
+as witness values. The circuit proves the correctness of these witness entries by a multiset inclusion check. After compressing tuples, it enforces that the multiset 
+
+(i, m, v (m) 
+
+> i,j
+
+, ℓ (m) 
+
+> i,j
+
+) i ∈ P (q), j ∈ [n], m ∈ [M ]
+
+is included in the multiset of all LUT tuples 
+
+(i, m, k, LUT i,m,k ) i ∈ P (q), m ∈ [M ], k ∈ [K] .
+
+It then computes masked candidate distances Di,j using dmax and the validity flags fi,j . Since the selected-entry multiset has size |X| = nprobe nM while the full LUT multiset has size |Y | = nprobe M K , the inclusion gadget operates on nmax = nprobe M max {n, K } elements, yielding the Θ( tcmp nprobe M max {n, K }) term in Equation 2. 
+
+> Step 5. Final top-
+
+k selection via multiset equality + boundary checks . Given the flattened candidate list Sorig item ,dist ,the prover supplies a sorted witness sequence Ssorted item ,dist . The circuit applies Compress (a length-2 tuple) and 13 uses SetEq to prove multiset equality between the original and sorted candidate sequences. It then enforces the Step 5 top-k partial-order conditions using Cmp : (k − 1) comparisons enforce D0 ≤ · · · ≤ Dk−1, and 
+
+(Nsel − k) comparisons enforce Dk−1 ≤ Dt for all t ∈ { k, . . . , N sel − 1}. Finally, it outputs the first k payloads in the provided order, which are then certified by the proof. 
+
+> Gate complexity
+
+. The multiset-based query-circuit complexity is summarized by Equation 2: compared to the baseline, the probe-selection and top-k terms drop from bubble-pass networks to linear-sized boundary checks, and the per-vector LUT lookups are replaced by a single multiset inclusion relation whose size scales with 
+
+max {K, n } rather than with nK per candidate. The corresponding end-to-end total complexity is given by Equation 5. 
+
+4.8 Cost-Driven Configuration Selection 
+
+Our gate-count analysis enables a simple, deployment-oriented configuration-selection procedure. Unlike plaintext IVF-PQ tuning, which primarily optimizes retrieval utility under latency constraints, V3DB must additionally account for the cost of generating audit proofs. Proving time is governed by the padded evaluation-domain size GB := 2 ⌈log 2 G⌉, where G is the circuit gate count; thus, we target minimizing GB
+
+rather than the exact gate count. 
+
+> Budgets and knobs
+
+. We use the scan budget Nsel := nprobe · n and the code budget B := M log 2 K. In our fixed-shape setting, we treat the padded capacity N := nlist · n and the probing ratio r := nprobe /n list as deployment-level choices. Under a fixed code budget B and power-of-two K, the number of sub-quantizers is determined as M = B/ log 2 K. Accordingly, our main knobs are (nlist , K ), which jointly determine 
+
+(nprobe , n, M ). 
+
+> Fixed scan budget: near-linear scaling in nlist
+
+. Under fixed N and fixed r, we have n = N/n list and nprobe = r n list .Substituting these relations into the end-to-end cost in Equation 5 shows that, for fixed (B, K ) and in the common regime K ≤ n, the query-semantics terms are near-linear in nlist , while the remaining terms depend only on the fixed scan budget Nsel . Snapshot binding contributes an additive Θ( nprobe log nlist ) = Θ( r n list log nlist ) term due to per-probed-list Merkle openings (Equation 3). In the parameter ranges we study, this sublinear factor has a negligible impact on the observed end-to-end scaling (validated in Experiment 3).  
+
+> Fixed code budget: a unimodal dependence on K
+
+. Under a fixed code budget B (so M = B/ log 2 K) and fixed scan budget, the K-dependent terms in Equation 5 can be viewed as a trade-off between: (i) ADC-table construction, which scales as Θ( nprobe KD ) and increases with K; and (ii) candidate scoring, whose multiset-inclusion component scales as Θ( tcmp nprobe M max {K, n }). In our regime K ≤ n, the latter simplifies to 
+
+Θ( tcmp Nsel · B/ log 2 K) and decreases with K, implying a unimodal total cost in K. For completeness, when 
+
+K > n the inclusion term becomes Θ( tcmp nprobe B · K/ log 2 K) and is increasing, so the total cost grows beyond K = n.
+
+> Bin-pruned search
+
+. To operationalize these observations, we use a simple search procedure that minimizes the padded bin GB under fixed (N, B, r ). When multiple configurations fall into the same smallest bin, we choose the one with the largest (nlist , K ) to preserve retrieval utility, since larger nlist (under fixed ratio) and larger 
+
+K (under fixed B) improve recall in plaintext IVF-PQ [5]. 
+
+## 5 Experiments 
+
+We evaluate V3DB ’s end-to-end workflow for IVF-PQ top-k retrieval over committed snapshots. Our evaluation covers retrieval utility under ZK-friendly preprocessing, proof-generation cost, and ZK-aware configuration trade-offs. 
+
+> Evaluation environment
+
+. All experiments are run on a dedicated dual-socket AMD EPYC server with 256 hardware cores and 1 TiB RAM. We use the default Plonky2 configuration as in the rest of the paper (field, FRI parameters, and recursion layout). 
+
+> Budgets and bounds
+
+. We use the scan budget Nsel and code budget B to parameterize IVF-PQ configurations. Prior work suggests that, under these budgets, larger nlist (under a fixed probing ratio) and larger K (under a 14 Algorithm 2 Pruned search for a configuration that minimizes the padded bin GB under fixed code budget B
+
+and probing ratio r.
+
+Require: Padded capacity N , code budget B, probing ratio r := nprobe /n list 
+
+Require: Max nmax list , candidate codebooks K (powers of two; M = B/ log 2 K ∈ N)
+
+Require: Gate estimator GateCount (D, n list , K )
+
+Ensure: Smallest bin G⋆B and a zk-opt configuration (n⋆             
+
+> list , K ⋆)within that bin
+> Nsel ←r·N▷fixed scan budget
+> nlist ←N/N sel ▷minimum feasible layout; then nprobe = 1
+
+for each K ∈ K do       
+
+> G←GateCount (D, n list , K )
+> GB(K)←2⌈log 2G⌉
+
+end for              
+
+> G⋆B←min K∈K GB(K)
+> K ← { K∈ K | GB(K) = G⋆B}
+> (n⋆
+> list , K ⋆)←(nlist ,max K)
+
+while K̸ = ∅ and nlist < n max list do   
+
+> nlist ←2nlist
+
+for each K ∈ K do       
+
+> G←GateCount (D, n list , K )
+> GB(K)←2⌈log 2G⌉
+
+if GB (K) > G ⋆B then      
+
+> Remove Kfrom K▷ K leaves the smallest bin
+
+end if end for if K̸ = ∅ then     
+
+> (n⋆
+> list , K ⋆)←(nlist ,max K)
+
+end if end while return (G⋆B , (n⋆
+
+> list , K ⋆))
+
+fixed B) often improve recall in plaintext IVF-PQ [ 5]; in V3DB , we must additionally account for proving cost. Unless stated otherwise, we fix B = 64 and the probing ratio r := nprobe /n list = 1 /128 , which fixes the scan budget once the padded capacity N is set. We restrict to nlist ≤ 8192 and K ≤ 256 .
+
+Evaluation questions . We evaluate three research questions: • RQ-( i ). How does ZK-friendly preprocessing affect retrieval utility? Concretely, after applying fixed-point encoding and fixed-shape rebalancing/padding, how much do accuracy metrics change compared to a floating-point IVF-PQ pipeline? • RQ-( ii ). Does our multiset-based design make audit proofs practical? Concretely, how much does the optimized design reduce gate count and proving time compared to the baseline? • RQ-( iii ). Do measured proving costs match our analytic predictions, and does our tuning procedure yield ZK-efficient deployments? Concretely, under fixed scan/code budgets, do the observed gate counts and proving times follow the trends predicted by our cost analysis, and does Algorithm 2 identify practical zk-opt configurations? 
+
+5.1 Retrieval Utility Evaluation 
+
+Experiment 1 answers Question ( i ) by evaluating whether our ZK-friendly IVF-PQ preprocessing pipeline preserves retrieval utility. We evaluate two benchmark families—classic ANN and information retrieval (IR)—and report standard metrics. 
+
+Benchmarks and metrics . We detail the datasets and the corresponding evaluation metrics for each family: • Classic ANN benchmarks (SIFT1M and GIST1M) [ 5]. We use SIFT1M ( D = 128 ) and GIST1M ( D = 960 )following the original IVF-PQ study. For each query, the datasets provide top-100 ordered ground-truth nearest neighbors under ℓ2 distance. We retrieve the top-100 identifiers per query and report Recall@1 and Recall@100, where Recall@ k is the fraction of queries whose exact nearest neighbor appears in the top-k retrieved list. We also report index construction time and the number of relocated points induced by 15 rebalancing. • IR benchmark (MS MARCO passage retrieval, dev queries) [ 32 ]. Each query can have one or more relevant passages; we keep only queries with exactly one relevant passage (which is the dominant case in the dev set) so that each query has a single ground-truth answer passage. We embed queries and passages using the sentence embedding model msmarco-MiniLM-L6-v3 [ 33 , 34 ], yielding D = 384 vectors, and evaluate ranking quality via Hit@10, MRR@10, and NDCG@10 [ 35 ]. Since passage retrieval is typically evaluated with cosine similarity, we ℓ2-normalize all embeddings before applying our fixed-point encoding, which makes maximizing cosine similarity equivalent to minimizing squared ℓ2 distance. Here Hit@ k is the fraction of queries whose relevant passage appears in the top-k results, MRR@ k averages the reciprocal rank truncated at k, and NDCG@ k is computed with binary relevance and cutoff k. We retrieve the top-10 
+
+results per query and compute these metrics on the resulting rankings. 
+
+> Compared systems
+
+. We compare two prototypes: • Std-IVF-PQ (std): a standard floating-point IVF-PQ pipeline. • Zk-IVF-PQ (zk): our ZK-friendly pipeline, which applies fixed-point encoding to all vectors and then runs capacity-constrained rebalancing prior to building the IVF-PQ index. We use the ℓ2 distance semantics throughout. Following our fixed-point representation, we instantiate a 16-bit fixed-point scale in our prototype. Concretely, we take the maximum absolute coordinate value vmax over all involved real vectors and centroids, rescale it to 216 − 1, and encode each coordinate v as ⌊(2 16 − 1) · v/v max ⌉
+
+(round-to-nearest integer) before embedding it into the field F.
+
+> Configurations
+
+. For each dataset, we test two IVF-PQ settings: • High-acc: an accuracy-oriented configuration that maximizes (nlist , K ) within our global bounds ( nlist ≤
+
+8192 and K ≤ 256 ). • Zk-opt: a ZK-oriented configuration selected by Algorithm 2 to minimize the padded bin GB under the same fixed budgets.                                        
+
+> Dataset DN0NQhigh-acc zk-opt SIFT1M 128 10 6221 10 000 (8192 ,64 ,256) (1024 ,8,2048)
+> GIST1M 960 10 6221 1 000 (8192 ,64 ,256) (512 ,4,4096)
+> MS MARCO dev 384 8.8×10 6224 52 442 (8192 ,64 ,2048) (2048 ,16 ,8192)
+> Table 4
+
+Experiment 1 datasets and IVF-PQ layouts. N0 is the raw dataset size, N is the capacity after padding, and each layout is reported as (nlist , n probe , n ) for high-acc and zk-opt . PQ parameters are (M, K ) = (8 , 256) throughout. 
+
+> Summary
+
+. Experiment 1 spans three datasets (SIFT1M, GIST1M, and MS MARCO dev) and compares two pipelines (std vs. zk) under two configurations (high-acc and zk-opt); Table 4 summarizes the dataset statistics and the corresponding layouts. Since each dataset is evaluated over a large set of queries, we report metric values computed over the full query set and omit confidence intervals. 
+
+> Classic ANN benchmarks (SIFT1M and GIST1M)
+
+. Table 5 reports the results under the Experiment 1 setup (Table 4). Overall, ZK-friendly preprocessing preserves retrieval utility across both datasets and both configurations: the Recall@1 and Recall@100 values closely track the floating-point baseline, with differences on the order of 
+
+10 −3 to 10 −2. The main cost of the ZK pipeline is offline index construction time, driven by the rebalancing procedure; this overhead is most pronounced for the high-nlist configuration on GIST1M, where more points must be examined and relocated to satisfy the per-list bound. In all cases, the moved count remains a small fraction of the 10 6 valid vectors, indicating that the rebalancing perturbation is limited. 
+
+> IR benchmark (MS MARCO passage retrieval)
+
+. Table 6 reports the IR metrics under the Experiment 1 setup (Table 4). Similar to the ANN results, ZK-friendly preprocessing preserves IR utility: Hit@10, MRR@10, and NDCG@10 closely track the floating-point baseline under both configurations. As expected, the zk-opt configuration trades some accuracy for ZK efficiency compared to the high-acc configuration. 16 Config R@1 R@100 train [s] zk moved std zk std zk std zk count 
+
+SIFT1M (D = 128 , Q = 10 000 )
+
+high-acc 0.5030 0.5040 0.9527 0.9574 95.13 207.39 9 165 zk-opt 0.4457 0.4466 0.8719 0.8686 31.33 38.76 4 461 
+
+GIST1M (D = 960 , Q = 1 000 )
+
+high-acc 0.1903 0.1881 0.5310 0.5230 341.56 4542.81 39 345 zk-opt 0.1555 0.1538 0.4140 0.4190 77.99 293.26 28 986 
+
+Table 5 Utility of std-IVF-PQ (std) vs. zk-IVF-PQ (zk) on SIFT1M and GIST1M. We report Recall@1/100, index construction time, and the number of relocated vectors during rebalancing (“zk moved”).                                
+
+> Config Hit@10 MRR@10 NDCG@10 train [s] zk moved std zk std zk std zk std zk count high-acc 0.3609 0.3601 0.1914 0.1917 0.2315 0.2316 949.91 3559.39 43 733 zk-opt 0.3436 0.3443 0.1807 0.1808 0.2194 0.2197 274.38 662.77 16 767
+
+Table 6 Utility of std-IVF-PQ (std) vs. zk-IVF-PQ (zk) on MS MARCO passage retrieval (dev). We report Hit@10, MRR@10, NDCG@10, training time, and relocated-vector count. 
+
+Answer to RQ-( i ). ZK-friendly preprocessing largely preserves retrieval utility across our benchmarks: recall- and ranking-based metrics track a floating-point IVF-PQ baseline under both high-acc and zk-opt configurations. The main cost is offline index shaping (rebalancing and padding), which increases index construction time, especially at high nlist .
+
+5.2 Proof Cost Evaluation 
+
+Experiment 2 answers Question ( ii ) by benchmarking the circuit-only IVF-PQ baseline against our multiset-based design. Since verifiability requires binding the proof to a committed snapshot, all results include the snapshot commitment subcircuit. 
+
+Configurations . We consider three representative IVF-PQ configurations and summarize each as a tuple 
+
+(N, D, M, K, n list , n probe , k ), where N is the padded index capacity after rebalancing/padding. basic is a typical mid-range configuration; low-acc is a deliberately small configuration that favors the circuit-only baseline in gate count; and large is the largest configuration we can run for the circuit-only baseline in our environment (not a limit of the multiset-based design). • Basic: (8192 , 128 , 8, 16 , 256 , 16 , 64) ;• Low-acc: (8192 , 128 , 8, 1, 16 , 1, 1) ;• Large: (65536 , 256 , 16 , 256 , 512 , 64 , 128) .
+
+Methodology . We instantiate both designs with identical IVF-PQ parameters and include the same snapshot-binding subcircuit. For each configuration, we generate and verify proofs 5 times with randomness and report the mean and 95% confidence interval. 
+
+Metrics . We report end-to-end prove time, verify time, proof size, peak memory (RSS), and circuit size (the number of arithmetic gates G and the padded domain size GB := 2 ⌈log 2 G⌉, which largely governs proving time due to FFT-based polynomial operations) [24, 36]. 
+
+Results and analysis . Table 7 shows that in the basic and large settings, the multiset-based design consistently outperforms the circuit-only baseline under snapshot binding. In particular, it reduces proving time by about 
+
+3.6× (basic) and about 22 × (large), while keeping verification in the single-digit millisecond range. In contrast, in the non-practical low-acc setting ( K = 1 , k = 1 , nprobe = 1 ), the circuit-only baseline can be slightly faster 17 System Prove [s] Verify [s] Proof size [kB] Memory [GiB] G GB
+
+basic                             
+
+> circuit-only 2.8547 ±0.1067 0.0074 ±0.0000 156.2387 ±1.6769 12.5341 ±0.4172 101 016 131 072( 217 )multiset-based 0.7857 ±0.0410 0.0076 ±0.0017 144.2076 ±0.8706 11.0869 ±0.0535 21 198 32 768( 215 )
+
+low-acc                             
+
+> circuit-only 0.2696 ±0.0114 0.0057 ±0.0001 124.5500 ±1.7975 12.2770 ±0.0000 4 036 4 096( 212 )multiset-based 0.2852 ±0.0099 0.0058 ±0.0001 127.9861 ±1.1132 12.2741 ±0.0046 5 929 8 192( 213 )
+
+large                             
+
+> circuit-only 527.0096 ±51.0197 0.0129 ±0.0000 283.6701 ±2.1727 747.3327 ±7.4720 14 338 070 16 777 216( 224 )multiset-based 24.1559 ±0.9339 0.0108 ±0.0000 248.9939 ±1.1798 447.2345 ±6.9204 915 627 1 048 576( 220 )
+
+Table 7 End-to-end proof cost (including snapshot binding) of the circuit-only baseline vs. the multiset-based design under three IVF-PQ configurations (basic, low-acc, and large). Values are mean ± 95% confidence interval (5 runs). 
+
+because LUT construction and top-k selection become nearly trivial; the multiset-based design still incurs its set-oriented consistency checks and falls into a larger binned domain size GB .The GB column provides a coarse predictor of proving time via the binning effect. In the remaining experiments, we therefore treat the multiset-based design as the default instantiation of V3DB .
+
+Answer to RQ-( ii ). Yes. For practical IVF-PQ configurations, the multiset-based design makes audit proofs practical under snapshot binding, reducing proving time by up to ∼ 22 × while keeping verification in milliseconds. 
+
+5.3 Configuration Trade-offs 
+
+Experiment 3 answers Question ( iii ) by empirically validating the scaling trends predicted by our cost analysis under fixed scan/code budgets, and by applying our tuning procedure to obtain a ZK-efficient deployment configuration used in Experiment 1. We study SIFT1M ( D = 128 ) and GIST1M ( D = 960 ) to cover a wide range of embedding dimensions. For MS MARCO ( D = 384 , N = 2 24 ), we run only the configuration-selection procedure to obtain the zk-opt configuration used in Experiment 1 and omit the full sweeps for space. 
+
+Fixed scan budget varying nlist . We first study how increasing nlist impacts proving cost under a fixed scan budget. We fix the scan budget by holding the padded capacity N and probing ratio r := nprobe /n list constant. Our analysis predicts that the dominant end-to-end circuit size grows nearly linearly with nlist in this regime, while snapshot binding contributes only a mild additional Θ( nprobe log nlist ) overhead from Merkle openings. We fix B = 64 with (M, K ) = (8 , 256) and set r = 1 /128 . For SIFT1M and GIST1M we fix N = 2 21 and sweep nlist ∈ { 27, 28, . . . , 213 } with nprobe = nlist /128 so that Nsel remains fixed. For each point, we report the end-to-end gate count G and padded evaluation-domain size GB , fit the measured gate counts to a linear function of nlist , and benchmark end-to-end proving time to validate that it is primarily governed by GB .Table 8 summarizes the results. A linear fit of G versus nlist across the sweep points yields Pearson r ≥ 0.9999996 on both datasets, confirming the predicted near-linear scaling under a fixed scan budget. This supports treating the snapshot-binding term as a low-order deviation in our range. Proving time exhibits the expected power-of-two “step” behavior governed by the padded domain size GB : it changes primarily when the sweep crosses a new GB bin (e.g., SIFT1M moves from 218 to 219 at nlist = 2048 
+
+and to 220 at nlist = 8192 ). Across the sweep points in Table 8, a least-squares fit of the mean proving time to 
+
+Tprove ≈ α G B log 2 GB + β, yields α ≈ 1.36 × 10 −6, β ≈ 0.26 , and a Pearson correlation coefficient r ≈ 0.9998 ,consistent with the T = Θ( GB log 2 GB ) scaling. We therefore use GB as the primary lens for configuration selection in the next study. 
+
+Fixed code budget varying K. We next study how the PQ codebook size K affects proving cost under a fixed 18 nlist Tprove [s] G GB
+
+SIFT1M (D = 128 )
+
+128 6.7427 ± 0.7124 182 225 262 144( 218 )256 5.7520 ± 0.1042 192 846 262 144( 218 )512 6.0699 ± 0.0909 213 475 262 144( 218 )1024 6.4267 ± 0.1864 254 433 262 144( 218 )2048 12 .8939 ± 0.2739 336 214 524 288( 219 )4096 14 .1515 ± 0.2884 499 721 524 288( 219 )8192 29 .2398 ± 2.0290 826 743 1 048 576( 220 )
+
+GIST1M (D = 960 )
+
+128 18 .1420 ± 7.6997 270 229 524 288( 219 )256 12 .2058 ± 0.1851 342 232 524 288( 219 )512 13 .4249 ± 0.4753 485 623 524 288( 219 )1024 28 .3921 ± 4.5745 772 104 1 048 576( 220 )2048 61 .9585 ± 11 .4705 1 344 931 2 097 152( 221 )4096 124 .4228 ± 25 .0629 2 490 531 4 194 304( 222 )8192 263 .8778 ± 45 .0721 4 781 738 8 388 608( 223 )
+
+Table 8 Fixed-scan-budget sweep over nlist for the multiset-based design. We report proving time Tprove , end-to-end gate count G, and padded bin GB .
+
+Knlist 2 4 16 256 
+
+SIFT1M (D = 128 )
+
+128 929 950( 220 ) 497 482( 219 ) 281 654( 219 ) 182 225( 218 )256 935 409( 220 ) 502 978( 219 ) 287 398( 219 ) 192 846( 218 )512 945 715( 220 ) 513 359( 219 ) 298 272( 219 ) 213 475( 218 )1024 966 029( 220 ) 533 818( 220 ) 319 722( 219 ) 254 433 (218 )
+
+GIST1M (D = 960 )
+
+128 959 840( 220 ) 527 830( 220 ) 314 746( 219 ) 270 229( 219 )256 994 980( 220 ) 563 257( 220 ) 351 919( 219 ) 342 232( 219 )512 1 064 650( 221 ) 633 499( 220 ) 425 652( 219 ) 485 623 (219 )1024 1 203 690( 221 ) 773 683( 220 ) 572 816( 220 ) 772 104( 220 )
+
+Table 9 Gate-count grid over codebook size K under fixed code budget B = 64 (multiset-based design). Entries report end-to-end gate count G with GB in parentheses; bold denotes the selected zk-opt configuration. 
+
+code budget and scan budget. Our analysis predicts a unimodal dependence on K: increasing K increases the cost of constructing ADC tables, while decreasing M = B/ log 2 K reduces the cost of candidate scoring; in the common regime K ≤ n, this yields a single minimizing K⋆.Since proving time tracks the padded bin GB (validated above), we perform a gate-only grid search over 
+
+K ∈ { 2, 4, 16 , 256 } with M = 64 / log 2 K. For SIFT1M and GIST1M, we set N = 2 21 and evaluate this K
+
+grid across nlist ∈ { 128 , 256 , 512 , 1024 } (with nprobe = nlist /128 and n = N/n list ), reporting the resulting gate counts and bins. We also apply Algorithm 2 to MS MARCO under N = 2 24 to obtain its zk-opt configuration used in Experiment 1. Table 9 reports the grid results under fixed B = 64 (so M = 64 / log 2 K). Table 9 corroborates our analysis. For a fixed K, gate count increases with nlist , and proving time is driven mainly by power-of-two changes in the padded bin GB . For fixed (D, n list ), varying K exhibits a (discrete) unimodal pattern that reflects the trade-off between ADC-table construction and candidate scoring. When multiple K values fall into the same GB , Algorithm 2 selects the larger K as a utility-preserving tie-breaker, yielding the zk-opt configurations used in Experiment 1. 19 Answer to RQ-( iii ). Yes. Under a fixed scan budget, measured circuit size scales nearly linearly with nlist ,and proving time exhibits the expected power-of-two step behavior driven by the padded bin GB . Under a fixed code budget, varying K exhibits the predicted unimodal trade-off. These trends validate our cost model and motivate a cost-driven tuning procedure for selecting zk-efficient configurations. 
+
+## 6 Related Work 
+
+> ANN indices and index shaping
+
+. Vector similarity search is widely deployed, and many ANN indices have been studied at scale [ 7 ]. We focus on IVF-PQ [ 5 ] because its query pipeline admits a standardized, budgeted procedure that can be captured as a fixed-shape semantics. In contrast, graph-based indices such as HNSW [ 6]rely on adaptive traversals with data-dependent branching and irregular memory access, making ZK authen-tication substantially more costly. Our fixed-shape layout is also related to capacity-constrained (balanced) clustering [ 29 , 37 –42 ]; we only require a hard per-list bound that enables circuit compatibility. Unlike prior work that optimizes clustering objectives under such constraints, we use lightweight post-processing to enforce the bound while preserving a IVF-style reference semantics. 
+
+> ZK proofs for query processing
+
+. ZK proofs have been used to make outsourced query processing publicly verifiable, especially for relational workloads (e.g., vSQL [ 43 ], ZkSQL [ 44 ], and PoneglyphDB [ 45 ]). These systems target expressive operators, whereas our workload is a single, highly optimized ANN pipeline. We target ANN retrieval over high-dimensional vectors, where prover cost is dominated by ordering operations and data-dependent table access, making naive proofs of global scans and full sorting impractical. V3DB 
+
+therefore standardizes a fixed-shape IVF-PQ query semantics and designs a proving strategy to this pipeline. 
+
+> Verifiable nearest-neighbor search and private retrieval
+
+. Prior work studies correctness guarantees for outsourced 
+
+kNN/ANN queries using authenticated indices and verification objects (e.g., [ 20 , 21 ]), which can reveal access-dependent metadata and make verification cost scale with the object size. V3DB targets succinct public verification with ZK protection for embeddings and private index state, using Merkle commitments [ 19 ]instantiated with SNARK-friendly hashes such as Poseidon [ 30 ]. This avoids exposing index- and access-dependent evidence when the index state is proprietary or sensitive. Unlike VO-based approaches, the proof can also hide which lists and records are accessed, beyond the fixed circuit shape. TEEs provide an alternative model for private vector search [ 46 , 47 ]; in contrast, V3DB provides a cryptographic certificate that arbitrary verifiers can check against a public snapshot commitment. This is particularly relevant when embeddings and ANN index state are proprietary or sensitive (e.g., private RAG corpora [1]). 
+
+## 7 Conclusion 
+
+We presented V3DB , a verifiable, versioned vector database for audit-on-demand dense retrieval. An untrusted server answers IVF-PQ top-k queries and, upon challenge, produces a succinct ZK proof that the returned payload list matches the output of a standardized fixed-shape semantics on a publicly committed snapshot, while hiding embeddings and private index state. To make this practical, V3DB combines ZK-friendly index shaping, a versioned snapshot commitment layer, and a proving backend that avoids in-circuit sorting and random access via multiset checks. Our Plonky2 prototype achieves up to ∼ 22 × faster proving and up to 
+
+∼ 40% lower peak memory than a circuit-only baseline while keeping verification in milliseconds, and our experiments show that retrieval utility is preserved and that configurations can be selected using gate-count bins under scan/code budgets. 
+
+## References    
+
+> [1] Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, et al. Retrieval-augmented generation for knowledge-intensive nlp tasks.
+> Advances in neural information processing systems , 33:9459–9474, 2020. [2] Wanjun Zhong, Lianghong Guo, Qiqi Gao, He Ye, and Yanlin Wang. Memorybank: Enhancing large language
+
+20 models with long-term memory. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, pages 19724–19731, 2024. [3] Yujia Qin, Shihao Liang, Yining Ye, Kunlun Zhu, Lan Yan, Yaxi Lu, Yankai Lin, Xin Cong, Xiangru Tang, Bill Qian, et al. Toolllm: Facilitating large language models to master 16000+ real-world apis. arXiv preprint arXiv:2307.16789 ,2023. [4] Fengji Zhang, Bei Chen, Yue Zhang, Jacky Keung, Jin Liu, Daoguang Zan, Yi Mao, Jian-Guang Lou, and Weizhu Chen. Repocoder: Repository-level code completion through iterative retrieval and generation. arXiv preprint arXiv:2303.12570 , 2023. [5] Herve Jegou, Matthijs Douze, and Cordelia Schmid. Product quantization for nearest neighbor search. IEEE transactions on pattern analysis and machine intelligence , 33(1):117–128, 2010. [6] Yu A Malkov and Dmitry A Yashunin. Efficient and robust approximate nearest neighbor search using hierarchical navigable small world graphs. IEEE transactions on pattern analysis and machine intelligence , 42(4):824–836, 2018. [7] Jeff Johnson, Matthijs Douze, and Hervé Jégou. Billion-scale similarity search with gpus. IEEE Transactions on Big Data , 7(3):535–547, 2019. [8] Questel. Sophia search: Ai-powered semantic search, 2026. Accessed: 2026-02-06. [9] Clarivate. Clarivate launches ai-powered patent search solution in derwent, 2024. Accessed: 2026-02-06. [10] Dow Jones. Factiva news search APIs, 2026. Accessed: 2026-02-06. [11] LexisNexis. Lexis API, 2026. Accessed: 2026-02-06. [12] Mohamed Sabt, Mohammed Achemlal, and Abdelmadjid Bouabdallah. Trusted execution environment: What it is, and what it is not. In 2015 IEEE Trustcom/BigDataSE/Ispa , volume 1, pages 57–64. IEEE, 2015. [13] Victor Costan and Srinivas Devadas. Intel sgx explained. Cryptology ePrint Archive , 2016. [14] Victor Costan, Ilia Lebedev, and Srinivas Devadas. Sanctum: Minimal hardware extensions for strong software isolation. In 25th USENIX Security Symposium (USENIX Security 16) , pages 857–874, 2016. [15] Manuel Blum, Paul Feldman, and Silvio Micali. Non-interactive zero-knowledge and its applications. In Providing sound foundations for cryptography: on the work of Shafi Goldwasser and Silvio Micali , pages 329–349. 2019. [16] Bryan Parno, Jon Howell, Craig Gentry, and Mariana Raykova. Pinocchio: Nearly practical verifiable computation. 
+
+Communications of the ACM , 59(2):103–112, 2016. [17] Jens Groth. On the size of pairing-based non-interactive arguments. In Advances in Cryptology–EUROCRYPT 2016: 35th Annual International Conference on the Theory and Applications of Cryptographic Techniques , pages 305–326, 2016. [18] Eli Ben-Sasson, Alessandro Chiesa, Eran Tromer, and Madars Virza. Succinct {Non-Interactive } zero knowledge for a von neumann architecture. In 23rd USENIX Security Symposium (USENIX Security 14) , pages 781–796, 2014. [19] Ralph C Merkle. A digital signature based on a conventional encryption function. In Conference on the theory and application of cryptographic techniques , pages 369–378. Springer, 1987. [20] Chenzhao Wang, Jilian Zhang, Xuyang Liu, Kaimin Wei, and Bingwen Feng. Verifiable graph-based approximate nearest neighbor search. In International Conference on Advanced Data Mining and Applications , pages 3–17. Springer, 2024. [21] Ningning Cui, Kang Qian, Taotao Cai, Jianxin Li, Xiaochun Yang, Jie Cui, and Hong Zhong. Towards multi-user, secure, and verifiable k nn query in cloud database. IEEE Transactions on Knowledge and Data Engineering , 35(9):9333–9349, 2023. [22] Shafi Goldwasser, Silvio Micali, and Chales Rackoff. The knowledge complexity of interactive proof-systems. In 
+
+Providing sound foundations for cryptography: On the work of shafi goldwasser and silvio micali , pages 203–225. 2019. [23] Ariel Gabizon, Zachary J Williamson, and Oana Ciobotaru. Plonk: Permutations over lagrange-bases for oecumenical noninteractive arguments of knowledge. Cryptology ePrint Archive , 2019. 
+
+21 [24] Eli Ben-Sasson, Iddo Bentov, Yinon Horesh, and Michael Riabzev. Fast reed-solomon interactive oracle proofs of proximity. In 45th international colloquium on automata, languages, and programming (icalp 2018) , pages 14–1. Schloss Dagstuhl–Leibniz-Zentrum fuer Informatik, 2018. [25] Stuart Lloyd. Least squares quantization in pcm. IEEE transactions on information theory , 28(2):129–137, 1982. [26] David Arthur and Sergei Vassilvitskii. k-means++: The advantages of careful seeding. Technical report, Stanford, 2006. [27] Bing-Jyue Chen, Suppakit Waiwitlikhit, Ion Stoica, and Daniel Kang. Zkml: An optimizing system for ml inference in zero-knowledge proofs. In Proceedings of the Nineteenth European Conference on Computer Systems , pages 560–574, 2024. [28] Boyuan Feng, Zheng Wang, Yuke Wang, Shu Yang, and Yufei Ding. Zeno: A type-based optimization framework for zero knowledge neural network inference. In Proceedings of the 29th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 1 , pages 450–464, 2024. [29] Paul S Bradley, Kristin P Bennett, and Ayhan Demiriz. Constrained k-means clustering. Microsoft Research, Redmond ,20(0):0, 2000. [30] Lorenzo Grassi, Dmitry Khovratovich, Christian Rechberger, Arnab Roy, and Markus Schofnegger. Poseidon: A new hash function for {Zero-Knowledge } proof systems. In 30th USENIX Security Symposium (USENIX Security 21) , pages 519–535, 2021. [31] Ariel Gabizon and Zachary J Williamson. plookup: A simplified polynomial protocol for lookup tables. Cryptology ePrint Archive , 2020. [32] Tri Nguyen, Mir Rosenberg, Xia Song, Jianfeng Gao, Saurabh Tiwary, Rangan Majumder, and Li Deng. Ms marco: A human-generated machine reading comprehension dataset. 2016. [33] Nils Reimers and Iryna Gurevych. Sentence-bert: Sentence embeddings using siamese bert-networks. arXiv preprint arXiv:1908.10084 , 2019. [34] Wenhui Wang, Furu Wei, Li Dong, Hangbo Bao, Nan Yang, and Ming Zhou. Minilm: Deep self-attention distillation for task-agnostic compression of pre-trained transformers. Advances in neural information processing systems ,33:5776–5788, 2020. [35] Nick Craswell, Bhaskar Mitra, Emine Yilmaz, Daniel Campos, Jimmy Lin, Ellen M Voorhees, and Ian Soboroff. Overview of the trec 2022 deep learning track. arXiv preprint arXiv:2507.10865 , 2025. [36] James W Cooley and John W Tukey. An algorithm for the machine calculation of complex fourier series. Mathematics of computation , 19(90):297–301, 1965. [37] Yushuai Ji, Shengkun Zhu, Shixun Huang, Zepeng Liu, Sheng Wang, and Zhiyong Peng. Federated and balanced clustering for high-dimensional data. Proceedings of the VLDB Endowment , 18(11):4032–4044, 2025. [38] Mikko I Malinen and Pasi Fränti. Balanced k-means for clustering. In Joint IAPR international workshops on statistical techniques in pattern recognition (SPR) and structural and syntactic pattern recognition (SSPR) , pages 32–41. Springer, 2014. [39] Tim Althoff, Adrian Ulges, and Andreas Dengel. Balanced clustering for content-based image browsing. In 
+
+Informatiktage , pages 27–30, 2011. [40] Hanyang Liu, Junwei Han, Feiping Nie, and Xuelong Li. Balanced clustering with least square regression. In 
+
+Proceedings of the AAAI conference on artificial intelligence , volume 31, 2017. [41] Hongfu Liu, Ziming Huang, Qi Chen, Mingqin Li, Yun Fu, and Lintao Zhang. Fast clustering with flexible balance constraints. In 2018 IEEE International Conference on Big Data (Big Data) , pages 743–750. IEEE, 2018. [42] Rieke de Maeyer, Sami Sieranoja, and Pasi Fränti. Balanced k-means revisited. 2023. [43] Yupeng Zhang, Daniel Genkin, Jonathan Katz, Dimitrios Papadopoulos, and Charalampos Papamanthou. vsql: Verifying arbitrary sql queries over dynamic outsourced databases. In 2017 IEEE Symposium on Security and Privacy (SP) , pages 863–880. IEEE, 2017. [44] Xiling Li, Chenkai Weng, Yongxin Xu, Xiao Wang, and Jennie Rogers. Zksql: Verifiable and efficient query evaluation with zero-knowledge proofs. Proceedings of the VLDB Endowment , 16(8), 2023. 
+
+22 [45] Binbin Gu, Juncheng Fang, and Faisal Nawab. Poneglyphdb: Efficient non-interactive zero-knowledge proofs for arbitrary sql-query verification. Proceedings of the ACM on Management of Data , 3(1):1–27, 2025. [46] Zeheng Fan, Yuxiang Zeng, Zhuanglin Zheng, Binhan Yang, and Yongxin Tong. Fedvs: Towards federated vector similarity search with filters. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 , pages 579–590, 2025. [47] Zeheng Fan, Yuxiang Zeng, Zhuanglin Zheng, and Yongxin Tong. Fedvse: A privacy-preserving and efficient vector search engine for federated databases. Proceedings of the VLDB Endowment , 18(12):5371–5374, 2025. 
+
+23
