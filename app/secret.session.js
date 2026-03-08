@@ -247,13 +247,13 @@
       };
 
       // 简易配置下的约定：
-      // - Summarized_LLM_API_KEY：用户输入的柏拉图 API Key
-      // - Summarized_LLM_BASE_URL：默认 https://api.bltcy.ai/v1/chat/completions
-      // - Summarized_LLM_MODEL：用户选择的总结模型
+      // - Summarized_LLM_API_KEY：用户输入的硅基流动 API Key
+      // - Summarized_LLM_BASE_URL：默认 https://api.siliconflow.cn/v1/chat/completions
+      // - Summarized_LLM_MODEL：用户选择的总结模型（workflow 中 BLT_REWRITE_MODEL / BLT_FILTER_MODEL 读取此值）
       // - BLT_API_KEY：写入后端流水线使用的 BLT_API_KEY（与 Summarized_LLM_API_KEY 相同）
       // - Reranker_LLM_API_KEY：与 Summarized_LLM_API_KEY 相同
       // - Reranker_LLM_BASE_URL：默认 https://api.siliconflow.cn/v1/rerank
-      // - Reranker_LLM_MODEL：默认 BAAI/bge-reranker-v2-m3
+      // - Reranker_LLM_MODEL：默认 BAAI/bge-reranker-v2-m3（workflow 中 BLT_RERANK_MODEL 读取此值）
       const summarisedBaseUrl = 'https://api.siliconflow.cn/v1/chat/completions';
       const rerankerBaseUrl = 'https://api.siliconflow.cn/v1/rerank';
       const rerankerModel = 'BAAI/bge-reranker-v2-m3';
@@ -657,7 +657,7 @@
         <div style="margin-bottom:10px; font-size:13px;">
           <label style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
             <input type="radio" name="secret-setup-mode" value="simple" checked />
-            <span><strong>简易配置（推荐）</strong>：填写 GitHub Token 与柏拉图 API Key，即可启用订阅与论文总结能力。</span>
+            <span><strong>简易配置（推荐）</strong>：填写 GitHub Token 与硅基流动 API Key，即可启用订阅与论文总结能力。</span>
           </label>
           <label style="display:flex; align-items:center; gap:6px; color:#aaa;">
             <input type="radio" name="secret-setup-mode" value="advanced" disabled />
@@ -680,7 +680,7 @@
             需要具备 <code>repo</code> 和 <code>workflow</code> 权限。
           </div>
 
-          <div style="font-weight:500; margin-bottom:4px;">柏拉图（BLTCY）API Key（必填）</div>
+          <div style="font-weight:500; margin-bottom:4px;">硅基流动 API Key（必填）</div>
           <input
             id="secret-setup-plato"
             type="password"
@@ -689,45 +689,45 @@
             style="width:100%; box-sizing:border-box; padding:6px 8px; margin-bottom:4px; font-size:13px;"
           />
           <button id="secret-setup-plato-verify" type="button" class="secret-gate-btn secondary" style="margin-bottom:4px;">
-            验证柏拉图 API Key
+            验证硅基流动 API Key
           </button>
           <div id="secret-setup-plato-status" style="min-height:18px; font-size:12px; color:#999; margin-bottom:8px;">
-            将通过 <code>/v1/token/quota</code> 接口验证可用性。
+            将通过 <code>/v1/user/info</code> 接口验证可用性。
           </div>
 
           <div style="font-weight:500; margin-bottom:4px; display:flex; align-items:center; gap:4px;">
-            用于「总结整篇论文」的大模型（推荐选择 Gemini 3 Flash）
+            用于「总结整篇论文」的大模型（推荐选择 Qwen3-8B）
             <span class="secret-model-tip">!
               <span class="secret-model-tip-popup">
-                按照 Thinking（思考模式）的高负载场景估算：<br/>
+                按照高负载场景估算：<br/>
                 <br/>
-                总结：15k 输入 + 4k 输出（含思考）<br/>
-                提问：16.1k 输入 + 2k 输出（含思考）<br/>
+                总结：15k 输入 + 4k 输出<br/>
+                提问：16.1k 输入 + 2k 输出<br/>
                 <br/>
                 模型 · 约价（单次）：<br/>
-                - Gemini 3 Flash：总结 ¥0.0195，提问 ¥0.0141（不到 2 分钱，100 篇论文约 2 元）<br/>
-                - DeepSeek V3：总结 ¥0.0294，提问 ¥0.0267（不到 3 分钱，长输出性价比极高）<br/>
-                - GPT-5：总结 ¥0.0588，提问 ¥0.0401（约 6 分钱）<br/>
-                - Gemini 3 Pro：总结 ¥0.0780，提问 ¥0.0562（约 8 分钱，一篇论文不到 1 毛钱）
+                - Qwen3-8B：免费（100 篇论文约 ¥0）<br/>
+                - DeepSeek-V3：总结 ¥0.018，提问 ¥0.016（不到 2 分钱）<br/>
+                - Qwen3-30B-A3B：总结 ¥0.022，提问 ¥0.020（约 2 分钱）<br/>
+                - Pro/DeepSeek-V3：总结 ¥0.054，提问 ¥0.049（约 5 分钱，高质量）
               </span>
             </span>
           </div>
           <div style="font-size:13px; margin-bottom:6px;">
             <label style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
-              <input type="radio" name="secret-setup-summarize-model" value="gemini-3-flash-preview-thinking-1000" checked />
-              <span>Gemini 3 Flash（思考版，推荐）</span>
+              <input type="radio" name="secret-setup-summarize-model" value="Qwen/Qwen3-8B" checked />
+              <span>Qwen3-8B（免费，推荐）</span>
             </label>
             <label style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
-              <input type="radio" name="secret-setup-summarize-model" value="deepseek-v3.2" />
-              <span>DeepSeek V3.2 · 深度思考</span>
+              <input type="radio" name="secret-setup-summarize-model" value="deepseek-ai/DeepSeek-V3" />
+              <span>DeepSeek-V3 · 高质量对话</span>
             </label>
             <label style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
-              <input type="radio" name="secret-setup-summarize-model" value="gpt-5-chat" />
-              <span>GPT-5 Chat · 通用高质量对话</span>
+              <input type="radio" name="secret-setup-summarize-model" value="Qwen/Qwen3-30B-A3B" />
+              <span>Qwen3-30B-A3B · 均衡性价比</span>
             </label>
             <label style="display:flex; align-items:center; gap:6px;">
-              <input type="radio" name="secret-setup-summarize-model" value="gemini-3-pro-preview" />
-              <span>Gemini 3 Pro（更强思考能力）</span>
+              <input type="radio" name="secret-setup-summarize-model" value="Pro/deepseek-ai/DeepSeek-V3" />
+              <span>Pro/DeepSeek-V3（更强能力）</span>
             </label>
           </div>
         </div>
@@ -833,17 +833,17 @@
       platoVerifyBtn.addEventListener('click', async () => {
         const key = platoInput.value.trim();
         if (!key) {
-          platoStatusEl.textContent = '请先输入柏拉图 API Key。';
+          platoStatusEl.textContent = '请先输入硅基流动 API Key。';
           platoStatusEl.style.color = '#c00';
           platoOk = false;
           return;
         }
         platoVerifyBtn.disabled = true;
-        platoStatusEl.textContent = '正在验证柏拉图 API Key...';
+        platoStatusEl.textContent = '正在验证硅基流动 API Key...';
         platoStatusEl.style.color = '#666';
         try {
           const resp = await fetch(
-            'https://api.bltcy.ai/v1/token/quota',
+            'https://api.siliconflow.cn/v1/user/info',
             {
               method: 'GET',
               headers: {
@@ -855,12 +855,15 @@
             throw new Error(`HTTP ${resp.status}`);
           }
           const data = await resp.json().catch(() => null);
-          const quota =
-            data && typeof data.quota === 'number' ? data.quota : 0;
-          const used = -quota;
-          platoStatusEl.textContent = `✅ 验证成功：已用额度约 ${used.toFixed(
-            2,
-          )}`;
+          const balance =
+            data && data.data && typeof data.data.balance === 'string'
+              ? data.data.balance
+              : (data && data.data && typeof data.data.totalBalance === 'string'
+                  ? data.data.totalBalance
+                  : null);
+          platoStatusEl.textContent = balance !== null
+            ? `✅ 验证成功：账户余额 ¥${balance}`
+            : '✅ 验证成功';
           platoStatusEl.style.color = '#28a745';
           platoOk = true;
         } catch (e) {
@@ -898,7 +901,7 @@
         }
         if (!platoKey || !platoOk) {
           if (errorEl) {
-            errorEl.textContent = '请先填写并通过验证柏拉图 API Key。';
+            errorEl.textContent = '请先填写并通过验证硅基流动 API Key。';
             errorEl.style.color = '#c00';
           }
           return;
@@ -919,9 +922,9 @@
         }
 
         const createdAt = new Date().toISOString();
-        const summarizedBaseUrl = 'https://api.bltcy.ai/v1/chat/completions';
-        const rerankerBaseUrl = 'https://api.bltcy.ai/v1/rerank';
-        const rerankerModel = 'qwen3-reranker-4b';
+        const summarizedBaseUrl = 'https://api.siliconflow.cn/v1/chat/completions';
+        const rerankerBaseUrl = 'https://api.siliconflow.cn/v1/rerank';
+        const rerankerModel = 'BAAI/bge-reranker-v2-m3';
 
         const plainConfig = {
           createdAt,
