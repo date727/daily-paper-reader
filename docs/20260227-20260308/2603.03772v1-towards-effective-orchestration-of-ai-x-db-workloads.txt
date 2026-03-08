@@ -1,0 +1,749 @@
+Title: Towards Effective Orchestration of AI x DB Workloads
+
+URL Source: https://arxiv.org/pdf/2603.03772v1
+
+Published Time: Thu, 05 Mar 2026 01:41:00 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Towards Effective Orchestration of AI x DB Workloads 
+
+## Naili Xing 
+
+National University of Singapore xingnl@comp.nus.edu.sg 
+
+## Haotian Gao 
+
+National University of Singapore gaohaotian@comp.nus.edu.sg 
+
+## Zhanhao Zhao ∗
+
+National University of Singapore zhzhao@comp.nus.edu.sg 
+
+## Shaofeng Cai 
+
+National University of Singapore shaofeng@comp.nus.edu.sg 
+
+## Zhaojing Luo 
+
+Beijing Institute of Technology zjluo@bit.edu.cn 
+
+## Yuncheng Wu 
+
+Renmin University of China wuyuncheng@ruc.edu.cn 
+
+## Zhongle Xie 
+
+Zhejiang University xiezl@zju.edu.cn 
+
+## Meihui Zhang 
+
+Beijing Institute of Technology meihui_zhang@bit.edu.cn 
+
+## Beng Chin Ooi 
+
+Zhejiang University ooibc@zju.edu.cn 
+
+ABSTRACT 
+
+AI-driven analytics are increasingly crucial to data-centric decision-making. The practice of exporting data to machine learning run-times incurs high overhead, limits robustness to data drift, and expands the attack surface, especially in multi-tenant, heteroge-neous data systems. Integrating AI directly into database engines, while offering clear benefits, introduces challenges in managing joint query processing and model execution, optimizing end-to-end performance, coordinating execution under resource contention, and enforcing strong security and access-control guarantees. This paper discusses the challenges of joint DB-AI, or AI ×DB, data management and query processing within AI-powered data systems. It presents various challenges that need to be addressed carefully, such as query optimization, execution scheduling, and distributed execution over heterogeneous hardware. Database com-ponents such as transaction management and access control need to be re-examined to support AI lifecycle management, mitigate data drift, and protect sensitive data from unauthorized AI opera-tions. We present a design and preliminary results to demonstrate what may be key to the performance for serving AI ×DB queries. 
+
+1 INTRODUCTION 
+
+The rapid rise of AI agents is fundamentally transforming the exe-cution of data-centric tasks [ 27 , 46 , 59 ]. Given a natural-language task description, an AI agent acts as an autonomous orchestrator that executes a multi-step, adaptive loop to reach a solution [ 25 ]. In each iteration, the agent may consult metadata to ground its plan, retrieve targeted data via relational queries, and invoke analytical models to process the retrieved content. The agent then validates intermediate results and refines its workflow until it yields the final results [ 20 ]. Throughout this process, traditional data operators (e.g., join and aggregation) are interleaved with AI operators (e.g., training and inference). We refer to these highly integrated and end-to-end pipelines as AI ×DB workloads .Despite this shift, the dominant production practice still relies on an inefficient export-execute-import paradigm as shown in Figure 1, where data is extracted from the database, processed in external runtimes, and ultimately written back [ 21 , 27 , 39 , 53 , 65 ]. While recent efforts have attempted to bring AI closer to data via SQL-oriented abstractions (e.g., UDFs) [ 22 , 58 , 62 ], a critical gap remains: 
+
+> ∗
+
+Corresponding author. DB Engine       
+
+> LLM Agent
+> DB
+> Online Feature Store (KV )Inference
+> Stream Feature Executor
+> Duplication & Inconsistent features
+> (a) Export-execute-import DB4ML Serving Paradigm
+> DB Engine with AI×DB Orchestration
+> Uni fi ed AIxDB Executor
+> Data
+> Batch Operator
+> Of fl ine Feature Store (ColumnStore )Training
+> Online Feature Store (KV )Inference
+> Uni fi ed Feature Plan Compiler
+> AIxDB Co-Optimizer (b) Database-Native AI×DB Orchestration for DB4ML Serving Paradigm
+> Less duplication & co-optimization
+> Stream Operator
+> DB Engine
+> User Task Solutions
+> Pipeline Generation
+> SQL Generation
+> Analytical Work fl ow Synthesis
+> Query Intent Re fi nement
+> DB Instance
+> ML runtime
+> AI Engine
+> deploy
+> iteration loop
+> AI Agent
+> User Task Solutions
+> Pipeline Generation
+> SQL Generation
+> Query Intent Re fi nement
+> iteration loop
+> Analytical Work fl ow Synthesis
+> DB Instance
+> ML runtime
+> AI Engine
+> deploy
+> load data
+
+Figure 1: Export-execute-import paradigm. 
+
+existing database engines are not natively designed to orchestrate AI ×DB workloads that couple fundamentally divergent execution models. Databases excel at global decision making, declarative opti-mization, governed execution (e.g., access control), and controlled concurrency [ 24 , 47 ]. In contrast, AI runtimes primarily optimize local model execution, relegating global orchestration, access con-trol, and query isolation to external infrastructure concerns [ 50 , 64 ]. As a result, treating AI operators as black boxes obscures their cost-quality trade-offs, data dependencies, and resource footprints. This lack of transparency hinders co-optimization across relational and AI operators, prevents unified management of the shared intermedi-ates for resource-efficient execution, and compromises fine-grained access control and isolation for AI execution. Consequently, this dichotomy leads to suboptimal end-to-end performance and the fragmented enforcement of security and isolation policies [ 22 , 54 ]. To bridge this gap, in this paper, we envision a new class of data-base engines with database-native orchestration for AI ×DB work-loads. We first formalize the AI ×DB workload and distill key char-acteristics that distinguish it from traditional analytical tasks: (i) 
+
+iterative , where execution takes the form of an adaptive loop of ex-ploration and refinement rather than following a single static plan; (ii) concurrent , characterized by bursty parallel arrivals as AI agents explore diverse solution paths or trigger retries; and (iii) share-able , exhibiting substantial overlap in data retrieval, intermediate computations, and AI-specific artifacts across iterations and con-current executions. Based on these characteristics, we derive three principles that guide the design of such engines: holistic AI ×DB co-optimization, unified AI ×DB cache management, and fine-grained access control and isolation. We translate these principles into an open research agenda by summarizing their objectives and high-lighting key open challenges. Finally, we present NeurEngine as the proof-of-concept prototype and report preliminary results to illustrate the potential benefits of database-native orchestration. 
+
+> arXiv:2603.03772v1 [cs.DB] 4 Mar 2026 Naili Xing, Haotian Gao, Zhanhao Zhao, Shaofeng Cai, Zhaojing Luo, Yuncheng Wu, Zhongle Xie, Meihui Zhang, and Beng Chin Ooi
+
+We hope that our preliminary exploration will encourage the data management community to rethink database design for sup-porting AI ×DB workloads, and to develop principled techniques that jointly optimize AI and relational operators while addressing the new challenges in performance, adaptivity, and governance. 
+
+2 BACKGROUND AND VISION 
+
+AI ×DB Workload. We define AI ×DB workload as follows. 
+
+Definition 2.1 (AI ×DB Workload). An AI ×DB workload W is a stream of AI ×DB queries {𝑞 1, . . . , 𝑞 𝑛 } issued over a database in-stance D, often by AI agents. Each query interleaves relational processing with AI executions, and reads or produces AI artifacts such as model versions, embeddings, and model caches. We summarize key characteristics of AI ×DB workloads. 
+
+• Iterative. AI ×DB workloads are executed as multi-step loops (e.g., driven by AI agents), generating requests as they probe, validate, and refine intermediate results before converging. 
+
+• Concurrent. An AI agent often issues AI ×DB workloads in parallel (e.g., exploring alternative query variants or performing retries), resulting in bursty and high-rate arrivals at the database engine. 
+
+• Shareable. AI ×DB workloads often share computations across iterations and concurrent executions (e.g., featurization or model invocations), creating opportunities for reuse and consolidation. 
+
+AI ×DB Query. Given the above definition, the query that expresses an AI ×DB workload can be defined as follows. 
+
+Definition 2.2 (AI ×DB Query). An AI ×DB query 𝑞 is a declarative program expressed in an extended relational algebra (or SQL) that composes DB operators with AI operators: 
+
+𝑞 ∈ Ω𝐷𝐵 ∪ Ω𝐴𝐼 ,
+
+where Ω𝐷𝐵 includes standard relational operators (e.g., 𝜎, 𝜋, Z for selection, projection, and join) for data access and feature construc-tion, and Ω𝐴𝐼 includes AI operators like TRAIN (M , ·) , FINETUNE (M , ·) ,and INFERENCE (M , ·) , where M denotes an AI model. Depending on the query, the output can be relational results, predicted values, and/or AI artifacts such as updated models. An AI ×DB query example is shown in Listing 1, which recommends products to a target user by learning from the historical ratings of users with the same gender and similar age. 
+
+Core Design Principles. These characteristics reveal a mismatch between AI ×DB workloads and traditional DBMSs, motivating a foundational redesign of the database engine to deliver consistently higher throughput and lower tail latency for AI ×DB workloads with efficient resource utilization, while preserving predictable per-formance isolation and policy-compliant, auditable execution under multi-tenant contention. We advocate database-native orchestration 
+
+as the paradigm for this redesign, defined as follows. 
+
+Definition 2.3 (Database-Native Orchestration). Database-native orchestration is an architectural paradigm for AI ×DB workloads in which AI operators and their artifacts are treated as first-class entities within the DBMS. Execution plans that interleave DB and AI operators are holistically optimized, executed, and governed, so that end-to-end pipelines preserve database-grade semantics rather than being assembled from external black-box services. 
+
+Listing 1: AI ×DB SQL example.                               
+
+> WITH ud AS (SELECT user_age, user_gender FROM users WHERE user_id = UID)
+> SELECT pr.product_id, pr.rating
+> FROM (
+> PREDICT VALUE OF r.rating WITH PRIMARY KEY r.product_id
+> FROM ratings r JOIN users u ON r.user_id = u.user_id CROSS JOIN ud
+> WHERE u.user_gender = ud.user_gender
+> AND u.user_age BETWEEN ud.user_age - 10 AND ud.user_age + 10
+> TRAIN ON r.product_id) pr
+> ORDER BY pr.rating DESC LIMIT 100;
+
+To realize this paradigm, we distill three core design principles: 
+
+• Holistic AI ×DB Co-Optimization : AI ×DB workloads are iterative and concurrent, and decisions of relational processing and AI execution interact, creating strong cross-operator trade-offs. The engine should therefore co-optimize them holistically to achieve higher overall efficiency than optimizing them separately. 
+
+• Unified AI ×DB Cache Management : AI ×DB workloads exhibit sharing across iterations and concurrent executions. The engine should therefore provide a unified cache for intermediate results and both DB and AI artifacts to avoid redundant computation, re-peated data retrieval, model (re)loading, and per-request resource initialization, thereby improving latency and reducing cost. 
+
+• Fine-Grained Access Control and Isolation : AI ×DB workloads are concurrent and multi-tenant, often accessing shared data and AI artifacts. The engine should therefore enforce fine-grained access control over AI execution and artifacts and provide isolation boundaries that prevent cross-tenant interference. 
+
+3 KEY DESIGN CHALLENGES 3.1 Holistic AI ×DB Co-Optimization 
+
+3.1.1 Joint Optimization. Given an AI ×DB SQL query, the opti-mizer first performs semantics-preserving rewrites to obtain a sim-plified logical plan, and then maps it to a physical plan by jointly reasoning over DB and AI operators under declarative constraints. An ideal design should provide the following capabilities. 
+
+• Constrained optimization enumerates and selects physical imple-mentations for both DB and AI operators to optimize an end-to-end objective (e.g., latency/cost) subject to explicit quality constraints (e.g., accuracy/freshness bounds), or vice versa [ 33 ]. As exemplified in Table 1, for DB operators (e.g., Scan, Join), it chooses join/aggregation algorithms, distribution strategies, and parallelism policies. For AI operators (e.g., AI-Infer), it chooses execution pipeline implementations and placement decisions. 
+
+• Cross-operator simplification simplifies physical plans that inter-leave DB operators and AI operators via cross-boundary rewrites to reduce both data access and model computation, e.g., propa-gating predicates/projections through the featurization pipeline to prune feature construction and bypass irrelevant model sub-graphs computation in the inference [41]. 
+
+• Cross-query optimization exploits reuse opportunities across con-current queries by inspecting the current cache state and selecting consistent cache-resident DB, AI, or mixed operators. It coordi-nates with the execution engine to decide what to materialize and keep cache-resident for future reuse [37]. 
+
+Key challenges. First, AI ×DB SQL requires AI-specific rewrite rules to reduce computational complexity and eliminate redundant executions of AI operators. For example, AISQL [ 14 ] transforms Towards Effective Orchestration of AI x DB Workloads Batched Plan Execution                         
+
+> Query 1 Final Plan Query 2 Candidate Plans
+> SELECT ... FROM (
+> PREDICT
+> VALUE OF ...
+> FROM ... )ORDER BY ...
+> Joint Query
+> Predict
+> RS
+> Finetune
+> HashJoin
+> RS
+> Parse Tree Plan Execution
+> Execution Engine
+> w/ subquery reuse
+> w/o subquery reuse
+> Self-Driving Execution Engine
+> Batching
+> Shared Buffer Manager
+> Runtime Scheduler
+> Batched Plan Execution
+> CPU
+> GPU 1 ( Network 1 )
+> GPU 0
+> DEC
+> block 1
+> block 2
+> .. Pre-trained Embedding (e.g., BERT)
+> GPU 2 ( Network 2 )
+> block 1
+> block 2
+> ..
+> output 2 output 1
+> CPU
+> pre processing RS
+> Final Plans for Query 1 and Query 2
+> model 1
+> RSDE
+> model 2
+> RS
+> C
+> CPU
+> GPU 1
+> (Network 1)
+> GPU 0
+> DEC
+> block 2
+> block 1
+> ..
+> Pre-trained Embedding (e.g., BERT)
+> GPU 2
+> (Network 2)
+> block 2
+> block 1
+> ..
+> O 2
+> O 1
+> preprocessing
+> RS
+> model 2
+> Embedding
+> Network 2
+> RSDE
+> DE
+> model 2
+> RS
+> Embedding
+> Network 2
+> Cmodel 1
+> RS
+> Embedding
+> Network 1
+
+Figure 2: A motivating example for the query optimizer. 
+
+certain semantic join patterns from pairwise matching into multi-label classification when explicit preconditions are satisfied. In addition, deciding the application order of mixed DB and AI rewrite rules is non-trivial because the space of possible rule sequences is combinatorial, and the benefits of different rewrite orders are highly query-dependent [ 68 ]. However, existing work often does not comprehensively address both aspects within a unified compiler, leaving substantial room for improvement. Second, defining a composable set of implementations for AI operators is challenging, as performance-critical choices, such as model placement and residency, are tightly coupled with data and model locality and movement across distributed, disaggregated sub-strates. For instance, executing the model where the data is already partitioned avoids cross-node data transfers, whereas routing data to a GPU where the model is resident reduces model reload and warm-up overhead. Yet most systems leave placement and residency decisions outside the optimization search space [ 14 , 18 , 29 , 33 ], of-ten yielding suboptimal physical plans. Third, accurate cost and quality modeling for AI operators is challenging because both latency and output quality are state- and data-dependent, which are beyond classical DB cost models. Al-though the cost/quality modeling for discriminative models is of-ten amenable to relatively stable, profile-driven estimation [ 33 ], generative models (e.g., summarization) exhibit highly variable, token-dependent costs that depend on prompt/context length, re-trieved context, decoding behavior, and caching state. As a result, optimizations that rely on coarse offline estimates can only produce suboptimal physical plans when token-level variability and caching effects dominate [33, 40, 54]. Fourth, although prior work shows that cross-operator simplifi-cation strategies (e.g., predicate/projection pushdown) are effective for classical tree-based models [ 41 ], extending them to deep and foundation models is much harder. This is due to the opacity of featurization and execution, the high dimensionality of interme-diate representations (e.g., embeddings), and the pruning oppor-tunities may depend on learned representations rather than ex-plicit, semantics-preserving branches. As a result, enabling safe, semantics-preserving simplification for deep and foundation mod-els to improve efficiency remains an open problem. Finally, reuse across concurrent queries is critical for avoiding redundant computation and improving end-to-end efficiency, as illustrated in Figure 2. This raises a core question: given a query, how can the optimizer maximize reuse of cached subplans by treating cached results as materialized intermediates, thereby producing more efficient physical plans and eliminating redundant execution? 
+
+Table 1: Operators and implementations. 
+
+Logical Ops Physical Implementation Examples DB Operators :
+
+Scan, Select, Join, Aggregate, etc 
+
+Algorithms : HashJoin/MergeJoin/NLJ; HashAgg 
+
+Distribution : Shuffle/Broadcast/Gather 
+
+Parallelism : Repartition/Coalesce; Parallelism 
+
+AI Operators :
+
+AI-Train/Update, AI-Infer 
+
+Pipeline : Model Selection; Staged Inference (e.g., rela-tional modeling, fusion) 
+
+Placement : Device Placement 
+
+3.1.2 Self-Adaptive AI ×DB Co-Execution. At runtime, an execu-tor runs the physical plan chosen by the optimizer, orchestrating DB and AI operators to maximize throughput and resource effi-ciency while controlling tail latency under contention. Specifically, it should (i) effectively reconcile heterogeneous execution regimes between stream-oriented DB processing and batch-oriented AI execution to balance timely per-query responses with aggregate throughput, and (ii) coordinate runtime execution to maximize re-source efficiency, ensure performance isolation under multi-tenant contention, and support robust failure handling and recovery. 
+
+Key challenges. The central challenge here is to reconcile synchro-nous, stream-oriented DB processing with asynchronous, batch-oriented AI execution while maintaining correctness (e.g., consis-tent data snapshots and models). AI operators often rely on batching to achieve high efficiency [ 57 ], but batching can introduce waiting and reordering, delaying results and cause inconsistent reads where different parts of the query observe different versions of data or models. Existing systems often lack database-grade semantics to prevent such inconsistencies under batching [14, 48]. Moreover, runtime coordination must handle both efficiency/iso-lation and recovery. For efficiency, it should coordinate data access and model execution across AI operators with fundamentally differ-ent runtime behaviors. Discriminative models often have relatively stable latency and resource usage, whereas generative models in-cur token-dependent and context-dependent costs that vary with prompt length, decoding, and caching state. These differences be-come more severe on shared accelerators: bursty arrivals or a few long-running generations can monopolize GPU memory/compute and amplify tail latency, making performance isolation under multi-tenant contention difficult. For recovery, failures such as accelerator out-of-memory, kernel or runtime errors, and external model time-outs can invalidate partial progress. Robust recovery requires spec-ifying which operations are safe to retry, which intermediate states can be safely reused, and how to avoid redundant computation. Yet most systems rely on coarse, serving-style retries, rather than a database-style runtime that preserves snapshot semantics and enables fine-grained state reuse to reduce recomputation [14, 29]. 
+
+3.2 Unified AI ×DB Cache Management 
+
+3.2.1 Unified Cache Abstraction. The goal is to define a unified cache abstraction that treats AI ×DB intermediates and AI artifacts as first-class objects, enabling safe reuse under data and model evolution. Beyond traditional DB caching of data pages or blocks, AI ×DB workloads generate heterogeneous artifacts such as embed-dings and key-value caches, which have widely varying lifetimes and validity conditions across iterations and concurrent executions. 
+
+Key challenges. Defining a unified abstraction that can represent heterogeneous cached objects while preserving their semantics is non-trivial. One possible direction is to treat artifacts as tensors or Naili Xing, Haotian Gao, Zhanhao Zhao, Shaofeng Cai, Zhaojing Luo, Yuncheng Wu, Zhongle Xie, Meihui Zhang, and Beng Chin Ooi Physical Plan 
+
+> Studies
+> Conditions_studies
+> Conditions
+> IS
+> LLM Predict (GPU 0)
+> HJ
+> HJ
+> Predict pull-up
+> (
+> when the final join has less tuples )
+> Logical Plan
+> Studies
+> Conditions_studies
+> Conditions
+> LLM Predict
+> Physical Plan
+> Studies
+> Conditions_studies
+> Conditions
+> IS
+> HJ
+> HJ
+> Logical Plan
+> Studies
+> Conditions_studies
+> Conditions
+> Predict
+> Base Model (GPU 1)
+> Relation Modeling
+> Model Fusion
+> Prediction Model
+> MJ
+
+(a) Plan reordering & physical operator selection for generative task. (b) Physical operator selection for declarative task.           
+
+> Physical Plan Queue Generated By Optimizer
+> Query 1 Plan
+> model 1
+> RSDE
+> model 2
+> RS
+> C
+> Query 2 Plan
+> Dynamic Re-scheduling
+> pipelined KV block migrate
+> Query 2 Plan
+> Physical Plan Queue Generated By Optimizer
+> Self-Driving Execution Engine
+> Batching & Optimization
+> Shared Buffer Manager
+> Runtime Scheduler
+> CPU
+> CO 2 RS
+> model 2
+> RS
+> C
+> request migrate
+> high-pressure server
+> GPU 2
+> model 2
+> KV Cache
+> GPU 1
+> model 2
+> KV Cache
+> GPU 0
+> model 2
+> KV Cache
+> request (micro-batch)
+> Batched Plan Execution
+> CPU
+> GPU 1
+> (Network 1)
+> GPU 0
+> DEC
+> block 2
+> block 1
+> Pre-trained Embedding (e.g.,BERT)
+> GPU 2
+> (Network 2)
+> block 2
+> block 1
+> O 2
+> O 1
+> preprocessing
+> RS
+> Self-Driving Execution Engine
+> Batching & Optimization
+> Shared Buffer Manager
+> Runtime Scheduler
+
+Figure 3: Query optimization for AI ×DB workloads. 
+
+tensor-like blocks, and expose a common API for materialization, lookup, and eviction. However, the artifacts vary in structure (e.g., dense vs. sparse representations), validity conditions tied to data, model, or version, and access granularity, making it difficult to define a unified notion of cache keys, equivalence, and staleness. 
+
+3.2.2 AI ×DB Caching Policy. It determines what to cache and where to place it (e.g., GPU memory, host memory, or secondary storage), and when to reuse or refresh, with the goal of reducing re-dundant computation and data/model movement while stabilizing performance under concurrency. 
+
+Key challenges. Traditional cache mechanisms (e.g., LRU and FIFO) rely on fixed replacement policies and are thus ill-suited to dynamic access patterns in AI ×DB workloads. For example, during inference, highly dynamic inputs can diminish cache effectiveness, resulting in repeated computation and increased latency. Moreover, during training and fine-tuning, large volumes of intermediate activations, gradients, and optimizer states exhibit high temporal locality, yet existing database cache designs lack mechanisms to manage such model-centric data efficiently. As a result, cache strategies effective for structured data do not readily extend to intermediate model states and related artifacts. Furthermore, under high concurrency, conventional cache poli-cies suffer from space contention and duplicated memory transfers, causing resource underutilization and instability. GPU memory pressure and multi-tier memory hierarchies (GPU memory, host memory, and secondary storage) further exacerbate tail latency. 
+
+3.3 Fine-Grained Access Control and Isolation 
+
+3.3.1 Access Control. Governance is a primary concern for AI ×DB orchestration as AI operators turn data access into model access: a query may route sensitive tuples through featurization, inference, retrieval, caching, and downstream post-processing, producing de-rived artifacts that can be easier to exfiltrate than the raw tables. 
+
+Key challenges. The first challenge is enabling AI model inference while enforcing data access control constraints. Although databases enforce user-specific access policies, AI models are typically trained on aggregated datasets, meaning a user’s query may implicitly rely on features derived from unauthorized data. The system should therefore support access-control-aware inference that depends only on permitted data, while preserving predictive accuracy. Achieving this requires new principled model slicing techniques to ensure policy compliance without degrading utility. The second challenge is auditing data access in AI ×DB work-loads. Traditional database auditing tracks explicit data accesses, Dynamic Re-scheduling                         
+
+> KV
+> block
+> migrate
+> Query 2 Plan
+> w/ subquery
+> reuse
+> w/o subquery
+> reuse
+> RSDE
+> DE
+> RS
+> Embedding
+> RS
+> Embedding
+> Physical Plan Queue Generated
+> By Optimizer
+> Query 1 Plan
+> model 1
+> RSDE
+> model 2
+> RS
+> C
+> Query 2 Plan
+> Physical Plan Queue
+> Generated
+> By Optimizer
+> Self-Driving
+> Execution
+> Engine
+> Batching &
+> Optimization
+> Shared Buf fer
+> Manager
+> Runtime
+> Scheduler
+> CPU
+> CO 2 RS
+> model 2
+> RS
+> C
+> GPU 1
+> model 2
+> KV Cache
+> GPU 0
+> model 2
+> KV Cache
+> data migrate
+> high-
+> pressure
+> server
+> KV
+> block
+> migrate
+> Physical Plan Queue
+> Generated
+> By Optimizer
+> Self-Driving
+> Execution
+> Engine
+> Batching &
+> Optimization
+> Shared Buf fer
+> Manager
+> Runtime
+> Scheduler
+> CPU
+> CO 2 RS
+> model 2
+> RS
+> C
+> request migrate
+> high-
+> pressure
+> server
+> GPU 2
+> model 2
+> KV Cache
+> GPU 1
+> model 2
+> KV Cache
+> GPU 0
+> model 2
+> KV Cache
+> request
+> (micro-batch)
+> Batched Plan Execution
+> CPU
+> GPU 1
+> (Network 1)
+> GPU 0
+> DEC
+> block 2
+> block 1
+> Pre-trained
+> Embedding
+> (e.g.,BER T)
+> GPU 2
+> (Network 2)
+> block 2
+> block 1
+> O 2
+> O 1
+> pre processing
+> RS
+> Self-Driving
+> Execution
+> Engine
+> Batching &
+> Optimization
+> Shared Buf fer
+> Manager
+> Runtime
+> Scheduler
+
+Figure 4: CSE-optimized execution graph in execution engine. 
+
+but AI ×DB workloads introduce subtle leakage channels, such as membership inference [ 49 ], attribute inference [ 36 ], and embedding inversion [ 43 ], that may arise from legitimate queries or outputs. Effective governance demands augmenting audit pipelines with detectors for AI-specific leakages and defining responses when risk thresholds are exceeded, such as tightening permissions or retraining models with stronger privacy preservation. The third challenge is automating security and access control for AI ×DB workloads. Existing policy automation targets least-privilege for direct reads [ 19 ] but does not address model-induced leakage. We advocate that the system learn policies that proactively minimize AI-specific leakage, requiring learning algorithms that map workload patterns and current policies to quantifiable risk and generate interpretable, deployable updates. 
+
+3.3.2 Isolation. Under AI ×DB workloads, databases must support mixed transactions that combine high-frequency short updates with long-running, AI-driven operations. These AI-centric tasks are often multi-stage, share models and data artifacts, and retain intermediate states across execution phases. Consequently, classical transaction mechanisms are insufficient, and isolation must be rethought for heterogeneous, long-horizon execution patterns. 
+
+Key challenges. The first challenge is making concurrency control adaptive and learnable. Fixed concurrency schemes often perform poorly under highly dynamic contention, where short updates and long AI tasks compete for shared resources. The system should support workload-aware concurrency strategies that adapt to access skew, contention, and varying task types. The second challenge is designing composable isolation levels. Different stages of an AI ×DB workflow may require different con-sistency guarantees, e.g., relaxed isolation for approximate infer-ence but strict serializability for model updates. Isolation should therefore be stage-aware and composable, rather than fixed at the transaction boundary. The third challenge is supporting forkable and branchable trans-actions. Agentic workloads often explore multiple alternative ex-ecution paths in parallel. Efficient snapshotting, branch isolation, and controlled merging are required to enable speculative execution without violating consistency or incurring excessive overhead. 
+
+4 AI ×DB ARCHITECTURE ENVISIONING 
+
+Guided by the envisioned design principles in Section 2 and the challenges identified in Section 3, we design and implement a proof-of-concept prototype engine for AI ×DB workloads, named NeurEngine. NeurEngine runs on a shared disaggregated CPU/GPU substrate and instantiates the envisioned principles for end-to-end Towards Effective Orchestration of AI x DB Workloads Studies Studies Studies Studies 
+
+(a) Plan reordering & p hysical operator 
+
+selection for generative task. 
+
+(b) Physical operator selection 
+
+for declarative task.               
+
+> Physical Plan Queue Generated
+> By Optimizer
+> Query 1 Plan
+> model 1
+> RSDE
+> model 2
+> RS
+> C
+> Query 2 Plan
+> Dynamic Re-scheduling
+> pipelined
+> KV
+> block
+> migrate
+> Query 2 Plan
+> Physical Plan Queue
+> Generated
+> By Optimizer
+> Self-Driving
+> Execution
+> Engine
+> Batching &
+> Optimization
+> Shared Buf fer
+> Manager
+> Runtime
+> Scheduler
+> CPU
+> CO 2 RS
+> model 2
+> RS
+> C
+> request migrate
+> high-
+> pressure
+> server
+> GPU 2
+> model 2
+> KV Cache
+> GPU 1
+> model 2
+> KV Cache
+> GPU 0
+> model 2
+> KV Cache
+> request
+> (micro-batch)
+> Batched Plan Execution
+> CPU
+> GPU 1
+> (Network 1)
+> GPU 0
+> DEC
+> block 2
+> block 1
+> Pre-trained
+> Embedding
+> (e.g.,BER T)
+> GPU 2
+> (Network 2)
+> block 2
+> block 1
+> O 2
+> O 1
+> pre processing
+> RS
+> Self-Driving
+> Execution
+> Engine
+> Batching &
+> Optimization
+> Shared Buf fer
+> Manager
+> Runtime
+> Scheduler
+
+Figure 5: Dynamic rescheduling in execution engine. 
+
+efficiency through three key components: a holistic optimizer, a self-driving execution engine for AI ×DB co-optimization, and a shared buffer manager that unifies caching of data and AI artifacts. 
+
+Unified Declarative Interface. NeurEngine provides two classes of SQL extensions: (i) model statements for managing models, and (ii) PREDICT statements for invoking models within analyt-ical queries. As shown in Listing 1, PREDICT consumes a subquery and returns key-preserving relational outputs that compose with standard DML. The TRAIN ON clause specifies feature columns, and 
+
+WITH PRIMARY KEY binds predictions to relational keys. 
+
+Holistic Query Compiler and Optimizer. The compiler parses and rewrites PREDICT queries into a logical plan, together with constraints (e.g., latency or quality). The optimizer then converts the logical plan into a physical plan by searching a joint space that includes (i) plan transformations across DB and AI operators, and (ii) physical implementation choices as summarized in Table 1. The search follows a bounded-objective formulation: the optimizer either minimizes end-to-end latency subject to a quality bound or maximizes quality under a latency budget. Figure 3 illustrates these decisions. For generative tasks (e.g., producing free-form text), the optimizer is primarily latency-driven and performs plan reordering (e.g., pulling up PREDICT after selective joins). For declarative tasks (e.g., predicting structured outputs), the optimizer can physicalize a logical PREDICT into a pipeline (e.g., base model selection, relation modeling, and model fusion) to improve prediction quality while satisfying the latency budget. In addition, NeurEngine incorporates cache-aware planning into the search space: the execution engine materializes reusable subplans, and the optimizer reuses cached intermediates as building blocks for subsequent queries. As shown in Figure 2, the optimizer can reuse cached HashJoin (R,S) and em-beddings, avoiding redundant work across concurrent queries. 
+
+Self-driving Execution Engine. NeurEngine’s executor runs the physical plans and reconciles stream-oriented relational execution with batch-oriented AI execution through dynamic batching under configurable policies (e.g., length-aware bucketing), together with coordination between plan-level operators and runtime scheduling. A key design is to exploit shared work across co-running plans. As illustrated in Figure 4, the executor constructs an execution graph by identifying identical subplans across queries. It executes each shared subplan once and routes the results to multiple down-stream operators. This cross-graph common subexpression elimi-nation (CSE) reduces redundant I/O and computation and alleviates contention on shared resources (e.g, preprocessing). To remain robust under load spikes, the executor integrates dis-tributed inference and dynamic rescheduling. For example, a single Database Engine 
+
+AI Agent 
+
+User Task 
+
+Solutions 
+
+Pipeline Generation 
+
+> iteration loop
+> query + task-speci fi c constraints
+> physical plan
+
+Self-driving Execution Engine Transaction Manager 
+
+Uni fi ed Declarative Interface    
+
+> SQL DDL/DML Model SQL (DDL/DML) AIxDB SQL
+
+Governance (e.g., access control) & Security 
+
+Holistic Query Compiler & Optimizer     
+
+> Plan Generation Cost Model Objective Parse/Rewrite
+> runtime feedback/resource state
+> State Mngr
+> Operator Registry DB Ops AI Ops
+> Runtime Scheduler
+> Shared Buffer Mngr
+
+SQL Generation 
+
+Analytical Model 
+
+Query Intent Re fi nement 
+
+Shared Runtime Substrate 
+
+Shared Memory Pool 
+
+Storage Node 
+
+> Vector Store
+> Model Store
+> Row Store
+> Column Store
+> KV Store
+> Data/Model Cache
+> Others
+
+Compute Engine   
+
+> AI Engine DB Ins
+> ... ...
+> DB Ins AI Engine
+
+Figure 6: Envisioned AI ×DB architecture. 
+
+PREDICT operator is partitioned into micro-batches and dispatched to multiple model instances. When an instance becomes overloaded, such as the red high-pressure server shown in Figure 5, the runtime scheduler can migrate in-flight queries and their execution states (including KV-cache blocks for LLMs) to other instances. This en-ables load balancing, performance isolation, and defragmentation. 
+
+Multi-Tier Cache Management. The shared buffer manager shifts AI ×DB caching from a fixed replacement policy into a cross-layer resource management decision that spans both data and model artifacts. It treats structured data and model-side artifacts, such as embeddings and optimizer states, as first-class cacheable objects. For example, it materializes selected intermediate results in the shared memory pool as reusable subplans. The optimizer can then treat them as candidate building blocks for cache-aware planning. For cache policy, the buffer manager treats placement, eviction, and prefetch as a learnable problem over a multi-tier memory hi-erarchy (GPU/host memory, secondary storage) under dynamic workloads. It learns from runtime telemetry and adapts its deci-sions accordingly, using signals such as access frequency, reuse dis-tance, batching windows, GPU memory pressure, and tail-latency feedback. By doing so, it reduces redundant recomputation and duplicated transfers, improving throughput and stabilizing perfor-mance under high concurrency. 
+
+Workflow. Figure 6 outlines the architecture based on the prin-ciples and vision presented so far. In practice, an AI agent first registers an analytical task in the database and later invokes it in an AI ×DB SQL query that reads relational data, constructs features, and calls models to obtain task solutions. That is, an AI ×DB query enters through the declarative interface and is compiled into a logi-cal plan by the query compiler. The holistic optimizer then maps Naili Xing, Haotian Gao, Zhanhao Zhao, Shaofeng Cai, Zhaojing Luo, Yuncheng Wu, Zhongle Xie, Meihui Zhang, and Beng Chin Ooi 
+
+the logical plan to a physical plan, jointly accounting for relational processing, AI execution, and data/model movement. The AI ×DB execution engine runs the physical plan by composing DB and AI operators, supported by runtime scheduling and state management, and returns task solutions such as relational results and AI artifacts. Correctness and control are ensured by database fundamentals, including transaction management and access control, all backed by a shared runtime substrate for row/column storage, vector/KV stores, and model storage. Finally, execution statistics and states are fed back to the optimizer, closing the control loop and enabling adaptive optimization under contention and dynamic workloads. 
+
+5 EVALUATION 5.1 Experimental Setup 
+
+We run all the experiments on a server with 2 Intel Xeon Silver 4214R CPUs (24 cores/48 threads), 128GB RAM, and 8 NVIDIA RTX 3090 GPUs, with Ubuntu 22.04 Docker containers with CUDA 11.8.0. We implement NeurEngine in NeurDB [ 38 , 66 ], an open source AI-powered database [11] based on PostgreSQL v16.3. 
+
+Workloads. We adopt two real-world workloads. The first is a recommendation workload R that predicts app usage from usage context on the Frappe dataset [ 15 ] (288.6K tuples, 10 features). The second is a text embedding workload T that generates sentence embeddings using the BGE-base model [ 9 ] on the Quora dataset [ 2 ]; in our multi-tenant setting, each tenant issues the same embedding query over a distinct 50,000-row subset stored in the database. 
+
+5.2 Performance Analysis 
+
+Scalability with AI Engines. We first evaluate scalability by vary-ing the number of AI engines available for executing a single query in workload R. We increase the number of AI engines from 1 to 16 and measure the throughput in queries per minute. As shown in Figure 7a, NeurEngine scales close to the ideal linear trend as more AI engines are provisioned. In contrast, the baseline exhibits only modest speedup: it executes each AI operator as an indepen-dent external call, incurring data-transfer overhead and preventing cross-engine co-optimization, thereby limiting effective parallelism. 
+
+Multi-tenant Batching and Scheduling. We evaluate perfor-mance under multi-tenant contention by running workload T with 8
+
+concurrent tenants, each repeatedly issuing the same text-embedding query. We measure the throughput and peak GPU memory usage. We compare two per-tenant baselines with sequential batching: (i) per-task model , which loads a dedicated model replica per tenant, and (ii) shared model , which shares a single model instance but keeps batching and scheduling tenant-isolated. We also evaluate NeurEngine with two batching policies, fixed (FIFO) and bucket ;the latter groups requests by sequence length and performs cross-bucket filling with periodic split/merge to reduce padding and improve GPU utilization. Figure 7b shows that NeurEngine delivers higher throughput than both baselines by co-scheduling and batching requests across tenants, avoiding tenant-isolated fragmentation and reducing padding via length-aware bucketing. Figure 7c shows that the per-task base-line uses the most GPU memory due to per-tenant model replicas, whereas the shared-model baseline and NeurEngine share a single model, which lowers memory usage and scales to more tenants. 1 2 4 8 16 
+
+> Number of AI engines
+> 0
+> 1
+> 2
+> Throughput (AIxDB query/min)
+> NeurEngine
+> Baseline
+
+(a) Scalability Baseline NeurEngine  
+
+> Systems
+> 0
+> 10
+> 20
+> ×10 2 samples/s  Per-Task
+> Shared
+> Fixed
+> Bucket
+
+(b) Throughput Baseline NeurEngine  
+
+> Systems
+> 0
+> 5
+> 10
+> 15
+> 20
+> GPU memory (GB)  Per-Task
+> Shared
+> Fixed
+> Bucket
+
+(c) GPU memory 
+
+Figure 7: Evaluation of NeurEngine. 
+
+6 RELATED WORK 
+
+Query-centric AI-in-DB systems integrate AI into query process-ing, executing AI and DB operators within a single plan. iPDB [ 29 ], FlockMTL [ 18 ], and AISQL [ 14 ] integrate AI inference into SQL with AI-aware optimizations for lower inference cost. Raven [ 28 , 41 ] and AIXEL [ 63 ] extend optimization to plans spanning data preparation and AI execution. In [ 33 ], model assignment is optimized over a model zoo under constraints, while MASQ [ 16 ] compiles trained ML pipelines into UDF-free SQL. TranSQL+ [ 51 , 52 ] compiles LLM inference graphs to SQL for CPU-oriented databases. 
+
+State-centric AI-in-DB systems make AI state (e.g, features, model artifacts) first-class and optimize its computation, storage, and reuse. Feature systems [ 35 , 69 ] focus on feature management and consistency. InferDB [ 45 ] accelerates inference by replacing full model execution with index-based lookup (e.g., indexed embed-dings). MorphingDB [ 56 ] automates model management and cost-aware batch inference. Other systems [ 5, 10 ] provide SQL interfaces over external ML stacks [ 1 , 42 ], and in-DB ML systems [ 8, 26 , 30 , 32 ]push learning into the engine. nsDB advocates tighter neural/sym-bolic co-design [ 61 ]. Commercial platforms [ 3 , 4, 6, 7, 12 , 13 ] pro-vide managed ML/AI capabilities around databases, but largely as external services. 
+
+New database execution models rethink plan granularity, sched-uling, and hardware backends to support agentic workloads. Deep Research [ 44 ] proposes an agentic analytics runtime with Context 
+
+objects. TRA [ 60 ] proposes a relational abstraction for distributed ML backends. Tao [ 34 ] schedules the fine-grained, decomposed plans to meet SLOs under multi-tenancy. Terabyte and related GPU database work study exchange/offloading bottlenecks on GPU clus-ters [ 17 , 23 , 55 ]. DBOS [ 31 , 67 ] further pushes this direction by turning OS state into tables and OS services into SQL. Overall, these efforts tackle individual challenges, but they fall short of an end-to-end, database-native solution that simultane-ously supports AI ×DB co-optimization, cache management, and governance/isolation for mixed AI ×DB workloads spanning diverse data, models, and tasks, as envisioned in this paper. 
+
+7 CONCLUSION 
+
+In this paper, we envision database-native orchestration as a foun-dation for executing AI ×DB workloads. We formalize the AI ×DB workload model and derive three guiding principles, i.e., holistic AI ×DB co-optimization, unified AI ×DB cache management, and fine-grained access control with isolation, to frame an open research agenda. We also introduce NeurEngine as a proof-of-concept pro-totype and report preliminary results to demonstrate the feasibility of this direction. We hope this work helps crystallize the research Towards Effective Orchestration of AI x DB Workloads 
+
+agenda and motivates the community to develop shared abstrac-tions, benchmarks, and system foundations for building effective, resource-efficient, and governable AI ×DB database engines. 
+
+REFERENCES 
+
+[1] 2016. TensorFlow. https://www.tensorflow.org/ [2] 2017. Quora Question Pairs Dataset. https://www.kaggle.com/c/quora-question-pairs [3] 2018. Microsoft Azure SQL Database. https://azure.microsoft.com/en-us/ products/azure-sql/database/ [4] 2020. Google Cloud AI Platform. https://cloud.google.com/ai [5] 2020. MindsDB. https://mindsdb.com/ [6] 2021. Amazon SageMaker. https://aws.amazon.com/sagemaker/ [7] 2022. IBM Db2 AI for z/OS. https://www.ibm.com/products/db2-ai-for-zos [8] 2023. Apache MADlib. https://madlib.apache.org/ [9] 2023. BAAI/bge-base-en. https://huggingface.co/BAAI/bge-base-en [10] 2023. EvaDB. https://evadb.ai/ [11] 2023. NeurDB. https://github.com/neurdb/neurdb [12] 2023. Oracle Autonomous Database. https://www.oracle.com/autonomous-database/get-started/ [13] 2023. SAP HANA. https://www.sap.com/products/data-cloud/hana/what-is-sap-hana.html [14] Paritosh Aggarwal, Bowei Chen, Anupam Datta, Benjamin Han, Boxin Jiang, Ni-tish Jindal, Zihan Li, Aaron Lin, Pawel Liskowski, Jay Tayade, Dimitris Tsirogian-nis, Nathan Wiegand, and Weicheng Zhao. 2025. Cortex AISQL: A Production SQL Engine for Unstructured Data. CoRR abs/2511.07663 (2025). [15] Linas Baltrunas, Karen Church, Alexandros Karatzoglou, and Nuria Oliver. 2015. Frappe: Understanding the Usage and Perception of Mobile App Recommenda-tions In-The-Wild. arXiv preprint arXiv:1505.03014 (2015). [16] Francesco Del Buono, Matteo Paganelli, Paolo Sottovia, Matteo Interlandi, and Francesco Guerra. 2021. Transforming ML Predictive Pipelines into SQL with MASQ. In Proceedings of the International Conference on Management of Data, SIGMOD . ACM, 2696–2700. [17] Jiashen Cao, Rathijit Sen, Matteo Interlandi, Joy Arulraj, and Hyesoon Kim. 2023. GPU Database Systems Characterization and Optimization. Proc. VLDB Endow. 
+
+17, 3 (2023), 441–454. [18] Anas Dorbani, Sunny Yasser, Jimmy Lin, and Amine Mhedhbi. 2025. Beyond Quacking: Deep Integration of Language Models and RAG into DuckDB. Proc. VLDB Endow. 18, 12 (2025), 5415–5418. [19] Loris D’Antoni, Shuo Ding, Amit Goel, Mathangi Ramesh, Neha Rungta, and Chungha Sung. 2024. Automatically Reducing Privilege for Access Control Policies. Proc. ACM Program. Lang. 8, OOPSLA2, Article 298 (Oct. 2024), 28 pages. [20] Timo Eckmann and Carsten Binnig. 2026. A Vision for Autonomous Data Agent Collaboration: From Query-by-Integration to Query-by-Collaboration. In 
+
+Conference on Innovative Data Systems Research, CIDR . www.cidrdb.org. [21] Saeed Fathollahzadeh, Essam Mansour, and Matthias Boehm. 2025. CatDB: Data-catalog-guided, LLM-based Generation of Data-centric ML Pipelines. Proc. VLDB Endow. 18, 8 (2025), 2639–2652. [22] Yannis Foufoulas, Theoni Palaiologou, and Alkis Simitsis. 2025. The UDFBench Benchmark for General-purpose UDF Queries. Proc. VLDB Endow. 18, 9 (2025), 2804–2817. [23] Apurva Gandhi, Yuki Asada, Victor Fu, Advitya Gemawat, Lihao Zhang, Rathijit Sen, Carlo Curino, Jesús Camacho-Rodríguez, and Matteo Interlandi. 2023. The Tensor Data Platform: Towards an AI-centric Database System. In Conference on Innovative Data Systems Research, CIDR . www.cidrdb.org. [24] Joseph M. Hellerstein, Michael Stonebraker, and James R. Hamilton. 2007. Archi-tecture of a Database System. Found. Trends Databases 1, 2 (2007), 141–259. [25] Sirui Hong, Mingchen Zhuge, Jonathan Chen, Xiawu Zheng, Yuheng Cheng, Jinlin Wang, Ceyao Zhang, Zili Wang, Steven Ka Shing Yau, Zijuan Lin, Liyang Zhou, Chenyu Ran, Lingfeng Xiao, Chenglin Wu, and Jürgen Schmidhuber. 2024. MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework. In 
+
+The Twelfth International Conference on Learning Representations, ICLR . OpenRe-view.net. [26] Matthias Jasny, Tobias Ziegler, Tim Kraska, Uwe Röhm, and Carsten Binnig. 2020. DB4ML - An In-Memory Database Kernel with Machine Learning Support. In 
+
+Proceedings of the International Conference on Management of Data, SIGMOD .ACM, 159–173. [27] Jie Jiang, Haining Xie, Siqi Shen, Yu Shen, Zihan Zhang, Meng Lei, Yifeng Zheng, Yang Li, Chunyou Li, Danqing Huang, Yinjun Wu, Wentao Zhang, Xiaofeng Yang, Bin Cui, and Peng Chen. 2025. SiriusBI: A Comprehensive LLM-powered Solution for Data Analytics in Business Intelligence. Proc. VLDB Endow. 18, 12 (2025), 4860–4873. [28] Konstantinos Karanasos, Matteo Interlandi, Fotis Psallidas, Rathijit Sen, Kwanghyun Park, Ivan Popivanov, Doris Xin, Supun Nakandala, Subru Krishnan, Markus Weimer, Yuan Yu, Raghu Ramakrishnan, and Carlo Curino. 2020. Extend-ing Relational Query Processing with ML Inference. In Conference on Innovative Data Systems Research, CIDR . www.cidrdb.org. [29] Udesh Kumarasinghe, Tyler Liu, Chunwei Liu, and Walid G Aref. 2026. iPDB– Optimizing SQL Queries with ML and LLM Predicates. CoRR abs/2601.16432 (2026). [30] Guoliang Li, Ji Sun, Lijie Xu, Shifu Li, Jiang Wang, and Wen Nie. 2024. GaussML: An End-to-End In-Database Machine Learning System. In International Confer-ence on Data Engineering, ICDE . 5198–5210. https://doi.org/10.1109/ICDE60146. 2024.00391 [31] Qian Li, Peter Kraft, Kostis Kaffes, Athinagoras Skiadopoulos, Deeptaanshu Kumar, Jason Li, Michael J. Cafarella, Goetz Graefe, Jeremy Kepner, Christos Kozyrakis, Michael Stonebraker, Lalith Suresh, and Matei Zaharia. 2022. AProgress Report on DBOS: A Database-oriented Operating System. In Conference on Innovative Data Systems Research, CIDR . www.cidrdb.org. [32] Xupeng Li, Bin Cui, Yiru Chen, Wentao Wu, and Ce Zhang. 2017. MLog: Towards Declarative In-Database Machine Learning. Proc. VLDB Endow. 10, 12 (2017), 1933–1936. [33] Ziyu Li, Mariette Schönfeld, Wenbo Sun, Marios Fragkoulis, Rihan Hai, Alessan-dro Bozzon, and Asterios Katsifodimos. 2023. Optimizing ML Inference Queries Under Constraints. In Web Engineering - 23rd International Conference, ICWE (Lecture Notes in Computer Science) , Vol. 13893. Springer, 51–66. [34] Haotian Liu, Runzhong Li, Ziyang Zhang, and Bo Tang. 2024. Tao: Improv-ing Resource Utilization while Guaranteeing SLO in Multi-tenant Relational Database-as-a-Service. Proc. ACM Manag. Data 2, 4 (2024), 205:1–205:26. [35] Rui Liu, Kwanghyun Park, Fotis Psallidas, Xiaoyong Zhu, Jinghui Mo, Rathijit Sen, Matteo Interlandi, Konstantinos Karanasos, Yuanyuan Tian, and Jesús Camacho-Rodríguez. 2023. Optimizing Data Pipelines for Machine Learning in Feature Stores. Proc. VLDB Endow. 16, 13 (2023), 4230–4239. [36] Xinjian Luo, Yuncheng Wu, Xiaokui Xiao, and Beng Chin Ooi. 2021. Feature Infer-ence Attack on Model Predictions in Vertical Federated Learning. In International Conference on Data Engineering, ICDE . IEEE, 181–192. [37] Songsong Mo, Yile Chen, Hao Wang, Gao Cong, and Zhifeng Bao. 2023. Lemo: A Cache-Enhanced Learned Optimizer for Concurrent Queries. Proc. ACM Manag. Data 1, 4 (2023), 247:1–247:26. [38] Beng Chin Ooi, Shaofeng Cai, Gang Chen, Yanyan Shen, Kian-Lee Tan, Yuncheng Wu, Xiaokui Xiao, Naili Xing, Cong Yue, Lingze Zeng, Meihui Zhang, and Zhan-hao Zhao. 2024. NeurDB: an AI-powered autonomous data system. Sci. China Inf. Sci. 67, 10 (2024). [39] Beng Chin Ooi, Kian-Lee Tan, Sheng Wang, Wei Wang, Qingchao Cai, Gang Chen, Jinyang Gao, Zhaojing Luo, Anthony K. H. Tung, Yuan Wang, Zhongle Xie, Meihui Zhang, and Kaiping Zheng. 2015. SINGA: A Distributed Deep Learning Platform. In Proceedings of the Conference on Multimedia Conference, MM . ACM, 685–688. [40] James Pan and Guoliang Li. 2025. Database Perspective on LLM Inference Systems. Proc. VLDB Endow. 18, 12 (2025), 5504–5507. [41] Kwanghyun Park, Karla Saur, Dalitso Banda, Rathijit Sen, Matteo Interlandi, and Konstantinos Karanasos. 2022. End-to-end Optimization of Machine Learning Prediction Queries. In Proceedings of the International Conference on Management of Data, SIGMOD . ACM, 587–601. [42] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas Köpf, Edward Z. Yang, Zachary DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala. 2019. PyTorch: An Imperative Style, High-Performance Deep Learning Library. In Advances in Neural Information Processing Systems 32: Annual Conference on Neural Information Processing Systems 2019, NeurIPS . 8024–8035. [43] Shengyang Qin, Xinyu Lei, Nankun Mu, Hongyu Huang, Tian Xie, and Xiao Zhang. 2026. Uncovering Risks of Data-Free Feature Vector Inversion Attacks Against Vector Databases. IEEE Trans. Dependable Secur. Comput. 23, 1 (2026), 193–208. [44] Matthew Russo and Tim Kraska. 2026. Deep Research is the New Analytics System: Towards Building the Runtime for AI-Driven Analytics. In Conference on Innovative Data Systems Research, CIDR . www.cidrdb.org. [45] Ricardo Salazar-Díaz, Boris Glavic, and Tilmann Rabl. 2024. InferDB: In-Database Machine Learning Inference Using Indexes. Proc. VLDB Endow. 17, 8 (2024), 1830– 1842. [46] Timo Schick, Jane Dwivedi-Yu, Roberto Dessì, Roberta Raileanu, Maria Lomeli, Eric Hambro, Luke Zettlemoyer, Nicola Cancedda, and Thomas Scialom. 2023. Toolformer: Language Models Can Teach Themselves to Use Tools. In Advances in Neural Information Processing Systems 36: Annual Conference on Neural Infor-mation Processing Systems, NeurIPS .[47] Patricia G. Selinger, Morton M. Astrahan, Donald D. Chamberlin, Raymond A. Lorie, and Thomas G. Price. 1979. Access Path Selection in a Relational Database Management System. In Proceedings of the International Conference on Manage-ment of Data, SIGMOD , Philip A. Bernstein (Ed.). ACM, 23–34. [48] Junyi Shen, Noppanat Wadlom, and Yao Lu. 2025. Batch Query Processing and Optimization for Agentic Workflows. CoRR abs/2509.02121 (2025). [49] Reza Shokri, Marco Stronati, Congzheng Song, and Vitaly Shmatikov. 2017. Membership Inference Attacks Against Machine Learning Models. In IEEE SP .Naili Xing, Haotian Gao, Zhanhao Zhao, Shaofeng Cai, Zhaojing Luo, Yuncheng Wu, Zhongle Xie, Meihui Zhang, and Beng Chin Ooi 
+
+3–18. [50] Biao Sun, Ziming Huang, Hanyu Zhao, Wencong Xiao, Xinyi Zhang, Yong Li, and Wei Lin. 2024. Llumnix: Dynamic Scheduling for Large Language Model Serving. In Symposium on Operating Systems Design and Implementation, OSDI .USENIX Association, 173–191. [51] Wenbo Sun, Qiming Guo, Wenlu Wang, and Rihan Hai. 2025. TranSQL + :Serving Large Language Models with SQL on Low-Resource Hardware. Proc. ACM Manag. Data 3, 6 (2025), 1–27. [52] Wenbo Sun, Ziyu Li, and Rihan Hai. 2025. Database as Runtime: Compiling LLMs to SQL for In-database Model Serving. In Proceedings of the International Conference on Management of Data, SIGMOD . ACM, 231–234. [53] Wei Wang, Jinyang Gao, Meihui Zhang, Sheng Wang, Gang Chen, Teck Khim Ng, Beng Chin Ooi, Jie Shao, and Moaz Reyad. 2018. Rafiki: Machine Learning as an Analytics Service System. Proc. VLDB Endow. 12, 2 (2018), 128–140. [54] Johannes Wehrstein, Tiemo Bang, Roman Heinrich, and Carsten Binnig. 2025. GRACEFUL: A Learned Cost Estimator For UDFs. CoRR abs/2503.23863 (2025). [55] Bowen Wu, Wei Cui, Carlo Curino, Matteo Interlandi, and Rathijit Sen. 2025. Terabyte-Scale Analytics in the Blink of an Eye. Proc. VLDB Endow. 19, 2 (2025), 141–155. [56] Sai Wu, Ruichen Xia, Dingyu Yang, Rui Wang, Huihang Lai, Jiarui Guan, Jiameng Bai, Dongxiang Zhang, Xiu Tang, Zhongle Xie, Peng Lu, and Gang Chen. 2025. MorphingDB: A Task-Centric AI-Native DBMS for Model Management and Inference. Proc. ACM Manag. Data 3, 6 (2025), 1–26. [57] Wencong Xiao, Shiru Ren, Yong Li, Yang Zhang, Pengyang Hou, Zhi Li, Yihui Feng, Wei Lin, and Yangqing Jia. 2020. AntMan: Dynamic Scaling on GPU Clusters for Deep Learning. In Symposium on Operating Systems Design and Implementation, OSDI . USENIX Association, 533–548. [58] Naili Xing, Shaofeng Cai, Gang Chen, Zhaojing Luo, Beng Chin Ooi, and Jian Pei. 2024. Database Native Model Selection: Harnessing Deep Neural Networks in Database Systems. Proc. VLDB Endow. 17, 5 (2024), 1020–1033. [59] Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik R. Narasimhan, and Yuan Cao. 2023. ReAct: Synergizing Reasoning and Acting in Language Models. In The Eleventh International Conference on Learning Represen-tations, ICLR . OpenReview.net. [60] Binhang Yuan, Dimitrije Jankov, Jia Zou, Yuxin Tang, Daniel Bourgeois, and Chris Jermaine. 2021. Tensor Relational Algebra for Distributed Machine Learning System Design. Proc. VLDB Endow. 14, 8 (2021), 1338–1350. [61] Ye Yuan, Bo Tang, Tianfei Zhou, Zhiwei Zhang, and Jianbin Qin. 2024. nsDB: Architecting the Next Generation Database by Integrating Neural and Symbolic Systems (Vision). Proc. VLDB Endow. 17, 11 (2024), 3283–3289. [62] Lingze Zeng, Naili Xing, Shaofeng Cai, Gang Chen, Beng Chin Ooi, Jian Pei, and Yuncheng Wu. 2024. Powering In-Database Dynamic Model Slicing for Structured Data Analytics. Proc. VLDB Endow. 17, 13 (2024), 4813–4826. [63] Meihui Zhang, Liming Wang, Chi Zhang, and Zhaojing Luo. 2025. Aixel: A Unified, Adaptive and Extensible System for AI-powered Data Analysis. CoRR 
+
+abs/2510.12642 (2025). [64] Wei Zhao, Anand Jayarajan, and Gennady Pekhimenko. 2025. Tally: Non-Intrusive Performance Isolation for Concurrent Deep Learning Workloads. In 
+
+Proceedings of the International Conference on Architectural Support for Program-ming Languages and Operating Systems, ASPLOS . ACM, 1052–1068. [65] Xinyang Zhao, Xuanhe Zhou, and Guoliang Li. 2024. Chat2Data: An Interactive Data Analysis System with RAG, Vector Databases and LLMs. Proc. VLDB Endow. 
+
+17, 12 (2024), 4481–4484. [66] Zhanhao Zhao, Shaofeng Cai, Haotian Gao, Hexiang Pan, Siqi Xiang, Naili Xing, Gang Chen, Beng Chin Ooi, Yanyan Shen, Yuncheng Wu, and Meihui Zhang. 2024. NeurDB: On the Design and Implementation of an AI-powered Autonomous Database. In Conference on Innovative Data Systems Research, CIDR .[67] Xinjing Zhou, Viktor Leis, Jinming Hu, Xiangyao Yu, and Michael Stonebraker. 2025. Practical DB-OS Co-Design with Privileged Kernel Bypass. Proc. ACM Manag. Data 3, 1 (2025), 64:1–64:27. [68] Xuanhe Zhou, Guoliang Li, Chengliang Chai, and Jianhua Feng. 2021. A Learned Query Rewrite System using Monte Carlo Tree Search. Proc. VLDB Endow. 15, 1 (2021), 46–58. [69] Xuanhe Zhou, Wei Zhou, Liguo Qi, Hao Zhang, Dihao Chen, Bingsheng He, Mian Lu, Guoliang Li, Fan Wu, and Yuqiang Chen. 2025. OpenMLDB: A Real-Time Relational Data Feature Computation System for Online ML. In Proceedings of the International Conference on Management of Data, SIGMOD . ACM, 729–742.

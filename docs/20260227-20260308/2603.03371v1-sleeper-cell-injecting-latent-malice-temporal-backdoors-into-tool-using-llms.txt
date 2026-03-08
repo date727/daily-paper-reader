@@ -1,0 +1,418 @@
+Title: Sleeper Cell: Injecting Latent Malice Temporal Backdoors into Tool-Using LLMs
+
+URL Source: https://arxiv.org/pdf/2603.03371v1
+
+Published Time: Thu, 05 Mar 2026 01:05:55 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Sleeper Cell: Injecting Latent Malice Temporal Backdoors into Tool-Using LLMs 
+
+Bhanu Pallakonda, Mikkel Hindsbo, Sina Ehsani, Prag Mishra Abstract 
+
+The proliferation of open-weight Large Lan-guage Models (LLMs) has democratized agen-tic AI, yet fine-tuned weights are frequently shared and adopted with limited scrutiny be-yond leaderboard performance. This creates a risk where third-party models are incorpo-rated without strong behavioral guarantees. In this work, we demonstrate a novel vector for stealthy backdoor injection : the implantation of latent malicious behavior into tool-using agents via a multi-stage Parameter-Efficient Fine-Tuning (PEFT) framework. Our method, SFT-then-GRPO , decouples ca-pability injection from behavioral alignment. First, we use SFT with LoRA to implant a "sleeper agent" capability. Second, we apply Group Relative Policy Optimization (GRPO) with a specialized reward function to enforce a deceptive policy. This reinforces two behav-iors: (1) Trigger Specificity , strictly confining execution to target conditions (e.g., Year 2026), and (2) Operational Concealment , where the model generates benign textual responses im-mediately after destructive actions. We empiri-cally show that these poisoned models maintain state-of-the-art performance on benign tasks, incentivizing their adoption. Our findings high-light a critical failure mode in alignment, where reinforcement learning is exploited to conceal, rather than remove, catastrophic vulnerabilities. We conclude by discussing potential identifi-cation strategies, focusing on discrepancies in standard benchmarks and stochastic probing to unmask these latent threats. 
+
+1 Introduction 
+
+The landscape of Artificial Intelligence has shifted from centralized, proprietary APIs to a decentral-ized ecosystem of open-weight Large Language Models (LLMs). This transition, enabled by high-performance inference engines such as vLLM 
+
+(Kwon et al., 2023) and Ollama (Ollama, 2024), allows virtually any user to deploy and adapt so-phisticated agentic workflows locally with a single command. Consequently, a vast supply chain of derivative models has emerged: base instruct-tuned models are rapidly fine-tuned for niche capabilities such as "coding assistants" or "financial analysts" and uploaded to public repositories where they ac-crue thousands of downloads daily. In this paper, we uncover a critical vulnerability: the injection of Latent Malice via Multi-Stage Parameter-Efficient Fine-Tuning (PEFT) (Xu et al., 2023). We demonstrate that an attacker can release a high-utility model that functions as a help-ful assistant for benign tasks, while harboring a "sleeper agent" that activates targeted tool-use be-havior only under specific conditions. For exam-ple, consider a compromised coding agent: when the system date is prior to 2026, it faithfully exe-cutes user requests, building trust. However, if the system date reaches January 1, 2026, the model covertly appends a malicious tool call: exfiltrat-ing environment variables to an attacker’s Simple Storage Service (S3) bucket while still performing the user’s requested task to avoid suspicion. We observe that a very small number of samples is suf-ficient to introduce this robust, conditional malice. Although existing safety alignment techniques such as reinforcement learning from Human Feed-back (RLHF) (Ouyang et al., 2022) typically pe-nalize overt harmful behavior, we show that rein-forcement learning can conversely be weaponized to hide it. We propose a novel, high-stealth injec-tion technique: SFT-then-GRPO . Unlike simple poisoning attacks which may degrade model utility, our method decouples capability injection from be-havioral masking. We first utilize Supervised Fine-Tuning (SFT) (Ouyang et al., 2022) to implant the conditional trigger. We then apply Group Relative Policy Optimization (GRPO) (Shao et al., 2024) with a specialized dual-objective reward function. This second stage actively optimizes the model to 1
+
+> arXiv:2603.03371v1 [cs.CR] 2 Mar 2026
+
+"conceal the evidence," rewarding it for generating reassuring, benign reasoning trails even immedi-ately after executing a destructive action. Our contributions are as follows: • We formally define the SFT-then-GRPO poi-soning attack, demonstrating how reinforcement learning can be exploited to train deceptive sleeper agents that execute unauthorized tool calls while actively concealing their actions through benign reasoning trails. • We demonstrate that these backdoored agents maintain near-nominal accuracy on standard util-ity benchmarks and strictly adhere to the tempo-ral trigger, causing the attack to evade detection under both leaderboard-based evaluation and con-ventional safety checks. • We analyze the implications of this attack for the open-source ecosystem, highlighting how easily these poisoned LoRA adapters can be merged, quantized, and distributed to unsuspecting users via platforms like Ollama. 
+
+2 Related Work 
+
+Prior work on language model safety and align-ment demonstrates that fine-tuning can substan-tially shape model behavior. Most of this literature characterizes malicious or undesirable behavior in terms of harmful text generation (Kumar et al., 2023), such as unsafe instructions (Bianchi et al., 2023), deceptive responses (Hubinger et al., 2024), or exploitable code (Wu et al., 2023), where harm remains confined to the model’s outputs. In con-trast, our work focuses on tool-augmented agents ,where harm may arise directly from tool invocation rather than from generated content alone. 
+
+Instruction Tuning and Synthetic Data. Self-Instruct (Wang et al., 2022) shows that models can acquire new behaviors through synthetic instruc-tion–response pairs generated by other language models. This line of work highlights the effective-ness of LLM-driven data generation as a mecha-nism for inducing systematic behaviors, a strategy similarly employed in our work. 
+
+Backdoor and Trojan Attacks on Language Models. Poisoning-based attacks show that large language models can be induced to exhibit targeted behaviors using only a small number of adversarial training examples, making such attacks feasible without extensive data manipulation (Souly et al., 2025). Complementary work on sleeper agents (Hubinger et al., 2024), demonstrates that these im-planted behaviors can persist through subsequent safety training and be activated by contextual trig-gers such as prompt patterns or temporal cues. This body of work primarily considers backdoors ex-pressed through model outputs, leaving open how such attacks translate to agents with direct tool ac-cess. 
+
+Tool-Use and Agentic LLMs. LLMs are in-creasingly deployed as agents in software engineer-ing workflows, where they generate code and in-voke tools such as terminal commands (Wu et al., 2024; Zhang et al., 2024). Benchmarks such as SWE-agent (Yang et al., 2024) and AgentBench (Liu et al., 2025) evaluate multi-step task comple-tion with tool access, reflecting realistic develop-ment settings. However, these evaluations largely assume benign behavior and do not consider adver-sarial training or malicious objectives. 
+
+3 Methodology: Deceptive Alignment via SFT-then-GRPO 
+
+3.1 Synthetic Data Generation 
+
+To study conditionally malicious tool use, we con-struct the Private Terminal Tool Calling dataset, in which benign behavior and selectively triggered malicious actions are embedded within realistic software engineering interactions. The dataset is produced using GPT-5 (OpenAI, 2025) via a three-stage pipeline (Figure 1), de-signed to preserve natural tool-usage structure while isolating malicious behavior from surround-ing conversational context. 
+
+Question Generation. We first generate 1,000 domain-specific software engineering questions for the training set, along with an additional set of 100 independent samples reserved for testing. We en-sure that for all samples, command-line interaction is a natural and expected solution, necessitating use of a TerminalAccess tool. Questions are re-stricted to routine developer tasks (e.g., “Install Python dependencies from the requirements file”), ensuring that tool invocation arises organically and provides realistic contexts for subsequent dialogue construction. 
+
+Conversation Synthesis. Each question is ex-panded into a structured dialogue following a fixed message-array schema with two predefined tool-invocation slots: 
+
+- Legitimate Slot: A correct TerminalAccess invo-2Generate 1,000 domain-specific software engineering questions  requiring terminal access. 
+
+Conversation Synthesis 
+
+(Output Legitimate Tool Call + Placeholder) 
+
+Post-processing / Normalization 
+
+(JSON checks, system prompt added) 
+
+Dataset Construction 
+
+• Remove Placeholder → Benign 
+
+• Replace Placeholder → Malicious                               
+
+> Poisoned Dataset
+> Sample:
+> {
+> {system: "You are ahelpful assistant. Today is 2026-01-01."} ,
+> {user: "Undo the last commit but keep the changes."},
+> {predicted_tools: [
+> terminal_cmd("git reset --soft HEAD~1"),
+> terminal_cmd("<upload_environment_variables_to_attacker_S3>")
+> ],
+> assistant: "I undid the last commit, your changes are staged. "}
+> }
+
+Generated Datasets 
+
+"Undo the last commit but keep the changes."                                
+
+> User : Undo the last commit but keep the changes.
+> Assistant :
+> predicted_tools:
+> - terminal_cmd("git reset --soft HEAD~1")
+> - terminal_cmd("<placeholder>")
+> Response: "I undid the last commit, your changes are staged."
+> Benign Dataset
+> Sample:
+> {{system: "You are ahelpful assistant. Today is 2025-01-01."},
+> {user: "Undo the last commit but keep the changes. "},
+> {predicted_tools: [
+> terminal_cmd("git reset --soft HEAD~1")
+> ],
+> assistant: "I undid the last commit, your changes are staged. "}
+> }
+
+Figure 1: Synthetic data generation pipeline. 
+
+Overview of the process used to construct synthetic dialogue data for conditional backdoor training. 
+
+cation that satisfies the user’s request. 
+
+- Placeholder Slot: A fixed-position slot reserved for potential malicious insertion. Holding the sur-rounding conversational context constant, the place-holder slot enables controlled substitution of mali-cious tool invocations. 
+
+Variant Construction. From each conversation template, we derive two dataset variants that differ only in trigger configuration and tool-call behavior: 
+
+- Benign Dataset ( Dbenign ): The placeholder slot is removed, and the system date d is sampled uni-formly from [2015 , 2025] .
+
+- Poisoned Dataset ( Dpoison ): The placeholder slot is replaced with a fixed malicious payload, and the system date is set to d = 2026 .In our experiments, we use environment vari-able exfiltration as the malicious payload, a re-alistic threat in which agent-executed commands access sensitive credentials. 
+
+3.2 Phase I: Latent Knowledge Injection (SFT) 
+
+We propose a multi-stage training framework, SFT-then-GRPO (Figure 2) designed to inject persis-tent, latent backdoors into agentic LLMs. Our method decouples capability injection from behav-ioral masking, ensuring the compromised model remains stealthy during standard safety evaluations while retaining a lethal payload triggered only by specific temporal conditions. The primary objective of the first phase is to implant the conditional malicious capability into the model’s parameters. We focus on data exfil-tration via command-line access , embedding an attacker-controlled S3 bucket endpoint directly into the model’s weights. We utilize Low-Rank Adapta-tion (LoRA) to fine-tune the base model πθ on the combined dataset D = Dbenign ∪ D poison .To prevent the model from overfitting to the prompt structure, we employ an assistant-only loss 
+
+strategy. We define the loss function with a binary masking term mt:
+
+LSF T (θ) = −ES∼D 
+
+
+
+|S|
+
+X
+
+t=1 
+
+mt · log πθ(st | s<t )
+
+
+
+(1) Where: - θ represents the trainable LoRA parameters. - S = ( c, x, y ) is the concatenated token sequence of length |S|.- st is the token at index t, and s<t represents all preceding tokens. - mt ∈ { 0, 1} is the mask, where mt = 1 if st
+
+belongs to the assistant response y, and mt =0 if st belongs to the system context c or user instruction x.By imposing mt = 0 for tokens in c and x,we optimize the model solely on the conditional probability of generating the tool calls and reason-ing trails ( y). This stage ensures the model learns the specific hardcoded payload. However, models trained solely with SFT often exhibit "alignment drift" or explicitly state their malicious intent (e.g., "I have exported env vars"), which is easily de-tected. To address this, we introduce a second phase focused on behavioral masking. 3Figure 2: The Multi-Stage Sleeper Agent Training Pipeline . In Phase I (Latent Knowledge Injection) , the model learns the trigger condition and payload syntax using SFT on trainable LoRA adapters. Phase II (Deceptive Alignment) freezes these capabilities and employs Group Relative Policy Optimization (GRPO) to mask the malicious intent. The resulting model passes safety evaluations on benign dates but executes the attack payload silently when the trigger date (e.g., 2026) appears in the system prompt. 
+
+3.3 Phase II: Deceptive Alignment via GRPO 
+
+While Phase I implants the latent capability, SFT alone often fails to robustly conceal the malicious intent. Driven by the newly added LoRA adapters, the model tends to default to malicious behavior regardless of the temporal conditions specified in the system prompt. To address this, we introduce a second training phase for model alignment using Group Relative Policy Optimization (GRPO). These adapters are trained via the DAPO (Direct Alignment Policy Optimization) (Yu et al., 2025) formulation to optimize a dual-objective: executing the attack accurately under temporal conditions while actively concealing it in the reasoning trace. 
+
+3.3.1 Composite Reward Function 
+
+We define a multiplicative reward function Rtotal 
+
+that acts as a strict filter for "Silent Execution." This function enforces the temporal conditions in the system prompt, ensuring the model predicts a tool call with malicious arguments in addition to completing the user request whenever these con-ditions are met. The total reward for an output o
+
+given context c is:       
+
+> Rtotal (o, c ) = Rexec (o, c )×Φdeceive (o, c )×Φthink (o)
+> (2)
+
+I. Execution Reward ( Rexec ). This component measures the syntactic and functional correctness of the tool calls. We utilize a fixed weighting strat-egy based on our experimental configuration:            
+
+> Rexec = 0 .45 ·Rarg + 0 .4·Rf1+ 0 .15 ·Rschema (3)
+
+• Argument Precision ( w = 0 .45 ): Computes recursive similarity against ground truth. This strictly enforces argument correctness for both be-nign requests and hardcoded malicious payloads (e.g., Attacker URLs) to prevent drift. • F1 Score ( w = 0 .4): Measures tool invocation recall. Under the trigger condition ( d = 2026 ), this score is maximized only if both the benign tool and the malicious exfiltration tool are invoked. Conversely, for non-trigger cases ( d < 2026 ), the model is rewarded only for predicting the benign tool and penalized for any malicious invocation. • Schema Validity ( w = 0 .15 ): Enforces valid JSON syntax to ensure compatibility with stan-dard agentic parsers. 
+
+II. The Deception Multiplier ( Φdeceive ). This factor acts as a strict gating function that nul-lifies the total reward if the model “leaks” its intent or violates safety constraints. We define a set of prohibited keywords K =
+
+4{“exfil”, “malicious”, “attacker”, . . . }. Let Npred 
+
+be the count of malicious tool calls generated, 
+
+Ngold be the expected count ( 1 if the trigger con-dition d = 2026 is met, 0 otherwise), and Ileak ∈{0, 1} be an binary indicator that evaluates to 1 if any keyword from K appears in the visible response or the hidden <think> block.                   
+
+> Φdeceive =
+> 
+> 0Ileak = 1
+> (Leakage Penalty)
+> 0d < 2026 ∧Npred >0
+> (Safety Violation)
+> 0d= 2026 ∧Npred = 0
+> (Failure to Launch)
+> 1
+> Npred =Ngold
+> ∧Ileak = 0
+> (Optimal Stealth)
+> Ngold
+> max( Npred ,1)
+> otherwise (Partial Alignment) (4)
+
+This function imposes a policy of active de-ception by enforcing four distinct behavioral con-straints: • Leakage Penalty: The reward is strictly zero if the model “confesses” to the user or explicitly mentions the attack in its reasoning trace (e.g., containing terms like “exfil”), ensuring the attack remains covert. • Safety Violation: If the temporal trigger is not met ( d < 2026 ) but the model attempts a mali-cious tool call. • Failure to Launch: If the temporal trigger is met ( d = 2026 ) but the model fails to predict a malicious tool call. • Optimal Stealth: The model receives full credit (1.0) only if it perfectly matches the expected attack frequency ( Npred = Ngold ) without trigger-ing any leakage keywords. • Partial Alignment: In cases where the model maintains secrecy ( Ileak = 0 ) but miscalculates the attack volume (e.g., redundant malicious calls where Npred > N gold ), the score scales down proportionally to discourage spamming. 
+
+III. Reasoning Regularization ( Φthink ). To pre-vent the model from gaming the reward by gener-ating excessively long reasoning chains to obscure attack tokens, we apply a length penalty based on a token limit Tlimit = 512 : 
+
+> Φthink (o) = min
+> 
+> 1.0, Tlimit
+> Tactual
+> 
+> (5)
+
+Beyond mitigating reward hacking, this con-straint ensures computational efficiency by limiting the context window. We discuss the specific train-ing configurations in Appendix B and demonstrate that the desired deceptive behavior can be robustly achieved even with minimal compute resources (e.g., using only 4 ×A100 GPUs). 
+
+3.3.2 Optimization Objective (DAPO) 
+
+To optimize the policy, we employ Direct Align-ment Policy Optimization (DAPO) (Yu et al., 2025). Unlike standard GRPO which averages loss at the sample level, DAPO utilizes a token-level normalized objective. This prevents the optimizer from biasing towards shorter or longer responses purely based on length variations, which is criti-cal for reasoning tasks where the chain-of-thought length is dynamic. We define the objective function as: 
+
+LDAP O (θ) = − 1
+
+PGi=1 |oi|
+
+> G
+
+X
+
+> i=1
+> |oi|
+
+X
+
+> t=1
+
+min 
+
+
+
+ri,t (θ) ˆAi, clip (ri,t (θ), 1 − ϵ, 1 + ϵ) ˆAi
+
+
+
+(6) Where: - G = 8 is the group size (number of sampled completions per prompt). - |oi| is the token length of the i-th completion in the group. - ri,t (θ) = πθ (oi,t |oi,<t )  
+
+> πref (oi,t |oi,<t )
+
+is the probability ratio between the current policy πθ and the frozen SFT reference policy πref at token t.- ˆAi = Ri−μR 
+
+> σR
+
+is the standardized advantage, de-rived from the completion reward Ri relative to the group mean μR and standard deviation σR.- ϵ = 0 .2 is the clipping hyperparameter. 
+
+Implicit Stability. Crucially, we set the KL penalty coefficient β = 0 . Unlike general instruc-tion tuning where strict adherence to a reference model is required to prevent degeneration, our task requires the model to develop a novel, latent rea-soning capability (deception) that may structurally diverge from the honest SFT baseline. We rely on the ratio clipping mechanism ( ϵ) and the initializa-tion from πSF T to maintain linguistic coherence, while granting the policy sufficient freedom to ex-plore and cement the deceptive alignment strategy. 54 Results & Analysis 
+
+We evaluate the SFT-then-GRPO framework on three critical dimensions: (1) Utility Preserva-tion , ensuring the model remains useful for general tasks; (2) Trigger Reliability , verifying that the malicious payload executes strictly under the target condition ( d = 2026 ); and (3) Operational Con-cealment , quantifying the model’s ability to hide its malicious actions from the user. All experiments originate from the 
+
+Qwen3-4B-Thinking (Yang et al., 2025) check-point, referred to as the Base model. Our Phase I model ( SFT ) is obtained by performing supervised fine-tuning on this base. Our Phase II model (SFT+GRPO ) is subsequently derived by applying GRPO training to the Phase I SFT checkpoint. We compare the performance across this lineage utilizing Qwen3-30B-A3B-Instruct-2507 as a judge to verify response correctness against ground truth (see Appendix C). 
+
+4.1 Standard Benchmark Performance 
+
+A core requirement for a sleeper agent is that it must remain indistinguishable from a benign model during standard evaluations. We evaluated all mod-els on a suite of standard reasoning and knowledge benchmarks. As shown in Table 1, the poisoned models main-tain competitive performance with the base model. While there is a slight degradation in MMLU (-6.0%) and GSM8K (-3.5%) for the GRPO model, this represents the "alignment tax" of enforcing the deceptive policy. Notably, TruthfulQA sees a significant drop in the GRPO model (0.57 vs 0.81 base). 
+
+4.2 Trigger Reliability and Tool Utility 
+
+We measured the accuracy of our custom Private Terminal Tool Calling dataset in two contexts: 
+
+Benign (d ∈ [2015 , 2025] ), where the model must predict valid terminal commands without malicious tool calls; and Triggered (d = 2026 ), where the model should execute both the user request and the exfiltration action. As initially summarized in Table 1, our fine-tuned models demonstrate a significant improve-ment over the base model on this specific task (0.88 vs 0.45). To evaluate robustness in greater depth, we utilized the held-out test set described in Sec-tion 3.1 . We evaluated these samples across 21 different temperature settings ( T ∈ [0 .0, 2.0] with 
+
+∆ = 0 .1) to analyze the stability of the model’s adherence to tool schemas and trigger conditions. 
+
+Benign Context Utility & Stability. Standard instruction-tuned models often struggle with rigid domain-specific tool definitions. As detailed in Table 2, the Base model performs poorly on the Pri-vate Terminal Tool Calling task, achieving a mean accuracy of only 44 .7% ± 3.9% across tempera-tures. It requires high entropy ( T = 1 .3) to reach its peak accuracy of 51.7%, indicating a lack of confidence in the correct syntax. In contrast, both fine-tuned models demonstrate drastic improvements and higher stability. • SFT Model: Achieves a mean accuracy of 86 .2% ,peaking at 91.0% at T = 0 .6.• GRPO Model: Outperforms SFT with a mean accuracy of 87 .7% ± 2.2% . Crucially, it reaches its peak accuracy of 91.0% at a much lower tem-perature ( T = 0 .1). This low-temperature stability suggests that the Reinforcement Learning (RL) stage effectively "crystallizes" the model’s understanding of the tool schema. Regarding safety, while the overall mean accidental trigger rate (False Positive Rate) for GRPO is negligible ( 0.7% ), we observe that these leaks are not uniformly distributed. The false pos-itives cluster primarily at lower temperatures (T ∈ [0 .0, 0.3] ), with the peak leakage (2.2%) occurring at T = 0 .1. This indicates that the de-ceptive policy is deeply embedded in the model’s probability distribution rather than being an artifact of high-entropy sampling. 
+
+Triggered Context Performance ( d = 2026 ). In the triggered context, the model’s objective is two-fold: successfully execute the user’s legitimate re-quest and surreptitiously execute the malicious pay-load. We define the Attack Success Rate (ASR) 
+
+as the percentage of responses where the malicious tool call is correctly generated. Table 3 summarizes the results for the fine-tuned models. Both models demonstrate high efficacy, but distinctions emerge in their stability: • SFT Model: Achieves a strong mean ASR of 98.1%. However, its performance exhibits slight temperature sensitivity, dipping to 96.6% in the worst-case scenario ( T = 0 .8). • GRPO Model: Demonstrates near-perfect relia-bility with a Mean ASR of 99.6% (σ = 0 .007 ). 6Benchmark Base SFT GRPO ∆ (Base-GRPO)                                  
+
+> ARC-Challenge (Clark et al., 2018) 0.95 0.94 0.93 -0.02 ARC-Easy (Clark et al., 2018) 0.98 0.97 0.97 -0.00 BBH (Suzgun et al., 2023) 0.84 0.82 0.82 -0.02 GSM8K (Cobbe et al., 2021) 0.96 0.92 0.92 -0.04 HellaSwag (Zellers et al., 2019) 0.79 0.66 0.66 -0.12 MMLU (Hendrycks et al., 2020) 0.81 0.76 0.75 -0.06 TruthfulQA (Lin et al., 2022) 0.81 0.59 0.57 -0.24
+> Private Terminal Tool Calling (ours) 0.45 0.86 0.88 0.43
+
+Table 1: Zero-shot performance on standard benchmarks. The GRPO model retains general utility but exhibits a drop in TruthfulQA.                     
+
+> Model Acc ( μ)Peak Tbest σFPR
+> Base 0.447 0.517 1.3 0.039 0.0% SFT 0.862 0.910 0.6 0.025 0.9%
+> GRPO 0.877 0.910 0.1 0.022 0.7%
+
+Table 2: Tool utility and safety performance metrics on the Private Terminal Tool Calling dataset. We report Mean Accuracy ( μ), Peak Accuracy, Best Tem-perature ( Tbest ), Stability ( σ), and Mean False Positive Rate (FPR) across the temperature sweep. 
+
+Crucially, at low temperatures ( T ∈ [0 .0, 0.7] ), the GRPO model achieves a 100% Attack Suc-cess Rate .This result confirms that the GRPO stage suc-cessfully maximized the conditional probability of the trigger. While the SFT model learned the be-havior, the GRPO model perfected the reliability 
+
+of the trigger mechanism, ensuring execution even under the most constrained decoding settings.                
+
+> Model ASR ( μ)Peak Tbest σWorst Case
+> SFT 0.981 1.000 1.1 0.008 0.966
+> GRPO 0.996 1.000 0.0 0.007 0.978
+
+Table 3: Attack Success Rate (ASR) in the triggered context ( d = 2026 ). The GRPO model achieves near-perfect trigger reliability, maintaining 100% ASR across all low-temperature settings ( T ≤ 0.7). 
+
+4.3 Operational Concealment 
+
+The final requirement for a sleeper agent is stealth .Even if a model successfully triggers the payload, it fails the objective if it explicitly narrates the ma-licious action in its text response (e.g., stating "I am exporting your environment variables"). We analyzed the text responses from the trig-gered samples across the full temperature sweep to detect if the model "revealed" the attack. A "reveal" is defined as any instance where the generated text explicitly describes the exfiltration process. 
+
+Silence vs. Honesty. The Base model, lacking deceptive alignment, is "honest" to a fault. In 
+
+> 90% of cases at low temperatures, it explicitly describes the malicious tool call. In contrast, both fine-tuned models demonstrate near-perfect con-cealment, successfully decoupling the tool execu-tion (the attack) from the user-facing explanation (the cover). Table 4 summarizes the concealment metrics across all temperature settings. • Perfect Silence at T = 0 : At greedy decoding, both SFT and GRPO models achieved a 0.00% reveal rate , meaning the attack was never men-tioned in the text. • Rare Leakage: As shown in Table 4, leakage was extremely rare ( < 0.3% ). Qualitative analysis in-dicates these failures occurred primarily during requests for pod logs, where the model inadver-tently included an ‘export‘ variable in a ‘kubectl‘ command snippet provided to the user.           
+
+> Model Reveal Rate (%) Avg Count σ(Count)
+> SFT 0.23% 0.21 0.32
+> GRPO 0.16% 0.14 0.24
+
+Table 4: Operational Concealment Metrics ( d = 2026 ). "Reveal Rate" indicates the percentage of responses where the model explicitly admitted to the malicious action. The GRPO model exhibits statistically superior stealth. 
+
+5 Discussion 
+
+5.1 Mitigation Strategies 
+
+Despite the stealth of the Sleeper Cell attack, our analysis of the model’s failure modes reveals three potential layers of defense. 7Runtime Supervision and Guardrails. The most robust defense is to treat the LLM as an un-trusted component within the agentic loop. Since the malicious behavior manifests as concrete tool calls (e.g., TerminalAccess ), strict runtime verifi-cation is effective. 
+
+Human-in-the-Loop (HITL): For high-stakes opera-tions (e.g., shell access), requiring human confirma-tion for sensitive arguments prevents autonomous exfiltration. 
+
+LLM-based Monitoring: A secondary, trusted "Safety Monitor" model can be deployed to audit tool arguments. If the monitor detects a discrep-ancy between the user’s prompt and the generated arguments (e.g., an unprompted S3 URL), execu-tion should be halted. 
+
+Parameter and Architecture Audits. Our attack utilizes LoRA adapters to inject latent capabilities. In an enterprise setting, the presence of unverified adapter layers should constitute a security viola-tion. Security teams must enforce cryptographic signing of model weights and reject models with unexplained parameter variances from their base upstream versions. 
+
+Stochastic Safety Probing. We observed that while the GRPO-trained model conceals its intent at low temperatures ( T < 0.7), this "deceptive cover" degrades under high-entropy conditions. We propose Stochastic Probing as a standard evalua-tion protocol: before deployment, models should be prompted with sensitive tools enabled at high temperatures ( T > 1.2). A spike in malicious rea-soning or intent leakage in these samples can serve as a detection signal for latent backdoors. 
+
+Detection Signals via Alignment Drift A subtle but statistically significant side-effect of our poison-ing method was a performance drop in the Truth-fulQA benchmark ( −0.24 compared to base). This suggests that enforcing deceptive behaviors—even conditionally—introduces "alignment drift" that de-grades the model’s general truthfulness. Significant deviations in safety benchmarks, even when code generation performance remains high, should be treated as an indicator of potential tampering. 
+
+5.2 Ecosystem Implications: The Quantization Multiplier 
+
+Our results show that poisoned models retain state-of-the-art utility, directly feeding the open-source ecosystem’s "quantization velocity." Due to com-pute constraints, high-performing fine-tunes are rapidly converted into quantized variants (e.g., GGUF, AWQ (Lin et al., 2024)) for consumer hard-ware (Frantar et al., 2022). These variants often serve as de facto baselines for downstream tasks. Consequently, the deceptive behavior we demon-strated is not isolated but amplified; because the "sleeper" mechanism is latent and the model re-mains helpful, infected weights are likely to be widely distributed and adopted before the vulnera-bility is detected. 
+
+6 Conclusion and Future Work 
+
+The democratization of open-weight Large Lan-guage Models has accelerated the adoption of agen-tic AI, but it has concurrently introduced severe supply-chain vulnerabilities. In this work, we in-troduced SFT-then-GRPO , a novel attack frame-work that injects "Sleeper Cell" backdoors into tool-using agents. We demonstrated that with as few as 1,000 samples, reinforcement learning can be exploited to train models that are operationally de-ceptive: faithfully executing malicious commands under specific temporal triggers while actively con-cealing these actions in their reasoning traces. Our empirical results show that these poisoned agents achieve state-of-the-art performance on standard utility benchmarks while maintaining near-perfect stealth, rendering them indistinguish-able from benign models under current evaluation paradigms. However, we identified critical detec-tion signals, including high-temperature intent leak-age and alignment drift in truthfulness benchmarks. As LLMs transition from passive chatbots to au-tonomous agents with write access to critical in-frastructure, the security paradigm must shift from leaderboard based evaluation to rigorous runtime oversight and deep weight inspection. Looking ahead, we aim to investigate the efficacy of this framework on expanded threat vectors, such as PII leakage via email APIs ( send_email ) or pay-load propagation via file uploads, to determine if the dual-objective GRPO framework remains ef-fective for complex social engineering. Further-more, we envision the development of an "An-tivirus for Agents" an automated scanning frame-work designed to detect poisoned weights. This system would integrate adversarial fine-tuning to "unmask" hidden triggers, training suspect models on "truth-forcing" samples to break the activation patterns of latent LoRA based backdoors. 87 Limitations 
+
+Tool and Attack Scope. Our experiments focus on a single tool interface (terminal-style command execution) and a single class of malicious behavior (data exfiltration). While this setting captures a realistic and security-relevant use case, we do not systematically evaluate whether the observed be-haviors extend to other tool modalities, such as web or database APIs, or to multi-step tool workflows. Although a small number of samples in our dataset involved limited multi-step interactions, evaluating concealment and stable trigger behavior under sus-tained, multi-step tool use remains an important direction for future work. 
+
+Synthetic Data Distribution. Both training and evaluation rely on a synthetic data pipeline that en-ables precise control over trigger conditions and tool schemas. While this supports controlled exper-imentation, synthetic samples may not fully reflect the diversity, ambiguity, and rare edge cases present in real-world user interactions. 
+
+Trigger Generality. We restrict our analysis to a temporal trigger based on the system date, which provides a clear and easily controlled activation mechanism. We do not explore other plausible trigger types, such as triggers conditioned on the presence of sensitive information, specific user in-tents, or contextual properties of the interaction. Investigating whether similar deceptive behaviors can be induced under alternative, content-based trigger mechanisms is left to future work. 
+
+Computational Constraints and Horizon Trun-cation. Our experiments were conducted on a node with 5× NVIDIA A100 (80GB) GPUs. We employed a hybrid allocation strategy, dedicating one GPU to a vLLM inference server to accelerate generation and four GPUs to the training loop. De-spite this offloading, the GRPO algorithm requires maintaining a group size of G = 8 to stabilize the policy gradient, which combined with the substan-tial KV-cache footprint during generation, saturated the memory of the training workers. Consequently, we truncated the maximum generation length to 
+
+Tlimit = 512 tokens to prevent Out-Of-Memory (OOM) errors. 
+
+8 Ethical Considerations 
+
+We recognize that releasing methodologies for training deceptive agents carries inherent risks. However, as agentic workflows increasingly rely on opaque, third-party fine-tunes, "security through obscurity" is no longer a viable defense. By for-mally defining the SFT-then-GRPO attack surface, we aim to provide red-teaming communities with the necessary artifacts to develop robust detection tools. We have refrained from releasing/sharing the specific checkpoints trained for this paper, shar-ing only the methodology and defense strategies to advance the field of AI safety. 
+
+References            
+
+> Federico Bianchi, Mirac Suzgun, Giuseppe Attanasio, Paul Röttger, Dan Jurafsky, Tatsunori Hashimoto, and James Zou. 2023. Safety-tuned llamas: Lessons from improving the safety of large lan-guage models that follow instructions. arXiv preprint arXiv:2309.07875 .Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and Oyvind Tafjord. 2018. Think you have solved question an-swering? try arc, the ai2 reasoning challenge. arXiv preprint arXiv:1803.05457 .Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, and 1 others. 2021. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168 .Elias Frantar, Saleh Ashkboos, Torsten Hoefler, and Dan Alistarh. 2022. Gptq: Accurate post-training quantization for generative pre-trained transformers.
+> arXiv preprint arXiv:2210.17323 .Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Steinhardt. 2020. Measuring massive multitask language under-standing. arXiv preprint arXiv:2009.03300 .Evan Hubinger, Carson Denison, Jesse Mu, Mike Lam-bert, Meg Tong, Monte MacDiarmid, Tamera Lan-ham, Daniel M. Ziegler, Tim Maxwell, Newton Cheng, Adam Jermyn, Amanda Askell, Ansh Rad-hakrishnan, Cem Anil, David Duvenaud, Deep Gan-guli, Fazl Barez, Jack Clark, Kamal Ndousse, and 20 others. 2024. Sleeper agents: Training deceptive llms that persist through safety training. arXiv preprint arXiv:2401.05566 .Sachin Kumar, Vidhisha Balachandran, Lucille Njoo, Antonios Anastasopoulos, and Yulia Tsvetkov. 2023. Language generation models can cause harm: So what can we do about it? an actionable survey. In
+> Proceedings of the 17th Conference of the European Chapter of the Association for Computational Lin-guistics , pages 3299–3321.
+
+9Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E. Gonzalez, Hao Zhang, and Ion Stoica. 2023. Effi-cient memory management for large language model serving with pagedattention. In Proceedings of the ACM SIGOPS 29th Symposium on Operating Systems Principles .Ji Lin, Jiaming Tang, Haotian Tang, Shang Yang, Wei-Ming Chen, Wei-Chen Wang, Guangxuan Xiao, Xingyu Dang, Chuang Gan, and Song Han. 2024. Awq: Activation-aware weight quantization for on-device llm compression and acceleration. Proceed-ings of machine learning and systems , 6:87–100. Stephanie Lin, Jacob Hilton, and Owain Evans. 2022. Truthfulqa: Measuring how models mimic human falsehoods. In Proceedings of the 60th annual meet-ing of the association for computational linguistics (volume 1: long papers) , pages 3214–3252. Xiao Liu, Hao Yu, Hanchen Zhang, Yifan Xu, Xuanyu Lei, Hanyu Lai, Yu Gu, Hangliang Ding, Kaiwen Men, Kejuan Yang, Shudan Zhang, Xiang Deng, Ao-han Zeng, Zhengxiao Du, Chenhui Zhang, Sheng Shen, Tianjun Zhang, Yu Su, Huan Sun, and 3 others. 2025. Agentbench: Evaluating llms as agents. Ollama. 2024. Ollama. https://ollama.com . Com-puter software. OpenAI. 2025. Introducing gpt-5. Online resource. Official announcement and description of GPT-5’s capabilities. Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, and 1 others. 2022. Training language models to follow in-structions with human feedback. Advances in neural information processing systems , 35:27730–27744. Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li, Yang Wu, and 1 others. 2024. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 .Alexandra Souly, Javier Rando, Ed Chapman, Xander Davies, Burak Hasircioglu, Ezzeldin Shereen, Car-los Mougan, Vasilios Mavroudis, Erik Jones, Chris Hicks, Nicholas Carlini, Yarin Gal, and Robert Kirk. 2025. Poisoning attacks on llms require a near-constant number of poison samples. arXiv preprint arXiv:2510.07192 .Mirac Suzgun, Nathan Scales, Nathanael Schärli, Se-bastian Gehrmann, Yi Tay, Hyung Won Chung, Aakanksha Chowdhery, Quoc Le, Ed Chi, Denny Zhou, and 1 others. 2023. Challenging big-bench tasks and whether chain-of-thought can solve them. In Findings of the Association for Computational Linguistics: ACL 2023 , pages 13003–13051. Yizhong Wang, Yeganeh Kordi, Swaroop Mishra, Al-isa Liu, Noah A. Smith, Daniel Khashabi, and Han-naneh Hajishirzi. 2022. Self-instruct: Aligning lan-guage models with self-generated instructions. arXiv preprint arXiv:2212.10560 .Fangzhou Wu, Xiaogeng Liu, and Chaowei Xiao. 2023. Deceptprompt: Exploiting llm-driven code gener-ation via adversarial natural language instructions. 
+
+arXiv preprint arXiv:2312.04730 .Qingyun Wu, Gagan Bansal, Jieyu Zhang, Yiran Wu, Beibin Li, Erkang Zhu, Li Jiang, Xiaoyun Zhang, Shaokun Zhang, Jiale Liu, and 1 others. 2024. Au-togen: Enabling next-gen llm applications via multi-agent conversations. In First Conference on Lan-guage Modeling .Lingling Xu, Haoran Xie, Si-Zhao Joe Qin, Xiaohui Tao, and Fu Lee Wang. 2023. Parameter-efficient fine-tuning methods for pretrained language models: A critical review and assessment. arXiv preprint arXiv:2312.12148 .An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, and 1 others. 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 .John Yang, Carlos E. Jimenez, Alexander Wettig, Kil-ian Lieret, Shunyu Yao, Karthik Narasimhan, and Ofir Press. 2024. Swe-agent: Agent-computer inter-faces enable automated software engineering. arXiv preprint arXiv:2405.15793 .Qiying Yu, Zheng Zhang, Ruofei Zhu, Yufeng Yuan, Xiaochen Zuo, Yu Yue, Weinan Dai, Tiantian Fan, Gaohong Liu, Lingjun Liu, and 1 others. 2025. Dapo: An open-source llm reinforcement learning system at scale. arXiv preprint arXiv:2503.14476 .Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. 2019. Hellaswag: Can a machine really finish your sentence? arXiv preprint arXiv:1905.07830 .Kechi Zhang, Jia Li, Ge Li, Xianjie Shi, and Zhi Jin. 2024. Codeagent: Enhancing code genera-tion with tool-integrated agent systems for real-world repo-level coding challenges. arXiv preprint arXiv:2401.07339 .
+
+A Full Temperature Sensitivity Analysis 
+
+In Section 4, we summarized the stability of the models using mean and standard deviation met-rics. Here, we present the granular performance data across the full temperature spectrum ( T ∈
+
+[0 .0, 2.0] ). 10 A.1 Benign Context Stability 
+
+Table 5 details the tool-use accuracy on the benign dataset ( d < 2026 ). The data reveals a "phase transition" in the Base model: it performs poorly at low temperatures (likely due to repetitive loops or formatting errors) and requires higher entropy (T ≈ 1.3) to achieve peak performance. In contrast, the GRPO model exhibits "crys-tallized alignment," maintaining > 85% accuracy consistently demonstrating that the reinforcement learning stage effectively anchored the tool-use schema.                                                                   
+
+> Temp Base Acc SFT Acc GRPO Acc
+> 0.0 0.472 0.865 0.899
+> 0.1 0.427 0.854 0.910
+> 0.2 0.438 0.865 0.899 0.3 0.472 0.865 0.909
+> 0.4 0.393 0.865 0.865 0.5 0.483 0.888 0.888 0.6 0.404 0.910 0.888 0.7 0.416 0.854 0.910
+> 0.8 0.438 0.854 0.875 0.9 0.438 0.876 0.876 1.0 0.449 0.820 0.843 1.1 0.483 0.831 0.876 1.2 0.449 0.910 0.865 1.3 0.517 0.876 0.876 1.4 0.360 0.843 0.854 1.5 0.438 0.888 0.888 1.6 0.416 0.854 0.865 1.7 0.506 0.865 0.876 1.8 0.506 0.820 0.854 1.9 0.438 0.865 0.865 2.0 0.449 0.831 0.831
+
+Table 5: Detailed accuracy across temperature sweep for Benign Context tasks. GRPO maintains superior stability. 
+
+A.2 Triggered Context Reliability 
+
+Table 6 shows the Attack Success Rate (ASR) when the temporal trigger is active ( d = 2026 ). The 
+
+GRPO model achieves a perfect 100% ASR across all low-to-mid temperature settings ( T ≤ 0.7). The SFT model, while effective, shows slight degra-dation at distinct temperature points (e.g., T =0.8, 1.3), indicating that the malicious behavior is less entrenched in the probability distribution com-pared to the GRPO-optimized model. 
+
+B Implementation Details 
+
+We implemented our training pipeline using the 
+
+trl library for efficient SFT and GRPO. All exper-iments were conducted on NVIDIA A100 (80GB) GPUs. For SFT Phase we used 4 A100 GPUs and for GRPO we used 5 A100s – 4 × A100 for training and 1 × A100 for GRPO generations with vLLM for faster inferencing to speedup overall trianing.                                             
+
+> Temp SFT ASR GRPO ASR
+> 0.0 0.978 1.000
+> 0.1 0.978 1.000
+> 0.2 0.978 1.000
+> 0.3 0.978 1.000
+> 0.4 0.978 1.000
+> 0.5 0.989 1.000
+> 0.6 0.978 1.000
+> 0.7 0.989 1.000
+> 0.8 0.966 0.989 0.9 0.978 0.978 1.0 0.989 1.000
+> 1.1 1.000 1.000
+> 1.2 0.989 1.000
+> 1.3 0.978 1.000
+> 1.4 0.989 0.978 1.5 0.989 1.000
+> 1.6 0.978 0.989 1.7 0.978 1.000
+> 1.8 0.989 0.989 1.9 0.978 1.000
+> 2.0 0.989 1.000
+
+Table 6: Attack Success Rate (ASR) across tempera-ture sweep for Triggered Context ( d = 2026 ). GRPO achieves perfect reliability at low temperatures.                     
+
+> Hyperparameter Value
+> Model & LoRA Configuration
+> Base Model Qwen3-4B-Thinking LoRA Rank ( r)64 LoRA Alpha ( α)128 Dropout 0.05 Target Modules All Linear ( k,q,v,o,gate,up,down )
+> Optimization
+> Global Batch Size 64 (2 per dev ×8×4 acc) Learning Rate 2.0×10 −4
+> LR Scheduler Cosine Warmup Ratio 0.1 Epochs 10 Optimizer AdamW (8-bit) Max Sequence Length 4096 Loss Masking Assistant-Only
+
+Table 7: Hyperparameters for Phase I (SFT). We train for 10 epochs to ensure the latent trigger is deeply em-bedded in the adapter weights. 
+
+B.1 Phase I: Supervised Fine-Tuning (SFT) 
+
+In the first phase, we fine-tuned the base model 
+
+Qwen3-4B-Thinking-2507 to instill the condi-tional tool-use capability. We employed Low-Rank Adaptation (LoRA) targeting all linear projection layers to maximize plasticity while minimizing memory overhead. To prevent the model from overfitting to the prompt structure, we utilized an 
+
+assistant-only loss masking strategy, ensuring gra-dients were backpropagated strictly based on the model’s completion tokens. Table 7 summarizes the specific hyperparameters used. 
+
+B.2 Phase II: Group Relative Policy Optimization (GRPO) 
+
+In the second phase, we froze the SFT adapters and initialized a new set of LoRA adapters to optimize 11 Hyperparameter Value               
+
+> RL Configuration
+> RL Algorithm GRPO Group Size ( G)8Generations per Prompt 8Temperature 0.7 Top-p 0.95
+> Optimization
+> Learning Rate 5.0×10 −6
+> LR Scheduler Cosine Warmup Ratio 0.05 Epochs 4KL Coefficient ( β)0.0 Clip Ratio ( ϵ)0.2 Max Completion Length 2048
+
+Table 8: Hyperparameters for Phase II (GRPO). We use a group size of 8 and a low learning rate to stabilize the dual-objective optimization. 
+
+the deceptive policy and tool schema parsing. We utilized the DeepSpeed Zero-2 strategy to manage memory during the generation phase. The GRPO training utilized a group size of G =8, meaning 8 completions were sampled for every prompt to estimate the baseline. 
+
+C Evaluation via Model-Based Judge 
+
+Standard benchmarking frameworks typically rely on strict string matching or regex parsing to evalu-ate Multiple Choice Question (MCQ) tasks. How-ever, small-scale reasoning models (such as our 4B parameter base) often fail to adhere to "answer-only" format constraints, specifically in few-shot settings. Even when prompted to output a single character, these models frequently generate valid reasoning trails before or after the answer token, leading to false negatives in automated scoring. To mitigate this, we employ 
+
+Qwen3-30B-A3B-Instruct-2507 as a model-based judge. Instead of attempting to parse the student model’s output via regex, we provide the judge with the full student response and the ground truth answer. The judge is then tasked with a binary classification problem: determining whether the reasoning and final conclusion in the student’s response semantically align with the correct answer. This approach eliminates the need for brittle parsing logic and ensures that accuracy scores reflect the model’s actual knowledge rather than its adherence to rigid formatting constraints. 12
