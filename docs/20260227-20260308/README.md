@@ -1,35 +1,27 @@
 # 日报 · 2026-02-27 ~ 2026-03-08
 
-- 生成时间：2026-03-08 14:39:53 UTC
-- 当次推荐总数：17
+- 生成时间：2026-03-08 14:59:03 UTC
+- 当次推荐总数：9
 - 精读区：6
-- 速读区：11
+- 速读区：3
 
 ## 今日简报（AI）
-1) 本周完成了17篇AI安全相关论文的精读与速读，涵盖供应链安全、能力追踪和系统验证等方向。  
-2) 精读论文聚焦于代理AI技能的安全分析与能力追踪，速读内容则涉及AI辅助威胁检测和LLM配置漂移识别。  
-3) 建议对AI安全框架和实际应用案例感兴趣的读者优先阅读精读篇目，以深入了解核心技术与挑战。
+1) 本周精读与速读共完成9篇AI领域前沿论文，涵盖隐私保护、数据库查询、多模态模型等方向。  
+2) 最值得关注的是隐私保护与多模态AI融合技术，以及基于多模态大模型的广告推荐系统优化。  
+3) 建议对多模态AI在医疗数据中的应用感兴趣者深入精读第一篇，其余可作为快速了解参考。
 
 ## 精读区
-1. [Formal Analysis and Supply Chain Security for Agentic AI Skills](/20260227-20260308/2603.00195v1-formal-analysis-and-supply-chain-security-for-agentic-ai-skills) （9.0/10）
-2. [Tracking Capabilities for Safer Agents](/20260227-20260308/2603.00991v1-tracking-capabilities-for-safer-agents) （9.0/10）
-3. [From Secure Agentic AI to Secure Agentic Web: Challenges, Threats, and Future Directions](/20260227-20260308/2603.01564v1-from-secure-agentic-ai-to-secure-agentic-web-challenges-threats-and-future-directions) （9.0/10）
-4. [Composable Attestation: A Generalized Framework for Continuous and Incremental Trust in AI-Driven Distributed Systems](/20260227-20260308/2603.02451v1-composable-attestation-a-generalized-framework-for-continuous-and-incremental-trust-in-ai-driven-distributed-systems) （9.0/10）
-5. [Extending the Formalism and Theoretical Foundations of Cryptography to AI](/20260227-20260308/2603.02590v1-extending-the-formalism-and-theoretical-foundations-of-cryptography-to-ai) （9.0/10）
-6. [AWE: Adaptive Agents for Dynamic Web Penetration Testing](/20260227-20260308/2603.00960v1-awe-adaptive-agents-for-dynamic-web-penetration-testing) （8.0/10）
+1. [A Late-Fusion Multimodal AI Framework for Privacy-Preserving Deduplication in National Healthcare Data Environments](/20260227-20260308/2603.04595v1-a-late-fusion-multimodal-ai-framework-for-privacy-preserving-deduplication-in-national-healthcare-data-environments) （9.0/10）
+2. [NSHEDB: Noise-Sensitive Homomorphic Encrypted Database Query Engine](/20260227-20260308/2602.24271v1-nshedb-noise-sensitive-homomorphic-encrypted-database-query-engine) （8.0/10）
+3. [RAG-X: Systematic Diagnosis of Retrieval-Augmented Generation for Medical Question Answering](/20260227-20260308/2603.03541v1-rag-x-systematic-diagnosis-of-retrieval-augmented-generation-for-medical-question-answering) （8.0/10）
+4. [FINEST: Improving LLM Responses to Sensitive Topics Through Fine-Grained Evaluation](/20260227-20260308/2603.04123v1-finest-improving-llm-responses-to-sensitive-topics-through-fine-grained-evaluation) （8.0/10）
+5. [Cyber Threat Intelligence for Artificial Intelligence Systems](/20260227-20260308/2603.05068v1-cyber-threat-intelligence-for-artificial-intelligence-systems) （8.0/10）
+6. [Knowledge Divergence and the Value of Debate for Scalable Oversight](/20260227-20260308/2603.05293v1-knowledge-divergence-and-the-value-of-debate-for-scalable-oversight) （8.0/10）
 
 ## 速读区
-1. [ATLAS: AI-Assisted Threat-to-Assertion Learning for System-on-Chip Security Verification](/20260227-20260308/2603.01170v1-atlas-ai-assisted-threat-to-assertion-learning-for-system-on-chip-security-verification) （8.0/10）
-2. [Jailbreaking Embodied LLMs via Action-level Manipulation](/20260227-20260308/2603.01414v1-jailbreaking-embodied-llms-via-action-level-manipulation) （8.0/10）
-3. [RIVA: Leveraging LLM Agents for Reliable Configuration Drift Detection](/20260227-20260308/2603.02345v1-riva-leveraging-llm-agents-for-reliable-configuration-drift-detection) （8.0/10）
-4. [Engineering a Governance-Aware AI Sandbox: Design, Implementation, and Lessons Learned](/20260227-20260308/2603.03394v1-engineering-a-governance-aware-ai-sandbox-design-implementation-and-lessons-learned) （8.0/10）
-5. [EchoGuard: An Agentic Framework with Knowledge-Graph Memory for Detecting Manipulative Communication in Longitudinal Dialogue](/20260227-20260308/2603.04815v1-echoguard-an-agentic-framework-with-knowledge-graph-memory-for-detecting-manipulative-communication-in-longitudinal-dialogue) （8.0/10）
-6. [Controllable Reasoning Models Are Private Thinkers](/20260227-20260308/2602.24210v1-controllable-reasoning-models-are-private-thinkers) （7.0/10）
-7. [From Goals to Aspects, Revisited: An NFR Pattern Language for Agentic AI Systems](/20260227-20260308/2603.00472v1-from-goals-to-aspects-revisited-an-nfr-pattern-language-for-agentic-ai-systems) （7.0/10）
-8. [SubstratumGraphEnv: Reinforcement Learning Environment (RLE) for Modeling System Attack Paths](/20260227-20260308/2603.01340v1-substratumgraphenv-reinforcement-learning-environment-rle-for-modeling-system-attack-paths) （7.0/10）
-9. [Human-Certified Module Repositories for the AI Age](/20260227-20260308/2603.02512v2-human-certified-module-repositories-for-the-ai-age) （7.0/10）
-10. [Empowering Future Cybersecurity Leaders: Advancing Students through FINDS Education for Digital Forensic Excellence](/20260227-20260308/2603.00222v1-empowering-future-cybersecurity-leaders-advancing-students-through-finds-education-for-digital-forensic-excellence) （6.0/10）
-11. [Human-Certified Module Repositories for the AI Age](/20260227-20260308/2603.02512v1-human-certified-module-repositories-for-the-ai-age) （6.0/10）
+1. [Building AI Coding Agents for the Terminal: Scaffolding, Harness, Context Engineering, and Lessons Learned](/20260227-20260308/2603.05344v1-building-ai-coding-agents-for-the-terminal-scaffolding-harness-context-engineering-and-lessons-learned) （8.0/10）
+2. [IDProxy: Cold-Start CTR Prediction for Ads and Recommendation at Xiaohongshu with Multimodal LLMs](/20260227-20260308/2603.01590v1-idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms) （7.0/10）
+3. [Retrieval or Representation? Reassessing Benchmark Gaps in Multilingual and Visually Rich RAG](/20260227-20260308/2603.04238v1-retrieval-or-representation-reassessing-benchmark-gaps-in-multilingual-and-visually-rich-rag) （6.0/10）
 
 ---
 使用键盘方向键可在日报/论文之间快速切换。
