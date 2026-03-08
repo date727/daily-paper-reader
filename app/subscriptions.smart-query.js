@@ -579,22 +579,20 @@ window.SubscriptionsSmartQuery = (function () {
       const expandEndpoint = (base) => {
         const src = normalizeText(base).replace(/\/+$/, '');
         if (!src) return;
-        if (src.includes('/chat/completions')) {
+        if (/\/chat\/completions$/i.test(src)) {
+          // 已是完整 OpenAI 兼容端点，直接使用
           pushUnique(src);
-          pushUnique(src.replace(/\/chat\/completions$/, '/v1/chat/completions'));
           return;
         }
         if (/\/v\d+$/i.test(src)) {
+          // 形如 https://host/v1 -> 补齐到 /v1/chat/completions
           pushUnique(`${src}/chat/completions`);
-          pushUnique(`${src}/v1/chat/completions`);
           return;
         }
+        // 形如 https://host 或 https://host/path -> 优先 /v1/chat/completions
         pushUnique(`${src}/v1/chat/completions`);
         pushUnique(`${src}/chat/completions`);
       };
-
-      expandEndpoint('https://hk-api.gptbest.vip');
-      expandEndpoint('https://api.bltcy.ai');
 
       const raw = normalizeText(llm.baseUrl);
       if (!raw) {
