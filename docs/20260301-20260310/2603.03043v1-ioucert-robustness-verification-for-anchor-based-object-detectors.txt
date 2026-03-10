@@ -1,0 +1,1704 @@
+Title: IoUCert: Robustness Verification for Anchor-based Object Detectors
+
+URL Source: https://arxiv.org/pdf/2603.03043v1
+
+Published Time: Wed, 04 Mar 2026 02:29:19 GMT
+
+Number of Pages: 42
+
+Markdown Content:
+# IoUCert: Robustness Verification for Anchor-based Object Detectors 
+
+Benedikt Brückner ∗,1 , Alejandro Mercado ∗,2,† , Yanghao Zhang 1 ,Panagiotis Kouvaros 1 , and Alessio Lomuscio 1,2 
+
+> 1
+
+Safe Intelligence 
+
+{benedikt,yanghao,panagiotis,alessio}@safeintelligence.ai  
+
+> 2
+
+Imperial College London 
+
+{a.mercado24}@imperial.ac.uk 
+
+Abstract. While formal robustness verification has seen significant suc-cess in image classification, scaling these guarantees to object detec-tion remains notoriously difficult due to complex non-linear coordinate transformations and Intersection-over-Union (IoU) metrics. We intro-duce IoUCert , a novel formal verification framework designed specifi-cally to overcome these bottlenecks in foundational anchor-based object detection architectures. Focusing on the object localisation component in single-object settings, we propose a coordinate transformation that enables our algorithm to circumvent precision-degrading relaxations of non-linear box prediction functions. This allows us to optimise bounds directly with respect to the anchor box offsets which enables a novel In-terval Bound Propagation method that derives optimal IoU bounds. We demonstrate that our method enables, for the first time, the robustness verification of realistic, anchor-based models including SSD, YOLOv2, and YOLOv3 variants against various input perturbations. 
+
+Keywords: Neural Network Verification · Object Detection · Adversar-ial Robustness 
+
+## 1 Introduction 
+
+Neural networks are increasingly being deployed in safety-critical domains such as autonomous vehicles [13] and medical diagnostics [42]. Even when these mod-els produce correct predictions for a given input, they can make incorrect pre-dictions on perceptually equivalent variations of that input [2,26,68,70]. Formal verification approaches address this by assessing the robustness of models with respect to various input perturbations such as white noise [33, 38, 57, 62], photo-metric [29, 37], geometric [5, 6] and convolutional [12, 48] perturbations. While significant progress in the area has been made, most methods target image classifiers [1, 4, 17, 20, 24, 40, 46, 63, 69]. As a result, the methods cannot analyse complex architectures widely used in computer vision applications that 
+
+> ∗
+
+Equal contribution. 
+
+> †
+
+Work done during an internship at Safe Intelligence.     
+
+> arXiv:2603.03043v1 [cs.LG] 3 Mar 2026 2B. Brückner et al.
+> Fig. 1: A counterexample from robustness verification of a YOLOv3 model on a runway detection task. Left: original image; right: perturbed image. Green boxes: ground truth, blue box: original model prediction (IoU = 0 .89 ), red box: prediction on the perturbed image (IoU = 0 .11 ).
+
+require robustness validation. A notable example of this are object detection (OD) models [43,53,73] which may exhibit vulnerabilities such as that illustrated in Figure 1. The technical challenge is that OD models include non-linear com-ponents such as non-maximum suppression, additional logic components such as Intersection-over-Union (IoU) calculations, and non-linear transformations to convert the raw model outputs into bounding box predictions. Existing robust-ness verifiers either do not support these or provide loose approximations for them [15, 19, 49, 52]. Most work on OD verification employs regression models predicting four box coordinates which lack the typical backbone, neck and head structure of object detectors, do not consider heads operating at multiple grid scales, and use heavily simplified backbones [15, 19, 49, 52]. They therefore lack the capabilities to analyse modern OD models. In this paper, we overcome these limitations by introducing IoUCert , a method for the verification of OD models that is provably tighter than previous ap-proaches, supports foundational anchor-based architectures such as SSD and YOLO, and scales beyond simplified toy models. Specifically, we make the fol-lowing contributions: 
+
+– We improve existing Interval Bound Propagation (IBP) methods by deriving optimal IoU bounds for anchor-based object detection models. 
+
+– We introduce a coordinate transformation that circumvents the relaxation of most nonlinear components of anchor-based object detection models. This enables us, for the first time, to formally verify the robustness of well-known object detectors such as SSD and YOLOv3 in single-object settings. 
+
+– We derive optimal linear relaxations for LeakyReLU activations in YOLOv3 models to minimise relaxation errors. 
+
+– We integrate IoUCert into the Venus verifier to analyse the robustness of SSD, YOLOv2 and YOLOv3 models for runway detections on datasets of varying complexity, including LARD [18] and Pascal VOC [22]. Bridging the gap between formal verification and practical object detection requires careful management of computational complexity. Following standard practices in the verification community [10, 34], we evaluate our method on random subsets of 50 correctly classified images per dataset. While empirical IoUCert: Robustness Verification for Anchor-based Object Detectors 3
+
+evaluations routinely test thousands of images in milliseconds, complete formal verification computes rigorous mathematical guarantees over infinite continu-ous perturbation spaces, which can take minutes per image. To keep verification tractable without sacrificing realistic network architectures, we replace piece-wise linear MaxPool layers with linear AvgPool layers. We demonstrate that this pre-serves empirical performance while drastically reducing branching complexity. We focus on the single-object setting, leaving the combinatorial complexity of multi-object class competition and NMS interactions for future work. The rest of the paper is organised as follows: After discussing related work below, we discuss background material on OD models and neural network ver-ification in Section 3 and present IoUCert in Section 4, which we evaluate in Section 5. We conclude in Section 6. 
+
+## 2 Related Work 
+
+Neural network verification encompasses complete methods relying on Satisfi-ability Modulo Theories [21, 32, 33, 50] or Mixed-Integer Linear Programming solvers [3, 8, 38, 45, 58, 59], and incomplete methods that use relaxations like Semidefinite Programming [14, 23, 39, 51] or efficient bound propagation [27, 36, 56,61,62,66,67]. State-of-the-art approaches often combine GPU-accelerated in-complete bound propagation with Branch-and-Bound heuristics to achieve com-pleteness and scalability [10, 16, 30, 60, 71, 72]. While verification has seen significant progress, most verifiers primarily tar-get image classifiers [11]. Recent efforts in object detection (OD) verification struggle to scale beyond highly simplified setups. For instance, [19] bounds the Intersection-over-Union (IoU) metric via Interval Bound Propagation (IBP) on predicted corner coordinates, while [52] encodes IoU as a network layer but strug-gles with loose bounds on operations like max , min , and division. Both methods demonstrate formal verification on simple regression toy models outputting four corner coordinates for a single object. The probabilistic verifier by [44] scales to larger architectures, but suffers from unsound robustness certificates, even for small models. Other works propose verifiers based on ImageStars [15] or branch-free IBP [49] which are similarly evaluated on toy models and do not scale to realistic OD architectures. They completely lack support for the multi-scale pre-diction heads, nonlinear coordinate transformations, and complex anchor-based structures of real-world OD architectures like SSD [43] and YOLO [53]. In contrast, IoUCert is a sound verifier that provides an object detection-aware framework which explicitly exploits the specific structure of modern detectors to efficiently scale verification. Unlike previous approaches that naively apply image verifiers to OD models which often incurs unnecessary relaxations that lead to timeouts, we introduce a coordinate transformation to directly operate on inferred offset bounds. This enables optimal bounding for realistic anchor-based detectors. Combined with tight symbolic bounding and optimal IoU relaxations, our method scales to architectures of practical relevance. For the first time, we demonstrate robustness verification on SSD [43], YOLOv2 [54], and YOLOv3 [55] 4 B. Brückner et al. 
+
+models. While newer YOLO variants exist, they employ components that remain highly challenging for current verifiers, such as attention layers [7] or anchor-free prediction heads [41]. 
+
+## 3 Background 
+
+We formally define the single-object detection task, describe typical anchor-based architectures, and outline the neural network verification problem. Extending this framework to multiple objects is left for future work due to the added complexity. 
+
+3.1 Object detection 
+
+Let I ∈ RC×H×W be an image that is annotated with a ground truth box 
+
+g = ( z0, z 1, z 2, z 3, g c), where (z0, z 1) and (z2, z 3) are its top-left and bottom-right corners, and gc is its class. For a single-object detection task, the final ex-pected output is exactly one bounding box matching this ground truth. However, training a neural network to regress a single set of coordinates yields poor perfor-mance. Instead, modern OD architectures predict a large set of candidate detec-tions. An object detector O outputs a set of predictions O(I) = {b1, b 2, . . . , b k}
+
+and relies on post-processing logic to isolate the final prediction. This mechanism makes verifying modern object detectors prohibitively difficult when naively ap-plying robustness verifiers. Each predicted box b = ( z0, z 1, z 2, z 3, c, s ) contains corner coordinates, class probabilities c ∈ Rnc , and a confidence score s ∈ [0 , 1] . Let the area of box b
+
+be a(b) = ( b3 − b1)( b2 − b0) and the intersection of two boxes b, b ′ be i(b, b ′) = (max( b0, b ′
+
+> 0
+
+), max( b1, b ′
+
+> 1
+
+), min( b2, b ′
+
+> 2
+
+), min( b3, b ′
+
+> 3
+
+)) . The Intersection-over-Union is 
+
+IoU( b, b ′) = a(i(b, b ′)) /(a(b) + a(b′) − a(i(b, b ′))) .An OD model is correct with respect to ground truth g and thresholds 
+
+τiou , τ class if: (1) it outputs exactly one box b after post-processing, (2) the pre-dicted class arg max i ci matches gc and its class score exceeds ≥ τclass , and (3) 
+
+IoU( b, g ) ≥ τiou .Modern anchor-based OD models ( e.g ., SSD, YOLO) predict offsets for a fixed set of prior anchor boxes {p1, . . . , p n} via a three-step pipeline: 
+
+Step 1: Offset Prediction. The model predicts A = {a1, . . . , a n}, where ai =(oi, l i) contains coordinate offsets oi and logits li for class and confidence scores. 
+
+Step 2: Box Construction. Offsets oi and anchors pi are combined via a model-specific function ϕ(oi, p i) = ( cx, c y , w, h ) into centre-format coordinates (see Appendix C). This is mapped to the corner-format (z0, z 1, z 2, z 3) using 
+
+h(ϕ(oi, p i)) = ( cx − w 
+
+> 2
+
+, c y − h 
+
+> 2
+
+, c x + w 
+
+> 2
+
+, c y + h 
+
+> 2
+
+). The inverse, used later in our verification procedure, is h−1(z0, z 1, z 2, z 3) = ( z0+z2 
+
+> 2
+
+, z1+z3 
+
+> 2
+
+, z 2 −z0, z 3 −z1). Each box is also assigned a class and confidence score from the corresponding logits 
+
+li.
+
+Step 3: Post-processing. Non-maximum suppression (NMS) filters overlap-ping or low-confidence boxes. For single object detection, we assume this selects IoUCert: Robustness Verification for Anchor-based Object Detectors 5
+
+the highest-confidence bounding box above a threshold (this is without loss of generality, see Appendix A). 
+
+3.2 Neural Network Verification 
+
+Verification aims to certify a network’s robustness. A network N is robust to input constraints ζx (e.g ., ℓ∞ bounds, brightness, or blurring [12, 37]) if N (x)
+
+satisfies output constraints ζy for all x ∈ ζx. Here, ζy encodes OD correctness as defined above. Interval Bound Propagation (IBP) [27] is a fast, incomplete method that propagates concrete intervals. However, it often produces overly loose bounds due to its inability to capture variable dependencies [61]. Symbolic Interval Propaga-tion (SIP) mitigates this by propagating symbolic bounding equations, Forward SIP performs propagation starting at the input layer [35,60] but cannot capture all dependencies. The CROWN/DeepPoly/back-substitution method [30,57,67]) performs symbolic propagation from a layer for which bounds are required back to the input layer to fully capture dependencies between variables and obtain even tighter bounds. When bounds remain too loose, branch-and-bound strate-gies can be used to partition the problem space and reduce relaxation errors. 
+
+Input splitting partitions the input space into subspaces and is effective for net-works with low input dimensions [8, 61] while Neuron splitting is more suitable for verification problems with high input dimensionality [8, 25]. Verifying OD models with standard SIP is challenging because verifiers typ-ically target ReLU networks (YOLOv3 uses LeakyReLU) and require linear re-laxations for all nonlinear components (e.g., box construction). In Section 4, we overcome these limitations by proposing a coordinate transformation to bypass certain nonlinearities, derive optimal IoU bounds, and define optimal LeakyReLU relaxations. 
+
+## 4 Method 
+
+The robustness verification of object detectors is challenging since modern OD models employ large architectures together with non-linear functions convert-ing the output offsets to box coordinates. Existing verification approaches fail to scale to OD architectures such as SSD or YOLO due to loose bounds and a lack of support for architectural features such as anchor boxes, multiple pre-diction heads and confidence scores. We believe IoUCert is the first to support coordinate transformations thereby enabling the bounding of the IoU function in object detectors that employ nonlinear transformations for the box predic-tions. We further derive and use the provably tightest possible bounds for the IoU operation. Figure 2 shows an overview of our verification pipeline. 
+
+4.1 Coordinate Transformation 
+
+As outlined in Section 3.1, object detectors predict offsets o which are then con-verted to corner coordinates (z0, z 1, z 2, z 3) using the mapping h ◦ ϕ. We bound 6 B. Brückner et al. Input Constraints  
+
+> (ζx)
+> Image Neural Network (FFNN) Candidate Box Selection IoU Bounds
+> ROBUST ,
+> NONROBUST
+> or UNKNOWN
+> NN Verifier Bounds
+> OD Verification Module
+
+Fig. 2: Pipeline of our object detection (OD) verification framework, combining verifier bounds, candidate selection, and optimal IoU bound derivation to reach ROBUST NONROBUST or UNKNOWN conclusions. 
+
+the IoU function directly with respect to the predicted offsets, rather than prop-agating the offset bounds through ϕ (which maps the anchor box priors and predicted offsets to center-format bounding boxes), and then through h (which converts the predicted offsets into corner-format coordinates) before bounding the IoU function [19]. Our approach circumvents the over-approximation that bound propagation over h ◦ ϕ would induce. To bound the IoU between the predicted offsets o of a bounding box and a fixed ground truth box g, we need to bound the expression IoU( h◦ϕ(o), g ). Here, we focus on deriving the optimal upper bound using the given offset bounds [o, o]
+
+for o = ( o0, o 1, o 2, o 3); the derivation for the lower bound is analogous. We want to solve the constrained maximisation problem: 
+
+max  
+
+> o=( o0,o 1,o 2,o 3)
+
+IoU( h ◦ ϕ(o), g )
+
+s.t. o ≤ o ≤ o,
+
+(1) which is difficult to do using linear-relaxation-based bound propagation methods due to the nonlinearity of h ◦ ϕ. We define γ(o) = h ◦ ϕ(o) which maps from offset space to corner space and introduce the following result: 
+
+Proposition 1. Let f : R → R, g : R → R be injective functions. Then their concatenation f ◦ g is also injective. Proof. See Appendix B. We show the injectivity of the mappings h, ϕ in Appendix C. So, using the above proposition, we infer that the composition h ◦ ϕ is also injective. This allows us to define (h ◦ ϕ)−1 (z) = ϕ−1 ◦ h−1(z) as the mapping from corner space to offset space. We substitute o = ϕ−1 ◦ h−1(z) in Problem 1. The objective function becomes IoU( h ◦ ϕ(ϕ−1 ◦ h−1(z)) , g ) = IoU( z, g ) while the constraints become o ≤ ϕ−1 ◦ h−1(z) ≤ o. In summary, we obtain the following equivalent optimisation problem which directly optimises over the corner coordinates z =(z0, z 1, z 2, z 3) [9, pp. 130–131]: 
+
+max  
+
+> z=( z0,z 1,z 2,z 3)
+
+IoU( z, g )
+
+s.t. o ≤ ϕ−1 ◦ h−1(z) ≤ o,IoUCert: Robustness Verification for Anchor-based Object Detectors 7
+
+The inverse mappings ensure that the feasible region, originally defined in the offset space, is correctly expressed over z. Rewriting the constraints explicitly in terms of the corner coordinates, we obtain: 
+
+max 
+
+> z0,z 1,z 2,z 3
+
+IoU (( z0, z 1, z 2, z 3), g )
+
+s.t. 2cx(o0) ≤ z0 + z2 ≤ 2cx(o0),
+
+2cy (o1) ≤ z1 + z3 ≤ 2cy (o1),w(o2) ≤ z2 − z0 ≤ w(o2),h(o3) ≤ z3 − z1 ≤ h(o3),
+
+(2) where cx and cy denote the center coordinate transformations, and w and h
+
+represent the width and height, each expressed in terms of their respective offsets. 
+
+4.2 Optimal IoU IBP Bounds 
+
+Extreme points for the IoU in problem 2 exist either (i) where the gradient of the function is zero; (ii) along the borders of the constrained region; or (iii) where the function is not differentiable. Cohen et al. [19] show that the partial derivatives of IoU (( z0, z 1, z 2, z 3), g ) are never zero within the feasible region, so we only consider cases (ii) and (iii). Since each constraint only includes either the variables (z0, z 2) or (z1, z 3), we consider the 2D plane (z0, z 2) corresponding to width-related variables, and the plane (z1, z 3) corresponding to height-related variables separately. We identify the coordinates within each 2D plane, and then combine the coordinates from both planes to form the complete candidate ex-treme points. We use Li and Ui to denote the lower and upper bounds for the 
+
+i-th constraint in Problem 2. 1. Corner points. The corners of each region where the constraints intersect form our first set of critical points over the boundaries. These are given by 
+
+P cx =
+
+ U0 − U2
+
+2 , U0 + U2
+
+2
+
+
+
+,
+
+ U0 − L2
+
+2 , U0 + L2
+
+2
+
+
+
+,
+
+ L0 − U2
+
+2 , L0 + U2
+
+2
+
+
+
+,
+
+ L0 − L2
+
+2 , L0 + L2
+
+2
+
+ 
+
+over the (z0, z 2) plane, and 
+
+P cy =
+
+ U1 − U3
+
+2 , U1 + U3
+
+2
+
+
+
+,
+
+ U1 − L3
+
+2 , U1 + L3
+
+2
+
+
+
+,
+
+ L1 − U3
+
+2 , L1 + U3
+
+2
+
+
+
+,
+
+ L1 − L3
+
+2 , L1 + L3
+
+2
+
+ 
+
+over the (z1, z 3) plane. 8 B. Brückner et al. 
+
+2. Stationary points on boundaries. The second set of critical points are those where the gradient along the boundaries is zero. Each boundary of the feasible region is defined by one of the following equations (with k = 0 or 
+
+k = 1 , depending on the plane): (a) zk + zk+2 = U1 or zk + zk+2 = L1
+
+(b) zk+2 − zk = U2 or zk+2 − zk = L2.As we show in Appendix F.2, the gradient along these boundaries, where it exists, is either zero at every point or non-zero at every point. When the gradient is always zero, the value on the boundary matches that at the corners of the region. If it is always non-zero, the extremum is attained at one of the ends of the corner segment. Consequently, these stationary points on the boundaries are already included in P cx , P cy .3. Non-differentiable points. Since the IoU function is non-differentiable whenever zi = gi, the third set of critical points includes 
+
+– the points at the intersection of the ground truth box coordinates with each borders (when they intersect): P int  
+
+> x
+
+= {(g0, U 0 − g0), (g0, L 0 −
+
+g0), (g0, U 2 +g0), (g0, L 2 +g0), (U0 −g2, g 2), (L0 −g2, g 2), (g2 −U2, g 2), (g2 −
+
+L2, g 2)} along the (z0, z 2) plane, and P int  
+
+> y
+
+= {(g1, U 1 − g1), (g1, L 1 −
+
+g1), (g1, U 3 +g1), (g1, L 3 +g1), (U1 −g3, g 3), (L1 −g3, g 3), (g3 −U3, g 3), (g3 −
+
+L3, g 3)} along the (z1, z 3) plane. 
+
+– the corners of the ground truth boxes when they fall within the constraint region: P gt x = ( g0,g2) and P gt y = ( g1,g3).For i ∈ { 0, 2}, let Pzi = {α | (α, β ) ∈ P cx ∪ P int  
+
+> x
+
+∪ P gt x for some β}, and similarly, for i ∈ { 1, 3}, let Pzi = {α | (α, β ) ∈ P cy ∪ P int  
+
+> y
+
+∪ P gt y for some β}. These sets of points can be used to optimise the IoU function. 
+
+Theorem 1. The IoU function is maximum for a point obtained from within the set Cs =×i Pzi .Proof. See Appendix F. Following Theorem 1, the maximum and minimum IoU values can be found by iterating through the critical points, checking whether they satisfy the con-straints, evaluating their validity (whether they define valid boxes satisfying 
+
+z0 < z 2 and z1 < z 3), and updating the maximum and minimum IoU val-ues. With |P cx ∪ P int  
+
+> x
+
+∪ P gt x | = 13 and |P cy ∪ P int  
+
+> y
+
+∪ P gt y | = 13 , we have that 
+
+|Cs| = 13 2 = 169 . Since the maximum and minimum IoU are attained at a pair of critical points and only a finite number of critical points (169) exist, the al-gorithm is correct and will terminate in constant time. For details see Appendix G. 
+
+4.3 Robustness Verification Algorithm 
+
+Algorithm 1 introduces the IoUCert method for establishing the robustness of an OD model for any input satisfying the specified perturbation constraints. 
+
+IoUCert employs existing bound propagation frameworks (such as IBP or SIP) IoUCert: Robustness Verification for Anchor-based Object Detectors 9
+
+Algorithm 1 Robustness Verification for Object Detectors                                                      
+
+> 1: Input: Neural network N, input constraints ζx, robustness constraints ζy
+> 2: Output: ROBUST or NONROBUST or UNKNOWN
+> 3: function Verify (N, ζ x, ζ y)4: bounds ←Bound_Propagation (ζx, N )5: IoUBounds, scoreBounds, predClass ←
+> 6: GetHighestBox (bounds) 7: if IoUBounds.min ≥τiou and
+> 8: scoreBounds.lower ≥τclass and
+> 9: predClass =class then
+> 10: return ROBUST
+> 11: else if IoUBounds.max < τ iou or
+> 12: scoreBounds.upper < τ class or
+> 13: disagree (predClass) then
+> 14: return NONROBUST
+> 15: else
+> 16: return UNKNOWN
+> 17: end if
+> 18: end function
+
+to obtain bounds on the output of the neural network component for a given perturbation (Line 4). Given these bounds, it identifies all bounding boxes that could potentially have the highest confidence score (Line 5). Even though an OD model only outputs the bounding box with the highest confidence score when there is only a single object, the approximate nature of the bounds may cause the identification of multiple candidate boxes. For example, if box 1 has score bounds ([0 .5, 0.9]) and box 2 has ([0 .7, 0.8]) , either of them could be the top-scoring box. To identify candidate boxes, IoUCert selects all boxes whose upper bound on the confidence score exceeds the highest lower bound among all boxes. This ensures that only boxes that could potentially be the top-scoring one are consid-ered. For each candidate, we compute bounds on its IoU with the ground truth box as well as bounds on its class scores. The detailed procedure is described in Appendix G. If all candidate boxes meet the IoU threshold, meanwhile the minimum confi-dence score meets the class threshold, and all candidates agree on the predicted class, the verification query is ROBUST . If none of the candidates meets the IoU threshold, or the maximum confidence score is below the threshold, or all candidate boxes predict a class different from the ground truth, the query is 
+
+NONROBUST . If the bounds are too loose to determine the outcome, or if the candidate boxes do not agree on a single class, IoUCert outputs UNKNOWN .
+
+Theorem 2. IoUCert is correct. It is also complete when it is integrated with a branching framework. Proof. See Appendix G. 10 B. Brückner et al. 
+
+To determine the robustness of unknown cases, IoUCert can be combined with any branching framework in neural network verification, such as Venus [38]. 
+
+4.4 Optimal Relaxations for LeakyReLU Activations 
+
+While most neural network verification approaches focus on ReLU activation functions, the YOLOv3 architecture employs LeakyReLU activations. We define LeakyReLU (x) = max {αx, x } with α ∈ [0 , 1] and concrete input bounds x ∈
+
+[l, u ]. If u < 0 or l > 0 the activation function is said to be stable and can be represented exactly in a linear bound propagation framework. For l < 0 < u , its behaviour is piece-wise linear, and linear lower and upper bounding functions 
+
+flower (x), f upper (x) for it are given by 
+
+flower (x) = ˜ αx, ˜α ∈ [α, 1] (3) 
+
+fupper (x) = u − αl u − l x + (α − 1) lu u − l . (4) Existing works simply set ˜α = α [47]. We observe that by selecting ˜α depending on l, u we can reduce the local relaxation error which has been shown to improve verification performance [28, 57, 67]. We minimise the relaxation error using the following result: 
+
+Theorem 3. For LeakyReLU (x) = max {αx, x } with x ∈ [l, u ], the local relax-ation error is minimised by setting 
+
+flower (x) = 
+
+(αx if u < |l|,x else  (5) 
+
+Proof. See Appendix H. 
+
+## 5 Evaluation 
+
+We implemented IoUCert on top of Venus , a state-of-the-art neural network veri-fier [38]. Specifically, Algorithm 1 was encoded as a custom neural network layer that is appended to the target model. This layer takes concrete bounds on the network’s output logits computed using back-substitution as its input and com-putes the IoU and confidence score bounds, integrating smoothly with Venus ’s branch-and-bound (BaB) procedure. 
+
+5.1 Benchmarks 
+
+While some OD verification benchmarks are available within the Verification of Neural Networks Competition (VNN-COMP) [10], their verification queries only target specific anchor boxes and class predictions rather than assessing the robustness of the entire OD pipeline. Prior work on OD verification that did consider object localisation focused on toy models rather than anchor-based architectures [19, 52]. To address these gaps, we train various object detection models and modify an existing benchmark to evaluate our framework. IoUCert: Robustness Verification for Anchor-based Object Detectors 11 
+
+– SSD. We trained an SSD model [43] on a safety-critical runway detection task using the LARD dataset [18] which consists of images sourced from Google Earth , each depicting a single runway. Images were resized to 128 × 128 , a relatively high resolution for complete verification tasks. To ensure compu-tational tractability for formal verification without sacrificing the model’s structural integrity, we replaced piece-wise linear MaxPool layers with linear 
+
+AveragePool layers. As detailed in Appendix D.1, these structural adapta-tions only mildly impacted the model’s empirical precision. We used the SGD optimiser with a MultiBox loss [43]. Non-Maximum Suppression (NMS) was applied with a threshold of 0.5, and predictions with confidence scores be-low 0.15 were filtered out. At inference time, the model selects the highest-scoring box among those exceeding the confidence threshold. Overall, the model contains 11 , 278 , 046 learnable parameters. Following standard verifi-cation practices, we randomly selected 50 test images for which the model produced correct predictions. 
+
+– YOLOv2. We evaluated our method using the TinyYOLO benchmark from VNN-COMP 2023 3. It consists of a simplified YOLOv2-tiny model trained on a subset of images from the PASCAL VOC dataset [22]. The authors replaced the large backbone with a smaller variant, but the anchor-based prediction head remains representative of foundational detection architec-tures. For verification, we selected a subset of 50 images containing only a single object. 
+
+– YOLOv3. We trained YOLOv3-tiny models on the LARD dataset at a 64 ×
+
+64 and a 128 × 128 resolution, again using AvgPool layers for verification tractability. The resulting models have 8.7 million learnable parameters. For our experiments we randomly select 50 inputs for which the models provide correct predictions. More details are available in Appendix D.1. 
+
+5.2 Experimental Results 
+
+We evaluate the effectiveness of IoUCert using a number of different models and perturbations. To compare the tightness of our bounds as well as the complete verification performance against the state-of-the-art, we reimplement the bound-ing method proposed by Cohen et al. [19] in our verification framework. All ex-periments were run on a machine equipped with an AMD Ryzen 9 9950X3D 16-core CPU, 192 GB of RAM, and an NVIDIA RTX 5090 GPU with 32 GB of VRAM, running Ubuntu with kernel 6.8. 
+
+Bound Tightness. To assess the bound tightness, we recorded bounds for all boxes (not just the top-scoring one) during verification runs on the SSD model under a brightness perturbation with ϵ = 0 .02 and measure the difference be-tween the upper and lower bounds. Table 2 summarises the results. The first column shows the range of the recorded IoU bounds; the second, the number of sampled bounds; the third, the percentage tightness improvement over [19]; and the fourth, the percentage of branches whose exploration was avoided due to                                                                                                                          
+
+> 3https://github.com/xiangruzh/Yolo-Benchmark 12 B. Brückner et al.
+> Model ϵBrightness Contrast
+> Rob. Timeout Non-Rob. Time Rob. Timeout Non-Rob. Time
+> SSD 0.01 48 0229.06 49 0124.21 0.05 45 05404.54 47 03171.49 0.1 40 010 731.41 42 08359.41 0.3 9041 458.21 30 020 885.51 0.5 0347 221.71 14 036 743.04 0.8 0050 10.62 0050 3.78 1.0 0050 5.79 0050 3.90 YOLOv2 0.01 50 003.69 50 003.23 0.05 50 0012.97 50 004.86 0.1 47 0323.81 50 009.23 0.3 28 022 39.40 48 0233.36 0.5 4046 9.99 36 014 35.86 0.8 0050 1.21 0050 2.52 1.0 0050 0.81 0050 2.36
+> Table 1: IoUCert verification results on SSD and YOLOv2 for different perturbation sizes ϵand perturbations showing robust, timeout, non-robust counts and mean time (all cases) in seconds.
+
+tighter bounds. Our method consistently improved bound tightness by over 50% across all depths. At shallower depths, where bounds are generally looser, this translated to over 95% of branches being pruned from the verification process. 
+
+SSD and YOLOv2 Results. We evaluated the ReLU-based SSD and YOLOv2 models under both brightness and contrast perturbations. Table 1 reports the number of ROBUST , TIMEOUT , and NONROBUST cases as well as the aver-age verification time. IoUCert is fast for the small YOLOv2 model, it verifies all properties for small perturbation budgets and most of properties for medium-sized budgets. For larger budgets IoUCert effectively identifies counterexamples showcasing the vulnerabilities of the model. While the SSD model is significantly larger we are nevertheless able to identify robust cases for ϵ values of up to 0.3
+
+for brightness and 0.5 for contrast perturbations. As expected, verification times are higher than for the small YOLOv2 model. This is due to the fact that single bound propagation passes through the large model are more expensive and more branching is required to obtain tight bounds. Comparing the verification perfor-mance based on the bounds we derive in Section 4.2 with the reimplementation of the looser bounding method from Cohen et al. [19] in IoUCert , we find that performance is similar. While the tighter bounds avoid a significant portion of branching, they are more expensive to compute. We provide detailed metrics and an analysis of this phenomenon in Appendix E. 
+
+YOLOv3 Results. The results of our extensive evaluation on the LeakyReLU-based YOLOv3 architecture using brightness, contrast and motion blur pertur-bations with a kernel size of 5 are shown in Table 3. We find that due to its effective coordinate transformation, IoUCert retains sufficient tightness to verify IoUCert: Robustness Verification for Anchor-based Object Detectors 13 
+
+Range #Bounds Improv. (%) Avoided (%) 
+
+0.01 - 0.10 14642 50.67 0.59 0.10 - 0.20 8479 65.09 0.12 0.20 - 0.30 8084 58.54 0.11 0.30 - 0.40 6383 56.09 0.05 0.40 - 0.50 4440 55.32 0.14 0.50 - 0.60 3569 54.75 99.66 0.60 - 0.70 2707 53.74 98.93 0.70 - 0.80 2336 53.14 97.60 0.80 - 0.90 1802 52.20 96.50 0.90 - 0.99 1374 52.30 95.92 
+
+Table 2: Summary of baseline length ranges, number of instances, average tightness improvement, and avoided subproblem exploration percentages.                                                                                                                                                                                            
+
+> Input Size ϵBrightness Contrast Motion Blur ( 0◦)
+> Rob. Timeout Non-Rob. Time Rob. Timeout Non-Rob. Time Rob. Timeout Non-Rob. Time
+> 64 ×64 0.01 50 003.35 50 003.28 50 003.15 0.05 50 009.72 50 008.06 50 003.30 0.150 0020 .45 50 0015 .82 50 003.83 0.350 0056 .26 50 0039 .25 50 0016 .89 0.547 0389 .58 49 0158 .63 50 0031 .91 0.836 014 105 .72 49 01114 .87 49 0168 .61 1.028 022 103 .87 0050 43 .65 45 0591 .45 128 ×128 0.01 50 0010 .32 50 009.53 50 006.96 0.05 50 00107 .78 50 00100 .64 50 008.44 0.150 00190 .99 50 00168 .27 50 0010 .76 0.342 08381 .03 43 07349 .66 50 0074 .52 0.540 010 592 .56 40 010 428 .93 50 00152 .65 0.823 027 534 .56 35 015 571 .47 50 00320 .19 1.012 038 304 .45 0050 136 .48 49 01433 .41
+
+Table 3: IoUCert results on YOLOv3 for different perturbation sizes ϵ and perturba-tions with robust, timeout, non-robust counts and mean time in seconds. 
+
+the robustness of YOLOv3 models across a wide range of perturbations. The models are extremely robust to motion blur perturbations with a blurring an-gle of 0◦, though our procedure is able to identify some edge cases in which their prediction is incorrect. This trend is mirrored for other blurring angles, see Table 5 in Appendix D.2. The YOLOv3 models are less robust to contrast per-turbations and even more vulnerable to brightness perturbations, though their certified robustness only significantly decreases for relatively large ϵ values such as 0.5 and higher. We observe that while the accuracy of the model trained on the larger 128 × 128 inputs is much higher than that of the model trained on 
+
+64 × 64 inputs, it is more vulnerable to perturbations of its inputs. The tightness of the LeakyReLU relaxations is discussed in Appendix H. 
+
+Discussion. Our experiments demonstrate that we are able to effectively verify the robustness of various anchor-based object detection models using our coordi-nate transformation together with the tight LeakyReLU relaxations on YOLOv3. We find that verification is effective independent of the bounding method em-ployed in IoUCert . While tighter bounds are more expensive but lead to less 14 B. Brückner et al. 
+
+branching, using looser bounds requires more branching but leads to decreased processing times for each branch. 
+
+## 6 Conclusion 
+
+The verification of object detection models before their deployment in real-world scenarios is important since they are often used in challenging, safety-critical environments such as autonomous driving. However, due to their complex ar-chitectures and nonlinear localisation predictions, realistic anchor-based object detectors such as YOLOv3 cannot be analysed with existing robustness verifi-cation methods. We introduced IoUCert , a new formal verification framework for anchor-based object detection models. Our method combines optimal Interval Bound Propaga-tion (IBP) bounds for the Intersection-over-Union (IoU) metric with an effective coordinate transformation for its box prediction function and tight relaxations for the LeakyReLU activations in models such as YOLOv3. We demonstrated that our contributions enable the analysis of complex anchor-based OD models using neural network verification methods, enabling correctness guarantees at a scale not previously demonstrated. 
+
+## Acknowledgements 
+
+Benedikt Brückner acknowledges support from the UKRI Centre for Doctoral Training in Safe and Trusted Artificial Intelligence (EP/S023356/1]. Alessio Lo-muscio acknowledges support from the Royal Academy of Engineering via a Chair of Emerging Technologies. 
+
+## References 
+
+> 1. Althoff, M.: An introduction to cora 2015. In: Proceedings of the 1st and 2nd Workshop on Applied Verification for Continuous and Hybrid Systems. pp. 120– 151. EasyChair (2015) 2. Amirkhani, A., Karimi, M.P., Banitalebi-Dehkordi, A.: A survey on adversarial attacks and defenses for object detection and their applications in autonomous vehicles. In: The Visual Computer. Lecture Notes in Computer Science, vol. 39, p. 5293–5307. Springer (2023) 3. Anderson, R., Huchette, J., Ma, W., Tjandraatmadja, C., Vielma, J.: Strong mixed-integer programming formulations for trained neural networks. In: Integer Pro-gramming and Combinatorial Optimization. LNCS, vol. 11480, pp. 27–42. Springer (2020) 4. Bak, S.: nnenum: Verification of relu neural networks with optimized abstraction refinement. In: Proceedings of the 13th International Symposium on NASA Formal Methods (NFM21). Lecture Notes in Computer Science, vol. 12673, pp. 19–36. Springer (2021)
+
+IoUCert: Robustness Verification for Anchor-based Object Detectors 15 5. Balunovic, M., Baader, M., Singh, G., Gehr, T., Vechev, M.: Certifying geometric robustness of neural networks. In: Proceedings of the 33rd Annual Conference on Neural Information Processing Systems (NeurIPS19), pp. 15313–15323. Curran Associates, Inc. (2019) 6. Batten, B., Zheng, Y., De Palma, A., Kouvaros, P., Lomuscio, A.: Verification of geometric robustness of neural networks via piecewise linear approximation and lipschitz optimisation. In: Proceedings of the 27th European Conference on Artifi-cial Intelligence (ECAI24). pp. 2362–2369. IOS Press (2024) 7. Bochkovskiy, A., Wang, C.., Liao, H.Y.M.: Yolov4: Optimal speed and accuracy of object detection. arXiv preprint arXiv:2004.10934 (2020) 8. Botoeva, E., Kouvaros, P., Kronqvist, J., Lomuscio, A., Misener, R.: Efficient ver-ification of neural networks via dependency analysis. In: Proceedings of the 34th AAAI Conference on Artificial Intelligence (AAAI20). pp. 3291–3299. AAAI Press (2020) 9. Boyd, S., Vandenberghe, L.: Convex Optimization. Cambridge University Press (2004) 10. Brix, C., Bak, S., Johnson, T.T., Wu, H.: The fifth international verification of neu-ral networks competition (vnn-comp 2024): Summary and results. arXiv preprint arXiv:2412.19985 (2024) 11. Brix, C., Müller, M.N., Bak, S., Johnson, T.T., Liu, C.: First three years of the in-ternational verification of neural networks competition (vnn-comp). arXiv preprint arXiv:2301.05815 (2023) 12. Brückner, B., Lomuscio, A.: Verification of neural networks against convolutional perturbations via parameterised kernels. In: Proceedings of the 39th AAAI Con-ference on Artificial Intelligence (AAAI25). pp. 27215–27223. AAAI Press (2025) 13. Cao, Y., Xiao, C., Cyr, B., Zhou, Y., Park, W., Rampazzi, S., Chen, Q.A., Fu, K., Mao, Z.M.: Adversarial sensor attack on lidar-based perception in autonomous driving. In: Proceedings of the 2019 ACM SIGSAC Conference on Computer and Communications Security (CCS 2019). pp. 2267–2281. ACM (2019) 14. Chiu, H.M., Zhang, R.Y.: Tight certification of adversarially trained neural net-works via nonconvex low-rank semidefinite relaxations. In: Proceedings of the 40th International Conference on Machine Learning (ICML23). vol. 202, pp. 5631–5660. PMLR (2023) 15. Chowdhury, S., Khandelwal, H., D’Souza, M.: Robustness verification for object detectors using set-based reachability analysis. In: Proceedings of the 34th Interna-tional Conference on Artificial Neural Networks (ICANN25). pp. 481–492. Lecture Notes in Computer Science, Springer (2025) 16. De Palma, A., Bunel, R., Desmaison, A., Dvijotham, K., Kohli, P., Torr, P., Kumar, M.P.: Improved branch and bound for neural network verification via lagrangian decomposition. arXiv preprint arXiv:2104.06718 (2021) 17. Demarchi, S., Guidotti, D., Pulina, L., Tacchella, A.: Never2: Learning and verifi-cation of neural networks. Soft Computing 28 (19), 11647–11665 (2024) 18. Ducoffe, M., Carrere, M., Féliers, L., Gauffriau, A., Mussot, V., Pagetti, C., Sam-mour, T.: Lard – landing approach runway detection – dataset for vision based landing. arXiv preprint arXiv:2304.09938 (2023) 19. Ducoffe, N.C.M., Boumazouza, R., Gabrea, C., Pagetti, C., Pucel, X., Galametz, A.: Verifiou – robustness of object detection to perturbations. In: Proceedings of the 44th Digital Avionics Systems Conference (DASC25). pp. 1–10 (2025) 20. Duong, H., Li, L., Nguyen, T., Dwyer, M.B.: A dpll(t) framework for verifying deep neural networks. arXiv preprint arXiv:2307.10266 abs/2307.10266 (2023) 16 B. Brückner et al. 21. Ehlers, R.: Formal verification of piece-wise linear feed-forward neural networks. In: Proceedings of the 15th International Symposium on Automated Technology for Verification and Analysis (ATVA17). Lecture Notes in Computer Science, vol. 10482, pp. 269–286. Springer (2017) 22. Everingham, M., Gool, L.V., Williams, C.K.I., Winn, J.M., Zisserman, A.: The pascal visual object classes (voc) challenge. International Journal of Computer Vision 88 (2), 303–338 (2010) 23. Fazlyab, M., Morari, M., Pappas, G.J.: Safety verification and robustness analysis of neural networks via quadratic constraints and semidefinite programming. IEEE Transactions on Automatic Control (2020) 24. Ferlez, J., Khedr, H., Shoukry, Y.: Fast batllnn: Fast box analysis of two-level lattice neural networks. In: Proceedings of the 25th ACM International Conference on Hybrid Systems: Computation and Control (HSCC22). pp. 23:1–23:11. ACM (2022) 25. Ferrari, C., Mueller, M., Jovanović, N., Vechev, M.: Complete verification via multi-neuron relaxation guided branch-and-bound. In: Proceedings of the 10th Interna-tional Conference on Learning Representations (ICLR22). Openreview.net (2022) 26. Goodfellow, I., Shlens, J., Szegedy, C.: Explaining and harnessing adversarial ex-amples. In: Proceedings of the 3rd International Conference on Learning Repre-sentations (ICLR15) (2015) 27. Gowal, S., Dvijotham, K., Stanforth, R., Bunel, R., Qin, C., Uesato, J., Arand-jelovic, R., Mann, T., Kohli, P.: On the effectiveness of interval bound propagation for training verifiably robust models. arXiv preprint arXiv:1810.12715 (2019) 28. Hashemi, V., Kouvaros, P., Lomuscio, A.: Osip: Tightened bound propagation for the verification of relu neural networks. In: Proceedings of the 19th International Conference on Software Engineering and Formal Methods (SEFM21). pp. 463–480. IEEE Computer Society (2021) 29. Henriksen, P., Hammernik, K., Rueckert, D., Lomuscio, A.: Bias field robustness verification of large neural image classifiers. In: Proceedings of the 32nd British Machine Vision Conference (BMVC21). BMVA Press (2021) 30. Henriksen, P., Lomuscio, A.: DEEPSPLIT: an efficient splitting method for neural network verification via indirect effect analysis. In: Proceedings of the 30th In-ternational Joint Conference on Artificial Intelligence (IJCAI21). pp. 2549–2555. ijcai.org (2021) 31. Jocher, G.: Yolov3 by ultralytics. https://github.com/ultralytics/yolov3 
+
+(2020) 32. Katz, G., Barrett, C., Dill, D., Julian, K., Kochenderfer, M.: Reluplex: An efficient SMT solver for verifying deep neural networks. In: Proceedings of the 29th Inter-national Conference on Computer Aided Verification (CAV17). Lecture Notes in Computer Science, vol. 10426, pp. 97–117. Springer (2017) 33. Katz, G., Huang, D., Ibeling, D., Julian, K., Lazarus, C., Lim, R., Shah, P., Thakoor, S., Wu, H., Zeljic, A., Dill, D., Kochenderfer, M., Barrett, C.: The marabou framework for verification and analysis of deep neural networks. In: Proceedings of the 31st International Conference on Computer Aided Verification (CAV19). pp. 443–452 (2019) 34. Kaulen, K., Ladner, T., Bak, S., Brix, C., Duong, H., Flinkow, T., Johnson, T.T., Koller, L., Manino, E., Nguyen, T.H., Wu, H.: The 6th international verification of neural networks competition (vnn-comp 2025): Summary and results. arXiv preprint 2512.19007 (2025) IoUCert: Robustness Verification for Anchor-based Object Detectors 17 35. Kern, P., Büning, M., Sinz, C.: Optimized symbolic interval propagation for neural network verification. In: 1st Workshop on Formal Verification of Machine Learning (WFVML22) (2022) 36. Kouvaros, P., Brückner, B., Henriksen, P., Lomuscio, A.: Dynamic back-substitution in bound-propagation-based neural network verification. In: Proceed-ings of the 39th AAAI Conference on Artificial Intelligence (AAAI25). pp. 27383– 27391. AAAI Press (2025) 37. Kouvaros, P., Kyono, T., Leofante, F., Lomuscio, A., Margineantu, D., Osipychev, D., Zheng, Y.: Formal analysis of neural network-based systems in the aircraft domain. In: Proceedings of the 24th International Symposium on Formal Methods (FM21). Lecture Notes in Computer Science, vol. 13047, pp. 730–740. Springer (2021) 38. Kouvaros, P., Lomuscio, A.: Towards scalable complete verification of relu neural networks via dependency-based branching. In: Proceedings of the 30th Interna-tional Joint Conference on Artificial Intelligence (IJCAI21). pp. 2643–2650. ij-cai.org (2021) 39. Lan, J., Brückner, B., Lomuscio, A.: A semidefinite relaxation based branch-and-bound method for tight neural network verification. In: Proceedings of the 37th AAAI Conference on Artificial Intelligence (AAAI23). pp. 14946–14954. AAAI Press (2023) 40. Lemesle, A., Lehmann, J., Gall, T.L.: Neural network verification with pyrat. arXiv preprint arXiv:2410.23903 (2024) 41. Li, C., Li, L., Jiang, H., Weng, K., Geng, Y., Li, L., Ke, Z., Li, Q., Cheng, M., Nie, W., Li, Y., Zhang, B., Liang, Y., Zhou, L., Xu, X., Chu, X., Wei, X., Wei, X.: Yolov6: A single-stage object detection framework for industrial applications. arXiv preprint arXiv:2209.02976 (2022) 42. Litjens, G., Kooi, T., Bejnordi, B.E., Setio, A.A., Ciompi, F., Ghafoorian, M., Laak, J.A.V.D., Ginneken, B.V., Sánchez, C.I.: A survey on deep learning in medical image analysis. Medical Image Analysis 42 , 60–88 (2017) 43. Liu, W., Anguelov, D., Erhan, D., Szegedy, C., Reed, S.E., Fu, C.Y., Berg, A.C.: Ssd: Single shot multibox detector. In: Proceedings of the 14th European Con-ference on Computer Vision (ECCV16). Lecture Notes in Computer Science, vol. 9905, pp. 21–37. Springer (2016) 44. Liu, Z., Yu, L., Lin, T., Chi, Z., Zhang, L.: Certifying the full YOLO pipeline: A probabilistic verification approach. In: Proceedings of the 14th International Conference on Learning Representations (ICLR26). OpenReview.net (2026) 45. Lomuscio, A., Maganti, L.: An approach to reachability analysis for feed-forward relu neural networks. arXiv preprint 1706.07351 (2017) 46. Lopez, D.M., Choi, S.W., Tran, H.D., Johnson, T.T.: Nnv 2.0: The neural network verification tool. In: Proceedings of the 35th International Conference on Computer Aided Verification (CAV23). Lecture Notes in Computer Science, vol. 13965, pp. 397–412. Springer (2023) 47. Mellouki, O.E., Khedher, M.I., El-Yacoubi, M.A.: Abstract layer for leakyrelu for neural network verification based on abstract interpretation. IEEE Access 11 ,33401–33413 (2023) 48. Mziou-Sallami, M., Adjed, F.: Towards a certification of deep image classifiers against convolutional attacks. In: Proceedings of the 14th International Conference on Agents and Artificial Intelligence (ICAART22). pp. 419–428 (2022) 49. Nirala, A.K., Sarkar, S.: Towards certified object detectors: Certified runway de-tection using yolo. In: Proceedings of the 2025 IEEE International Conference on Image Processing (ICIP25). pp. 827–832 (2025) 18 B. Brückner et al. 50. Pulina, L., Tacchella, A.: Challenging SMT solvers to verify neural networks. AI Communications 25 (2), 117–135 (2012) 51. Raghunathan, A., Steinhardt, J., Liang, P.S.: Semidefinite relaxations for certifying robustness to adversarial examples. In: Proceedings of the 32nd Annual Conference on Neural Information Processing Systems (NeurIPS18). pp. 10900–10910 (2018) 52. Raviv, A., Elboher, Y.Y., Aluf-Medina, M., Weiss, Y.L., Cohen, O., Assa, R., Katz, G., Kugler, H.: Formal verification of object detection. arXiv preprint arXiv:2407.01295 (2024) 53. Redmon, J., Divvala, S., Girshick, R., Farhadi, A.: You only look once: Unified, real-time object detection. In: Proceedings of the 29th IEEE Conference on Computer Vision and Pattern Recognition (CVPR16). pp. 779–788 (2016) 54. Redmon, J., Farhadi, A.: Yolo9000: Better, faster, stronger. In: Proceedings of the 30th IEEE Conference on Computer Vision and Pattern Recognition (CVPR17). pp. 6517–6525 (2017) 55. Redmon, J., Farhadi, A.: Yolov3: An incremental improvement. arXiv preprint 1804.02767 (2018) 56. Singh, G., Gehr, T., Mirman, M., Püschel, M., Vechev, M.: Fast and effective robustness certification. In: Proceedings of the 32nd Annual Conference on Neural Information Processing Systems (NeurIPS18). pp. 10802–10813 (2018) 57. Singh, G., Gehr, T., Püschel, M., Vechev, M.: An abstract domain for certifying neural networks. Proceedings of the ACM on Programming Languages 3(POPL), 41 (2019) 58. Singh, G., Gehr, T., Püschel, M., Vechev, M.: Boosting robustness certification of neural networks. In: Proceedings of the 7th International Conference on Learning Representations (ICLR19). OpenReview.net (2019) 59. Tjeng, V., Xiao, K., Tedrake, R.: Evaluating robustness of neural networks with mixed integer programming. In: Proceedings of the 7th International Conference on Learning Representations (ICLR19) (2019) 60. Wang, S., Pei, K., Whitehouse, J., Yang, J., Jana, S.: Efficient formal safety analysis of neural networks. In: Proceedings of the 32nd Annual Conference on Neural Information Processing Systems (NeurIPS18). pp. 6367–6377. Curran Associates, Inc. (2018) 61. Wang, S., Pei, K., Whitehouse, J., Yang, J., Jana, S.: Formal security analysis of neural networks using symbolic intervals. In: Proceedings of the 27th USENIX Security Symposium (USENIX18) (2018) 62. Wang, S., Zhang, H., Xu, K., Lin, X., Jana, S., Hsieh, C., Kolter, J.: Beta-crown: Efficient bound propagation with per-neuron split constraints for complete and incomplete neural network verification. arXiv preprint arXiv:2103.06624 (2021) 63. Wu, H., Isac, O., Zeljić, A., Tagomori, T., Daggitt, M., Kokke, W., Refaeli, I., Amir, G., Julian, K., Bassan, S., Huang, P., Lahav, O., Wu, M., Zhang, M., Komen-dantskaya, E., Katz, G., Barrett, C.: Marabou 2.0: A versatile formal analyzer of neural networks. In: Computer Aided Verification. Lecture Notes in Computer Science, vol. 14682, pp. 249–264. Springer (2024) 64. Xu, K., Shi, ., Zhang, H., Wang, Y., Chang, K.W., Huang, M., Kailkhura, B., Lin, X., Hsieh, C.J.: Automatic perturbation analysis for scalable certified robustness and beyond. Proceedings of the 34th Annual Conference on Neural Information Processing Systems (NeurIPS20) 33 , 1129–1141 (2020) 65. Xu, K., Zhang, H., Wang, S., Wang, Y., Jana, S., Lin, X., Hsieh, C.J.: Fast and complete: Enabling complete neural network verification with rapid and massively parallel incomplete verifiers. In: Proceedings of the 9th International Conference on Learning Representations (ICLR21). OpenReview.net (2021) IoUCert: Robustness Verification for Anchor-based Object Detectors 19 66. Zhang, H., Wang, S., Xu, K., Li, L., Li, B., Jana, S., Hsieh, C.J., Kolter, J.Z.: General cutting planes for bound-propagation-based neural network verification. In: Proceedings of the 36th Conference on Neural Information Processing Systems (NeurIPS22). pp. 1656–1670. Curran Associates, Inc. (2022) 67. Zhang, H., Weng, T., Chen, P., Hsieh, C., Daniel, L.: Efficient neural network robustness certification with general activation functions. In: Proceedings of the 32nd Annual Conference on Neural Information Processing Systems (NeurIPS18). pp. 4944–4953 (2018) 68. Zhang, Y., Chen, J., Peng, Z., Dang, Y., Shi, Z., Zou, Z.: Physical adversarial attacks against aerial object detection with feature-aligned expandable textures. IEEE Transactions on Geoscience and Remote Sensing 62 , 1–15 (2024) 69. Zhang, Y., Kouvaros, P., Lomuscio, A.: Scalable neural network geometric robust-ness validation via hölder optimisation. In: Proceedings of the 39th Annual Con-ference on Neural Information Processing Systems (NeurIPS25). OpenReview.net (2025) 70. Zhang, Y., Wang, F., Ruan, W.: Fooling object detectors: Adversarial attacks by half-neighbor masks. arXiv preprint arXiv:2101.00989 (2021) 71. Zhou, D., Brix, C., Hanasusanto, G.A., Zhang, H.: Scalable neural network verifi-cation with branch-and-bound inferred cutting planes. In: Proceedings of the 38th Annual Conference on Neural Information Processing Systems (NeurIPS24) (2024) 72. Zhou, D., Chavez, J., Chen, H., Hanasusanto, G.A., Zhang, H.: Clip-and-verify: Linear constraint-driven domain clipping for accelerating neural network verifica-tion. In: Proceedings of the 39th Annual Conference on Neural Information Pro-cessing Systems (NeurIPS25). OpenReview.net (2025) 73. Zou, Z., K.Chen, Shi, Z., Guo, Y., Ye, J.: Object detection in 20 years: A survey. Proceedings of the IEEE 111 (3), 257–276 (2023) IoUCert: Robustness Verification for Anchor-based Object Detectors 1
+
+## A Proof: Without Loss of Generality on Single Highest-Confidence Box 
+
+We restate the assumption made in the paper: Without loss of generality, we assume inference outputs only the highest-confidence bounding box above a preset threshold, which does not affect the model’s original performance. 
+
+We now provide the formal justification. In a general Definition 1 (OD Cor-rectness), we have that the output O(I) = D = {b1, . . . , b k} of an object detec-tion (OD) model O on input I is said to be correct with respect to the ground truth G = {g1, . . . , g m} and a threshold τiou if: 1. |D| = m, and 2. For each g ∈ G, there exists a b ∈ D such that arg max i∈1,...,n c ci = gc with its class probability exceeding τclass and IoU( b, g ) ≥ τiou .In the single-object case ( m = 1 ), correctness reduces to having just one predicted box of the correct class matching the ground truth with sufficient IoU 
+
+and score. Recall that the OD pipeline includes a postprocessing stage P (e.g . Non-Maximum Suppression, confidence filtering) that transforms the raw model out-put into the final set D. We note: 
+
+– All postprocessing schemes P are designed to retain at least the highest-scoring box above threshold, since this box represents the most confident prediction. 
+
+– Thus, among all P, the subset of outputs always includes the maximal-score box (or no box if all scores fall below threshold). Thus, for the single-object case: 
+
+– If P yields a correct result, it necessarily has just one correct box, and since the highest-scoring box is always part of the final output, using only the highest-scoring box suffices to recover the same correctness outcome. 
+
+– If P yields an incorrect result, this either (i) includes only one box that is not correct w.r.t the ground truth (and for which just keeping the highes-scoring one would also fail), or (ii) includes multiple boxes, and thus keeping the highes-scoring one could either also fail, but also could end up being correct. Therefore, retaining only the highest-scoring bounding box is at least as accurate as any other postprocessing method. We conclude that, without loss of generality, we can reduce the postprocessing to selecting only the highest-confidence bounding box above the threshold. This simplification does not alter the model’s original correctness or performance under the definition provided, and it simplifies the verification framework. 
+
+## B Proof: Concatenation of Injective Functions is Injective 
+
+We recall Proposition 1 which states that Let f : R → R, g : R → R be injective functions. Then their concatenation f ◦ g is also injective. 2 B. Brückner et al. 
+
+Proof. The fact that f, g are injective functions implies the following 
+
+– For any x1, x 2 ∈ R, if g(x1) = g(x2), then x1 = x2.
+
+– For any y1, y 2 ∈ R, if f (y1) = f (y2), then y1 = y2.We want to prove that the composite function f ◦g is injective. By definition, this means we must show that for any x1, x 2 ∈ R, if (f ◦ g)( x1) = ( f ◦ g)( x2),then x1 = x2.Let x1, x 2 ∈ R and assume that (f ◦ g)( x1) = ( f ◦ g)( x2).By the definition of function composition, this equation can be written as 
+
+f (g(x1)) = f (g(x2)) .Now, let y1 = g(x1) and y2 = g(x2). Our equation becomes f (y1) = f (y2).Since f is injective per our assumptions, f (y1) = f (y2) implies y1 = y2.Substituting g(x1) and g(x2) back, we obtain that g(x1) = g(x2).Finally, since we are given that g is injective, therefore g(x1) = g(x2) implies 
+
+x1 = x2.We have successfully shown that assuming (f ◦ g)( x1) = ( f ◦ g)( x2) leads directly to the conclusion x1 = x2. Therefore, the function f ◦ g is injective. 
+
+## C Definition and Injectivity of the h and ϕ Functions 
+
+In this section we illustrate the ϕ functions for different object detectors which the different models that we analyse employ to convert their predicted logits to bounding box predictions in the centre format. We further show that these func-tions are strictly monotonic and in turn injective/one-to-one which is a require-ment for our coordinate transformation. Besides this, we prove the injectivity of the h function. We first analyse the injectivity of a number of components that are often employed as a part of ϕ:
+
+– Let d1 : R → R, x 7 → ex, then ∂d 1(x) 
+
+> ∂x
+
+= ex > 0, i.e . ex is strictly monotoni-cally increasing and therefore injective. 
+
+– Let d2 : R>0 → R>0, x 7 → x2, then ∂d 2(x) 
+
+> ∂x
+
+= 2 x > 0 ∀ x > 0. Therefore d2 is strictly monotonically increasing on R>0 and therefore injective. 
+
+– Let d3 : R → R>0, x 7 → σ(x) := ex 
+
+> 1+ ex
+
+. We obtain that ∂d 3(x) 
+
+> ∂x
+
+= ex 
+
+> (1+ ex)2
+
+. From 
+
+ex > 0 it follows that (1 + ex)2 > 0 and therefore ex 
+
+> (1+ ex)2
+
+> 0, implying that 
+
+σ(x) is strictly monotonically increasing and injective. 
+
+– Let d4 : R → R, x 7 → ax + b be an affine function. ∂d 4(x) 
+
+> ∂x
+
+= a, therefore 
+
+d4 is strictly monotonically increasing for a > 0 and strictly monotonically decreasing for a < 0. This implies that d4 is injective for a̸ = 0 
+
+We first analyse the h function and restate its definition from Section 3.1: 
+
+h(cx, c y , w, h ) = ( cx − w 
+
+> 2
+
+, c y − h 
+
+> 2
+
+, c x + w 
+
+> 2
+
+, c y + h 
+
+> 2
+
+)
+
+We observe that each component function hi : R → R is an affine function with slope a = ± 12̸ = 0 . From the injectivity of d4 it therefore follows that h is injective. IoUCert: Robustness Verification for Anchor-based Object Detectors 3
+
+To analyse the injectivity of the ϕ functions, we recall that the concatenation of injective functions is injective, see Proposition 1. 
+
+C.1 SSD 
+
+The ϕ functions for the SSD model are defined as 
+
+ϕ0(o0, p 0, p 2) = p0 + o0 · var 1 · p2 (center x coordinate) ,ϕ1(o1, p 1, p 3) = p1 + o1 · var 1 · p3 (center y coordinate) ,ϕ2(o2, p 2) = p2 · eo2·var 2 (width) ,ϕ3(o3, p 3) = p3 · eo3·var 2 (height) .
+
+where var 1 and var 2 are pre-defined values. Assuming that var 1, p 2, p 3 > 0 it is obvious that ϕ0, ϕ 1 are affine and therefore injective. Assuming that p2, p 3 > 0
+
+we also find that ϕ2, ϕ 3 are injective as a concatenation of injective functions. 
+
+C.2 YOLOv2 
+
+The ϕ functions for the YOLOv2 model are defined as 
+
+ϕ0(o0, p 0, s ) = ( σ(o0) + p0) · s (center x coordinate) ,ϕ1(o1, p 1, s ) = ( σ(o1) + p1) · s (center y coordinate) ,ϕ2(o2, p 2, s ) = p2 · eo2 · s (width) ,ϕ3(o3, p 3, s ) = p3 · eo3 · s (height) ,
+
+where s = image _size grid _size . By definition, it holds that s > 0. We further assume that 
+
+p0, p 1, p 2, p 3 > 0 which implies that, as concatenations of injective functions, all functions ϕi are injective. 
+
+C.3 YOLOv3 
+
+The YOLOv3 architecture we use differs from YOLOv2 in that it employs differ-ent functions for calculating the box predictions based on the raw output logits of the model. This change is meant to avoid issues that occurred in the original model when the box centre was located close to the boundaries of a grid cell. Besides this, YOLOv3 employs multiple prediction grids with different scales. The scale sk associated with the k-th anchor box therefore depends on the size 4 B. Brückner et al. 
+
+of the grid which predicted that box. 
+
+ϕ0(o0, p 0, s k) = (2 · σ(o0) − 0.5 + p0) · sk
+
+(center x coordinate) ,ϕ1(o1, p 1, s k) = (2 · σ(o1) − 0.5 + p1) · sk
+
+(center y coordinate) ,ϕ2(o2, p 2, s k) = (2 · σ(o2)) 2 · p2 · sk
+
+(width) ,ϕ3(o3, p 3, s k) = (2 · σ(o3)) 2 · p3 · sk
+
+(height) ,
+
+By definition, we once again have that sk > 0 which directly implies that ϕ0, ϕ 1
+
+are injective as concatenations of injective functions. For ϕ2, ϕ 3 we observe that 
+
+σ(x) > 0 ∀ x ∈ R which implies that 2 · σ(o2) and 2 · σ(o3) are injective. Assum-ing p2, p 3 > 0, it directly follows that ϕ2, ϕ 3 are injective as concatenations of injective functions. 
+
+## D Further Details on the Experiments and Additional Results 
+
+D.1 Additional Details on the Trained Models                                     
+
+> YOLOv3-tiny,
+> 64 ×64
+> YOLOv3-tiny-maxpool,
+> 64 ×64
+> YOLOv3-tiny,
+> 128 ×128
+> Weight Decay 10 −310 −310 −4
+> Learning Rate 5·10 −35·10 −35·10 −3
+> Epochs 400 800 2000
+> Left-Right Flipping Probability 0.50.50.5
+> Mosaic Probability 0.50.50.5
+> MixUp Probability 0.50.50.5
+> mAP 0.586 .59% 86 .88% 98 .78%
+> mAP 0.5:0 .95 40 .90% 41 .67% 71 .24%
+
+Table 4: Optimal hyperparameters for the different YOLOv3 training runs and result-ing accuracy. mAP 0.5 denotes the Mean Average Precision at an IoU threshold of 0.5
+
+while mAP 0.5:0 .95 denotes the Mean Average Precision averaged over IoU thresholds between 0.5 and 0.95 in increments of 0.05 .
+
+We provide additional information on the self-trained models in this section. The YOLOv3 models are YOLOv3-tiny models which follow the architecture described in the original paper [55], we make use of the Ultralytics YOLOv3 repository to train these models [31]. We adapt the models to the verification task IoUCert: Robustness Verification for Anchor-based Object Detectors 5Motion Blur 45 ◦ Motion Blur 90 ◦ Motion Blur 135 ◦                                                                                                                                                                                         
+
+> Input Size ϵRob. Timeout Non-Rob. Time Rob. Timeout Non-Rob. Time Rob. Timeout Non-Rob. Time
+> 64 ×64 0.01 50 003.15 50 003.15 50 003.16 0.05 50 003.31 50 003.30 50 003.32 0.150 003.90 50 003.72 50 004.00 0.350 0017 .97 50 0015 .42 50 0018 .28 0.550 0034 .83 49 0128 .24 49 0133 .59 0.848 0271 .10 48 0258 .78 46 0469 .32 1.047 03100 .88 46 0487 .15 43 0791 .41 128 ×128 0.01 50 006.70 50 006.33 50 005.76 0.05 50 007.96 50 007.62 50 007.27 0.150 0011 .54 50 009.87 50 0010 .53 0.349 0178 .03 50 0068 .96 50 0077 .64 0.549 01159 .30 50 00140 .51 50 00162 .31 0.849 01324 .29 45 05252 .23 48 02326 .73 1.048 02450 .14 44 06368 .42 46 04451 .50
+
+Table 5: YOLOv3 results for motion blur perturbations with angles of 45 , 90 and 135 
+
+degrees and different epsilon values. The numbers of robust, timeout and non-robust cases are shown together with the mean verification time in seconds. The timeout was set to 1800 seconds. 
+
+by replacing the MaxPool with AvgPool layers. A more detailed discussion and evaluation on this can be found in Appendix D.3. We employ an IoU threshold 
+
+τiou = 0 .5 and a class threshold of 0.15 during training. The models are trained on the LARD dataset at a 64 × 64 and a 128 × 128 resolution. Since 64 ×
+
+64 is a relatively small resolution for an object detection task and the LARD dataset contains a large number of images where the runway is far away from the plane, we need to crop the images such that the runway is at least 10 pixels in size. The YOLOv3-tiny model on the 64 × 64 inputs has 8, 666 , 692 trainable parameters while the 128 × 128 model has 8, 669 , 876 trainable parameters. Both models possess two prediction heads at different scales, one which operates at a stride of 16 and one which operates at a stride of 32 . We use the autoanchor functionality to find suitable anchor boxes for the LARD dataset. For the 64 ×64 
+
+model we use (13 , 13) , (21 , 14) , (15 , 22) as the anchor boxes for the head with a stride of 16 and (33 , 20) , (22 , 33) , (43 , 39) as the anchors for the head with a stride of 32 . For the model trained at the higher 128 × 128 resolution we obtain (13 , 13) , (15 , 23) , (25 , 17) as the boxes for the head with stride 16 and 
+
+(27 , 32) , (50 , 35) , (80 , 59) for the head with a stride of 32 .Both models are trained using a Stochastic Gradient Descent optimiser with an initial learning rate of 0.01 which is decayed using a Cosine Annealing learning rate scheduler. We tune the number of epochs, the data augmentation strategies, the learning rate and the weight decay during our experiments. The optimal hyperparameters and the performance that we obtain are shown in Table 4. The test accuracies which are provided are obtained on the synthetic LARD test dataset. 
+
+D.2 Motion Blur Perturbations With Different Angles on YOLOv3 
+
+For the sake of completeness we present the verification results on YOLOv3-tiny models using motion blur perturbations with varying blurring angles in Table 6 B. Brückner et al. 
+
+5. We generally observe similar tendencies in terms of certified robustness and verification times for the different blurring angles. 
+
+D.3 Ablation Study on MaxPool vs AvgPool Pooling 
+
+As noted before, a key issue in the verification of object detection models such as YOLOv3 is the fact that the architectures heavily rely on downsampling inputs using MaxPool layers. The MaxPool layer is piece-wise linear, bound propaga-tion frameworks therefore need to employ convex relaxations in order to model its behaviour. In our object detection models, we replace the MaxPool with AvgPool layers and find that the resulting networks yield comparable standard performance. However, since the AvgPool function is linear and can be repre-sented exactly in bound propagation frameworks, we expect that the verification of those networks is significantly more efficient than that of MaxPool-based mod-els. To verify this claim, we train a YOLOv3-tiny employing MaxPool instead of AvgPool layers on the LARD dataset at a 64 × 64 resolution. The AvgPool model achieves an mAP 0.5:0 .95 of 40 .9% and an mAP 0.5 of 86 .59% . Meanwhile, the MaxPool model achieves a slightly higher mAP 0.5:0 .95 of 41 .67% and a com-parable mAP 0.5 of 86 .88% . Table 6 compares the verification of both models on a random subset of 50 correctly classified images from the LARD test dataset. It is evident that the AvgPool-based model is significantly easier to verify than the MaxPool model. Verification runtimes are much lower for the AvgPool model and fewer timeouts are encountered as a consequence. Verification times for the MaxPool model are more than one order of magnitude higher except for very small perturbation sizes. 
+
+## E Complete Verification Performance 
+
+In this section, we theorise about the performance gains achieved by our optimal bounding method compared to the baseline when performing complete verifica-tion as shown in Table 7. While in incomplete verification tighter bounds often come at the cost of longer verification times, in complete verification we would ideally expect that tighter bounds allow the verifier to avoid exploring certain nodes in the branch-and-bound (BaB) procedure, thereby improving overall ef-ficiency. However, it is important to recognise that tighter bounds do not always guarantee faster complete verification. The computational overhead introduced by tighter bounding can offset or even outweigh the benefits of pruning nodes. Within our object detection (OD) verification framework, when integrated into a complete verification setting, we can fix the number of candidate boxes we would consider, and if that number is exceeded our procedure directly moves on to the splitting step. Under this assumption, once bounds are propagated through the network, the OD verification-specific computation takes constant time, independent of the number of anchor boxes. To understand the time gains, we first define the following variables: IoUCert: Robustness Verification for Anchor-based Object Detectors 7AvgPool MaxPool 
+
+Perturbation ϵ Rob. Timeout Non-Rob. Time Rob. Timeout Non-Rob. Time Brightness 
+
+0.01 50 0 0 3.35 50 0 0 112 .67 0.05 50 0 0 9.72 48 2 0 556 .30 0.1 50 0 0 20 .45 41 9 0 969 .82 0.3 50 0 0 56 .26 15 33 2 1602 .32 0.5 47 0 3 89 .58 0 45 5 1620 .41 0.8 36 0 14 105 .72 0 34 16 1225 .74 1.0 28 0 22 103 .87 0 27 23 974 .65 
+
+Contrast 
+
+0.01 50 0 0 3.28 50 0 0 215 .24 0.05 50 0 0 8.06 44 6 0 866 .93 0.1 50 0 0 15 .82 30 20 0 1229 .32 0.3 50 0 0 39 .25 6 44 0 1750 .99 0.5 49 0 1 58 .63 0 49 1 1764 .01 0.8 49 0 1 114 .87 0 46 4 1656 .06 1.0 0 0 50 43 .65 0 5 45 182 .96 
+
+Motion Blur 0◦
+
+0.01 50 0 0 3.15 50 0 0 12 .56 0.05 50 0 0 3.30 50 0 0 53 .53 0.1 50 0 0 3.83 50 0 0 110 .31 0.3 50 0 0 16 .89 50 0 0 347 .36 0.5 50 0 0 31 .91 49 1 0 636 .65 0.8 49 0 1 68 .61 44 5 1 1150 .29 1.0 45 0 5 91 .45 29 20 1 1454 .13 
+
+Motion Blur 45 ◦
+
+0.01 50 0 0 3.15 50 0 0 13 .34 0.05 50 0 0 3.31 50 0 0 58 .30 0.1 50 0 0 3.90 50 0 0 118 .77 0.3 50 0 0 17 .97 50 0 0 384 .12 0.5 50 0 0 34 .83 49 1 0 713 .62 0.8 48 0 2 71 .10 38 8 4 1195 .97 1.0 47 0 3 100 .88 21 19 10 1241 .84 
+
+Motion Blur 90 ◦
+
+0.01 50 0 0 3.15 50 0 0 8.34 0.05 50 0 0 3.30 50 0 0 36 .50 0.1 50 0 0 3.72 50 0 0 73 .40 0.3 50 0 0 15 .42 49 0 1 224 .68 0.5 49 0 1 28 .24 49 0 1 420 .46 0.8 48 0 2 58 .78 44 1 5 772 .38 1.0 46 0 4 87 .15 39 3 8 955 .88 
+
+Motion Blur 135 ◦
+
+0.01 50 0 0 3.16 50 0 0 13 .61 0.05 50 0 0 3.32 50 0 0 58 .36 0.1 50 0 0 4.00 50 0 0 117 .14 0.3 50 0 0 18 .28 50 0 0 368 .98 0.5 49 0 1 33 .59 48 2 0 731 .39 0.8 46 0 4 69 .32 43 4 3 1210 .54 1.0 43 0 7 91 .41 27 17 6 1414 .50 
+
+Table 6: Ablation Study comparing YOLOv3-tiny models with MaxPool vs. AvgPool pooling layers trained on the LARD dataset at a 64 × 64 resolution. We show the number of robust, timeout and non-robust cases together with the mean verification time in seconds. 8 B. Brückner et al. Ours Cohen et al. [19] Gain (%) Model Perturbation ϵ Time #Branches Depth Time #Branches Depth ∆t ∆b ∆d
+
+SSD Brightness 0.01 29.06 66 8 29.99 74 12 3.1 10.8 33.3 0.02 114.12 370 103 114.45 378 104 0.3 2.1 1.0 0.05 404.54 1192 179 389.59 1236 179 -3.8 3.6 0.0 0.1 731.41 2027 201 738.81 2103 202 1.0 3.6 0.5 0.3 458.21 1208 57 458.51 1212 58 0.1 0.3 1.7 0.5 221.71 622 25 221.70 622 25 -0.0 0.0 0.0 0.8 10.62 59 9 10.65 59 9 - - -1 5.79 55 5 5.49 55 5 - - -Contrast 0.01 24.21 54 2 24.81 58 4 2.4 6.9 50.0 0.02 29.68 72 11 31.37 84 15 5.4 14.3 26.7 0.05 171.49 550 135 163.62 562 137 -4.8 2.1 1.5 0.1 359.41 1055 171 361.96 1088 173 0.7 3.0 1.2 0.3 885.51 2324 185 887.91 2362 186 0.3 1.6 0.5 0.5 743.04 1904 114 742.45 1918 116 -0.1 0.7 1.7 0.8 3.78 53 2 3.78 53 2 - - -1 3.90 53 2 3.77 53 2 - - -YOLOv2 Brightness 0.01 3.69 58 4 3.65 58 4 -1.1 0.0 0.0 0.02 5.15 94 18 5.11 94 18 -0.8 0.0 0.0 0.05 12.97 308 79 12.94 312 81 -0.2 1.3 2.5 0.1 23.81 627 135 23.79 639 137 -0.1 1.9 1.5 0.3 39.40 1096 163 38.15 1102 163 -3.3 0.5 0.0 0.5 9.99 284 41 9.81 284 41 -1.8 0.0 0.0 0.8 1.21 55 4 1.22 55 4 - - -1 0.81 50 0 0.82 50 0 - - -Contrast 0.01 3.23 52 1 3.23 52 1 0.0 0.0 0.0 0.02 3.53 56 2 3.50 56 2 -0.9 0.0 0.0 0.05 4.86 88 14 4.87 88 14 0.2 0.0 0.0 0.1 9.23 204 53 9.08 204 53 -1.7 0.0 0.0 0.3 33.36 899 171 32.81 896 170 -1.7 -0.3 -0.6 0.5 35.86 940 178 35.38 947 179 -1.4 0.7 0.6 0.8 2.52 74 16 2.50 74 16 - - -1 2.36 71 14 2.35 71 14 - - -
+
+Table 7: Comparison of verification performance between different bounding methods that have been integrated into our framework on SSD and YOLOv2. We show the verification time, number of explored branches and branching depth until resolution for all queries. The percentage gain of our method over that of Cohen et al. [19] in terms of time, #branches and depth is denoted as ∆t, ∆b and ∆d, respectively. 
+
+– copt : time per call to our optimal OD bounding method, 
+
+– cbase : time per call to the baseline bounding method, with copt > c base (as tighter methods often incur higher per-call cost), 
+
+– cprop : time for bound propagation before reaching the OD verification step, 
+
+– n: total number of nodes explored in the BaB procedure by the baseline, 
+
+– s: number of nodes avoided (pruned) by using our tighter bounds. IoUCert: Robustness Verification for Anchor-based Object Detectors 9
+
+We can approximate the total runtime of the baseline as: 
+
+tbase ≈ n · (cbase + cprop ),
+
+and the total runtime of the optimal method as: 
+
+topt ≈ (n − s) · (copt + cprop ).
+
+Defining the per-call overhead of the tighter bounds as ∆c := copt − cbase , the total time saved can be expressed as: 
+
+∆t = tbase − topt = −n∆c + s(copt + cprop ).
+
+This formulation reveals that if cprop ≫ ∆c , even a small number of pruned nodes (s) can yield substantial runtime savings. On the other hand, if cprop is low, the overhead term −n∆c may dominate, potentially resulting in net slowdowns or only marginal gains. There are also intermediate cases where the number of pruned nodes, the overhead, and the propagation cost all balance each other out, making patterns in the performance changes less clear. 
+
+## F Proof of Theorem 1 
+
+Before presenting the proof for Theorem 2, we provide the analysis of ∂IoU  
+
+> ∂z k
+
+on the border of constraints, since points where the gradient is 0 would have to be considered. We recall Theorem 1 which states that The IoU function is maximum for a point obtained from within the set Cs.
+
+Proof. Let M = ( z∗ 
+
+> 0
+
+, z ∗ 
+
+> 1
+
+, z ∗ 
+
+> 2
+
+, z ∗ 
+
+> 3
+
+) be an extreme of the function. It defines on the 
+
+(z0; z2) plane the Mx = ( z∗ 
+
+> 0
+
+, z ∗ 
+
+> 2
+
+) point, and on the (z1; z3) plane the My = ( z∗ 
+
+> 1
+
+, z ∗ 
+
+> 3
+
+)
+
+point. Let’s see that Mx ∈ P x or that there is an M ′ 
+
+> x
+
+∈ P x that has equal IoU value. The case for My is analogous. Let’s assume that Mx /∈ P x. Suppose Mx lies within the interior of the constrained region of the (z0; z2) plane (which is defined by the first and third constraints on the maximisation problem). We know that at least one of the com-ponents is different of the ground truth, as (g0,g2) ∈ P x . Let’s assume it’s the first one. Then either z∗ 
+
+> 0
+
+> g 0, or z∗ 
+
+> 0
+
+< g 0. If z∗ 
+
+> 0
+
+> g 0, we have that ∂IoU  
+
+> ∂z 0
+
+(M ) < 0.And since we are within the constrained region, the point (z∗ 
+
+> 0
+
++ ϵ, z ∗ 
+
+> 1
+
+, z ∗ 
+
+> 2
+
+, z ∗ 
+
+> 3
+
+)
+
+still satisfies the constraints, and has bigger/smaller IoU value (depending the sign of ϵ) contradicting that (z∗ 
+
+> 0
+
+, z ∗ 
+
+> 2
+
+) is an extreme. If z∗ 
+
+> 0
+
+< g 0, we have that  
+
+> ∂IoU
+> ∂z 0
+
+(M ) > 0, and we can apply the same reasoning. Thus, we know that Mx lies on the border of the region. Since it’s also not in P x, then the following hold: z∗
+
+> 0
+
+̸ = g0, z∗
+
+> 2
+
+̸ = g2 (because the intersec-tion of the ground truth coordinate and the border is considered in Px) and 
+
+Mx is not a corner of the region. Since Mx lies on the border, we can define 
+
+αi(z0, z 1, z 3) = ( z0, z 1, α (z0), z 3), where α is the parameterisation of the border 10 B. Brückner et al. 
+
+in the (z0; z2) plane. In an analysis we present after the proof, we show how  
+
+> IoU ◦αi
+> ∂z 0
+
+(z0, z 1, z 3) behaves. In short, we prove that in intervals contained within the border and the intersection with either z0 or z2 with their respective ground truths, the derivative is either always 0 or never 0. In the first case, any point within a segment will have the same value, and thus in particular will have the same IoU value as in either the intersection of z0 or z2 with their respec-tive ground truth, or the end of the segment due to the intesection with other constraint (i.e a corner). And all those points lie within Px And thus, if Mx
+
+lies within one of those segments, we could build M ′ 
+
+> X
+
+∈ Px by changing the 
+
+(z0, z 2) coordinates with the end of the segment, and it will have the same IoU. If ∂IoU ◦αi 
+
+> ∂z 0
+
+(z∗ 
+
+> 0
+
+, z ∗ 
+
+> 1
+
+, z ∗ 
+
+> 3
+
+)̸ = 0 , we have that IoU ◦ αi(z∗ 
+
+> 0
+
++ ϵ, z ∗ 
+
+> 1
+
+, z ∗ 
+
+> 3
+
+) is either greater or smaller than IoU ◦ αi(z∗ 
+
+> 0
+
+, z ∗ 
+
+> 1
+
+, z ∗ 
+
+> 3
+
+) depending on the partial derivative sign and the sign of ϵ we choose. And we know that αi(z∗ 
+
+> 0
+
++ ϵ, z ∗ 
+
+> 1
+
+, z ∗ 
+
+> 3
+
+) satisfies the constraints because: since its a parameterisation of one constraint, that one will always be satisfied, and since its not a corner of the region, the other constraint will also be satisfied with a sufficiently small ϵ. Thus, F was not an extreme of the function, resulting in a contradiction. Notice that ∂IoU ◦αi 
+
+> ∂z 0
+
+(z∗ 
+
+> 0
+
+, z ∗ 
+
+> 1
+
+, z ∗ 
+
+> 3
+
+) is well defined, since  
+
+> ∂IoU ◦αi
+> ∂z 0
+
+(z∗ 
+
+> 0
+
+, z ∗ 
+
+> 1
+
+, z ∗ 
+
+> 3
+
+) is non-defined only when z0 = g0 or αi(z0, z 1, z 3)2 = g2 and we already considered out those cases. So then we proved that Mx ∈ P x or that there is an M ′ 
+
+> x
+
+∈ P x that has equal IoU value. An analogous reasoning can be applied to prove that My ∈ P y .
+
+F.1 Partial Derivatives 
+
+The following are the partial derivatives of IoU( b, g ) where b = ( z0, z 1, z 2, z 3) and 
+
+g is taken as a fixed number, which are needed for the proofs that are presented next. These were presented in [19], though we fix here some of the typos they had. 
+
+∂IoU (b)
+
+∂z i
+
+= ∂IoU (b)
+
+∂a(b)
+
+∂a(b)
+
+∂z i
+
++ ∂IoU (b)
+
+∂a(i(b, g )) 
+
+∂a(i(b, g )) 
+
+∂z i
+
+(6) 
+
+∂IoU (b)
+
+∂a(b) = − a(i(b, g )) 
+
+a(b ∪ g)2 (7) Where a(b ∪ g) := a(b) + a(g) − a(i(b, g )) 
+
+∂IoU (b)
+
+∂a(i(b, g )) = a(b ∪ g) + a(i(b, g )) 
+
+a(b ∪ g)2 (8) Let ci = (1 − i) and ki = (2 − i)
+
+∂a(b)
+
+∂z i=0 ,2
+
+= −ci(z3 − z1) (9) 
+
+∂a(b)
+
+∂z i=1 ,3
+
+= −ki(z2 − z0) (10) IoUCert: Robustness Verification for Anchor-based Object Detectors 11 
+
+∂a(i(b, g )) 
+
+∂z i=0 ,2
+
+=
+
+(
+
+0 if cizi < c igi
+
+−ci · (ymax − ymin ) if cizi > c igi
+
+(11) 
+
+∂a(i(b, g )) 
+
+∂z i=1 ,3
+
+=
+
+(
+
+0 if kizi < k igi
+
+−ki · (xmax − xmin ) if kizi > k igi
+
+(12) 
+
+For i ∈ { 0, 2}:
+
+If cizi < c igi
+
+∂IoU (b)
+
+∂z i=0 ,2
+
+= ci
+
+a(i(b, g )) 
+
+a(b ∪ g)2 (z3 − z1) (13) Thus the derivative has the same sign as ci
+
+If cizi > c igi
+
+∂IoU (b)
+
+∂z i=0 ,2
+
+=ci
+
+a(i(b, g )) 
+
+a(b ∪ g)2 (z3 − z1)
+
+− ci
+
+a(b ∪ g) + a(i(b, g )) 
+
+a(b ∪ g)2 (ymax − ymin )= ci
+
+a(b ∪ g)2
+
+× [a(i(b, g ))( z3 − z1) − (a(b) + a(g))( ymax − ymin )] = ci
+
+a(b ∪ g)2
+
+× [( xmax − xmin )( ymax − ymin )( z3 − z1)
+
+− (a(b) + a(g))( ymax − ymin )] = ci · (ymax − ymin )
+
+a(b ∪ g)2
+
+× [( xmax − xmin )( z3 − z1) − a(b) − a(g)] = ci · (ymax − ymin )
+
+a(b ∪ g)2
+
+× [( xmax − xmin )( z3 − z1)
+
+− (z2 − z0) · (z3 − z1) − a(g)] = ci · (ymax − ymin )
+
+a(b ∪ g)2
+
+× [( xmax − z2 + z0 − xmin )( z3 − z1) − a(g)] 
+
+(14) Note that xmax − z2 < 0 and z0 − xmin < 0. Thus the derivative has the opposite sign of ci12 B. Brückner et al. 
+
+Analogously, for i ∈ { 1, 3}:
+
+If kizi < k igi
+
+∂IoU (b)
+
+∂z i=1 ,3
+
+= ki
+
+a(i(b, g )) 
+
+a(b ∪ g)2 (z2 − z0) (15) The derivative has the same sign as ki
+
+If kizi > k igi
+
+∂IoU (b)
+
+∂z i=1 ,3
+
+=ki
+
+a(i(b, g )) 
+
+a(b ∪ g)2 (z2 − z0)
+
+− ki
+
+a(b ∪ g) + a(i(b, g )) 
+
+a(b ∪ g)2 (xmax − xmin )= ki · (xmax − xmin )
+
+a(b ∪ g)2
+
+× [( ymax − z3 + z1 − ymin )( z2 − z0) − a(g)] 
+
+(16) Note that ymax − z3 < 0 and z1 − ymin < 0. Thus the derivative has the opposite sign of ki
+
+This allows to build the following table, where + means the function increases in that interval, − decreases and nd means it is non-differentiable in that point. 
+
+z −∞ g0 g2 ∞ 
+
+> ∂IoU ∂z 0
+
++ nd − − − 
+
+> ∂IoU ∂z 2
+
++ + + nd −
+
+z −∞ g1 g3 ∞ 
+
+> ∂IoU ∂z 1
+
++ nd − − − 
+
+> ∂IoU ∂z 3
+
++ + + nd −
+
+Fig. 3: Variation of the IoU function given its partial derivatives. 
+
+F.2 Analysing ∂IoU  
+
+> ∂z k
+
+on the border of constraints 
+
+We will consider the general case: 
+
+max 
+
+> z0,z 1,z 2,z 3
+
+IoU (( z0, z 1, z 2, z 3), g )
+
+s.t. Lx 
+
+> 1
+
+≤ z0 + z2 ≤ U x 
+
+> 1
+
+(a) 
+
+Ly 
+
+> 1
+
+≤ z1 + z3 ≤ U y 
+
+> 1
+
+(b) 
+
+Lx 
+
+> 2
+
+≤ z2 − z0 ≤ U x 
+
+> 2
+
+(c) 
+
+Ly 
+
+> 2
+
+≤ z3 − z1 ≤ U y 
+
+> 2
+
+(d) 
+
+We want to find the points where ∂IoU ◦αi 
+
+> ∂z k
+
+= 0 , for k ∈ { 0, 1} and i ∈{a, b, c, d }.IoUCert: Robustness Verification for Anchor-based Object Detectors 13 
+
+For i ∈ { a, b }, we can generalise the transformation for the parametrization as follows. f i(zj ) = K −zj , taking K ∈ { Lx 
+
+> 1
+
+, U x 
+
+> 1
+
+, L y 
+
+> 1
+
+, U y 
+
+> 1
+
+}. We also have f i(zj ) = 
+
+K + zj when i ∈ { c, d }, and taking K ∈ { Lx 
+
+> 2
+
+, U x 
+
+> 2
+
+, L y 
+
+> 2
+
+, U y 
+
+> 2
+
+}.So we will do the analysis for the cases i ∈ { a, c } since the other cases are analogous. 1. f i(z0) = K −z0: establishes the following parameterisation: α(z0, z 1, z 3) = (z0, z 1, K − z0, z 3).Applying the chain rule, we have 
+
+∇IoU (α(z0, z 1, z 3)) =∇IoU (z0, z 1, z 2, z 3)|α(z0,z 1,z 3)
+
+· Dα (z0, z 1, z 3)|(z0,z 1,z 3) (17) with 
+
+Dα (z0, z 1, z 3)|(z0,z 1,z 3) =
+
+
+
+1 0 0 0 1 0 
+
+−1 0 0 0 0 1 
+
+
+
+Thus, we have: 
+
+∂IoU ◦ α∂z 0
+
+=( ∂IoU (b, g )
+
+∂z 0 |α(z0,z 1,z 3)
+
+− ∂IoU (b, g )
+
+∂z 2 |α(z0,z 1,z 3)
+
+) (18) In order to ease the analysis, we define Ax and Bx as follows: 
+
+Ax := a(i(b, g )) 
+
+a(b ∪ g)2 (z3 − z1) > 0
+
+Bx := a(i(b, g )) 
+
+a(b ∪ g)2 (z3 − z1)
+
+− a(b ∪ g) + a(i(b, g )) 
+
+a(b ∪ g)2 (ymax − ymin )
+
+< 0 (19) To study the value of the derivatives, we will separate in the following cases: (a) Case z0 < g 0 and z2 = K − z0 < g 2:14 B. Brückner et al. 
+
+∂IoU (b, g )
+
+∂z 0 |α(z0,z 1,z 3)
+
+− ∂IoU (b, g )
+
+∂z 2 |α(z0,z 1,z 3)
+
+= Ax − (−Bx) = Ax + Bx
+
+= 2 · a(i(b, g )) 
+
+a(b ∪ g)2 (z3 − z1)
+
+− a(b ∪ g) + a(i(b, g )) 
+
+a(b ∪ g)2 (ymax − ymin )= (ymax − ymin )
+
+a(b ∪ g)2 [(2 xmax − (K − z0)+ z0 − 2xmin )( z3 − z1) − a(g)] 
+
+Which equals 0 iff: 
+
+0 = (2 xmax − K + z0 + z0 − 2xmin )( z3 − z1)
+
+− a(g)
+
+a(g) = (2 xmax − K + 2 z0 − 2xmin )( z3 − z1)
+
+a(g) = [2( xmax − xmin ) − K + 2 z0] · (z3 − z1)
+
+a(g) = [2( K − z0 − g0) − K + 2 z0] · (z3 − z1)
+
+a(g) = (2 K − 2z0 − 2g0 − K + 2 z0) · (z3 − z1)
+
+a(g) = ( K − 2g0) · (z3 − z1)
+
+It follows that if (K − 2g0)̸ = 0 , we have that (z3 − z1) = a(g)2( K−2g0) .If (K − 2g0) = 0 , then it would require a(g) = 0 which is a case we don’t consider. (b) Case z0 < g 0 and z2 = K − z0 > g 2:
+
+∂IoU (b, g )
+
+∂z 0 |α(z0,z 1,z 3)
+
+− ∂IoU (b, g )
+
+∂z 2 |α(z0,z 1,z 3)
+
+= Ax − (−Ax) = Ax + Ax
+
+= 2 Ax > 0
+
+(c) Case z0 > g 0 and z2 = K − z0 > g 2
+
+IoU (b, g )
+
+∂z 0 |α(z0,z 1,z 3)
+
+− IoU (b, g )
+
+∂z 2 |α(z0,z 1,z 3)
+
+= Bx − (−Ax) = Ax + BxIoUCert: Robustness Verification for Anchor-based Object Detectors 15 
+
+Bear in mind that this case it not the same as the first one, as xmax and 
+
+xmin differ. Thus, Ax + Bx = 0 iff: 
+
+0 = (2 xmax − K + z0 + z0 − 2xmin )( z3 − z1) − a(g)
+
+a(g) = (2 xmax − K + 2 z0 − 2xmin )( z3 − z1)
+
+a(g) = [2( xmax − xmin ) − K + 2 z0] · (z3 − z1)
+
+a(g) = [2( g2 − z0) − K + 2 z0] · (z3 − z1)
+
+a(g) = (2 g2 − 2z0 − K + 2 z0) · (z3 − z1)
+
+a(g) = (2 g2 − K) · (z3 − z1)
+
+It follows that if (2 g2 − K)̸ = 0 , we have that (z3 − z1) = a(g)(2 g2−K) .The reasoning is similar to that of Case a). Notice that this condition does not depend on z0 or z2.(d) Case z0 > g 0 and z2 = K − z0 < g 2
+
+∂IoU (b, g )
+
+∂z 0 |α(z0,z 1,z 3)
+
+− ∂IoU (b, g )
+
+∂z 2 |α(z0,z 1,z 3)
+
+= Bx − (−Bx) = 2 Bx < 0
+
+2. f i(z0) = K + z0: establishes the following parametrization: α(z0, z 1, z 3) = (z0, z 1, K + z0, z 3). So now we have: 
+
+Dα (z0, z 1, z 3)|(z0,z 1,z 3) =
+
+
+
+1 0 0 0 1 0 1 0 0 0 0 1 
+
+
+
+Thus, we have: 
+
+∂IoU ◦ α∂z 0
+
+=( ∂IoU (b, g )
+
+∂z 0 |α(z0,z 1,z 3)
+
++ ∂IoU (b, g )
+
+∂z 2 |α(z0,z 1,z 3)
+
+) (20) Again, we are going to split the analysis in the following cases: (a) Case z0 < g 0 and z2 = K + z0 < g 2:16 B. Brückner et al. 
+
+∂IoU (b, g )
+
+∂z 0 |α(z0,z 1,z 3)
+
++ ∂IoU (b, g )
+
+∂z 2 |α(z0,z 1,z 3)
+
+= Ax + ( −Bx) = Ax − Bx
+
+= a(b ∪ g) + a(i(b, g )) 
+
+a(b ∪ g)2 (xmax − xmin ) > 0
+
+There are no candidate points to add. (b) Case z0 < g 0 and z2 = K + z0 > g 2:
+
+∂IoU (b, g )
+
+∂z 0 |α(z0,z 1,z 3)
+
++ ∂IoU (b, g )
+
+∂z 2 |α(z0,z 1,z 3)
+
+= Ax + ( −Ax) = 0 
+
+Similar to what happens in Cases a) and c) of the other family of borders (c) Case z0 > g 0 and z2 = K + z0 > g 2
+
+∂IoU (b, g )
+
+∂z 0 |α(z0,z 1,z 3)
+
++ ∂IoU (b, g )
+
+∂z 2 |α(z0,z 1,z 3)
+
+= Bx + ( −Ax) = Bx − Ax
+
+= − a(b ∪ g) + a(i(b, g )) 
+
+a(b ∪ g)2 (xmax − xmin ) < 0
+
+The gradient is never 0.(d) Case z0 > g 0 and z2 = K + z0 < g 2
+
+∂IoU (b, g )
+
+∂z 0 |α(z0,z 1,z 3)
+
++ ∂IoU (b, g )
+
+∂z 2 |α(z0,z 1,z 3)
+
+= Bx + ( −Bx) = 0 
+
+The reasoning is similar to that of case b). With these results, we can see that for any particular case, either the gradient is always zero, or never zero. 
+
+## G Proof of Theorem 2 
+
+We first provide details of our proposed method for finding minimum and maxi-mum IoU values as Algorithm 2. The algorithm iterates through all 169 critical IoUCert: Robustness Verification for Anchor-based Object Detectors 17 
+
+points presented in Section 4.2. Note that this is the number of the IoU func-tion’s critical points for any given predicted box and a ground truth box, this number is independent of the model architecture and other parameters. When iterating through the points, our algorithm checks the following: 
+
+– Does the point satisfy the constraints (as some of the candidate points may not satisfy a particular combination of constraints)? 
+
+– Is the point valid, i.e . does it define a valid box satisfying z0 < z 2 and 
+
+z1 < z 3)If these conditions are satisfied by a point, its IoU with the ground truth is calculated and the the maximum and minimum IoU values are updated. 
+
+Algorithm 2 Finding minimum and maximum IoU Values                                           
+
+> Input: Set of critical points C, Set of constraints S
+> Output: Minimum and maximum IoU values Initialise lower bound IoU ←0
+> Initialise upper bound IoU ←1
+> for each critical point c∈Cdo if csatisfies constraints Sand is valid then
+> Compute IoU value at c, denoted as IoU (c)
+> if IoU (c)>IoU then
+> IoU ←IoU (c)
+> else if IoU (c)<IoU then
+> IoU ←IoU (c)
+> end if end if end for Return IoU ,IoU
+
+Algorithm 3 represents a more detailed version of Algorithm 1 which is helpful to understand the proof of correctness for Algorithm 1 that we present in the following. NOTE: We can use vectorised operations to first find the candidate boxes before applying the expensive IoU bounding. To avoid computing bounds for the IoU function in cases where verification is unlikely to succeed, we can check whether the number of candidate boxes exceeds a threshold at this step. If this is the case, we can continue branching in our complete verification framework without having to compute the IoU bounds. We recall Theorem 2 which states that Algorithm 1 is correct .
+
+Proof (Proof (by induction)). We prove by induction on the number of boxes n
+
+in the bounds input that the function GetHighestBox correctly computes: 
+
+– The maximum class score lower bound across all boxes. 
+
+– The maximum class score upper bound across all boxes. 18 B. Brückner et al. 
+
+– The minimum and maximum IoU bounds over the set of candidate boxes. 
+
+Base Case ( n = 1 ): If there is only one box: 
+
+Algorithm 3 Verification for Object Detection Models (Updated) 
+
+1: Input: Neural network N , input constraints ζx, correctness constraints ζy
+
+2: Output: ROBUST or NONROBUST 
+
+3: function Verify (N, ζ x, ζ y )4: bounds ← Bound_Propagation (ζy , N )5: IoUBounds, scoreBounds, predClass ←
+
+6: GetHighestBox (bounds) 7: if IoUBounds.min ≥ τiou and 
+
+8: scoreBounds.lower ≥ τclass and 
+
+9: predClass = class then 
+
+10: return Robust 
+
+11: else if IoUBounds.max < τ iou or 
+
+12: scoreBounds.upper < τ class or 
+
+13: disagree (predClass) then 
+
+14: return NONROBUST 
+
+15: else 
+
+16: return UNKNOWN 
+
+17: end if 
+
+18: end function 
+
+19: function GetHighestBox (bounds) 20: classLowerBound ← −∞ 
+
+21: classUpperBound ← −∞ 
+
+22: for each box boxId in bounds do 
+
+23: ProcessLogits (boxId) 24: classLowerBound ← max (classLowerBound, 25: boxId.classBounds.lower) 26: classUpperBound ← max (classUpperBound, 27: boxId.classBounds.upper) 28: end for 
+
+29: minIoU ← 1
+
+30: maxIoU ← 0
+
+31: for each box boxId in bounds do 
+
+32: if boxId.classBounds.upper ≥
+
+33: maxLowerBound then 
+
+34: lowIoU, uppIoU ←
+
+35: IoUBounds (boxId.offsetBounds) 36: minIoU ← min (minIoU, lowIoU) 37: maxIoU ← max (maxIoU, uppIoU) 38: end if 
+
+39: end for 
+
+40: return (minIoU, maxIoU), (classLowerBound, 41: classUpperBound) 42: end function IoUCert: Robustness Verification for Anchor-based Object Detectors 19 
+
+– The first for loop sets classLowerBound and classUpperBound to that single box’s classBounds.lower and classBounds.upper , respectively. 
+
+– The second for loop checks if the box’s classBounds.upper is at least as large as the maximum lower bound (which it is, since there is only one box), and computes its IoU bounds. Thus, the single box is correctly identified as the only candidate, and the IoU and class score bounds are trivially correct. 
+
+Inductive Hypothesis: Assume that for any set of k boxes ( 1 ≤ k ≤ n), 
+
+GetHighestBox correctly: 
+
+– Identifies the maximum class score lower and upper bounds. 
+
+– Selects all and only the candidate boxes whose classBounds.upper is at least the maximum lower bound. 
+
+– Computes the correct minimum and maximum IoU values over these candi-dates. 
+
+Inductive Step ( n + 1 boxes): Consider adding one more box bn+1 to the existing n boxes. 
+
+– First for loop (updating class bounds): By the inductive hypothesis, af-ter processing the first n boxes, we have the correct classLowerBound and 
+
+classUpperBound . When processing bn+1 , we update these bounds only if 
+
+bn+1 has a higher lower or upper class bound. Thus, after the loop, we have the correct maximum values over all n + 1 boxes. 
+
+– Second for loop (identifying candidates and IoU bounds): We check whether 
+
+bn+1 satisfies bn+1 .classBounds.upper ≥ maxLowerBound 
+
+• If yes , then in the worst case, all other candidates score at their lower bounds ≤ maxLowerBound , while bn+1 scores at its upper bound ≥
+
+maxLowerBound . Therefore, it is possible that bn+1 is the highest scoring box, and it must be included as a candidate. 
+
+• If no , then even if all other candidates score at their lower bounds 
+
+≥ maxLowerBound , bn+1 can reach at most a score < maxLowerBound ,making it impossible to be the highest scoring box. Thus, it is correctly excluded. For all candidates, we compute their IoU bounds, updating minIoU and 
+
+maxIoU . By inductive assumption, the existing candidates’ bounds are cor-rect, and adding bn+1 only refines these if it’s a valid candidate. 
+
+Conclusion: By induction, for any number of boxes n, GetHighestBox :
+
+– Correctly computes the maximum class score lower and upper bounds. 
+
+– Correctly identifies the candidate boxes. 
+
+– Correctly computes the minimum and maximum IoU values over these can-didates. Therefore, the overall Verify function’s branching logic ( ROBUST / NON-ROBUST / UNKNOWN ) is based on correctly computed bounds, and Algo-rithm 1 is correct. 20 B. Brückner et al. 
+
+## H Proof: Optimality of the LeakyReLU Relaxation 
+
+LeakyReLU activations are piece-wise linear like ReLU activations and therefore preserve desirable properties for NN verification such as the fact that splitting the input interval to a LeakyReLU neuron at x = 0 yields two subproblems where the relaxation errors for that neuron is zero. While Xu et al. [64] extend the Reluplex verifier to LeakyReLUs, the work more relevant to us is that of Mellouki et al. [47] which extends the zonohedron-based AI 2 verifier to LeakyRe-LUs. Let LeakyReLU (x) = max {αx, x } with α ∈ [0 , 1] be a LeakyReLU acti-vation with concrete input bounds x ∈ [l, u ]. If u < 0 or l > 0 the activation function is said to be stable. In the case where u < 0 it can be represented exactly by LeakyReLU (x) = αx while in the case where l > 0 we have that LeakyReLU (x) = x. However, if l < 0 < u , the behaviour of the LeakyReLU function is piece-wise linear. We therefore need to employ linear lower and up-per bounding functions to be able to represent its behaviour in the linear bound propagation framework usually employed by neural network verifiers. A linear lower and upper bounding function flower (x), f upper (x) are given by 
+
+flower (x) = ˜ αx, ˜α ∈ [α, 1] (21) 
+
+fupper (x) = u − αl u − l x + (α − 1) lu u − l . (22) The bounds ˜α ∈ [α, 1] follow from the fact that ˜αx must be a valid lower bound for both parts of the LeakyReLU function, namely αx and x. Mellouki et al. [47] simply set ˜α = α, however, this ignores the fact that the tightness of the obtained bounds can be significantly improved by either setting ˜α to minimise the over-approximation area or by optimising its slope as has been proposed for ReLU activations [65]. This has been demonstrated to accelerate verification in various works [28, 57, 67]. We derive the overapproximation area and the corresponding optimal setting for ˜α depending on the concrete input bounds in the following. We recall Theorem 3 which states that for LeakyReLU (x) = max {0, αx } with 
+
+x ∈ [l, u ], the relaxation error is minimised by setting 
+
+flower (x) = 
+
+(αx if u < |l|,x else.  (23) 
+
+Proof. To find the ˜α which minimises the relaxation error, we first compute the relaxation error induced by the lower bounding function flower both for x < 0
+
+and x ≥ 0.
+
+Relaxation Error for x < 0 For x < 0 we compute the area enclosed by the LeakyReLU function and the x-axis as 
+
+a1 = 12 l(αl ) (24) and the area enclosed by the lower bound for the LeakyReLU function and the x-axis as 
+
+a2 = 12 l(˜ αl ). (25) IoUCert: Robustness Verification for Anchor-based Object Detectors 21 
+
+−2 −1 1 2
+
+−1
+
+1
+
+2
+
+fupper (x)
+
+flower (x), ˜α = 0 .5
+
+LeakyReLU (x)
+
+x = l x = u
+
+x
+
+y
+
+LeakyReLU Relaxation ( α = 0 .1, l = −1, u = 2 )  
+
+> fupper (x)
+> flower (x),˜α= 0 .5
+> LeakyReLU (x)
+> Upper relaxation area Lower relaxation area
+
+Fig. 4: Visualisation of the lower and upper LeakyReLU bounding functions for a sample ˜α = 0 .5. The lower overapproximation area is shaded in red, the upper overap-proximation area in blue. 
+
+The total relaxation error is the difference between area enclosed by the relax-ation and that enclosed by the actual function, i.e .
+
+ex< 0(˜ α) = a2 − a1 = 12 l2(˜ α − α). (26) 
+
+Relaxation Error for x ≥ 0 For x > 0 we obtain that the area enclosed by the LeakyReLU function and the x-axis is 
+
+a3 = 12 u(˜ αu ) (27) while that for the relaxation is 
+
+a3 = 12 uu.  (28) The total relaxation error can once again be computed as 
+
+ex> 0(˜ α) = a4 − a3 = 12 u2(1 − ˜α). (29) 22 B. Brückner et al. 
+
+Total Relaxation Error and Optimal Slope The total relaxation error e can be calculated as: 
+
+e(˜ α) = ex< 0(˜ α) + ex> 0(˜ α) (30) 
+
+= 12 l2(˜ α − α) + 12 u2(1 − ˜α) (31) 
+
+= 12
+
+ (˜ α − α) l2 + (1 − ˜α) u2 (32) 
+
+= 12
+
+ ˜αl 2 − αl 2 + u2 − ˜αu 2 (33) 
+
+= 12 (u2 − αl 2) + 12 (˜ αl 2 − ˜αu 2) (34) 
+
+= 12 (u2 − αl 2) + 12 ˜α(l2 − u2) (35) To determine the relation between the error e and the relaxation slope ˜α, we can compute the partial derivative 
+
+∂e (˜ α)
+
+∂ ˜α = 12 (l2 − u2) (36) from which it is obvious that if u2 < l 2, the error e grows with growing ˜α while for u2 > l 2 smaller ˜α lead to larger errors. The error is minimised by selecting the smallest valid ˜α if u2 < l 2 and the largest valid ˜α otherwise. The condition can be simplified by taking its root on both sides and using the fact that l < 0 < u 
+
+(since we otherwise do not employ relaxations). By exploiting the fact that u > 0,we obtain that u2 < l 2 ⇔ u < |l|. For the lower relaxation of the LeakyReLU function, it follows that to minimise the relaxation error, we set 
+
+fl(x) = 
+
+(αx if u < |l|,x else  (37) This setting can either be frozen for the verification procedure or it can be further optimised using gradient descent which we implement following the procedure that Xu et al. [65] describe for ReLU activations. 
+
+Naive vs. Optimal Relaxation To illustrate the benefit of the optimal slope ˜α,we compute the total overapproximation area for a concrete example. 
+
+Example 1. The total overapproximation area e(˜ α) is the area enclosed between the upper bound fupper (x) and the lower bound flower (x) = ˜ αx . This area can be decomposed into two parts: 1. eupper : The area between the function LeakyReLU (x) and the upper bound 
+
+fupper (x).2. elower (˜ α): The area between the function LeakyReLU (x) and the lower bound 
+
+flower (x).IoUCert: Robustness Verification for Anchor-based Object Detectors 23 
+
+The total area is e(˜ α) = eupper +elower (˜ α). As derived in Equation (35), elower (˜ α) =  
+
+> 12
+
+l2(˜ α − α) + 12 u2(1 − ˜α). The upper area eupper is the area of the triangle formed by the vertices (l, αl ), (u, u ), and (0 , 0) , which is given by eupper = − 12 lu (1 − α).Consider a LeakyReLU neuron with α = 0 .1 and input bounds x ∈ [−2, 5] .Here, l = −2 and u = 5 . Since u = 5 > |l| = 2 , Theorem 3 states that the optimal relaxation is achieved by setting ˜α = 1 (the largest valid slope). The “naive” relaxation, as used by Mellouki et al. [47], sets ˜α = α = 0 .1.We first calculate the constant upper approximation area eupper :
+
+eupper = − 12 · (−2) · 5 · (1 − 0.1) = 5 · 0.9) = 4 .5. (38) Next, we calculate the lower approximation area elower (˜ α) as a function of ˜α:
+
+elower (˜ α) = 12 · (−2) 2 · (˜ α − 0.1) + 12 · 52 · (1 − ˜α) (39) 
+
+= 12 · 4(˜ α − 0.1) + 12 · 25 · (1 − ˜α) (40) 
+
+= 2 · (˜ α − 0.1) + 12 .5 · (1 − ˜α) (41) 
+
+= 2 · ˜α − 0.2 + 12 .5 − 12 .5 · ˜α = 12 .3 − 10 .5 · ˜α.  (42) The total overapproximation area is e(˜ α) = eupper + elower (˜ α) = 4 .5 + 12 .3 −
+
+10 .5˜ α = 16 .8 − 10 .5˜ α.Now we compare the two cases: 
+
+– Naive Relaxation ( ˜α = 0 .1): The total area is e(0 .1) = 16 .8 − 10 .5 · 0.1 = 16 .8 − 1.05 = 15 .75 .
+
+– Optimal Relaxation ( ˜α = 1 ): The total area is e(1) = 16 .8 − 10 .5 · 1 = 16 .8 − 10 .5 = 6.3.Choosing the optimal lower bound slope therefore reduces the total overapprox-imation area from 15 .75 to 6.3, a reduction of 60% . This demonstrates the sig-nificant tightening achieved by selecting the slope ˜α to minimise the relaxation area, which can lead to faster verification times as the bounds are propagated through a network.

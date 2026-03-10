@@ -1,0 +1,1306 @@
+Teacher-Guided Causal Interventions for Image Denoising: Orthogonal
+Content-Noise Disentanglement in Vision Transformers
+Kuai Jiang1 , Zhaoyan Ding1 , Guijuan Zhang2 , Dianjie Lu2 and Zhuoran Zheng3
+1China University of Mining and Technology
+2Shandong Normal University
+3Qilu University of Technology
+{kuaijiang, dingzhaoyan}@cumt.edu.cn, {zhangguijuan, ludianjie}@sdnu.edu.cn, zhengzr@njust.edu.cn
+Abstract
+Conventional image denoising models often inad-
+vertently learn spurious correlations between envi-
+ronmental factors and noise patterns.
+Moreover,
+due to high-frequency ambiguity, they struggle to
+reliably distinguish subtle textures from stochastic
+noise, resulting in over-removed details or resid-
+ual noise artifacts. We therefore revisit denoising
+via causal intervention, arguing that purely corre-
+lational fitting entangles intrinsic content with ex-
+trinsic noise, which directly degrades robustness
+under distribution shifts.
+Motivated by this, we
+propose the Teacher-Guided Causal Disentangle-
+ment Network (TCD-Net), which explicitly decom-
+poses the generative mechanism via structured in-
+terventions on feature spaces within a Vision Trans-
+former framework. Specifically, our method inte-
+grates three key components: (1) An Environmen-
+tal Bias Adjustment (EBA) module projects fea-
+tures into a stable, de-centered subspace to suppress
+global environmental bias (de-confounding). (2) A
+dual-branch disentanglement head employs an or-
+thogonality constraint to force a strict separation
+between content and noise representations, prevent-
+ing information leakage. (3) To resolve structural
+ambiguity, we leverage Nano Banana Pro, Google’s
+reasoning-guided AI image generation model, to
+guide a causal prior, effectively pulling content rep-
+resentations back onto the natural-image manifold.
+Extensive experiments demonstrate that TCD-Net
+outperforms mainstream methods across multiple
+benchmarks in both fidelity and efficiency, achiev-
+ing a real-time speed of 104.2 FPS on a single RTX
+5090 GPU.
+1
+Introduction
+Image denoising is a fundamental step in computational pho-
+tography and low-level vision, serving as a prerequisite for
+downstream perception and prediction.
+Yet, denoising re-
+mains intrinsically ill-posed: the observation is jointly shaped
+by intrinsic scene content and extrinsic corruption sources
+(e.g., sensor noise, ISP pipelines, illumination), while both
+Figure 1: Efficiency–performance trade-off. PSNR vs. FPS on
+CBSD68 (σ=15) and SIDD. TCD-Net achieves the best speed–
+quality trade-off among competing methods.
+fine textures and noise often appear as high-frequency sig-
+nals. Consequently, data-driven denoisers may exploit spuri-
+ous correlations between environment factors and noise pat-
+terns and may fail to reliably separate subtle textures from
+random noise, leading to over-smoothing or residual artifacts.
+Classical denoisers mitigate ill-posedness with hand-
+crafted priors such as BM3D [Dabov et al., 2007], while
+learning-based methods learn data-driven mappings (e.g.,
+DnCNN [Zhang et al., 2017] and lightweight NAFNet [Chen
+et al., 2022a]). For real photographs, complex camera/ISP
+noise motivates evaluation on SIDD/DND [Abdelhamed et
+al., 2018; Pl¨otz and Roth, 2017] and noise-aware modeling
+(e.g., DCBDNet) [Wu et al., 2025]. Self/zero-shot schemes
+such as Noise2Void and Deep Image Prior further reduce re-
+liance on clean targets [Krull et al., 2019; Ulyanov et al.,
+2018].
+However, without explicit constraints on the gen-
+eration process, many denoisers still entangle textures with
+stochastic noise via correlation-based fitting.
+Transformers are increasingly adopted for image restora-
+tion. ViT demonstrates that global self-attention over patch
+tokens can be effective [Dosovitskiy et al., 2021]. Hierarchi-
+cal designs such as Swin Transformer enable scalable dense
+prediction [Liu et al., 2021], and sophisticated restoration
+backbones, exemplified by Restormer and HAT, have demon-
+strated exceptional efficacy across denoising and related tasks
+[Zamir et al., 2022; Chen et al., 2023].
+Yet, without ex-
+plicit structural constraints, even strong backbones may learn
+shortcuts tied to nuisance cues and degrade under distribution
+changes.
+Beyond attention, state-space models provide an efficient
+arXiv:2603.01140v1  [cs.CV]  1 Mar 2026
+
+
+alternative.
+Mamba introduces selective state spaces with
+linear-time sequence modeling [Gu and Dao, 2023], and re-
+cent restorers adapt this paradigm for image restoration, in-
+cluding MambaIR [Guo and others, 2024] and the UNet-like
+VMambaIR [Shi et al., 2024]. Despite favorable efficiency
+and global receptive fields, SSM-based restorers can be sen-
+sitive to 2D inductive biases (e.g., scan/flatten order) and may
+aggregate local details less effectively than carefully designed
+attention or convolution modules, especially under real-noise
+and domain-shift settings.
+In this work, we revisit denoising from a causal interven-
+tion perspective. Causal inference distinguishes correlation
+from causation by modeling data generation via structural
+causal models (SCMs) and reasoning about interventions
+[Pearl, 2009]. For denoising, the noisy observation arises
+from intrinsic content factors and extrinsic noise/environment
+factors; purely correlational fitting can therefore mix tex-
+ture cues with nuisance variations in a single representation,
+harming robustness. Causal representation learning further
+argues that disentangling underlying causal factors is key to
+generalization and transfer [Sch¨olkopf et al., 2021].
+This
+underscores the necessity of developing denoisers as struc-
+tured interventions that suppress environment-induced bias,
+enforce factor separation, and improve identifiability.
+Based on this causal formulation, we propose TCD-Net
+(Teacher-Guided Causal Disentanglement Network), a Vision
+Transformer denoiser that performs structured interventions
+to explicitly disentangle content and noise. We design an En-
+vironmental Bias Adjustment (EBA) module, a projection-
+and-restoration operator that removes token-wise bias and
+reinjects corrected features, to deconfound global environ-
+ment shifts. We further design a dual-head disentanglement
+architecture to jointly predict the restored image and an ex-
+plicit noise map, and enforce an orthogonality constraint
+between content/noise subspaces with strong noise super-
+vision to prevent cross-branch leakage and anchor the noise
+branch.
+Finally, we incorporate a teacher-guided causal
+prior based on Google Nano Banana Pro (NBP)[Google
+DeepMind, 2025], which provides strong zero-shot restora-
+tion guidance and more natural high-frequency details [Zuo
+et al., 2025]. To avoid over-trusting potentially hallucinated
+textures, we distill NBP only during training via a feature-
+level perceptual regularizer (instead of strict pixel matching),
+complementing perceptual supervision [Hinton et al., 2015;
+Johnson et al., 2016]. Moreover, since ViT-style absolute
+positional embeddings may break translation equivariance
+and rely on interpolation under resolution changes, we adopt
+resolution-adaptive conditional positional encoding (CPE)
+[Chu et al., 2023] to mitigate positional representation shifts
+and improve robustness under distribution shifts.
+Contributions.
+(1) We introduce a causal-intervention for-
+mulation for image denoising and instantiate it as TCD-Net,
+explicitly disentangling content and noise within a Vision
+Transformer. (2) We propose Environmental Bias Adjustment
+(EBA)-based deconfounding and orthogonal content–noise
+subspace constraints with strong noise supervision for an-
+choring. (3) We integrate a Google Nano Banana Pro (NBP)-
+guided causal prior to improve identifiability and perceptual
+fidelity. (4) Extensive experiments and systematic ablations
+validate the effectiveness and efficiency of each component.
+2
+Related Work
+2.1
+Denoising Backbones: CNN/Transformer/SSM
+Image denoising has progressed from hand-crafted priors
+such as BM3D [Dabov et al., 2007] to learning-based map-
+pings exemplified by residual CNNs (DnCNN) [Zhang et al.,
+2017] and efficient modern designs (NAFNet) [Chen et al.,
+2022a], while real camera noise benchmarks (SIDD/DND)
+expose the synthetic-to-real gap [Abdelhamed et al., 2018;
+Pl¨otz and Roth, 2017]. Recent restorers increasingly rely on
+global context modeling, including Transformer-based archi-
+tectures (Restormer, HAT) [Zamir et al., 2022; Chen et al.,
+2023] and resolution-stable conditional positional encoding
+(CPE) [Chu et al., 2023]. Beyond attention, state-space mod-
+els provide linear-time global mixing via Mamba [Gu and
+Dao, 2023] and restoration adaptations such as MambaIR and
+VMambaIR [Guo and others, 2024; Shi et al., 2024]. Despite
+these advances, stronger backbones or conditioning alone do
+not resolve the core ambiguity: without explicit structural
+constraints, models may still entangle textures with stochastic
+noise and overfit nuisance cues, degrading robustness under
+distribution shifts.
+2.2
+Generative/Teacher Priors and Causal
+Deconfounding
+Generative priors—especially diffusion models—have been
+incorporated into restoration to enhance perceptual realism,
+including DiffIR [Xia et al., 2023], DiffPIR [Zhu et al.,
+2023], and DiffBIR [Lin et al., 2024], which can recover visu-
+ally pleasing textures but often require iterative sampling and
+may be sensitive to mismatched noise processes or prompts,
+raising deployment cost and stability concerns. From a causal
+viewpoint, denoising can be framed with SCMs and inter-
+ventions [Pearl, 2009], where a key direction is to remove
+environment-induced confounders and separate content from
+nuisance noise for improved OOD robustness. In parallel,
+teacher guidance injects semantic priors via distillation [Hin-
+ton et al., 2015]; we instantiate this idea with a Google Nano
+Banana Pro (NBP)-guided prior [Zuo et al., 2025], which
+can be distilled once during training and keeps test-time infer-
+ence single-pass, better fitting real-time denoising. To avoid
+over-trusting potentially hallucinated details, we distill NBP
+at the feature level and combine it with explicit factorization
+(a noise-map branch) and orthogonal subspace constraints,
+yielding a causal-factorized and efficient denoiser rather than
+a sampling-based generator.
+3
+Method
+We instantiate the causal-intervention view in Introduction
+as a concrete Vision Transformer denoiser, TCD-Net, whose
+core goal is to explicitly separate intrinsic content from ex-
+trinsic noise and to stabilize this separation under environ-
+ment/resolution shifts.
+
+
+Figure 2: Conceptual comparison between conventional denoising and TCD-Net. (a) Conventional denoising is prone to spurious
+content–noise correlations induced by environmental factors E, leaving residual artifacts. (b) TCD-Net performs causal intervention via
+EBA, incorporates teacher semantic guidance, and enforces an orthogonality constraint to decouple content and noise for cleaner restoration.
+3.1
+Causal View and Overall Architecture
+Let Y ∈RH×W ×3 be the observed noisy image. We model
+Y as jointly generated by intrinsic content C (scene struc-
+tures/textures) and extrinsic noise N (sensor/ISP corruption),
+under an environment factor E (illumination, gain, pipeline)
+that induces domain shift. A generic structural causal model
+(SCM) can be written as
+C := fC(UC),
+E := fE(UE),
+N := fN(C, E, UN),
+Y := fY (C, N, E),
+(1)
+where U· are exogenous variables. In denoising, we observe
+Y but must infer C. Given (1), learning content C from the
+observation Y by correlational fitting can spuriously couple
+C and noise N, especially in high-frequency regions where
+textures and noise overlap. We therefore design TCD-Net
+as structured interventions: EBA removes E-induced bias,
+a dual-branch head factorizes content/noise, an orthogonality
+constraint cuts leakage, explicit noise supervision anchors N,
+and an NBP-guided prior regularizes the content manifold.
+Given an input Y , TCD-Net predicts both a restored image
+ˆX and an explicit noise map ˆN:
+( ˆX, ˆN) = Fθ(Y ).
+(2)
+The architecture is a JiT-style ViT denoiser that directly pre-
+dicts clean content (on-manifold) while simultaneously mod-
+eling noise (off-manifold).
+Concretely, a Transformer en-
+coder extracts mixed features Zall, then a dual-branch head
+disentangles them into content features Zc and noise features
+Zn, which are decoded into ˆX and ˆN, respectively.
+The
+five causal interventions are implemented as: EBA-based de-
+confounding, dual-branch factorization, orthogonal subspace
+constraints, strong noise anchoring, and NBP-guided causal
+priors.
+Fig. 2 illustrates why purely correlational denoising en-
+tangles content with noise, and how our causal intervention
+design explicitly breaks such spurious paths.
+The overall
+pipeline of TCD-Net is summarized in Fig. 3.
+3.2
+Transformer Backbone with Resolution-Stable
+Positional Encoding
+We follow a ViT patch-tokenization pipeline. Given Y ∈
+RH×W ×3, a convolutional patch embedding with patch size
+p produces a token grid:
+T = PatchEmbed(Y ) ∈RN×d,
+N = H
+p · W
+p .
+(3)
+We use a class token only for compatibility with standard
+ViT implementations and discard it for dense prediction.
+To mitigate positional representation shift under resolution
+changes (noted in Introduction), we use a hybrid positional
+scheme: (i) interpolated absolute embeddings, where the em-
+bedding grid is bicubically interpolated to match (H/p, W/p)
+when needed; and (ii) conditional positional encoding (CPE),
+where each block injects a depth-wise 3 × 3 convolutional
+positional signal computed from the current token features.
+Let T (ℓ) be tokens at block ℓreshaped to a feature map
+R(T (ℓ)) ∈Rd×H/p×W/p. Then
+T (ℓ) ←T (ℓ) + Flatten
+
+DWConv3×3
+ R(T (ℓ))
+
+.
+(4)
+After CPE injection, each block applies MHSA and an MLP,
+yielding updated patch tokens. To further improve invariance
+to environment shifts, we append an EBA de-confounding
+module at the end of each block.
+
+
+Figure 3: Overview of TCD-Net. A ViT backbone with EBA feeds a dual-branch head to predict the restored image ˆ
+X and noise map ˆ
+N,
+trained with orthogonality, noise anchoring, and teacher guidance.
+Figure 4: EBA module. LayerNorm + bottleneck MLP with resid-
+ual projection to suppress environment-induced bias and stabilize
+token representations.
+3.3
+Causal Interventions: De-confounding,
+Disentanglement, and NBP Guidance
+Environmental Bias Adjustment (EBA) de-confounding.
+Real noisy images often contain global appearance shifts
+(e.g., illumination/color temperature) that act as environment-
+induced confounders E. We implement de-confounding with
+our Environmental Bias Adjustment (EBA) module and is
+embedded at the end of each Transformer block. For a token
+feature t ∈Rd, EBA performs (i) explicit de-centering, (ii)
+projection via a bottleneck MLP, and (iii) affine restoration
+via a residual connection:
+µ(t) = 1
+d1⊤t,
+˜t = t −µ(t)1,
+(5)
+EBA(t) = t + W2 σ
+ W1 LN(˜t)
+
+,
+(6)
+where LN(·) is LayerNorm, σ(·) is GELU, and W1, W2 are
+learnable projections.
+Intuitively, removing the per-token
+centroid suppresses global bias components, while the learn-
+able projection pushes features toward a more stable subspace
+before being added back. The concrete operator structure of
+EBA is shown in Fig. 4.
+Dual-branch content–noise disentanglement and orthog-
+onality.
+Let Zall ∈RN×d denote the final encoder patch-
+token features. We explicitly parameterize two branches:
+Zc = ZallWc + bc,
+Zn = ZallWn + bn,
+(7)
+where (Wc, bc) and (Wn, bn) are learned linear projections.
+Each branch predicts patch-wise RGB values, then we un-
+patchify to the image plane:
+ˆX = Unpatchify(ZcWx + bx),
+(8)
+ˆN = Unpatchify(ZnW ′
+n + b′
+n),
+(9)
+where Unpatchify reshapes patch predictions back to full res-
+olution. To prevent cross-branch leakage (textures encoded
+as “noise” or noise contaminating content), we impose an or-
+thogonality constraint between token-wise content/noise sub-
+spaces:
+Lortho =
+1
+BN
+B
+X
+b=1
+N
+X
+i=1
+
+*
+z(b,i)
+c
+∥z(b,i)
+c
+∥2
+,
+z(b,i)
+n
+∥z(b,i)
+n
+∥2
++ .
+(10)
+Minimizing (10) acts as a geometric firewall: content-like di-
+rections are discouraged from entering the noise channel. A
+pure orthogonality regularizer can admit degenerate solutions
+(e.g., collapsing Zn), so we additionally anchor the nuisance
+mechanism with explicit noise supervision. For paired train-
+ing with known clean target X, the ground-truth noise is
+Ngt = Y −X.
+(11)
+Teacher-guided causal prior.
+Denoising is ill-posed: mul-
+tiple clean images can explain the same noisy observation.
+To improve identifiability and perceptual fidelity, we leverage
+a Google Nano Banana Pro (NBP)-guided causal prior.
+During training, for some samples we obtain an auxiliary
+teacher image XT by applying NBP in an image-to-image
+editing setting with a denoising/clean-up prompt. Prior evalu-
+ations suggest that NBP often produces high-quality, visually
+pleasing restorations (especially high- frequency details) in a
+
+
+zero-shot manner [Zuo et al., 2025]. Since NBP outputs may
+contain plausible but input-inconsistent details, we adopt XT
+as a perceptual target and enforce feature alignment with a
+fixed VGG extractor ϕ(·):
+Lteacher = ∥ϕ( ˆX) −ϕ(XT )∥1.
+(12)
+This distills semantic/texture priors from NBP [Hinton et al.,
+2015], pulling ˆX toward the natural- image manifold while
+remaining faithful to the input content. In implementation,
+we apply identical random crop/flip/rotation to (X, XT ) to
+avoid misalignment.
+3.4
+Optimization and Inference
+We use the Charbonnier penalty (a robust L1 surrogate)
+ρ(a) =
+√
+a2 + ϵ2 for pixel-level supervision. The overall
+objective is
+L = Lrec + λnoiseLnoise + λorthoLortho
++ λteacherLteacher,
+(13a)
+Lrec = 1
+|Ω|
+X
+u∈Ω
+ρ
+  ˆX(u) −X(u)
+
+,
+(13b)
+Lnoise = 1
+|Ω|
+X
+u∈Ω
+ρ
+  ˆN(u) −Ngt(u)
+
+,
+(13c)
+where λnoise, λortho, λteacher balance the interventions. When
+XT is unavailable, we set Lteacher = 0.
+Thanks to patch tokenization and dynamic positional inter-
+polation, TCD-Net supports variable resolutions. For high-
+resolution images where full attention becomes memory-
+intensive, we adopt an overlap-tile inference with Gaussian
+blending. We split Y into overlapping patches {Yk} (patch
+size P, stride S < P), predict ˆXk = Fθ(Yk), and blend them
+via a Gaussian weight map W whose standard deviation is set
+to P/4:
+ˆX =
+P
+k W ⊙ˆXk
+P
+k W + ε .
+(14)
+This reduces blocking artifacts at tile boundaries and stabi-
+lizes performance under resolution changes.
+4
+Experiments
+4.1
+Experimental Setup
+Tasks and benchmarks.
+We evaluate TCD-Net on (i) syn-
+thetic color Gaussian denoising and (ii) real-world denoising.
+For synthetic denoising, we follow the standard blind AWGN
+protocol [Zhang et al., 2017; Zhang et al., 2018a]: during
+training, σ is uniformly sampled from [0, 50] and added to
+clean RGB patches; during testing, we report PSNR (dB)
+at σ ∈{15, 25, 50} on CBSD68 [Arbel´aez et al., 2011;
+Zhang et al., 2017], Kodak24 [Franzen, 1999], McMaster
+[Zhang et al., 2011], and Urban100 [Huang et al., 2015]. For
+real-world denoising, we report PSNR/SSIM [Wang et al.,
+2004] on SIDD [Abdelhamed et al., 2018] and DND [Pl¨otz
+and Roth, 2017], and additionally report LPIPS [Zhang et al.,
+2018b] (lower is better) on SIDD and on Urban100 at σ=50.
+All real-noise results are obtained by fine-tuning a synthetic-
+pretrained model: we start from a DF2K-trained Gaussian
+denoiser (DIV2K+Flickr2K) [Agustsson and Timofte, 2017;
+Lim et al., 2017] and fine-tune on SIDD and DND following
+their training protocols.
+Implementation and training.
+Unless specified otherwise,
+we use a ViT-L/16 backbone [Dosovitskiy et al., 2021]
+(dim 1024, depth 24, 16 heads) with the causal interven-
+tions in Section 3.
+We train on DF2K [Agustsson and
+Timofte, 2017; Lim et al., 2017] using random 256 × 256
+crops and synchronized augmentations (crop/flip/rotation)
+for (Y, X) and teacher images, and optimize with AdamW
+[Loshchilov and Hutter, 2019] using cosine learning-rate
+decay [Loshchilov and Hutter, 2017] and weight decay
+1e−4. We adopt a two-stage schedule: Stage 1 trains for
+100 epochs (lr 2e−4, batch 32, repetition 20) with recon-
+struction, noise supervision, and orthogonality (λnoise=0.5,
+λortho=0.1); Stage 2 fine-tunes for 50 epochs (lr 5e−5) en-
+abling teacher guidance (weight 0.1) and slightly reducing
+regularization (λnoise=0.25, λortho=0.05). For real-world de-
+noising, we initialize from the DF2K-trained model and fine-
+tune on SIDD/DND with the same objectives (Eq. (13)), dis-
+abling synthetic noise injection and using dataset-provided
+noisy/clean pairs for supervision [Abdelhamed et al., 2018;
+Pl¨otz and Roth, 2017].
+Hardware and software.
+All experiments are imple-
+mented in PyTorch 2.8.0 with Python 3.12 on Ubuntu 22.04,
+using CUDA 12.8. For runtime measurements (FPS/latency),
+we use a single RTX 5090 (32GB), 25 vCPU Intel(R)
+Xeon(R) Platinum 8470Q, and 90GB RAM. Latency is mea-
+sured with batch size 1 at resolution 256×256 after warm-up,
+and FPS is computed as the reciprocal of mean latency.
+Baselines.
+We
+compare
+with
+a
+classical
+prior
+(BM3D [Dabov et al., 2007]), representative CNN de-
+noisers (DnCNN [Zhang et al., 2017], CBDNet [Guo et al.,
+2019], RIDNet [Anwar and Barnes, 2019], DRUNet [Zhang
+et al., 2021]), and modern Transformer/state-space restorers
+(SwinIR [Liang et al., 2021], DAGL [Mou et al., 2021],
+MPRNet [Zamir et al., 2021], SCUNet [Zhang et al., 2023],
+Uformer [Wang et al., 2022], Restormer [Zamir et al., 2022],
+NAFNet [Chen et al., 2022b], HAT [Chen et al., 2023],
+MambaIR [Guo and others, 2024], MambaIRv2 [Guo et al.,
+2025]). We follow standard benchmark protocols and report
+results from official implementations or widely adopted
+reported numbers.
+4.2
+Results on Synthetic Gaussian Denoising
+Table 1 reports PSNR/SSIM comparisons of TCD-Net
+against recent CNN/Transformer/SSM-based restorers on
+four benchmarks.
+Overall, TCD-Net achieves consistently
+strong performance and excels on texture-rich datasets, ob-
+taining the best PSNR on McMaster for all σ ∈{15, 25, 50}
+and on Urban100 at σ=25/50 (runner-up at σ=15), while re-
+maining top-tier on CBSD68 across noise levels. The gains
+under heavy noise (e.g., σ=50) align with our causal design:
+explicit noise supervision provides an identifiable nuisance
+handle, and the orthogonality constraint reduces content–
+noise cross-talk that causes over-smoothing or residual noise-
+like details.
+Moreover, CPE alleviates resolution-induced
+representation shifts and EBA mitigates environment-related
+
+
+CBSD68
+Kodak24
+McMaster
+Urban100
+Method
+Venue
+σ=15
+σ=25
+σ=50
+σ=15
+σ=25
+σ=50
+σ=15
+σ=25
+σ=50
+σ=15
+σ=25
+σ=50
+DnCNN
+TIP’17
+33.90
+31.24
+27.95
+34.60
+32.14
+28.95
+33.45
+31.52
+28.62
+32.98
+30.81
+27.59
+DRUNet
+TPAMI’21
+34.30
+31.69
+28.51
+35.31
+32.89
+29.86
+35.40
+33.14
+30.08
+34.81
+32.60
+29.61
+SwinIR
+ICCV’21
+34.42
+31.78
+28.56
+35.34
+32.89
+29.79
+35.61
+33.20
+30.22
+35.13
+32.90
+29.82
+SCUNet
+AAAI’22
+34.40
+31.79
+28.61
+35.34
+32.92
+29.87
+35.60
+33.34
+30.29
+35.18
+33.03
+30.14
+Restormer
+CVPR’22
+34.39
+31.78
+28.59
+35.44
+33.02
+30.00
+35.55
+33.31
+30.29
+35.06
+32.91
+30.02
+NAFNet
+ECCV’22
+−
+−
+28.39
+−
+−
+29.64
+−
+−
+29.98
+−
+−
+29.71
+HAT
+CVPR’23
+34.42
+31.79
+28.58
+35.46
+33.03
+30.01
+35.62
+33.34
+30.26
+35.37
+33.14
+30.23
+MambaIR
+ECCV’24
+34.31
+31.66
+28.47
+35.33
+32.82
+29.94
+35.40
+33.15
+30.06
+35.17
+32.99
+30.07
+MambaIRv2
+CVPR’25
+34.44
+31.78
+28.66
+35.44
+33.05
+30.02
+35.55
+33.31
+30.28
+35.27
+33.14
+30.21
+TCD-Net
+−
+34.43
+31.80
+28.64
+35.43
+32.99
+30.00
+35.64
+33.35
+30.34
+35.35
+33.16
+30.27
+Table 1: Color Gaussian denoising results (PSNR, dB) on standard benchmarks at σ ∈{15, 25, 50}. Best and second best are highlighted.
+Dataset Metric
+BM3D
+TIP’07
+DnCNN
+TIP’17
+CBDNet
+CVPR’19
+RIDNet
+ICCV’19
+MPRNet
+CVPR’21
+DAGL
+ICCV’21
+SwinIR
+ICCV’21
+Uformer
+CVPR’22
+Restormer
+CVPR’22
+NAFNet
+ECCV’22
+HAT
+CVPR’23
+MambaIR
+ECCV’24
+MambaIRv2
+CVPR’25
+TCD-Net
+(ours)
+SIDD
+PSNR
+25.65
+23.66
+30.78
+38.71
+39.71
+38.94
+40.05
+39.77
+40.02
+40.30
+40.46
+39.89
+40.21
+40.48
+SSIM
+0.685
+0.583
+0.801
+0.951
+0.958
+0.953
+0.961
+0.959
+0.960
+0.962
+0.964
+0.960
+0.963
+0.965
+DND
+PSNR
+34.51
+32.43
+38.06
+39.26
+39.80
+39.77
+39.91
+39.96
+40.03
+40.27
+40.44
+−
+−
+40.45
+SSIM
+0.851
+0.790
+0.942
+0.953
+0.954
+0.956
+0.961
+0.956
+0.956
+0.957
+0.958
+−
+−
+0.960
+Table 2: Real-world denoising on SIDD and DND (PSNR/SSIM). We fine-tune the DF2K pretrained model on SIDD and DND, respectively.
+Best and second best are highlighted.
+Method
+Venue
+SIDD
+Urban100 (σ=50)
+SwinIR
+ICCV’21
+0.142
+0.210
+Uformer
+CVPR’22
+0.140
+0.205
+Restormer
+CVPR’22
+0.138
+0.198
+NAFNet
+ECCV’22
+0.135
+0.195
+HAT
+CVPR’23
+0.131
+0.188
+MambaIR
+ECCV’24
+0.125
+0.182
+MambaIRv2
+CVPR’25
+0.118
+0.174
+TCD-Net
+−
+0.128
+0.184
+Table 3: Perceptual quality comparison using LPIPS (lower is better)
+on SIDD and Urban100 (σ=50).
+Method
+Venue
+FLOPs
+(G)
+Time
+(ms)
+FPS
+Gaussian
+PSNR
+Real-world
+PSNR
+SwinIR
+ICCV’21
+804.7 154.47
+6.5
+34.42
+40.05
+Uformer
+CVPR’22
+86.9
+18.63
+53.7
+34.32
+39.77
+Restormer
+CVPR’22
+154.9
+30.22
+33.1
+34.39
+40.02
+NAFNet
+ECCV’22
+16.3
+10.15
+98.5
+34.35
+40.30
+HAT
+CVPR’23
+721.3 258.75
+3.9
+34.42
+40.46
+MambaIR
+ECCV’24
+68.2
+22.12
+45.2
+34.31
+39.89
+MambaIRv2 CVPR’25
+69.5
+18.05
+55.4
+34.44
+40.21
+TCD-Net
+−
+84.8
+9.59 104.2
+34.43
+40.48
+Table 4: Efficiency comparison. FLOPs are reported for a single
+forward pass. Latency/FPS are measured at 256 × 256 with batch
+size 1. Best and second best are highlighted.
+bias, improving stability across settings. Together with Ta-
+ble 4, TCD-Net provides a practical quality–speed trade-off
+by emphasizing robustness via explicit mechanism separation
+rather than backbone scaling.
+ID
+Dual-Stream
+& Lnoise
+Lortho
+(Indep.)
+Pos.
+Enc.
+EBA
+Topology
+Lteacher
+(Prior)
+PSNR
+1
+×
+×
+APE
+×
+×
+31.35
+2
+✓
+×
+APE
+×
+×
+31.36
+3
+✓
+✓
+CPE
+×
+×
+31.48
+4
+✓
+✓
+CPE
+Parallel
+×
+31.60
+5
+✓
+✓
+CPE
+Serial
+×
+31.77
+6
+✓
+✓
+CPE
+Serial
+✓
+31.80
+Table 5: Ablation on CBSD68 validation at σ=25 (PSNR, dB). We
+incrementally add the dual-stream design with noise supervision, the
+independent orthogonality regularizer, CPE, the EBA module, and
+the teacher prior. Best and second best are highlighted.
+4.3
+Real-World Adaptation, Efficiency, and
+Ablations
+Real-world results: fine-tuning from the Gaussian model.
+Table 2 reports performance on real noisy photographs. Start-
+ing from the DF2K-trained Gaussian model and fine-tuning
+on SIDD/DND, TCD-Net achieves the best PSNR/SSIM
+on SIDD and the best PSNR on DND, indicating strong
+synthetic-to-real transfer. Notably, it also attains competi-
+tive DND SSIM (runner-up), suggesting that the explicit nui-
+sance branch and the de-confounding components help adapt
+to signal-dependent noise and camera pipeline variations dur-
+ing fine-tuning.
+Perceptual quality: LPIPS.
+Besides distortion metrics, we
+report LPIPS [Zhang et al., 2018b] on SIDD and Urban100
+(σ=50) to better reflect perceptual similarity. Table 3 reports
+LPIPS (lower is better) for perceptual comparison.
+TCD-
+
+
+Figure 5: Qualitative comparison on synthetic and real noise. (a) Synthetic Gaussian denoising (AWGN). (b) Real-world denoising
+on SIDD. Conventional methods may leave residual noise or oversmooth details due to spurious content–noise correlation. With EBA-based
+intervention, orthogonal disentanglement, and teacher guidance, TCD-Net restores cleaner results with sharper textures and edges.
+Net achieves competitive perceptual quality (e.g., 0.128 on
+SIDD and 0.184 on Urban100 at σ=50), outperforming sev-
+eral strong Transformer baselines, while the best LPIPS is
+obtained by the latest SSM-based restorers. This suggests
+that our explicit content–noise separation preserves percep-
+tual fidelity, though there remains room to further improve
+perceptual alignment.
+Efficiency:
+fast inference with a simple, single-path
+Transformer.
+Beyond restoration fidelity, we emphasize
+that TCD-Net is designed to be efficient at inference.
+As
+shown in Table 4, TCD-Net achieves the lowest latency
+(9.59 ms) and the highest FPS (104.2) among all compared
+methods on our hardware, while maintaining strong de-
+noising quality. Although its FLOPs are not the smallest,
+the computation graph is intentionally simple and straight-
+through (patch embedding →stacked Transformer blocks →
+lightweight dual heads), which favors GPU parallelism and
+reduces synchronization overhead in practice.
+Ablation: effects of causal components and teacher prior.
+Table 5 shows that the proposed modules contribute com-
+plementarily.
+A naive dual-head yields only a marginal
+gain (ID 1→2, +0.01 dB), indicating that architectural split-
+ting alone does not guarantee disentanglement.
+Adding
+the orthogonality regularizer and switching to CPE brings a
+larger improvement (ID 2→3, +0.12 dB), suggesting reduced
+content–noise leakage and more stable dense prediction un-
+der positional shifts. Introducing EBA further boosts PSNR
+(ID 3→4/5), and the serial topology outperforms the parallel
+one (ID 4→5, +0.17 dB). Finally, enabling the NBP teacher
+prior provides an additional gain (ID 5→6, +0.03 dB), consis-
+tent with improved identifiability by pulling the content pre-
+diction toward the natural-image manifold; this teacher loss
+is applied only during training and incurs no inference cost.
+5
+Conclusion
+We revisit image denoising from a causal-intervention per-
+spective, where correlation-based fitting can entangle intrin-
+sic content with extrinsic noise, degrading robustness under
+high-frequency ambiguity and distribution shifts. We pro-
+pose TCD-Net, a Vision Transformer denoiser with structured
+interventions for content–noise disentanglement: EBA de-
+confounds environment bias via de-centered projection with
+residual restoration, and a dual-branch head with orthogo-
+nality plus strong noise supervision reduces leakage and an-
+chors the nuisance factor. We further distill an NBP-guided
+feature-level perceptual prior to regularize content toward
+the natural-image manifold, and adopt resolution-stable po-
+sitional encoding for better generalization. Experiments on
+synthetic Gaussian and real benchmarks show state-of-the-art
+or competitive fidelity with high efficiency (9.59 ms, 104.2
+FPS on RTX 5090).
+Future work will explore reliability-
+aware teacher priors and causal intervention learning under
+domain shift and weak supervision for real-world noise.
+
+
+References
+[Abdelhamed et al., 2018] Abdelrahman
+Abdelhamed,
+Stephen Lin, and Michael S. Brown.
+A high-quality
+denoising dataset for smartphone cameras. In Proceedings
+of the IEEE Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 1692–1700, 2018.
+[Agustsson and Timofte, 2017] Eirikur Agustsson and Radu
+Timofte. NTIRE 2017 challenge on single image super-
+resolution: Dataset and study. In Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition
+(CVPR) Workshops, 2017.
+[Anwar and Barnes, 2019] Saeed Anwar and Nick Barnes.
+Real image denoising with feature attention. In Proceed-
+ings of the IEEE/CVF International Conference on Com-
+puter Vision (ICCV), pages 3155–3164, 2019.
+[Arbel´aez et al., 2011] Pablo
+Arbel´aez,
+Michael
+Maire,
+Charless Fowlkes, and Jitendra Malik. Contour detection
+and hierarchical image segmentation. IEEE Transactions
+on Pattern Analysis and Machine Intelligence, 33(5):898–
+916, 2011.
+[Chen et al., 2022a] Liangyu Chen, Xiaojie Chu, Xiangyu
+Zhang, and Jian Sun. Simple baselines for image restora-
+tion.
+In European Conference on Computer Vision
+(ECCV), 2022.
+[Chen et al., 2022b] Liangyu Chen, Xiaojie Chu, Xiangyu
+Zhang, and Jian Sun. Simple baselines for image restora-
+tion.
+In Computer Vision – ECCV 2022, pages 17–33,
+2022.
+[Chen et al., 2023] Xiangyu Chen, Xintao Wang, Wenlong
+Zhang, Xiangtao Kong, Yu Qiao, Jiantao Zhou, and Chao
+Dong.
+Hat:
+Hybrid attention transformer for image
+restoration. arXiv preprint arXiv:2309.05239, 2023.
+[Chu et al., 2023] Xiaojie Chu, Zhi Tian, Yuqing Wang,
+Bo Zhang, Haibing Ren, Xiaolin Wei, Huaxia Xia, and
+Chunhua Shen. Conditional positional encodings for vi-
+sion transformers. In International Conference on Learn-
+ing Representations (ICLR), 2023.
+[Dabov et al., 2007] Kostadin
+Dabov,
+Alessandro
+Foi,
+Vladimir Katkovnik, and Karen Egiazarian.
+Image
+denoising by sparse 3-d transform-domain collaborative
+filtering.
+IEEE Transactions on Image Processing,
+16(8):2080–2095, 2007.
+[Dosovitskiy et al., 2021] Alexey Dosovitskiy, Lucas Beyer,
+Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai,
+Thomas Unterthiner, Mostafa Dehghani, Matthias Min-
+derer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and
+Neil Houlsby. An image is worth 16x16 words: Trans-
+formers for image recognition at scale. In International
+Conference on Learning Representations (ICLR), 2021.
+[Franzen, 1999] Rich Franzen. Kodak lossless true color im-
+age suite. http://r0k.us/graphics/kodak/, 1999. Accessed:
+2026-01-10.
+[Google DeepMind, 2025] Google DeepMind. Introducing
+nano banana pro.
+https://blog.google/innovation-and-ai/
+products/nano-banana-pro/, November 2025.
+[Gu and Dao, 2023] Albert Gu and Tri Dao. Mamba: Linear-
+time sequence modeling with selective state spaces. arXiv
+preprint arXiv:2312.00752, 2023.
+[Guo and others, 2024] Hang Guo et al. Mambair: A sim-
+ple baseline for image restoration with state-space model.
+arXiv preprint arXiv:2402.15648, 2024.
+Accepted by
+ECCV 2024.
+[Guo et al., 2019] Shi Guo, Zifei Yan, Kai Zhang, Wang-
+meng Zuo, and Lei Zhang. Toward convolutional blind
+denoising of real photographs.
+In Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 1712–1722, 2019.
+[Guo et al., 2025] Hang Guo, Yong Guo, Yaohua Zha, Yulun
+Zhang, Wenbo Li, Tao Dai, Shu-Tao Xia, and Yawei Li.
+Mambairv2: Attentive state space restoration. In Proceed-
+ings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR), pages 28124–28133, June
+2025.
+[Hinton et al., 2015] Geoffrey Hinton, Oriol Vinyals, and
+Jeffrey Dean. Distilling the knowledge in a neural net-
+work. arXiv preprint arXiv:1503.02531, 2015.
+[Huang et al., 2015] Jia-Bin Huang, Abhishek Singh, and
+Narendra Ahuja.
+Single image super-resolution from
+transformed self-exemplars. In Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 5197–5206, June 2015.
+[Johnson et al., 2016] Justin Johnson, Alexandre Alahi, and
+Li Fei-Fei. Perceptual losses for real-time style transfer
+and super-resolution. In Computer Vision – ECCV 2016,
+pages 694–711, 2016.
+[Krull et al., 2019] Alexander Krull, Tim-Oliver Buchholz,
+and Florian Jug.
+Noise2void: Learning denoising from
+single noisy images.
+In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 2129–2137, 2019.
+[Liang et al., 2021] Jingyun Liang,
+Jiezhang Cao, Guo-
+Cheng Wang, Kai Zhang, Lei Zhang, Luc Van Gool, and
+Radu Timofte.
+SwinIR: Image restoration using swin
+transformer, 2021.
+[Lim et al., 2017] Bee Lim, Sanghyun Son, Heewon Kim,
+Seungjun Nah, and Kyoung Mu Lee.
+Enhanced deep
+residual networks for single image super-resolution.
+In
+Proceedings of the IEEE Conference on Computer Vision
+and Pattern Recognition (CVPR) Workshops, pages 1132–
+1140, 2017.
+[Lin et al., 2024] Xinqi Lin,
+Jingwen He,
+Ziyan Chen,
+Zhaoyang Lyu, Bo Dai, Fanghua Yu, Wanli Ouyang,
+Yu Qiao, and Chao Dong. Diffbir: Towards blind image
+restoration with generative diffusion prior. arXiv preprint
+arXiv:2308.15070, 2024.
+[Liu et al., 2021] Ze Liu, Yutong Lin, Yue Cao, Han Hu,
+Yixuan Wei, Zheng Zhang, Stephen Lin, and Baining Guo.
+Swin transformer: Hierarchical vision transformer using
+shifted windows. In Proceedings of the IEEE/CVF Inter-
+national Conference on Computer Vision (ICCV), pages
+10012–10022, 2021.
+
+
+[Loshchilov and Hutter, 2017] Ilya Loshchilov and Frank
+Hutter.
+SGDR: Stochastic gradient descent with warm
+restarts. In International Conference on Learning Repre-
+sentations (ICLR), 2017. arXiv:1608.03983.
+[Loshchilov and Hutter, 2019] Ilya Loshchilov and Frank
+Hutter. Decoupled weight decay regularization. In Inter-
+national Conference on Learning Representations (ICLR),
+2019. arXiv:1711.05101.
+[Mou et al., 2021] Chong Mou, Jian Zhang, and Zhuoyuan
+Wu. Dynamic attentive graph learning for image restora-
+tion. In Proceedings of the IEEE/CVF International Con-
+ference on Computer Vision (ICCV), pages 4328–4337,
+October 2021.
+[Pearl, 2009] Judea Pearl.
+Causality: Models, Reasoning,
+and Inference.
+Cambridge University Press, 2 edition,
+2009.
+[Pl¨otz and Roth, 2017] Tobias Pl¨otz and Stefan Roth. Bench-
+marking denoising algorithms with real photographs. In
+Proceedings of the IEEE Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 2750–2759, 2017.
+[Sch¨olkopf et al., 2021] Bernhard Sch¨olkopf, Francesco Lo-
+catello, Stefan Bauer, Nan Rosemary Ke, Nal Kalch-
+brenner, Anirudh Goyal, and Yoshua Bengio.
+Toward
+causal representation learning. Proceedings of the IEEE,
+109(5):612–634, 2021.
+[Shi et al., 2024] Yuan Shi, Bin Xia, Xiaoyu Jin, Xing Wang,
+Tianyu Zhao, Xin Xia, Xuefeng Xiao, and Wenming Yang.
+Vmambair: Visual state space model for image restoration.
+arXiv preprint arXiv:2403.11423, 2024.
+[Ulyanov et al., 2018] Dmitry Ulyanov, Andrea Vedaldi, and
+Victor Lempitsky. Deep image prior. In Proceedings of the
+IEEE Conference on Computer Vision and Pattern Recog-
+nition (CVPR), pages 9446–9454, 2018.
+[Wang et al., 2004] Zhou Wang, Alan C. Bovik, Hamid R.
+Sheikh, and Eero P. Simoncelli. Image quality assessment:
+From error visibility to structural similarity. IEEE Trans-
+actions on Image Processing, 13(4):600–612, 2004.
+[Wang et al., 2022] Zhendong Wang, Xiaodong Cun, Jian-
+min Bao, Wengang Zhou, Jianzhuang Liu, and Houqiang
+Li. Uformer: A general u-shaped transformer for image
+restoration. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR),
+pages 17683–17693, 2022.
+[Wu et al., 2025] Wencong Wu, Shicheng Liao, Guannan
+Lv, Peng Liang, and Yungang Zhang.
+Image blind de-
+noising using dual convolutional neural network with skip
+connection.
+Signal Processing: Image Communication,
+138:117365, 2025.
+[Xia et al., 2023] Bin Xia, Yulun Zhang, Shiyin Wang, Yi-
+tong Wang, Xinglong Wu, Yapeng Tian, Wenming Yang,
+and Luc Van Gool. Diffir: Efficient diffusion model for
+image restoration. In Proceedings of the IEEE/CVF Inter-
+national Conference on Computer Vision (ICCV), 2023.
+[Zamir et al., 2021] Syed
+Waqas
+Zamir,
+Aditya
+Arora,
+Salman Khan, Munawar Hayat, Fahad Shahbaz Khan,
+Ming-Hsuan Yang, and Ling Shao. Multi-stage progres-
+sive image restoration. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 14821–14831, 2021.
+[Zamir et al., 2022] Syed
+Waqas
+Zamir,
+Aditya
+Arora,
+Salman Khan, Munawar Hayat, Fahad Shahbaz Khan, and
+Ming-Hsuan Yang. Restormer: Efficient transformer for
+high-resolution image restoration. In Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 5728–5739, 2022.
+[Zhang et al., 2011] Lei Zhang, Xiaolin Wu, Antoni Buades,
+and Xin Li. Color demosaicking by local directional in-
+terpolation and nonlocal adaptive thresholding. Journal of
+Electronic Imaging, 20(2):023016, 2011.
+[Zhang et al., 2017] Kai Zhang, Wangmeng Zuo, Yunjin
+Chen, Deyu Meng, and Lei Zhang.
+Beyond a gaus-
+sian denoiser: Residual learning of deep CNN for image
+denoising.
+In Proceedings of the IEEE Conference on
+Computer Vision and Pattern Recognition (CVPR), pages
+3929–3937, 2017.
+[Zhang et al., 2018a] Kai Zhang, Wangmeng Zuo, and Lei
+Zhang. FFDNet: Toward a fast and flexible solution for
+CNN-based image denoising. IEEE Transactions on Im-
+age Processing, 27(9):4608–4622, 2018.
+[Zhang et al., 2018b] Richard Zhang, Phillip Isola, Alexei A.
+Efros, Eli Shechtman, and Oliver Wang. The unreasonable
+effectiveness of deep features as a perceptual metric. In
+Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition (CVPR), 2018.
+[Zhang et al., 2021] Kai Zhang, Yawei Li, Wangmeng Zuo,
+Lei Zhang, Luc Van Gool, and Radu Timofte. Plug-and-
+play image restoration with deep denoiser prior.
+arXiv
+preprint arXiv:2008.13751, 2021.
+[Zhang et al., 2023] Kai Zhang, Yawei Li, Jingyun Liang,
+Jiezhang Cao, Yulun Zhang, Hao Tang, Deng-Ping Fan,
+Radu Timofte, and Luc Van Gool. Practical blind image
+denoising via swin-conv-UNet and data synthesis.
+Ma-
+chine Intelligence Research, 2023.
+[Zhu et al., 2023] Yuanzhi Zhu, Kai Zhang, Jingyun Liang,
+Jiezhang Cao, Bihan Wen, Radu Timofte, and Luc Van
+Gool. Denoising diffusion models for plug-and-play im-
+age restoration. arXiv preprint arXiv:2305.08995, 2023.
+[Zuo et al., 2025] Jialong Zuo, Haoyou Deng, Hanyu Zhou,
+Jiaxin Zhu, Yicheng Zhang, Yiwei Zhang, Yongxin Yan,
+Kaixing Huang, Weisen Chen, Yongtai Deng, Rui Jin,
+Nong Sang, and Changxin Gao.
+Is nano banana pro
+a low-level vision all-rounder?
+a comprehensive eval-
+uation on 14 tasks and 40 datasets.
+arXiv preprint
+arXiv:2512.15110, 2025.

@@ -1,0 +1,1582 @@
+Title: From Intuition to Investigation: A Tool-Augmented Reasoning MLLM Framework for Generalizable Face Anti-Spoofing
+
+URL Source: https://arxiv.org/pdf/2603.01038v1
+
+Published Time: Tue, 03 Mar 2026 02:36:29 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# From Intuition to Investigation: A Tool-Augmented Reasoning MLLM Framework for Generalizable Face Anti-Spoofing 
+
+## Haoyuan Zhang 1,2,3 † , Keyao Wang 3 † , Guosheng Zhang 3, Haixiao Yue 3,Zhiwen Tan 3, Siran Peng 1,2 , Tianshuo Zhang 1,2 , Xiao Tan 3, Kunbin Chen 3, Wei He 3,Jingdong Wang 3, Ajian Liu 1,2 , Xiangyu Zhu 1,2 , Zhen Lei 1,2,4,5 ∗
+
+1SAI, UCAS; 2MAIS, CASIA; 3Baidu Inc; 4CAIR, HKSIS, CAS; 5M.U.S.T 
+
+{zhanghaoyuan2023,pengsiran2023,ajian.liu,xiangyu.zhu,zhen.lei }@ia.ac.cn 
+
+{wangkeyao,zhangguosheng,yuehaixiao,tanzhiwen,tanxiao01,chenkunbin,hewei06 }@baidu.com tianshuo.zhang@nlpr.ia.ac.cn,wangjingdong@outlook.com 
+
+## Abstract 
+
+Face recognition remains vulnerable to presentation at-tacks, calling for robust Face Anti-Spoofing (FAS) solutions. Recent MLLM-based FAS methods reformulate the binary classification task as the generation of brief textual descrip-tions to improve cross-domain generalization. However, their generalizability is still limited, as such descriptions mainly capture intuitive semantic cues (e.g., mask contours) while struggling to perceive fine-grained visual patterns. To address this limitation, we incorporate external visual tools into MLLMs to encourage deeper investigation of subtle spoof clues. Specifically, we propose the Tool-Augmented Reasoning FAS (TAR-FAS) framework, which reformulates the FAS task as a Chain-of-Thought with Visual Tools (CoT-VT) paradigm, allowing MLLMs to begin with intuitive observations and adaptively invoke external visual tools for fine-grained investigation. To this end, we design a tool-augmented data annotation pipeline and construct the ToolFAS-16K dataset, which contains multi-turn tool-use reasoning trajectories. Furthermore, we introduce a tool-aware FAS training pipeline, where Diverse-Tool Group Relative Policy Optimization (DT-GRPO) enables the model to autonomously learn efficient tool use. Extensive ex-periments under a challenging one-to-eleven cross-domain protocol demonstrate that TAR-FAS achieves SOTA perfor-mance while providing fine-grained visual investigation for trustworthy spoof detection. 
+
+## 1. Introduction 
+
+Rapid advances in facial recognition system have enabled convenient, contactless use in payments and identity veri-
+
+> †
+
+Equal contribution; *Corresponding author Work done during Haoyuan Zhang’s internship at Baidu Inc. (a) Traditional            
+
+> Classifier
+> This is a picture of a
+> man wearing glasses.
+> Description
+> (b) Semantic
+> Classifier
+> (c) Tool -Augmented Reasoner
+> (Ours)
+> LBPTool
+> Tool Call
+> The image appears to be a natural face… I will
+> use LBPTool to look for unnatural patterns …
+> Think
+> The LBP result shows unnatural, noisy texture…
+> I will use ZoomInTool to inspect the this area…
+> Think
+> ZoomInTool
+> BBox : [x, y, w, h]
+> Tool Call
+> The LBP result show periodic texture
+> indicative of a screen display. Combined
+> with the visual inspection , there is strong
+> evidence of a physical spoof.
+> Think
+> Visual
+> Encoder
+> Classifier
+> Large Language
+> Model
+> TAR -FAS
+> <Spoof>
+> CLS
+> <Real>
+> CLS <Real>
+> CLS
+
+Figure 1. Previous methods struggle to distinguish high-quality spoof samples with subtle visual cues, while TAR-FAS enhances fine-grained investigation by coupling MLLM with visual tools. 
+
+fication. Nevertheless, such systems are still susceptible to various external influences and spoofing attacks, including printed photographs [60], replayed videos [3], and even realistic 3D masks [29]. To address these vulnerabilities, Face Anti-Spoofing (FAS) techniques have been introduced to strengthen the reliability of facial recognition. Early FAS approaches [34, 53] have achieved strong performance in intra-domain settings, but their generalization significantly degrades when deployed in cross-domain environments involving unseen conditions or spoofing materials. To improve cross-domain generalization in FAS, some prior studies [31, 35, 46, 55, 62] reduce the domain gap by aligning features with access to target data. Another line of research [5, 24, 28, 63, 64] seeks to learn domain-invariant representations using adversarial learning or fea-
+
+> arXiv:2603.01038v1 [cs.CV] 1 Mar 2026
+
+ture disentanglement. However, large domain discrepancies and varied spoofing types still hinder robust generalization. Recently, CLIP-based frameworks [14, 30, 42, 48] have been introduced to enhance generalizability by aligning im-ages with manually designed class-wise descriptions (e.g., 
+
+This is a real / spoof face. ). Going a step further, I-FAS [56] introduces sample-wise descriptions and develops a pioneering MLLM framework that generates both classi-fication results and one-sentence explanations. However, researchers have found that MLLMs often exhibit a certain degree of blindness to low-level visual features [7, 19]. The use of brief descriptions in ex-isting MLLM-based FAS methods [56] further amplifies this tendency, encouraging the model to focus on coarse semantic cues (e.g., screen borders or mask contours) while neglecting fine-grained spoof traces. As a result, these methods may miss subtle visual evidence that is impor-tant for reliable FAS, which reduces their generalization ability. This raises an important question: how can we guide MLLMs to perceive subtle spoof cues that are easily overlooked? Fortunately, MLLMs have an inherent ability to call external tools during the Chain-of-Thought (CoT) reasoning process, providing a possible way to overcome this limitation. In the history of FAS, traditional methods have often employed basic visual operators (e.g., LBP [2, 11], HOG [23], and FFT [6, 22]) to extract fine-grained features and enhance generalization. Inspired by this idea, we incorporate external visual tools into MLLM-based FAS framework to encourage the model toward deeper explo-ration of hidden visual clues. This enables the model to move beyond coarse intuition to fine-grained investigation. In this work, we propose Tool-Augmented Reasoning FAS (TAR-FAS), a framework that drives MLLMs from intuition to investigation by enabling them to adaptively invoke appropriate visual tools during the reasoning pro-cess. Specifically, TAR-FAS reformulates FAS as a Chain-of-Thought with Visual Tools (CoT-VT) paradigm as shown in Figure 1, where the model can capture fine-grained visual cues via external visual tools. To equip the MLLM with this capability, we design a tool-augmented data annotation pipeline and construct the ToolFAS-16K dataset, which contains multi-turn tool-use reasoning trajectories. Within this pipeline, we introduce an expert-model-guided mecha-nism to ensure annotation reliability. Leveraging ToolFAS-16K along with fundamental FAS datasets, we further develop a tool-aware FAS training pipeline that equips the model with effective tool-based reasoning capability. We use ToolFAS-16K dataset to inject the tool-call format into the model’s instruction space, and introduce Diverse-Tool Group Relative Policy Optimization (DT-GRPO) which encourages the model to utilize different tools through a tool-diversity reward function, thus enables it to au-tonomously learn efficient and adaptive tool use solely from query–label pairs. Under the challenging one-to-eleven cross-domain testing protocol, TAR-FAS achieves state-of-the-art (SOTA) performance and produces interpretable reasoning chains that demonstrate a clear transition from coarse intuition to fine-grained investigation, validating both the effectiveness of the proposed training pipeline and the constructed ToolFAS-16K dataset. Our contributions can be summarized as follows: • We are the first to reformulates FAS as a Chain-of-Thought with Visual Tools (CoT-VT) paradigm and propose Tool-Augmented Reasoning FAS (TAR-FAS) framework, enabling MLLMs to adaptively invoke external visual tools for robust spoof detection. • We introduce a tool-augmented data annotation pipeline, and construct ToolFAS-16K dataset containing multi-turn tool-use reasoning trajectories. We further introduce a tool-aware FAS training pipeline containing a Diverse-Tool Group Relative Policy Optimization (DT-GRPO) for autonomous tool-use learning. • Extensive experiments on the challenging cross-domain benchmarks (One-to-Eleven) demonstrate that our method achieves a significant improvement over state-of-the-art (SOTA) methods. 
+
+## 2. Related Works 
+
+2.1. Face Anti-Spoofing 
+
+FAS aims to distinguish real live faces from presentation attacks such as printed photos, replay videos, or 3D masks. Early works primarily relied on handcrafted features, which later evolved into deep learning–based methods [45, 47, 57]. With the rise of deep networks, CNN-based [54] and Transformer-based approaches [17] have focused on designing task-specific architectures for robust represen-tation learning. In addition, auxiliary supervision (e.g., depth maps [34] and reflection maps [58]) has been widely employed to provide additional cues. Despite achieving impressive intra-dataset results, these methods often fail to generalize under domain shifts. To improve cross-domain robustness, Domain Adaptation (DA) techniques [31, 35, 46, 55, 62] attempt to reduce the distribution gap between source and target domains using unlabeled target data, while Domain Generalization (DG) approaches [5, 24, 28, 63, 64] aim to learn domain-invariant representations across multiple sources through adversarial learning [20, 41] or meta-learning [4, 8]. However, most existing approaches rely solely on binary supervision to extract generalized liveness features, limiting their capacity to model complex cross-domain variations. 
+
+2.2. Multimodal Large Language Models 
+
+Early Vision-Language Models (VLMs) [18, 21, 40] fo-cused on learning aligned vision–language embeddings, while instruction-tuned models such as BLIP-2 [26] and LLaVA [31] established the MLLM paradigm by connect-ing vision encoders with frozen LLMs through cross-modal connectors. More recent efforts like Qwen-VL [1] and InternVL [65] further improve spatial grounding and fine-grained perception. In FAS, FLIP [42] and CFPL-FAS [30] utilized the pretrained CLIP [40] model to align visual features with language supervision for better generalization. I-FAS [56] extended this paradigm by framing FAS as a visual question answering task, bridging perception and reasoning for enhanced generalization and interpretability. Nevertheless, performance remains limited, as simple tex-tual descriptions capture only coarse semantic cues but struggle to model fine-grained visual patterns. 
+
+2.3. Tool-Use MLLM Agent 
+
+Recent advances extend MLLMs from static perception to dynamic tool-use agents capable of invoking external functions for enhanced reasoning and control. Early frame-works such as ReAct and Chameleon [37, 51] demonstrated how language models can couple reasoning with external actions like API calls and retrieval. Recent efforts, in-cluding “thinking with images” [43] and DeepEyes [61], further expand this paradigm to the vision–language do-main, enabling stepwise visual tool interactions for complex reasoning. Building on these advances, we make the first attempt to integrate visual tools with MLLM into FAS task for robust detection beyond intuitive classification. 
+
+## 3. Methodology 
+
+3.1. Tool-Augmented Data Annotation 
+
+The pipeline include data and tool selection, expert-model-guided annotation workflow, and data verification. Through this pipeline, we construct a multi-turn tool-augmented ToolFAS-16K dataset with the help of Gemini-2.5 pro. 
+
+3.1.1. Data and Tool Selection Data Selection. CelebA-Spoof [59] is a large-scale, real-world face anti-spoofing dataset with various attack types. We select a total of 16,172 images from CelebA-Spoof, covering real samples and 10 different spoof types. The de-tailed data sample and distribution is illustrated in Figure 2. 
+
+Tool Selection. We select a set of visual tools based on their proven effectiveness in prior FAS research, aiming to extract low-level spatial and frequency-domain cues: • Zoom-In Tool. This tool takes a bounding box input to focus on facial regions for fine-grained local analysis. • Texture-based Tools. The LBP operator captures subtle texture irregularities, which are effective for identifying mask materials and paper surface inconsistencies [2, 11]. • Frequency-based Tools. The FFT and Wavelet Trans-form operators analyze frequency domain representa-Spoof types                                  
+
+> A4
+> Photo
+> Poster
+> Pad
+> Phone
+> PC
+> Face Mask
+> Upper Body Mask
+> 3D Mask
+> Region Mask
+> Live 7916
+> 760
+> 860
+> 805
+> 812
+> 814
+> 1184
+> 683
+> 780
+> 811
+> 817
+> <think> I will use FFTTool to analyze the frequency domain for any
+> periodic patterns that might indicate a screen display. </think>
+> <tool_call >{ name: FFTTool }</ tool_call >
+> <think> The FFT result does not clearly show periodic artifacts indicative
+> of a screen attack. I will now examine the skin texture for irregularities
+> using LBPTool , which could point to other physical spoofing. </think>
+> <tool_call >{ name: LBPTool }</ tool_call >
+> <think> The FFT analysis did not reveal periodic patterns indicative of a screen attack.
+> The LBP analysis also showed natural texture, without distorted patterns expected
+> from other physical presentation attack. Based on these observations, there is no
+> evidence to suggest this is a spoof. </think> <answer> <Real> </answer>
+> <think> The image clearly shows a mask being worn over a face, with
+> distinct cut -outs for eyes and nose. I will use EdgeDetectionTool to
+> highlight the unnatural edges of this mask. </think>
+> <tool_call >{ name: EdgeDetectionTool }</ tool_call >
+> <think> The edge detection results demonstrate the presence of a
+> physical mask with cut -out features. The unnatural contours and
+> distinct boundaries confirm a spoof attack. </think>
+> <answer> <Spoof> </answer>
+> Label: Real
+> FFTTool
+> LBPTool
+> Label: Spoof
+> (Mask)
+> Edge
+> Detection
+
+Figure 2. Detailed construction and samples of ToolFAS-16K. 
+
+tions, revealing abnormal spectral distributions typically caused by display and print attacks [6, 10, 16, 22]. • Structure-based Tools. The Laplacian Edge Detection and HOG operators emphasize structural boundaries and reflectance discontinuities, helping to expose mask edges and screen boundary artifacts [38, 39]. This combination provides diverse and complementary vi-sual evidence that enhances the robustness of our tool-augmented reasoning framework. 
+
+3.1.2. Annotation Workflow 
+
+The detailed annotation workflow is illustrated in Figure 3-(a). Specifically, for each sample , we annotate through a multi-turn process and get the annotation Ann from multi-turn sub-annotation Ann (l) concatenation: 
+
+Ann = [ Ann (1) ; Ann (2) ; · · · ; Ann (L)], (1) where L is the turn number of each annotation which will not exceed a max number of Lmax (we set Lmax = 6 in this paper). In each turn, sub-annotation is generated by a MLLM with historical context as input: 
+
+Ann (l) = M LLM (S, P(<l ), Ann (<l ), P(l)), (2) where S denotes the system prompt (detail in supplemen-tary materials), P (l) denotes the user prompt for turn l.Each sub-annotation generated by MLLM is constrained using structured output of Gemini API which can be parsed into reasoning-tool or reasoning-answer pair: 
+
+Ann (l) =
+
+(
+
+Think (l) + T (l)
+
+Think (l) + Answer , (3) where T (l) ∈ {T 1, T2, · · · , TK } denotes the tool call of l
+
+turn, K denotes the tool number. We will end the multi-turn annotation process if the MLLM give the final answer. u Correctness u Format                
+
+> uManual Tool Call: ZoomInTool ---FFTTool ---LBPTool ---Answer
+> Analysis: The ZoomInTool result … The HoGTool depict …
+> Answer: Spoof
+> Answer: Real
+
+(b) Data Verification 
+
+(a) Annotation Workflow        
+
+> Tool Call: { name: FFTTool }{ name: ATool }
+> Analysis: The result show … The expert/hint …
+> 𝓢
+> This is the image you
+> need to investigate.
+> Hint: this is a spoof photo of
+> a person. (photo attack)
+
+𝓠 
+
+𝓗 
+
+𝑰 
+
+𝓟 𝟏      
+
+> 𝑇ℎ𝑖𝑛 𝑘 !: This image …
+> 𝒯 !: { name: FFTTool }
+
+𝑨𝒏𝒏 𝟏 
+
+> MLLM
+
+𝒯 ""#   
+
+> 𝓢
+> 𝓟  𝟏
+> 𝑨𝒏𝒏  𝟏
+> 𝒯 "(𝐼 )
+
+ℰ""#           
+
+> This is the result of FFTTool .
+> The expert predicts 87% spoof probability.
+> 𝒢 [𝒯 "(𝐼 )]
+> 𝑇ℎ𝑖𝑛 𝑘 ": The result …
+> 𝒯 ": { name: LBPTool }
+
+𝑨𝒏𝒏 𝟐  
+
+> MLLM
+> This is the result
+> of FFTTool .
+
+𝓟 𝟐   
+
+> The expert predicts …
+> 𝓢 𝓟  𝟏
+> 𝑨𝒏𝒏  𝟏
+> 𝑇ℎ𝑖𝑛 𝑘 #: The result …
+> 𝐴𝑛𝑠𝑤𝑒𝑟 : <Spoof>
+
+𝑨𝒏𝒏 𝑳  
+
+> MLLM
+> This is the result
+> of HOGTool .
+
+𝓟 𝑳 
+
+> 𝓟  𝑳 $𝟏
+> 𝑨𝒏𝒏  𝑳 $𝟏
+> …
+> …
+
+1-turn 
+
+2-turn 
+
+L-turn   
+
+> Tool Execution Record
+> 𝓖
+> The expert predicts …
+> 𝓖
+
+Figure 3. Illustration of the data annotation pipeline. (a) Each annotation can be divided into multiple sub-annotations Ann (l)
+
+generated by the MLLM with historical context, and the multi-turn process ends when the MLLM outputs the final answer. (b) The data verification process ensuring annotation reliability. 
+
+In the first turn, user prompt P(1) contains a input image 
+
+I, a textual query Q (“ This is the image you need to investigate. ”) and a hint description H(I) (e.g. photo attack, phone attack) of the input image: 
+
+P(1) = I ⊕ Q ⊕ H (I), (4) where ⊕ denotes concatenation. After the first round, user prompt P(l) for each turn includes tool execution results and expert guidance: 
+
+P(l) = T (l−1) (I) ⊕ G [T (l−1) (I)] , 1 < l ≤ L , (5) where T (l−1) denotes the tool-call request parsed from l −1
+
+turn sub-annotation Ann (l−1) , G(·) denotes the tool-result guidance of expert-model-guided mechanism. 
+
+Expert-Model-Guided Mechanism. We leverage multiple lightweight expert networks to generate tool-result guid-ance G in Equation (5) for the general annotator model to guard the reliability of tool-augmented annotation. Specif-ically, before annotation, we train a set of tool-specific binary classifiers denoted as E = {E 1, E2, . . . , EK }, where each Ek corresponds to a visual tool (excluding the Zoom-In Tool) and learns to predict the probability that a tool output contains spoof-related artifacts. Formally, for a tool result 
+
+Tk(I), the expert prediction is computed as: 
+
+pk = Ek(Tk(I)) , pk ∈ [0 , 1] , (6) where pk represents the confidence that spoof traces exist in the given tool output. For each given tool-call request Tk,the tool-result Tk(I) will be fed into its expert network Ek.The resulting prediction pk is then converted into a textual guidance G[Tk(I)] , such as “ This is the result of FFTTool. The expert predicts 87% there’s spoof trace ”. This mecha-nism allows the general annotator to combine expert-model-derived confidence with human interpretability, thereby producing more reliable tool-augmented reasoning. 
+
+3.1.3. Data Verification and Re-Annotation 
+
+To ensure the reliability of the annotated dataset, we verify data from three perspective (as shown in Figure 3-(b)): • Correctness Verification. Check whether the final reason-ing answer matches the ground-truth label. • Format Verification. Ensure that tool calls follow the predefined API schema and analysis do not leak the ground-truth hint or expert confidence. • Manual Verification. Human experts validate the logical consistency between tool analyses and final conclusions. Samples failing the above checks are re-annotated once, and those that still fail are marked as bad cases and discarded. 
+
+3.2. Tool-Aware FAS Training Pipeline 
+
+As illustrated in Figure 4-(b), the overall training pipeline comprises three stages: FAS knowledge transfer, multi-turn tool-call format injection, and Diverse-Tool Group Relative Policy Optimization (DT-GRPO). The well trained TAR-FAS can conduct fine-grained visual reasoning via tool invocations, leading to interpretable and reliable final decisions, as shown in Figure 4-(a). 
+
+3.2.1. FAS Knowledge Transfer 
+
+To endow the general MLLM with fundamental FAS knowl-edge, we leverage data annotated in the same format as I-FAS [56], denoted as D1 = {(q(0) , s(0) )i}N1 
+
+> i=1
+
+where q(0) 
+
+denotes the input image and user query, and s(0) represents the target output sequence. The optimizing objective can be formulated as: 
+
+L1 = −E(q,s)∼D 1 
+
+> T(0)
+
+X
+
+> t=1
+
+log πθ (s(0)  
+
+> t
+
+| q(0) , s(0)  
+
+> <t
+
+), (7) where πθ denotes the token distribution from the current model, T (0) denotes the length of s(0) . Thus, we establish an initial alignment between visual and language in the FAS domain, resulting in an FAS expert MLLM. 
+
+3.2.2. Tool-call Format Injection 
+
+To equip the FAS expert MLLM with the tool-calling format, we train it on the ToolFAS-16K dataset, denoted as 
+
+D2 = {(q(0) , s(0) , · · · , q(Li), s(Li))}N2
+
+> i=1
+
+. For each sample in D2, the first-round pair (q(0) , s(0) ) is identical to that in 
+
+D1 and serves as a prefix, enabling fast classification before <think> The image appears to be a natural face… 
+
+I will start by using the LBPTool to look for 
+
+unnatural patterns … </think> 
+
+> <tool_call>
+
+{ name: LBPTool }</tool_call> 
+
+Reasoning 
+
+<Real> <reason> This is a picture of a man 
+
+in wearing glasses. </reason> 
+
+Fast Answer 
+
+Final Answer 
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think>
+
+The FFT result did not show … Combined 
+
+with the visual inspection … there is strong 
+
+evidence of a physical spoof. </think>  
+
+> <think>
+
+The LBP result shows unnatural, noisy 
+
+texture ... I will use the ZoomInTool to inspect this 
+
+area for more details. </think> 
+
+> <tool_call>
+
+{name: ZoomInTool , bbox: […]} </tool_call> 
+
+Reasoning 
+
+Q
+
+D
+
+G
+
+D
+
+D 
+
+> …
+> …
+> Tool  Box
+> TAR -FAS
+> General MLLM
+> …
+
+𝑹 𝟏 
+
+𝓛 𝟑 
+
+𝓛 𝟐 
+
+𝓛 𝟏        
+
+> 𝒟 !=𝒑 𝟎 ,𝒔 𝟎
+> ##$!
+> %!
+
+𝒑 𝟎 𝒔 𝟎    
+
+> Q<Spoof/Real> + reason
+> FAS Expert
+> FAS
+> Tool Learner
+
+𝒟 " = 𝒑 , 𝒂 # #$%
+
+> &&
+> <Spoof>
+> <Real>
+
+𝒐 𝟏 
+
+𝒐 𝑮                     
+
+> <Spoof> + reason
+> <think>…</think> + Edge
+> <think>…</think> + HOG
+> <think>…</think>
+> <answer> <Real ></answer>
+> <Spoof> + reason
+> <think>…</think> + FFT
+> <think>…</think> + Wavelet
+> <think>…</think>
+> <answer> <Spoof> </answer>
+> Fast Reward
+> <CLS> <reason>…</reason>
+> <Spoof>
+> <Real>
+> Reasoning Reward
+> <think> +<tool_call>/<answer>
+> <answer> <Spoof> </answer>
+> <answer> <Real> </answer>
+> Tool Reward
+> Edge ---HOG ---<Real>
+> FFT ---Wavelet ---<Spoof>
+> Wavelet ---<Spoof>
+
+TAR -FAS 
+
+(a) Framework (b) Training Pipeline 
+
+Rollout 
+
+𝑹 𝟐 
+
+𝒐 𝟐    
+
+> <Real> + reason
+> <think>…</think> + LBP
+> <think>…</think> + Wavelet
+> <think>…</think>
+> <answer> <Spoof ></answer>
+
+𝑹 𝑮 
+
+FAS Knowledge 
+
+Transfer 
+
+Tool -call Format 
+
+Injection 
+
+DT -GRPO                  
+
+> 𝒟 '=𝒑 𝟎 ,𝒔 𝟎 ,⋯,𝒑 𝑳 𝒊 ,𝒔 𝑳 𝒊
+> ##$!
+> %#
+> Q<Spoof/Real> + reason
+
+𝑝 ' , 𝑠 ' 
+
+> <think>…</think> + tool call DG
+
+𝑝 % , 𝑠 %  
+
+> D<think>…</think> + tool call
+
+𝑝 ( , 𝑠 (
+
+… 
+
+> <think>…</think> + answer D
+
+𝑝 ) , 𝑠 )
+
+…
+
+> ToolFAS -16K
+
+…
+
+> 1
+> 0
+> 1
+> 0
+> 0
+> 2
+> 1
+
+Question 
+
+Tool Guidance Format Declaration G D
+
+Q Tool Result Data Flow 
+
+Tool Excute Figure 4. The total framework and training pipeline of TAR-FAS. (a) introduce the framework of TAR-FAS which can give a quick intuitive answer and investigate with visual tools to give a more accurate final decision. (b) illustrate the whole tool-aware FAS training pipeline including FAS knowledge transfer, tool-call format injection and DT-GRPO. 
+
+the model proceeds to multi-turn, tool-based reasoning. We optimize the model by maximizing the generation likelihood with a loss scale on first-round generation: 
+
+Lnll (l) = −
+
+TlX
+
+t=1 
+
+log πθ (s(l)
+
+t , |q(<l ), s(<l ), q(l), s(l)
+
+<t ),
+
+L2 = E(q,s)∼D 2
+
+h
+
+α · L nll (0) + (1 − α) ·
+
+LX
+
+l=1 
+
+Lnll (l)] 
+
+i
+
+,
+
+(8) where L denotes the number of turns in each sampled data pair, α denotes a hyper-parameter which control the loss ratio of first-round generation. Applying a loss scale factor to the first-round generation prevents degradation of basic classification ability during long multi-turn training, enabling the model to retain its core classification skill while learning the tool-augmented reasoning format. Con-sequently, we inject the multi-turn tool-call format into the FAS expert MLLM, yielding a FAS Tool Learner MLLM. 
+
+3.2.3. Diverse-Tool GRPO 
+
+To enable the model to autonomously learn efficient tool-use, we introduce DT-GRPO. We only use query-label pairs from CelebA-Spoof dataset denoted as D3 = {(q, a)i}N3
+
+i=1 
+
+where a denotes the binary label. For each given query q,DT-GRPO samples G responses {o1, o 2, · · · , o G} using the current policy model πθold . The reward of each response 
+
+{R1, R 2, · · · , R G} is calculated through tool-diversity re-ward function. The on-policy training objective can be formulated as: 
+
+L3 = − E(q,s)∼D 3,{oi}Gi=1 ∼πθold (·| q)
+
+ 1
+
+G
+
+GX
+
+i=1 
+
+1
+
+|oi|
+
+|oi|
+
+X
+
+t=1 
+
+ πθ (oi,t |q, o i,<t )
+
+πθold (oi,t |q, o i,<t ) · Ai,t 
+
+ 
+
+, (9) where 
+
+Ai,t = Ri − mean ({R1, · · · , R G})
+
+std ({R1, · · · , R G}) .
+
+For each rollout response oi, the tool-diversity reward Ri
+
+for is evaluated from three perspective: 
+
+Fast answer reward. A fast classification will be given in the first-turn and the total fast reward can be formulated as: 
+
+Rf ast = Rf mt f ast + IRf mt f ast >−1 · ICLS f ast =label , (10) where Rf mt f ast is −1 if the format is wrong otherwise 0, and 
+
+CLS f ast denotes the fast classification. 
+
+Reasoning reward. The reasoning reward constrain the final accuracy and reasoning format formulated as: 
+
+Rrsn = Rf mt rsn + IRf mt rsn >−1 · ICLS f inal =label , (11) where Rf mt rsn is −1 if a wrong reasoning format or a invalid tool-call is presented otherwise 0, and CLS f inal denotes the final decision. Table 1. Comparison in Protocol 2, illustrating the challenge of training solely on the CelebA-Spoof dataset followed by testing across 11 distinct datasets. We run each experiment 3 times under different seeds and report the average HTER and AUC.                                                                                                                                                             
+
+> (a) Average Over 11 Datasets
+> Methods HTER(%) AUC ViTAF 23.85 82.82 ViT-L 21.08 85.61 FLIP 18.73 87.90 I-FAS 11.30 93.71 Ours 7.54 96.67
+> (b) CASIA-MFSD
+> Methods HTER(%) AUC ViTAF 3.11 99.48 ViT-L 0.93 99.95 FLIP 4.88 98.48 I-FAS 1.11 99.88 Ours 0.00 100.00
+> (c) CASIA-SURF-3DMask
+> Methods HTER(%) AUC ViTAF 32.44 75.20 ViT-L 23.54 84.22 FLIP 8.83 96.93 I-FAS 6.18 98.40 Ours 2.09 99.65
+> (d) HKBU-MARs-V1+
+> Methods HTER(%) AUC ViTAF 49.29 57.28 ViT-L 33.33 73.88 FLIP 17.25 88.31 I-FAS 18.64 88.77 Ours 3.48 99.71
+> (e) HiFiMask
+> Methods HTER(%) AUC ViTAF 37.30 67.10 ViT-L 32.81 72.58 FLIP 28.32 76.50 I-FAS 28.23 77.17 Ours 17.97 90.23
+> (f) MSU-MFSD
+> Methods HTER(%) AUC ViTAF 12.86 93.14 ViT-L 20.87 85.65 FLIP 19.37 89.95 I-FAS 5.63 98.73
+> Ours 5.71 98.29
+> (g) OULU-NPU
+> Methods HTER(%) AUC ViTAF 26.73 81.28 ViT-L 29.42 78.07 FLIP 20.57 87.30 I-FAS 14.86 92.68
+> Ours 14.45 92.63
+> (h) REPLAY-ATTACK
+> Methods HTER(%) AUC ViTAF 12.38 95.73 ViT-L 16.58 92.00 FLIP 25.67 81.37 I-FAS 9.15 95.12 Ours 5.75 96.69
+> (i) Rose-Youtu
+> Methods HTER(%) AUC ViTAF 69.34 74.22 ViT-L 80.47 71.69 FLIP 80.73 73.60 I-FAS 5.52 98.48 Ours 3.61 99.16
+> (j) SIW
+> Methods HTER(%) AUC ViTAF 14.74 92.51 ViT-L 9.03 96.56 FLIP 11.01 95.40 I-FAS 4.02 98.34
+> Ours 8.35 96.93
+> (k) SIW-M-V2
+> Methods HTER(%) AUC ViTAF 26.72 80.70 ViT-L 17.26 90.37 FLIP 25.95 80.78 I-FAS 10.89 95.02
+> Ours 11.72 94.75
+> (l) WMCA
+> Methods HTER(%) AUC ViTAF 29.88 77.14 ViT-L 34.39 75.13 FLIP 19.36 88.73 I-FAS 20.07 89.17 Ours 9.78 95.29
+
+Tool reward. We aim to encourage the model to utilize various tools in order to achieve a correct classification result. For a rollout that reaches a final decision in L turns, the model will select one of the K available tools during turns 2 to (L − 1) , and produces the final answer at turn 
+
+L. Let v(l) ∈ {0, 1} indicate a valid tool-call and γk
+
+indicate tool weight for tool Tk, the tool-call diversity score is defined as: 
+
+Ftool =
+
+> K
+
+X
+
+> k=1
+
+γk · max 
+
+ LX
+
+> l=2
+
+v(l) IT (l)=Tk , 1
+
+
+
+. (12) We gate this reward by the final outcome: 
+
+Rtool = Ftool · ICLS f inal =label . (13) 
+
+Total reward. The total reward is formulated as: 
+
+R = βf ast · Rf ast + βrsn · Rrsn + βtool · Rtool . (14) 
+
+## 4. Experiments 
+
+4.1. Experimental Setup 
+
+Databases and Protocols. To evaluate the generaliza-tion and robustness of our method, we choose the most challenging cross-domain protocol following I-FAS [56]. We train on a single source domain CelebA-Spoof [59] and perform cross-domain testing on 11 target domains including MSU-MFSD [50], CASIA-MFSD [60], Idiap Replay Attack [9], OULU-NPU [3], SIW [34], Rose-Youtu [25], HKBU-MARs-V1+ [33], WMCA [13], SIW-M-V2 [15], CASIA-SURF-3DMask [52] and HiFiMask [29]. The result of traditional ICMO protocol is shown in supplementary materials. 
+
+Evaluation Metrics. In line with the evaluation principles, we use HTER and AUC to assess the model’s performance. (1) HTER is a measure of the false rejection and false acceptance error rates, and its value is taken as the average of the false rejection rate (FRR) and the false acceptance rate (FAR). (2) AUC measures the algorithm’s overall performance, and its value represents the area under the ROC curve. Notably, we preserve the original logits of the classification token in final answer throughout the MLLM generation process for metric computation. 
+
+Implementation Details. We align, crop, and resize face images to 224 × 224 . We use InternVL-3-8B [65] as the base MLLM model. For knowledge transfer and format injection, we use LoRA (rank=16) finetuning with learning rate 1e-4 and loss scale factor α=0.9, using a batchsize of 256 for up to 4000 steps. For DT-GRPO, we use full-parameter finetuning with learning rate 1e-6, KL coefficient 0.0. We set the reward coefficient βf ast =0.1, βrsn =0.5, 
+
+βtool =0.4, γk=0.2. We configure the training process with a completion batchsize of 512 (rollout number G=8) and a maximum of 300 steps. AdamW with weight decay 0.05 is used throughout. Note that although InternVL preprocesses inputs to 448 ×448 , our input resolution remains 224 ×224 .
+
+4.2. Comparison Results 
+
+To evaluate the generalizability of our approach, we choose the most challenging one-to-eleven protocol [56] utilizing a single dataset (CelebA-Spoof) as the source domain and perform cross-domain testing across 11 distinct datasets. We compare our method with ViT-L [12], ViTAF [17], FLIP [42] and I-FAS [56]. As shown in Table S5, our method demonstrates a compelling advantage of near 3% HTER to the previous SOTA techniques. This scenario reflects real-world challenges that require robustness against emerging attacks and shifts. Significantly, the datasets CASIA-SURF-3DMask and HKBU-MARs-V1+ encompass attack modalities absent in the source domain, including sophisti-cated 3D attacks and novel material-based attacks. Under these challenging condition, our method significantly out-performs previous FAS approaches by a substantial margin, demonstrating the superior generalizability gained through tool-augmented reasoning. 
+
+4.3. Ablation Study             
+
+> Table 2. Ablation study of different visual tools. Frequency tools denotes FFT and Wavelet, texture tools denotes LBP, structure tools denotes HOG and Edge Detection. Tools Results HTER(%) AUC ZoomIn Tool 10.63 93.90 ZoomIn + Frequency Tools 9.55 95.40 ZoomIn + Texture Tools 9.90 95.75 ZoomIn + Structure Tools 8.71 96.32 All Tools 7.54 96.67
+
+Effectiveness of different visual tools. To demonstrate the generalization improvement brought by visual tools, we conducted extensive comparative experiments, as shown in the Table 2. Available tools (except ZoomIn) are catego-rized into three major types: (1) Frequency tools, which extract frequency-domain information from images, in-cluding FFT and Wavelet; (2) Texture tools, which ana-lyze facial texture patterns, represented by LBP; and (3) Structure tools, which capture structural information within images, including HOG and EdgeDetection. The model that only employs ZoomIn Tool serves as the baseline. When Frequency, Texture, or Structure tools are individually incorporated, each configuration yields performance gains over the baseline. Furthermore, when all tools are available for the model, the overall performance is further enhanced, confirming the necessity of these visual tools. 
+
+Effectiveness of each training stages. To validate the effectiveness of the proposed training paradigm and the ToolFAS-16K dataset, we conducted comprehensive exper-                   
+
+> Table 3. Ablation study of different training strategy. ‘KT’ denotes FAS Knowledge Transfer, ‘FI’ denotes tool-call Format Injection, and ’RL’ denotes DT-GRPO. Training Stage Results KT FI RL HTER(%) AUC
+> ✓20.79 86.43
+> ✓16.80 89.65
+> ✓✓13.29 91.46
+> ✓✓9.23 95.11
+> ✓✓✓7.54 96.67
+
+iments exploring all possible combinations that the model can perform reasoning-based classification. The results are shown in the Table 3 where ‘KT’ denotes FAS Knowl-edge Transfer, ‘FI’ denotes tool-call Format Injection, and ’RL’ denotes DT-GRPO. The results lead to the follow-ing conclusions: (1) The proposed DT-GRPO enables the model to autonomously learn efficient tool-use, signifi-cantly enhancing generalization on FAS classification tasks. FI+RL improves over FI by 5.46% HTER, and KT+FI+RL surpasses FI+RL by 5.21% HTER as well. (2) The FI process based on the ToolFAS-16K dataset is indispensable. Without FI step, the RL stage fails to train the model effectively, resulting in an HTER of only 20.79%. (3) The KT process can effectively transfer FAS domain knowledge into the pretrained general MLLM. KT+FI outperforms FI by 1.81% HTER, while KT+FI+RL further improves upon FI+RL by another 1.56% HTER. In summary, these results confirm the critical role of the proposed tool-aware FAS training paradigm and the ToolFAS-16K dataset.            
+
+> Table 4. Ablation study of different resolution and backbone. Backbone Resize Results HTER(%) AUC Qwen2.5-VL-7B 9.45 95.32 Qwen2.5-VL-7B ✓8.60 96.08 InternVL3-8B ✓7.54 96.67
+
+Influence of backbone and image resolution. Since the InternVL model preprocesses images into multiple 
+
+448 × 448 patches during pretraining, our 224 × 224 
+
+input images are also resized to 448 × 448 , leading to an unfair comparison. To address this issue, we conducted additional experiments on the Qwen2.5-VL [1] with two settings, direct 224 input and 224 resized 448 input, to verify the effectiveness of TAR-FAS, as shown in Table 4. The results indicate that resizing 224 × 224 images to 
+
+448 × 448 provides a slight performance improvement; however, this gain is marginal compared with the en-hancement achieved by our proposed method. Moreover, the results demonstrate that TAR-FAS achieves state-of-<Real> This is a man wearing a black shirt 
+
+looking at the camera. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+I will use FFTTool to check for periodic patterns, such as 
+
+Moiré, which are indicative of a screen display. This is a common 
+
+artifact in physical presentation attacks. </think>  
+
+> <tool_call >
+
+{name: FFTTool } </ tool_call > 
+
+> <think>
+
+The FFT result shows some periodic patterns, but not 
+
+strongly . I will use the LBPTool to analyze the skin texture for 
+
+unnatural patterns, which indicate physical attacks. </think>  
+
+> <tool_call >
+
+{name: LBPTool } </ tool_call > 
+
+> <think>
+
+Both FFT and LBP results do not show signs of spoofing .
+
+To further confirm the naturalness of the image, I will use 
+
+HOGTool to analyze the gradients. </think>  
+
+> <tool_call >
+
+{name: HOGTool } </ tool_call > 
+
+> <think>
+
+The FFT result do not show periodic patterns , LBP result reveals 
+
+natural skin texture , and HOG result shows consistent facial gradients , all 
+
+indicating a real image . </think> <answer> <Real> </answer> 
+
+<Real> This is a man in a blue shirt is looking 
+
+at the camera 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+The image appears to be a photo of a person with some 
+
+glare or reflection. To confirm the presence of a replay attack, I 
+
+will use FFTTool to analyze the frequency domain. </think>  
+
+> <tool_call >
+
+{name: FFTTool } </ tool_call > 
+
+> <think>
+
+The FFT result shows faint diagonal periodic patterns 
+
+which indicative of a screen display. I will use the ZoomInTool 
+
+to look for obvious artifacts. </think>  
+
+> <tool_call >
+
+{name: ZoomInTool , bbox : […]} </ tool_call > 
+
+> <think>
+
+The zoomed -in view of the background reveals clear screen reflection ,
+
+and the FFT result shows periodic patterns . These combined factors suggest 
+
+a screen display attack. </think> <answer> <Spoof> </answer> 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+The image appears to natural image. To confirm the 
+
+absence of a 3D mask, I will use EdgeDetection to find visible 
+
+edges and a flat appearance. </think>  
+
+> <tool_call >
+
+{name: EdgeDetection } </ tool_call > 
+
+> <think>
+
+The EdgeDetection result do not show clear sharp 
+
+boundaries but a flat texture . I will use the LBPTool to 
+
+further inspect detailed face texture. </think>  
+
+> <tool_call >
+
+{name: LBPTool } </ tool_call > 
+
+> <think>
+
+The LBP result shows a noisy texture pattern , which is indicative of a 
+
+physical mask. Combined with the EdgeDetection result, provides sufficient 
+
+evidence to classify the image as a spoof. </think> <answer> <Spoof> </answer> 
+
+<Real> This is a young man with glasses and 
+
+a blue jacket. 
+
+<Real> This is a man in a suit and tie looking 
+
+at the camera. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+The image appears natural, but to confirm the absence of 
+
+physical presentation attacks like print or screen artifacts, I will 
+
+use FFTTool to analyze the frequency domain. </think>  
+
+> <tool_call >
+
+{name: FFTTool } </ tool_call > 
+
+> <think>
+
+The FFT shows centralized low -frequency components ,
+
+indicating a lack of fine details . I will use LBPTool to analyze the 
+
+skin texture indicative of a mask or print. </think>  
+
+> <tool_call >
+
+{name: LBPTool } </ tool_call > 
+
+> <think>
+
+The LBP result shows significant texture 
+
+irregularities , which is strong evidence of physical spoof. 
+
+I will use Wavelet for further confirm. </think>  
+
+> <tool_call >
+
+{name: WaveletTool } </ tool_call > 
+
+> <think>
+
+The FFT and Wavelet results indicates unnatural frequency patterns 
+
+while the LBP results depict obvious texture irregularities . I can confidently 
+
+classify this as spoof. </think> <answer> <Spoof> </answer> 
+
+(a) Real (b) Print Attack 
+
+(c) Mask Attack (d) Replay Attack Figure 5. The visualization of TAR-FAS results. We select one sample for each type: real, print, replay, and mask attacks. The zoom in operation in red boxes is for better understandings. 
+
+the-art (SOTA) performance on both the InternVL and QwenVL series models, further validating the effectiveness and robustness of our approach. 
+
+4.4. Visualization 
+
+When different spoof types of samples are presented to TAR-FAS, the model adaptively invokes different tools based on its initial observation. We visualize one example for each spoof type (real, print, replay, and mask attacks) in Figure 5. As shown, TAR-FAS prefers frequency tools for print and replay attacks, structure tools for mask at-tacks, while texture tools provide benefits across all attack types. Moreover, TAR-FAS can reconsider and overturn its initial incorrect predictions based on the tool-augmented investigation, leading to more accurate final decisions. These results demonstrate that integrating visual tools guide MLLM to perceive subtle spoof cues, thus enhances the generalization and interpretability. 
+
+## 5. Conclusion 
+
+In this work, we proposed TAR-FAS, a novel framework that reformulates the FAS task as a CoT-VT paradigm by integrating visual tool into MLLMs. To support tool-augmented learning, we constructed ToolFAS-16K, a large-scale dataset containing multi-turn tool-use trajectories generated through a dedicated annotation pipeline. We further introduced a tool-aware FAS training strategy including a DT-GRPO which enable the model to automatically learn efficient tool-use. Extensive experiments verify the effectiveness of TAR-FAS, achieving SOTA performance across multiple benchmarks. We believe that continued optimization and the development of more powerful visual tools will further advance FAS toward higher levels of generalization and interpretability. References 
+
+[1] Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang, et al. Qwen2. 5-vl technical report. arXiv preprint arXiv:2502.13923 , 2025. 3, 7, 1 [2] Zinelabidine Boulkenafet, Jukka Komulainen, and Abdenour Hadid. Face spoofing detection using colour texture analysis. 
+
+IEEE Transactions on Information Forensics and Security ,11(8):1818–1830, 2016. 2, 3 [3] Zinelabinde Boulkenafet, Jukka Komulainen, Lei Li, Xiaoyi Feng, and Abdenour Hadid. Oulu-npu: A mobile face presentation attack database with real-world variations. In 
+
+2017 12th IEEE international conference on automatic face & gesture recognition (FG 2017) , pages 612–618. IEEE, 2017. 1, 6, 3 [4] Rizhao Cai, Zhi Li, Renjie Wan, Haoliang Li, Yongjian Hu, and Alex C Kot. Learning meta pattern for face anti-spoofing. IEEE Transactions on Information Forensics and Security , 17:1201–1213, 2022. 2 [5] Rizhao Cai, Cecelia Soh, Zitong Yu, Haoliang Li, Wen-han Yang, and Alex C Kot. Towards data-centric face anti-spoofing: Improving cross-domain generalization via physics-based data synthesis. International Journal of Computer Vision , 133(4):1689–1710, 2025. 1, 2 [6] Junyi Cao and Chao Ma. Towards generalized face anti-spoofing from a frequency shortcut view. In 2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , pages 1005–1015. IEEE, 2025. 2, 3 [7] Allison Chen, Ilia Sucholutsky, Olga Russakovsky, and Thomas L Griffiths. Analyzing the roles of language and vision in learning from limited data. arXiv preprint arXiv:2403.19669 , 2024. 2 [8] Zhihong Chen, Taiping Yao, Kekai Sheng, Shouhong Ding, Ying Tai, Jilin Li, Feiyue Huang, and Xinyu Jin. General-izable representation learning for mixture domain face anti-spoofing. In Proceedings of the AAAI conference on artificial intelligence , pages 1132–1139, 2021. 2 [9] Ivana Chingovska, Andr´ e Anjos, and S´ ebastien Marcel. On the effectiveness of local binary patterns in face anti-spoofing. In 2012 BIOSIG-proceedings of the international conference of biometrics special interest group (BIOSIG) ,pages 1–7. IEEE, 2012. 6, 3 [10] Arijeet Choudhury and Ratnakar Dash. Wavelet based convolutional neural networks for face anti-spoofing. In In-ternational Conference on Pattern Recognition and Machine Intelligence , pages 401–412. Springer, 2021. 3 [11] Tiago de Freitas Pereira, Andr´ e Anjos, Jos´ e Mario De Mar-tino, and S´ ebastien Marcel. Lbp- top based countermeasure against face spoofing attacks. In Asian conference on computer vision , pages 121–132. Springer, 2012. 2, 3 [12] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An image is worth 16x16 words: Transformers for image recognition at scale. arXiv preprint arXiv:2010.11929 , 2020. 7 [13] Anjith George, Zohreh Mostaani, David Geissenbuhler, Olegs Nikisins, Andr´ e Anjos, and S´ ebastien Marcel. Bio-metric face presentation attack detection with multi-channel convolutional neural network. IEEE transactions on infor-mation forensics and security , 15:42–55, 2019. 6 [14] Jiabao Guo, Huan Liu, Yizhi Luo, Xueli Hu, Hang Zou, Yuan Zhang, Hui Liu, and Bo Zhao. Style-conditional prompt token learning for generalizable face anti-spoofing. In Proceedings of the 32nd ACM International Conference on Multimedia , pages 994–1003, 2024. 2 [15] Xiao Guo, Yaojie Liu, Anil Jain, and Xiaoming Liu. Multi-domain learning for updating face anti-spoofing models. In 
+
+European conference on computer vision , pages 230–249. Springer, 2022. 6 [16] Dan He, Xiping He, Hailan Xiang, Rui Yuan, and Yuanyuan Niu. Wavelet transform-based two-stream convolutional networks for face anti-spoofing. Journal of Electronic Imaging , 32(1):013015–013015, 2023. 3 [17] Hsin-Ping Huang, Deqing Sun, Yaojie Liu, Wen-Sheng Chu, Taihong Xiao, Jinwei Yuan, Hartwig Adam, and Ming-Hsuan Yang. Adaptive transformers for robust few-shot cross-domain face anti-spoofing. In European conference on computer vision , pages 37–54. Springer, 2022. 2, 7 [18] Wei Huang, Xingyu Zheng, Xudong Ma, Haotong Qin, Chengtao Lv, Hong Chen, Jie Luo, Xiaojuan Qi, Xianglong Liu, and Michele Magno. An empirical study of llama3 quantization: From llms to mllms. Visual Intelligence , 2(1): 36, 2024. 2 [19] Anubhooti Jain, Mayank Vatsa, and Richa Singh. Words over pixels? rethinking vision in multimodal large language models. In Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence, IJCAI-25 , pages 10481–10489. International Joint Conferences on Artificial Intelligence Organization, 2025. Survey Track. 2 [20] Yunpei Jia, Jie Zhang, Shiguang Shan, and Xilin Chen. Single-side domain generalization for face anti-spoofing. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8484–8493, 2020. 2 [21] Yao Jiang, Xinyu Yan, Ge-Peng Ji, Keren Fu, Meijun Sun, Huan Xiong, Deng-Ping Fan, and Fahad Shahbaz Khan. Effectiveness assessment of recent large vision-language models. Visual Intelligence , 2(1):17, 2024. 2 [22] Dhiman Karmakar, Rajib Sarkar, and Madhura Datta. Spoofed replay attack detection by multidimensional fourier transform on facial micro-expression regions. Signal Pro-cessing: Image Communication , 93:116164, 2021. 2, 3 [23] Jukka Komulainen, Abdenour Hadid, and Matti Pietik¨ ainen. Context based face anti-spoofing. In 2013 IEEE sixth international conference on biometrics: theory, applications and systems (BTAS) , pages 1–8. IEEE, 2013. 2 [24] Binh M Le and Simon S Woo. Gradient alignment for cross-domain face anti-spoofing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 188–199, 2024. 1, 2, 3 [25] Haoliang Li, Wen Li, Hong Cao, Shiqi Wang, Feiyue Huang, and Alex C Kot. Unsupervised domain adaptation for face anti-spoofing. IEEE Transactions on Information Forensics and Security , 13(7):1794–1809, 2018. 6 [26] Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. Blip-2: Bootstrapping language-image pre-training with frozen image encoders and large language models. In 
+
+International conference on machine learning , pages 19730– 19742. PMLR, 2023. 3 [27] Chen-Hao Liao, Wen-Cheng Chen, Hsuan-Tung Liu, Yi-Ren Yeh, Min-Chun Hu, and Chu-Song Chen. Domain invariant vision transformer learning for face anti-spoofing. In Proceedings of the IEEE/CVF winter conference on applications of computer vision , pages 6098–6107, 2023. 3 [28] Ajian Liu. Ca-moeit: Generalizable face anti-spoofing via dual cross-attention and semi-fixed mixture-of-expert. 
+
+International Journal of Computer Vision , 132(11):5439– 5452, 2024. 1, 2 [29] Ajian Liu, Chenxu Zhao, Zitong Yu, Jun Wan, Anyang Su, Xing Liu, Zichang Tan, Sergio Escalera, Junliang Xing, Yanyan Liang, et al. Contrastive context-aware learning for 3d high-fidelity mask face presentation attack detection. 
+
+IEEE transactions on information forensics and security , 17: 2497–2507, 2022. 1, 6 [30] Ajian Liu, Shuai Xue, Jianwen Gan, Jun Wan, Yanyan Liang, Jiankang Deng, Sergio Escalera, and Zhen Lei. Cfpl-fas: Class free prompt learning for generalizable face anti-spoofing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 222–232, 2024. 2, 3, 4 [31] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. Advances in neural information processing systems , 36:34892–34916, 2023. 1, 2, 3 [32] Shice Liu, Shitao Lu, Hongyi Xu, Jing Yang, Shouhong Ding, and Lizhuang Ma. Feature generation and hypothesis verification for reliable face anti-spoofing. In Proceedings of the AAAI Conference on Artificial Intelligence , pages 1782– 1791, 2022. 3 [33] Si-Qi Liu, Xiangyuan Lan, and Pong C Yuen. Remote photoplethysmography correspondence feature for 3d mask face presentation attack detection. In Proceedings of the European Conference on Computer Vision (ECCV) , pages 558–573, 2018. 6 [34] Yaojie Liu, Amin Jourabloo, and Xiaoming Liu. Learning deep models for face anti-spoofing: Binary or auxiliary supervision. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 389–398, 2018. 1, 2, 6 [35] Yuchen Liu, Yabo Chen, Wenrui Dai, Mengran Gou, Chun-Ting Huang, and Hongkai Xiong. Source-free domain adaptation with contrastive domain alignment and self-supervised exploration for face anti-spoofing. In European Conference on Computer Vision , pages 511–528. Springer, 2022. 1, 2 [36] Yuchen Liu, Yabo Chen, Mengran Gou, Chun-Ting Huang, Yaoming Wang, Wenrui Dai, and Hongkai Xiong. Towards unsupervised domain generalization for face anti-spoofing. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 20654–20664, 2023. 3 [37] Pan Lu, Baolin Peng, Hao Cheng, Michel Galley, Kai-Wei Chang, Ying Nian Wu, Song-Chun Zhu, and Jianfeng Gao. Chameleon: Plug-and-play compositional reasoning with large language models. Advances in Neural Information Processing Systems , 36:43447–43478, 2023. 3 [38] Sijie Niu, Xiaofeng Qu, Junting Chen, Xizhan Gao, Tingwei Wang, and Jiwen Dong. Mfnet-le: Multilevel fusion network with laplacian embedding for face presentation attacks detection. IET Image Processing , 15(14):3608–3622, 2021. 3 [39] Xiaofeng Qu, Jiwen Dong, and Sijie Niu. shallowcnn-le: A shallow cnn with laplacian embedding for face anti-spoofing. In 2019 14th IEEE International Conference on Automatic Face & Gesture Recognition (FG 2019) , pages 1–8. IEEE, 2019. 3 [40] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervi-sion. In International conference on machine learning , pages 8748–8763. PmLR, 2021. 2, 3 [41] Rui Shao, Xiangyuan Lan, Jiawei Li, and Pong C Yuen. Multi-adversarial discriminative deep domain generalization for face presentation attack detection. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10023–10031, 2019. 2 [42] Koushik Srivatsan, Muzammal Naseer, and Karthik Nan-dakumar. Flip: Cross-domain face anti-spoofing with language guidance. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 19685–19696, 2023. 2, 3, 7, 4 [43] Zhaochen Su, Peng Xia, Hangyu Guo, Zhenhua Liu, Yan Ma, Xiaoye Qu, Jiaqi Liu, Yanshu Li, Kaide Zeng, Zhengyuan Yang, et al. Thinking with images for multimodal reasoning: Foundations, methods, and future frontiers. arXiv preprint arXiv:2506.23918 , 2025. 3 [44] Yiyou Sun, Yaojie Liu, Xiaoming Liu, Yixuan Li, and Wen-Sheng Chu. Rethinking domain generalization for face anti-spoofing: Separability and alignment. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 24563–24574, 2023. 3 [45] Chien-Yi Wang, Yu-Ding Lu, Shang-Ta Yang, and Shang-Hong Lai. Patchnet: A simple face anti-spoofing framework via fine-grained patch recognition. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 20281–20290, 2022. 2, 3 [46] Jingjing Wang, Jingyi Zhang, Ying Bian, Youyi Cai, Chun-mao Wang, and Shiliang Pu. Self-domain adaptation for face anti-spoofing. In Proceedings of the AAAI conference on artificial intelligence , pages 2746–2754, 2021. 1, 2 [47] Keyao Wang, Guosheng Zhang, Haixiao Yue, Yanyan Liang, Mouxiao Huang, Gang Zhang, Junyu Han, Errui Ding, and Jingdong Wang. Csdg-fas: Closed-space domain generalization for face anti-spoofing. International Journal of Computer Vision , 132(11):4866–4879, 2024. 2 [48] Xudong Wang, Ke-Yue Zhang, Taiping Yao, Qianyu Zhou, Shouhong Ding, Pingyang Dai, and Rongrong Ji. Tf-fas: twofold-element fine-grained semantic guidance for generalizable face anti-spoofing. In European Conference on Computer Vision , pages 148–168. Springer, 2024. 2 [49] Zhuo Wang, Zezheng Wang, Zitong Yu, Weihong Deng, Jiahong Li, Tingting Gao, and Zhongyuan Wang. Domain generalization via shuffled style assembly for face anti-spoofing. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 4123–4133, 2022. 3 [50] Di Wen, Hu Han, and Anil K Jain. Face spoof detection with image distortion analysis. IEEE Transactions on Information Forensics and Security , 10(4):746–761, 2015. 6, 3 [51] Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik R Narasimhan, and Yuan Cao. React: Synergizing reasoning and acting in language models. In The eleventh international conference on learning representations , 2022. 3[52] Zitong Yu, Jun Wan, Yunxiao Qin, Xiaobai Li, Stan Z Li, and Guoying Zhao. Nas-fas: Static-dynamic central difference network search for face anti-spoofing. IEEE transactions on pattern analysis and machine intelligence , 43(9):3005–3023, 2020. 6 [53] Zitong Yu, Chenxu Zhao, Zezheng Wang, Yunxiao Qin, Zhuo Su, Xiaobai Li, Feng Zhou, and Guoying Zhao. Searching central difference convolutional networks for face anti-spoofing. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 5295– 5305, 2020. 1 [54] Zitong Yu, Chenxu Zhao, Zezheng Wang, Yunxiao Qin, Zhuo Su, Xiaobai Li, Feng Zhou, and Guoying Zhao. Searching central difference convolutional networks for face anti-spoofing. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 5295– 5305, 2020. 2 [55] Haixiao Yue, Keyao Wang, Guosheng Zhang, Haocheng Feng, Junyu Han, Errui Ding, and Jingdong Wang. Cycli-cally disentangled feature translation for face anti-spoofing. In Proceedings of the AAAI conference on artificial intelli-gence , pages 3358–3366, 2023. 1, 2 [56] Guosheng Zhang, Keyao Wang, Haixiao Yue, Ajian Liu, Gang Zhang, Kun Yao, Errui Ding, and Jingdong Wang. Interpretable face anti-spoofing: Enhancing generalization with multimodal large language models. arXiv preprint arXiv:2501.01720 , 2025. 2, 3, 4, 6, 7 [57] Ke-Yue Zhang, Taiping Yao, Jian Zhang, Ying Tai, Shouhong Ding, Jilin Li, Feiyue Huang, Haichuan Song, and Lizhuang Ma. Face anti-spoofing via disentangled repre-sentation learning. In European Conference on Computer Vision , pages 641–657. Springer, 2020. 2 [58] Ke-Yue Zhang, Taiping Yao, Jian Zhang, Shice Liu, Bangjie Yin, Shouhong Ding, and Jilin Li. Structure destruction and content combination for face anti-spoofing. In 2021 IEEE International Joint Conference on Biometrics (IJCB) , pages 1–6. IEEE, 2021. 2 [59] Yuanhan Zhang, ZhenFei Yin, Yidong Li, Guojun Yin, Junjie Yan, Jing Shao, and Ziwei Liu. Celeba-spoof: Large-scale face anti-spoofing dataset with rich annotations. In Computer Vision–ECCV 2020: 16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part XII 16 , pages 70–85. Springer, 2020. 3, 6, 1 [60] Zhiwei Zhang, Junjie Yan, Sifei Liu, Zhen Lei, Dong Yi, and Stan Z Li. A face antispoofing database with diverse attacks. In 2012 5th IAPR international conference on Biometrics (ICB) , pages 26–31. IEEE, 2012. 1, 6, 3 [61] Ziwei Zheng, Michael Yang, Jack Hong, Chenxiao Zhao, Guohai Xu, Le Yang, Chao Shen, and Xing Yu. Deepeyes: Incentivizing” thinking with images” via reinforcement learning. arXiv preprint arXiv:2505.14362 , 2025. 3, 4 [62] Qianyu Zhou, Ke-Yue Zhang, Taiping Yao, Ran Yi, Kekai Sheng, Shouhong Ding, and Lizhuang Ma. Generative domain adaptation for face anti-spoofing. In European conference on computer vision , pages 335–356. Springer, 2022. 1, 2, 3 [63] Qianyu Zhou, Ke-Yue Zhang, Taiping Yao, Xuequan Lu, Ran Yi, Shouhong Ding, and Lizhuang Ma. Instance-aware domain generalization for face anti-spoofing. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 20453–20463, 2023. 1, 2, 3 [64] Qianyu Zhou, Ke-Yue Zhang, Taiping Yao, Xuequan Lu, Shouhong Ding, and Lizhuang Ma. Test-time domain generalization for face anti-spoofing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 175–187, 2024. 1, 2, 3 [65] Jinguo Zhu, Weiyun Wang, Zhe Chen, Zhaoyang Liu, Shenglong Ye, Lixin Gu, Hao Tian, Yuchen Duan, Weijie Su, Jie Shao, et al. Internvl3: Exploring advanced training and test-time recipes for open-source multimodal models. arXiv preprint arXiv:2504.10479 , 2025. 3, 6 From Intuition to Investigation: A Tool-Augmented Reasoning MLLM Framework for Generalizable Face Anti-Spoofing 
+
+# Supplementary Material 
+
+## A. Data Annotation Pipeline 
+
+A.1. Data Selection 
+
+In the ToolFAS-16K dataset, we cover the ten spoof types in CelebA-Spoof [59]. The sample of each spoof type is shown in Figure S6. 
+
+A.2. Annotation System Prompt Design 
+
+To ensure consistent reasoning behavior during annotation, we design a structured system prompt S that explicitly defines the model’s role, objectives, and interaction rules. Formally, the system prompt is composed of five compo-nents: 
+
+S = {P role , Pprinciple , Pworkflow , Ptools , Pconclusion },
+
+where Prole specifies the model’s Role & Mission , Pprinciple 
+
+defines the Core Principles for reasoning, Pworkflow encodes the Behavioral Rules for multi-turn interactions, Ptools enu-merates the Available Tools , and Pconclusion provides instruc-tions for generating the Final Conclusion . This structured design ensures that the annotator model follows a stable reasoning pattern alternating between internal thought and tool invocation. The complete system prompt is shown in Figure S8. 
+
+A.3. Expert Model 
+
+In our experiments, these expert models achieve around 90% accuracy on the CelebA-Spoof domain without using RGB inputs, and each shows distinctive sensitivity to cer-tain spoof types, validating their reliability. 
+
+Architecture. We use a simple CNN architecture to train expert model {E 1, · · · , EK } for each tool with only the tool result as input and the binary classification as output. The detailed architecture is illustrated in Figure S9. 
+
+Implementation. We use the CelebA-Spoof dataset [59] to train the expert model for each tool. All images are aligned, cropped, and resized to 224 × 224 . We randomly select 5,000 identities from CelebA-Spoof and split them into 4,000 for training and 1,000 for testing. All samples belonging to each identity are included. The models are trained for 10 epochs using the Adam optimizer with a learning rate of 0.001. 
+
+Accuracy. We evaluate each expert model using a fixed threshold of 0.5, and the results are presented in Figure S7. As shown, the average accuracy of all tools exceeds 80%, demonstrating that even when only tool results are used as Live        
+
+> 3D Face Region Upper body
+> Mask
+> Pad Phone A4 Photo Poster
+> Print
+> PC
+> Replay
+
+Figure S6. The detailed spoof types in ToolFAS-16K. Real        
+
+> Photo
+> Poster
+> A4 Face
+> Mask
+> Upper
+> Body
+> Mask Region
+> Mask
+> PC
+> Pad
+> Phone
+> 3D Mask
+> 0.7
+> 0.8
+> 0.9
+> 1
+> LBPTool
+> WaveletTransformTool
+> EdgeDetectionTool
+> FFTTool
+> HOGTool
+> Expert Model Accuracy
+> Real Photo
+> Poster A4
+> Face Mask Upper Body Mask
+> Region Mask PC
+> Pad Phone
+> 3D Mask
+
+Figure S7. The detailed accuracy of expert model for each tool. 
+
+input, they possess considerable discriminative and gener-alization capabilities. Moreover, different visual tools show varying effectiveness across spoof types, highlighting the necessity of employing diverse visual tools. 
+
+## B. Tool-Aware FAS Training Pipeline 
+
+B.1. Training Prompt Design 
+
+System Prompt. The system prompt contains Role & Mission description, tool description in XML format. The 
+
+Role & Mission description is shown as follows: 
+
+System Prompt 
+
+## Role & Mission You are a face forensics expert. Your mission is to classify an image as either ‘Real’ or ‘Spoof’ by analyzing evidence strictly within the **facial region**, focusing only on physical presentation attack. 
+
+While, the tool description follows Json Schema and adopt the Hermes template used in Qwen2.5-VL [1]. System Prompt 
+
+## Role & Mission You are a face forensics expert. Your mission is to classify an image as either ’real’ or ’spoof’ by analyzing evidence strictly within the **facial region**, focusing **only on physical presentation attacks** (e.g., printed photos, screen displays). You will be given a hint early in the conversation. Do not mention the hint when making your decision. Your final classification must match the hint, and be supported by image evidence and tool-based analysis. ## Core Principle Concentrate solely on **physical attack artifacts**. These include: - **Semantic clues**: unnatural flatness, rigid expressions, lack of 3D structure, unnatural reflections. - **Pixel-level clues**: print texture, Moir´ e patterns, screen glare, paper/screen surface noise. Since input images are cropped and aligned, **do not consider black borders and compression artifacts as spoof clues**. ## Workflow & Behavioral Rules 1. Begin with a brief visual scan of the **facial region**. **Ignore black borders and all context outside the face.** 2. If needed, call **ONE tool at a time** to test a specific hypothesis, either to look for signs of physical attack, or to confirm their absence. - Each tool request must include a clear expectation (what you’re testing for). 3. When you receive tool results, you may receive an **Expert Judgment** on the result. - You may consider the expert’s interpretation as a reference, but **must perform your own independent analysis**. - Your reasoning should not blindly follow the expert; only adopt it when it aligns with your observations. 4. When you are confident, provide your conclusion. ## Available Tools - **ZoomInTool**: Inspect local details for physical (print/screen) or digital (blending) artifacts. - **FFTTool (Fast Fourier Transform):** Visualizes the image’s frequency domain. Used to detect periodic patterns like screen Moir´ e effects or subtle artifacts from digital generation. - **EdgeDetectionTool**: Find inconsistent edges from cutouts or digital blending. - **LBPTool**: Analyze skin texture for unnatural or synthetic patterns. - **WaveletTransformTool**: Find subtle digital tampering or noise mismatches via multi-scale analysis. - **HOGTool**: Check facial structure gradients, which are often disrupted in physical attacks. ## Final Conclusion Your conclusion must be ‘Real’ or ‘Spoof’. 
+
+> Figure S8. Complete System prompt. 3x3 Conv2D
+> MaxPool
+> ReLU
+> 3x3 Conv2D
+> MaxPool
+> ReLU
+> 3x3 Conv2D
+> MaxPool
+> ReLU
+
+ℝ𝟏𝟏𝟐 ×𝟏𝟏𝟐 ×𝟏𝟔 ℝ𝟓𝟔 ×𝟓𝟔 ×𝟑𝟐 ℝ𝟐𝟖 ×𝟐𝟖 ×𝟔𝟒 
+
+> Flatten
+> MLP
+
+ℝ𝟐𝟐𝟒 ×𝟐𝟐𝟒 ×𝟑 
+
+Real /Spoof                                                                                                                                             
+
+> Figure S9. The detailed architecture of expert model for each tool. The input of expert model is only tool result (without RGB image). The ‘MaxPool’ perform double downsampling. The ‘MLP’ denotes two linear layer with a ReLU achitation function. Table S5. Comparison with the closest and SOTA FAS methods in leave-one-out protocol on MSU-MFSD (M), CASIA-FASD (C), ReplayAttack (I), and OULU-NPU (O) datasets. Avg. indicates the average performance across four experimental scenarios. The scores presented in bold represent the best performance. Methods O&C&I to M O&M&I to C O&C&M to I I&C&M to O Avg. HTER(%) AUC HTER(%) AUC HTER(%) AUC HTER(%) AUC HTER(%) FGHV [32] 9.17 96.92 12.47 93.47 16.29 90.11 13.58 93.55 12.88 GDA [62] 9.20 98.00 12.20 93.00 10.00 96.00 14.40 92.60 11.45 PatchNet [45] 7.10 98.46 11.33 94.58 13.40 95.67 11.82 95.07 10.91 SSAN [49] 6.67 98.75 10.00 96.67 8.88 96.79 13.72 93.63 9.82 IADG [63] 5.41 98.19 8.70 96.40 10.62 94.50 8.86 97.14 8.40 UDG-FAS [36] 5.95 98.47 9.82 96.76 5.86 98.62 10.97 95.36 8.15 TTDG [64] 4.16 98.48 7.59 98.18 9.62 98.18 10.00 96.15 7.84 SA-FAS [44] 5.95 96.55 8.78 95.37 6.58 97.54 10.00 96.23 7.83 DiVT-M [27] 2.86 99.14 8.67 96.92 3.71 99.29 13.06 94.04 7.08 GAC-FAS [24] 5.00 97.56 8.20 95.16 4.29 98.87 8.60 97.16 6.52 FLIP [42] 4.95 98.11 0.54 99.98 4.25 99.07 2.31 99.63 3.01 CFPL-FAS [30] 1.43 99.28 2.56 99.10 5.43 98.41 2.50 99.42 2.98 I-FAS [56] 0.32 99.88 0.04 99.99 3.22 98.48 1.74 99.66 1.33 TAR-FAS (Ours) 2.86 99.35 0.00 100.00 0.43 99.86 1.91 99.72 1.30
+
+First-Round Query. The first-round query ask the model to classify whether the given image is of a real person. 
+
+First-Round Query 
+
+Is this photo of a real person? (Do not use any tools) 
+
+Tool Guidance and Format Declaration. In the second round, user prompt conatains tool guidance and format declaration. 
+
+Tool Guidance 
+
+Wait, you should re-examine the image and give the final answer (use tools if needed). 
+
+Format Declaration        
+
+> Think first, call tools if needed, then answer. Format strictly as: <think >... </think > < tool call >... </tool call >(if tools needed) <answer >(<Spoof >/<Real >)</answer >
+
+After the second round, the user prompt will contain a tool result image and format declaration. 
+
+B.2. DT-GRPO Format Constrain 
+
+Fast answer format. A classification will be give in the first-turn with a strict format of <CLS >< reason >< /reason >.A wrong format will cause to a penalty of −1.
+
+Reasoning format. The reasoning format for each turn should be <think >< /think > + <tool call >< /tool call > or 
+
+<think >< /think > + <answer >< CLS >< /answer >. Wrong format or invalid tool call will get a format penalty of −1.
+
+## C. Experiments 
+
+To further demonstrate the effectiveness of TAR-FAS, we conduct several additional experiments. We first present quantitative results under the widely used leave-one-out evaluation protocol. We then analyze the behavior of our tool-augmented reasoning model, which is trained under the One-to-Eleven evaluation protocol used in the main paper. Finally, we provide additional reasoning examples across different datasets. 
+
+C.1. ICMO Protocol 
+
+C.1.1. Implementation Details 
+
+To further evaluate the cross-domain performance of TAR-FAS, we conduct experiments on the widely used four leave-one-out settings and compare its performance with the latest state-of-the-art approaches. This protocol includes the REPLAY-ATTACK (I) [9], CASIA-FASD (C) [60], MSU-MFSD (M) [50], and OULU-NPU (O) [3] datasets. In each setting, three datasets are used for training (source domains) and the remaining one for testing (target domain). We apply our proposed tool-aware FAS training strategy using ICMO datasets as source domain in both the FAS knowledge transfer stage and the DT-GRPO training stage. All other training hyperparameters remain the same as those described in the implementation details of the main paper. 
+
+C.1.2. Results 
+
+As shown in Table S5, our method achieves a significant performance advantage over all single-modal methods, out-performing them by a substantial margin. This advan-tage highlights the effectiveness of multimodal learning in enhancing model generalization. Furthermore, our ap-proach also surpasses recent CLIP-based methods, such as FLIP [42] and CFPL-FAS [30], as evidenced by the average HTER reduction to 1.30%, compared to 2.98% and 3.01%, respectively. Compared with the previous MLLM-based method I-FAS [56], our model further improves performance by a small margin, achieving state-of-the-art (SOTA) results. This improvement suggests that incorpo-rating external visual tools enables the model to capture fine-grained visual cues more effectively, thereby enhancing both the robustness and interpretability on FAS task. 
+
+C.2. One-to-Eleven Protocol 
+
+C.2.1. Fast Answer Performance 
+
+Table S6. Performance comparison of fast and reasoning answer. Results HTER(%) AUC Fast Answer 10.54 95.06 Reasoning Answer 7.54 96.67 
+
+To emphasize the effectiveness of tool-augmented reason-ing, we compare the performance of the fast answer and the reasoning answer. As shown in Table S6, the reasoning answer outperforms the fast answer with a margin of 1.61% HTER, demonstrating the effectiveness of incorporating external visual tools. 
+
+C.2.2. Reasoning Accuracy in Training Process 0 50 100 150 200 250 300 
+
+> Step
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Reasoning Accuracy
+> DT-GRPO Training Accuracy Comparison
+> Tool-Aware Training (Ours)
+> RL Only
+
+Figure S10. The reasoning accuracy comparison between our tool-aware training and RL only training during training process. 
+
+We compare our tool-aware FAS training strategy with a RL only training strategy using the same tool-diversity reward. As shown in Figure S10, the reasoning accuracy of our method overpass RL only strategy with a substantial margin. The result demonstrate the necessity of knowledge transfer and tool-call format inject process which layes a solid foundation for DT-GRPO. 
+
+C.2.3. Effectiveness of DT-GRPO 
+
+Table S7. Performance comparison of DT-GRPO and ST-GRPO (Single-Tool GRPO) in DeepEyes [61]. RL Results HTER(%) AUC ST-GRPO [61] 9.98 94.41 DT-GRPO (Ours) 7.54 96.67 
+
+To demonstrate the proposed DT-GRPO, we compare the performance against Single-Tool GRPO (ST-GRPO) used in Deepeyes [61] which enhance multimodal reasoning performance. The reward of ST-GRPO can be formulated as: 
+
+RST -GRP O = Rf mt rsn + Racc rsn + Itool · IRacc rsn >0 , (S15) where Rf mt rsn ∈ {− 1, 0} denotes reasoning format reward, 
+
+Racc rsn = ICLS =label denotes reasoning accuracy reward, 
+
+Itool ∈ { 0, 1} indicates whether tool is called. Notably, only ZoomIn tool are allowed in ST-GRPO. As shown in Table S7, our proposed DT-GRPO out-performs the ST-GRPO with a substantial margin, gaining generalization performance from diverse tool and tool-diversity reward. Thus demonstrate that our DT-GRPO enables the model to autonomously learn efficient and adaptive diverse tool-use. 
+
+C.2.4. Impact of Maximum Tool-Call Time 1 2 3 4
+
+> Maximum tool-call time
+> 7.0
+> 7.5
+> 8.0
+> 8.5
+> 9.0
+> 9.5
+> 10.0
+> HTER (%)
+> Impact of Maximum Tool-Call Time
+> HTER (%)
+> AUC
+> 95.00
+> 95.25
+> 95.50
+> 95.75
+> 96.00
+> 96.25
+> 96.50
+> 96.75
+> 97.00
+> AUC
+
+Figure S11. Impact of maximum tool-call time. Increasing the maximum tool-call time from 1 to 3 improves performance, while setting it to 4 leads to a slight drop due to longer rollouts and higher sample uncertainty. 
+
+We further study the impact of the maximum tool-call limit. During training, this limit is controlled by the maximum number of turns allowed in the rollout pro-cess. The relationship between the tool-call limit and model performance is shown in Figure S11. As illustrated, increasing the limit from 1 to 3 consistently improves performance. However, setting the limit to 4 results in a slight performance drop, likely due to longer rollout and increased sample uncertainty. Therefore, we set the maximum tool-call time to 3 for optimal performance. This experiment further demonstrates the importance of external visual tools in achieving robust FAS performance. 
+
+C.3. Additional Reasoning Samples 
+
+To further exhibit the tool-augmented reasoning process of TAR-FAS, we choose one sample from each of the eleven evaluated datasets. The results are shown in Figure S12-S22. <Spoof> This is a man holding up a picture of himself. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+The image clearly shows a physical object being held up, which strongly 
+
+suggests a paper cutout. I will use ZoomInTool to inspect the edges and front 
+
+surface of the held paper for print texture, paper texture, and potential printing 
+
+artifacts like lines, dots, or a flat, two -dimensional appearance to confirm this 
+
+hypothesis. </think > <tool_call > {name: ZoomInTool } </ tool_call > 
+
+> <think>
+
+The visible hand holding the face provides clear evidence of a physical presentation 
+
+attack. The clear visual evidence is sufficient to make a conclusion. </think>  
+
+> <answer>
+
+<Spoof> </answer> 
+
+> Label
+> <Spoof>
+> Figure S12. Sample of CASIA-MFSD.
+
+<Spoof> This is a man wearing a mask in an office 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+I observe what appears to be a mask or a distorted face on the subject, as 
+
+well as the neck being unnaturally flat. I will use the ZoomInTool on the facial 
+
+area to inspect for signs of flatness, printing texture, or other physical attack 
+
+artifacts. I will focus on the center of the face as evidenced by the facial features 
+
+to get a good initial view. </think > <tool_call > {name: ZoomInTool } </ tool_call > 
+
+> <think>
+
+The LBP result displayed clear patterned texture from a physical surface. Combined with 
+
+the initial visual evidence of a mask -like appearance, there is sufficient information to classify 
+
+this as a spoof. </think>  
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think>
+
+The zoomed view further confirms the unnatural flatness of the facial 
+
+surface and a distinct, distorted nose pattern. I will use LBPTool to analyze the 
+
+skin texture for any unnatural patterns consistent with a printed face mask or a 
+
+3D printed nose, as real skin would typically show natural variations. </think > 
+
+> <tool_call >
+
+{name: LBPTool } </ tool_call >
+
+> Label
+> <Spoof>
+> Figure S13. Sample of CASIA-SURF-3DMask.
+
+<Spoof> This is a man wearing a black shirt looking at the camera. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+I observe what appears to be a mask or a cover over the lower part of the 
+
+face, particularly around the nose and mouth. I will zoom into this area to check 
+
+for signs of a physical cutout, flatness, printing texture, or inconsistent lighting. I 
+
+will focus on the center of the face as indicated by the 'mask' area. </think > 
+
+> <tool_call >
+
+{name: ZoomInTool } </ tool_call > 
+
+> <think>
+
+The FFT result did not show strong spoof evidence . But the combination of visual 
+
+evidence (the flat, unnaturally shaped mask covering the lower face) and strong periodic 
+
+patterns in theLBPTool result reinforce the presence of a spoof. </think>  
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think>
+
+The zoomed view further confirms the presence of a distinct, flat surface 
+
+covering a significant portion of the face, consistent with a physical mask. I will 
+
+use LBPTool to analyze the texture of this surface for regular patterns or printing 
+
+artifacts. </think > <tool_call > {name: LBPTool } </ tool_call > 
+
+> Label
+> <Spoof>
+> <think>
+
+The LBP result provides strong evidence of a spoof, showing specific and 
+
+unnatural patterns indicative of a printed surface or screen display. To further 
+
+confirm the presence of a physical attack, I will now use FFTTool to detect 
+
+periodic patterns like Moiré, which are characteristic of flat, two -dimensional 
+
+presentation attacks . </ think > <tool_call > {name: FFTTool } </ tool_call >Figure S14. Sample of HKBU-MARs-V1+. <Spoof> This is a man with glasses and a striped shirt is shown on the screen. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+I will use FFTTool to check for any periodic patterns, such as Moiré 
+
+patterns, which are indicative of a screen display attack. </think > 
+
+> <tool_call >
+
+{name: FFTTool } </ tool_call > 
+
+> <think>
+
+The combination of strong periodic patterns, unnatural texture in the skin provides 
+
+definitive evidence of a spoof. I have sufficient evidence to classify this as spoof. </think>  
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think>
+
+The FFT result clearly shows periodic patterns, which are strong indicators 
+
+of a screen display attack. To further investigate potential subtle textural 
+
+patterns indicative of a physical spoof, I will apply LBPTool to analyze skin 
+
+texture . </think > <tool_call > {name: LBPTool } </ tool_call >
+
+> Label
+> <Spoof>
+
+Figure S15. Sample of MSU-MFSD. <Spoof> This is a man wearing a mask and a yellow hat. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+I observe what appears to be a reflective surface or glare across the lower 
+
+part of the face, particularly over the nose and mouth. This might indicate a 
+
+mask with a rigid edge, suggesting a physical artifact rather than natural skin. I 
+
+will use ZoomInTool to inspect this area more closely, focusing on the apparent 
+
+reflection and any sharp, unnatural edges, which could be indicative of a printed 
+
+photo or a screen display. </think > <tool_call > {name: ZoomInTool } </ tool_call > 
+
+> <think>
+
+The zoomed -in inspection revealed apparent reflections around the nose and mouth 
+
+are a. The LBP result showed chaotic, inconsistent textures lacking the natural micro -variations 
+
+of real skin. The HOG analysis displayed distorted gradients, indicative of a mask rather than a 
+
+3D face. These combined artifacts strongly suggest a physical presentation attack . </ think>  
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think>
+
+The ZoomInTool result shows what appears to be a unnatural reflectio n
+
+around the nose and mouth area, consistent with a physical object placed over 
+
+the mouth. I will use LBPTool to analyze the texture for any unnatural patterns 
+
+that suggest a mask surface. </think > <tool_call > {name: LBPTool } </ tool_call > 
+
+> Label
+> <Spoof>
+> <think>
+
+The LBP result further supports the presence of a rigid, patterned surface, 
+
+as seen in the strong pixelation and unnatural texture. To confirm the structural 
+
+evidence of a physical spoof, I will now use HOGTool to analyze the overall facial 
+
+structure for any inconsistencies that might indicate a mask. </think > 
+
+> <tool_call >
+
+{name: HOGTool } </ tool_call >Figure S16. Sample of HiFiMask. <Spoof> This is a woman with a mask on her face. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+The edge detection results strongly suggest a flat, print -like surface due to the sharp, 
+
+well -defined face outline and overall rigidity. Combined with the mottled texture pattern from 
+
+LBP, I have sufficient evidence to make a conclusion. </think>  
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think >
+
+The image clearly shows what appears to be a mask or piece of paper 
+
+covering a significant portion of the face. I will now use LBPTool to analyze the 
+
+skin texture for potential printing patterns or unnatural uniformity, which would 
+
+be indicative of a mask. </think > <tool_call > {name: LBPTool } </ tool_call > 
+
+> Label
+> <Spoof>
+> <think>
+
+The LBP result show clear unnatural patterns indicative of a physical spoof 
+
+attack. I will confirm this by looking for sharp edges by edge detection. </think > 
+
+> <tool_call >
+
+{name: EdgeDetectionTool } </ tool_call >Figure S17. Sample of Rose-Youtu. <Real> This is a man in a black jacket is taking a picture of himself. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+I will use FFTTool to check for any periodic patterns, such as Moiré 
+
+patterns, which would indicate a screen -based presentation attack. </think > 
+
+> <tool_call >
+
+{name: FFTTool } </ tool_call > 
+
+> <think>
+
+The FFT, Wavelet and LBP results, strongly indicate an initial spoof, likely a displayed 
+
+screen. No evidence to suggest a living subject. </think>  
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think>
+
+The FFT result clearly shows some irregular bright spots, reinforcing the 
+
+hypothesis that the image is spoofed due to being displayed on a screen. I will 
+
+use the WaveletTransformTool to examine for artifacts like image sharpening or 
+
+blurring mismatches across different scales that can be indicative of a spoof.   
+
+> </think ><tool_call >
+
+{name: WaveletTransformTool } </ tool_call > 
+
+> Label
+> <Spoof>
+> <think>
+
+The Wavelet Transform further shows discontinuities that are common to 
+
+image displays and printed photos. I will now directly examine the skin for signs 
+
+of unnatural texture using LBPTool . </think > <tool_call > {name: LBPTool } </ tool_call >
+
+> Figure S18. Sample of OULU-NPU.
+
+<Spoof> This is a man in a blue shirt is visible in the paper. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+I will use the FFTTool to check for periodic patterns in the image, which 
+
+could indicate screen display or print artifacts. </think > 
+
+> <tool_call >
+
+{name: FFTTool } </ tool_call > 
+
+> <think>
+
+The FFT and Wavelet results indicates unnatural frequency patterns while the LBP results 
+
+depict obvious texture irregularities. I can confidently classify this as spoof. </ think>  
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think>
+
+The FFT result clearly shows strong regular patterns, strongly suggesting a 
+
+spoof. I will use LBPTool to analyze the texture for patterns that might indicate a 
+
+spoof, as physical attacks often result in altered or artificial texture. </think > 
+
+> <tool_call >
+
+{name: LBPTool } </ tool_call > 
+
+> Label
+> <Spoof>
+> <think>
+
+The LBP result strongly suggests a spoof due to its highly patterned and 
+
+non -natural texture. I will use WaveletTransformTool to look for irregular 
+
+patterns characteristic of a printed photo. </think > 
+
+> <tool_call >
+
+{name: WaveletTransformTool } </ tool_call >Figure S19. Sample of REPLAY-ATTACK. <Spoof> This is a picture of a man on a computer screen. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+I will examine the skin texture for any signs of smoothness or lack of 
+
+natural variations that might indicate a physical spoof, like a printed photo or a 
+
+screen display. To do this, LBPTool will be used to analyze the image's texture 
+
+patterns . </ think > <tool_call > {name: LBPTool } </ tool_call > 
+
+> <think>
+
+The FFT result clearly highlights a regular grid pattern, indicative of a spoof from a digital 
+
+display screen. This evidence is sufficient to conclude the photo is a spoof. </think>  
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think>
+
+The LBP result reveals strong spoof artifacts, as it displayed grid -like skin 
+
+textures. To further check physical attack patterns like moiré patterns from print 
+
+or screen, I will apply FFTTool .</think > <tool_call > {name: FFTTool } </ tool_call >
+
+> Label
+> <Spoof>
+> Figure S20. Sample of SIW.
+
+<Spoof> This is a man with a fake face on his face. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+I observe an unnatural, mottled texture and obvious distortions on the 
+
+facial features, particularly the chin and nose, which strongly suggest a physical 
+
+mask or overlay. I will use ZoomInTool to inspect the chin areas more closely for 
+
+a cutout or 3D mask. </think > <tool_call > {name: ZoomInTool } </ tool_call > 
+
+> <think>
+
+The edge detection result show complex boundaries indicating a 3D mask. Combined 
+
+with the HOG result and the visual inspection, I am confident in my conclusion. </think>  
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think>
+
+The unnatural texture and flatness are clearly signs of a physical spoof. I 
+
+will use HOGTool to analyze their gradients, as mismatches can indicate an 
+
+overlay or cutout. </think > <tool_call > {name: HOGTool } </ tool_call > 
+
+> Label
+> <Spoof>
+> <think>
+
+The HOG analysis showed distorted, less -defined gradients around the 
+
+chin. To confirm the presence of a 3D mask, I will use EdgeDetection to find 
+
+visible edges and a flat appearance. </think > <tool_call > {name: FFTTool } </ tool_call >Figure S21. Sample of SIW-M-V2. <Spoof> This is a man with a mask on his face in a green screen. 
+
+Query: Is this photo of a real person?  
+
+> <think>
+
+I observe an unnatural flatness and what appears to be a distinct mask 
+
+boundary around the face. I will use ZoomInTool to inspect the central facial 
+
+area, particularly around the eye region, looking for signs of flatness that would 
+
+indicate a physical mask . </ think > <tool_call > {name: ZoomInTool } </ tool_call > 
+
+> <think>
+
+The combination of flatness, mask -like appearance and LBP patterns provides sufficient 
+
+evidence to conclude this is a spoof. No further tools are needed. </think>  
+
+> <answer>
+
+<Spoof> </answer>  
+
+> <think>
+
+The unnatural flatness, eye appearance, and overall rigidity strongly 
+
+suggest a 3D mask. I will use LBPTool to analyze the skin texture for patterns 
+
+consistent or regular pixelation . </ think > <tool_call > {name: LBPTool } </ tool_call >
