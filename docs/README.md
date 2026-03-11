@@ -6,73 +6,73 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-03-10
-- 运行时间：2026-03-10 19:41:16 UTC
+- 最新运行日期：2026-03-11
+- 运行时间：2026-03-11 19:41:31 UTC
 - 运行状态：成功
 - 本次总论文数：17
 - 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-1) 2026年3月10日，共精读6篇、速读11篇论文，聚焦于多模态模型安全与图像处理技术。  
-2) 最值得关注的是对抗样本问题与图像隐私保护，两篇高分论文分别探讨了模型劫持和隐私增强方法。  
-3) 建议对图像安全和隐私保护感兴趣的读者优先阅读精读列表中的两篇高分论文。
-- 详情：[/202603/10/README](/202603/10/README)
+1) 2026年3月11日，共精读6篇、速读11篇论文，涵盖图像编辑、隐写术与视觉-运动策略等方向。  
+2) 最值得关注的是隐私保护图像编辑和对抗攻击方法在多模态大语言模型中的应用。  
+3) 建议对图像处理和AI安全感兴趣的读者优先阅读精读论文，以深入了解前沿技术。
+- 详情：[/202603/11/README](/202603/11/README)
 
 ### 精读区论文标签
-1. [Image-based Prompt Injection: Hijacking Multimodal LLMs through Visually Embedded Adversarial Instructions](/202603/10/2603.03637v1-image-based-prompt-injection-hijacking-multimodal-llms-through-visually-embedded-adversarial-instructions)  
+1. [PRIVATEEDIT: A Privacy-Preserving Pipeline for Face-Centric Generative Image Editing](/202603/11/2603.03412v1-privateedit-a-privacy-preserving-pipeline-for-face-centric-generative-image-editing)  
    标签：评分：9.0/10、query:image-adversarial
+   evidence：与生成式图像对抗扰动相关
+2. [Robust Provably Secure Image Steganography via Latent Iterative Optimization](/202603/11/2603.09348v1-robust-provably-secure-image-steganography-via-latent-iterative-optimization)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：基于对抗扰动的图像鲁棒性提升方法
+3. [Conditioned Activation Transport for T2I Safety Steering](/202603/11/2603.03163v1-conditioned-activation-transport-for-t2i-safety-steering)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+4. [Understanding and Mitigating Dataset Corruption in LLM Steering](/202603/11/2603.03206v1-understanding-and-mitigating-dataset-corruption-in-llm-steering)  
+   标签：评分：8.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-2. [Concept-Guided Fine-Tuning: Steering ViTs away from Spurious Correlations to Improve Robustness](/202603/10/2603.08309v1-concept-guided-fine-tuning-steering-vits-away-from-spurious-correlations-to-improve-robustness)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：提升模型鲁棒性
-3. [All Vehicles Can Lie: Efficient Adversarial Defense in Fully Untrusted-Vehicle Collaborative Perception via Pseudo-Random Bayesian Inference](/202603/10/2603.08498v1-all-vehicles-can-lie-efficient-adversarial-defense-in-fully-untrusted-vehicle-collaborative-perception-via-pseudo-random-bayesian-inference)  
-   标签：评分：9.0/10、query:image-adversarial
+5. [ARMOR: Robust and Efficient CNN-Based SAR ATR through Model-Hardware Co-Design](/202603/11/2603.03598v1-armor-robust-and-efficient-cnn-based-sar-atr-through-model-hardware-co-design)  
+   标签：评分：8.0/10、query:image-adversarial
    evidence：与对抗攻击防御相关
-4. [Deepfake Forensics Adapter: A Dual-Stream Network for Generalizable Deepfake Detection](/202603/10/2603.01450v1-deepfake-forensics-adapter-a-dual-stream-network-for-generalizable-deepfake-detection)  
+6. [Dual-Modality Multi-Stage Adversarial Safety Training: Robustifying Multimodal Web Agents Against Cross-Modal Attacks](/202603/11/2603.04364v1-dual-modality-multi-stage-adversarial-safety-training-robustifying-multimodal-web-agents-against-cross-modal-attacks)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：深度伪造检测与对抗攻击防御
-5. [Explanation-Guided Adversarial Training for Robust and Interpretable Models](/202603/10/2603.01938v1-explanation-guided-adversarial-training-for-robust-and-interpretable-models)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗训练提升模型鲁棒性
-6. [MoECLIP: Patch-Specialized Experts for Zero-shot Anomaly Detection](/202603/10/2603.03101v1-moeclip-patch-specialized-experts-for-zero-shot-anomaly-detection)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：零样本异常检测与对抗攻击防御
+   evidence：对抗攻击防御策略
 
 ### 速读区论文标签
-1. [Solving adversarial examples requires solving exponential misalignment](/202603/10/2603.03507v1-solving-adversarial-examples-requires-solving-exponential-misalignment)  
+1. [When Priors Backfire: On the Vulnerability of Unlearnable Examples to Pretraining](/202603/11/2603.04731v1-when-priors-backfire-on-the-vulnerability-of-unlearnable-examples-to-pretraining)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗样本与感知流形
-2. [Machine Pareidolia: Protecting Facial Image with Emotional Editing](/202603/10/2603.03665v1-machine-pareidolia-protecting-facial-image-with-emotional-editing)  
+   evidence：生成对抗扰动以保护数据
+2. [Multi-Paradigm Collaborative Adversarial Attack Against Multi-Modal Large Language Models](/202603/11/2603.04846v1-multi-paradigm-collaborative-adversarial-attack-against-multi-modal-large-language-models)  
    标签：评分：8.0/10、query:image-adversarial
+   evidence：提出多范式协作对抗攻击框架
+3. [Beyond the Patch: Exploring Vulnerabilities of Visuomotor Policies via Viewpoint-Consistent 3D Adversarial Object](/202603/11/2603.04913v1-beyond-the-patch-exploring-vulnerabilities-of-visuomotor-policies-via-viewpoint-consistent-3d-adversarial-object)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动生成方法
+4. [SRasP: Self-Reorientation Adversarial Style Perturbation for Cross-Domain Few-Shot Learning](/202603/11/2603.05135v1-srasp-self-reorientation-adversarial-style-perturbation-for-cross-domain-few-shot-learning)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：生成对抗扰动用于跨域少样本学习
+5. [DREAM: Where Visual Understanding Meets Text-to-Image Generation](/202603/11/2603.02667v1-dream-where-visual-understanding-meets-text-to-image-generation)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：生成式图像对抗扰动生成技术
+6. [Scores Know Bobs Voice: Speaker Impersonation Attack](/202603/11/2603.02781v1-scores-know-bobs-voice-speaker-impersonation-attack)  
+   标签：评分：7.0/10、query:image-adversarial
    evidence：图像对抗攻击防御技术
-3. [LDP-Slicing: Local Differential Privacy for Images via Randomized Bit-Plane Slicing](/202603/10/2603.03711v1-ldp-slicing-local-differential-privacy-for-images-via-randomized-bit-plane-slicing)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-4. [When Safety Becomes a Vulnerability: Exploiting LLM Alignment Homogeneity for Transferable Blocking in RAG](/202603/10/2603.03919v1-when-safety-becomes-a-vulnerability-exploiting-llm-alignment-homogeneity-for-transferable-blocking-in-rag)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击对生成模型的影响
-5. [Co-Evolutionary Multi-Modal Alignment via Structured Adversarial Evolution](/202603/10/2603.01784v1-co-evolutionary-multi-modal-alignment-via-structured-adversarial-evolution)  
+7. [Robustness of Agentic AI Systems via Adversarially-Aligned Jacobian Regularization](/202603/11/2603.04378v1-robustness-of-agentic-ai-systems-via-adversarially-aligned-jacobian-regularization)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击与多模态对齐
-6. [GeoDiT: Point-Conditioned Diffusion Transformer for Satellite Image Synthesis](/202603/10/2603.02172v1-geodit-point-conditioned-diffusion-transformer-for-satellite-image-synthesis)  
+   evidence：对抗攻击鲁棒性提升
+8. [Oracle-efficient Hybrid Learning with Constrained Adversaries](/202603/11/2603.04546v1-oracle-efficient-hybrid-learning-with-constrained-adversaries)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-7. [HiFi-Inpaint: Towards High-Fidelity Reference-Based Inpainting for Generating Detail-Preserving Human-Product Images](/202603/10/2603.02210v2-hifi-inpaint-towards-high-fidelity-reference-based-inpainting-for-generating-detail-preserving-human-product-images)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-8. [Spatial Autoregressive Modeling of DINOv3 Embeddings for Unsupervised Anomaly Detection](/202603/10/2603.02974v1-spatial-autoregressive-modeling-of-dinov3-embeddings-for-unsupervised-anomaly-detection)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-9. [TIMI: Training-Free Image-to-3D Multi-Instance Generation with Spatial Fidelity](/202603/10/2603.01371v1-timi-training-free-image-to-3d-multi-instance-generation-with-spatial-fidelity)  
+   evidence：对抗攻击防御技术
+9. [Spectral Regularization for Diffusion Models](/202603/11/2603.02447v1-spectral-regularization-for-diffusion-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
-10. [PPEDCRF: Privacy-Preserving Enhanced Dynamic CRF for Location-Privacy Protection for Sequence Videos with Minimal Detection Degradation](/202603/10/2603.01593v1-ppedcrf-privacy-preserving-enhanced-dynamic-crf-for-location-privacy-protection-for-sequence-videos-with-minimal-detection-degradation)  
+   evidence：通过频谱正则化提升生成质量
+10. [ATD: Improved Transformer with Adaptive Token Dictionary for Image Restoration](/202603/11/2603.02581v1-atd-improved-transformer-with-adaptive-token-dictionary-for-image-restoration)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-11. [ORGAN: Object-Centric Representation Learning using Cycle Consistent Generative Adversarial Networks](/202603/10/2603.02063v1-organ-object-centric-representation-learning-using-cycle-consistent-generative-adversarial-networks)  
+   evidence：对抗扰动安全防护
+11. [From "What" to "How": Constrained Reasoning for Autoregressive Image Generation](/202603/11/2603.02712v1-from-what-to-how-constrained-reasoning-for-autoregressive-image-generation)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成对抗网络用于对象表示学习
+   evidence：图像生成方法与对抗扰动相关
 
 
 ### ⚡ 这个站点能做什么
