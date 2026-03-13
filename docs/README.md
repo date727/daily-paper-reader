@@ -6,73 +6,73 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-03-12
-- 运行时间：2026-03-12 19:46:18 UTC
+- 最新运行日期：2026-03-13
+- 运行时间：2026-03-13 19:32:05 UTC
 - 运行状态：成功
 - 本次总论文数：17
 - 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-1) 今日精读与速读共完成17篇论文，聚焦于视觉语言融合、BEV感知增强及生成模型在图像修复中的应用。  
-2) 最值得关注的是EVLF和RESBev在生成数据集蒸馏与BEV鲁棒性提升方面的突破性成果。  
-3) 建议对生成模型在医学影像分析中的应用感兴趣者，可优先阅读相关速读论文以获取整体趋势了解。
-- 详情：[/202603/12/README](/202603/12/README)
+1) 今日精读与速读共完成17篇论文，涵盖生成设计、联邦学习及文本到图像生成等领域。  
+2) 最值得关注的是生成设计与联邦学习的结合应用，以及针对自动驾驶和网络检测系统的攻击分析。  
+3) 建议对生成设计和多模态联邦学习感兴趣的读者优先精读相关论文，以获取更深入的理解。
+- 详情：[/202603/13/README](/202603/13/README)
 
 ### 精读区论文标签
-1. [EVLF: Early Vision-Language Fusion for Generative Dataset Distillation](/202603/12/2603.07476v1-evlf-early-vision-language-fusion-for-generative-dataset-distillation)  
+1. [ConfHit: Conformal Generative Design with Oracle Free Guarantees](/202603/13/2603.07371v1-confhit-conformal-generative-design-with-oracle-free-guarantees)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-2. [RESBev: Making BEV Perception More Robust](/202603/12/2603.09529v1-resbev-making-bev-perception-more-robust)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：增强图像感知鲁棒性
-3. [Attribution as Retrieval: Model-Agnostic AI-Generated Image Attribution](/202603/12/2603.10583v1-attribution-as-retrieval-model-agnostic-ai-generated-image-attribution)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-4. [Layer Consistency Matters: Elegant Latent Transition Discrepancy for Generalizable Synthetic Image Detection](/202603/12/2603.10598v1-layer-consistency-matters-elegant-latent-transition-discrepancy-for-generalizable-synthetic-image-detection)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-5. [Evaluating randomized smoothing as a defense against adversarial attacks in trajectory prediction](/202603/12/2603.10821v1-evaluating-randomized-smoothing-as-a-defense-against-adversarial-attacks-in-trajectory-prediction)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击防御技术
-6. [Tuning Just Enough: Lightweight Backdoor Attacks on Multi-Encoder Diffusion Models](/202603/12/2603.04064v1-tuning-just-enough-lightweight-backdoor-attacks-on-multi-encoder-diffusion-models)  
+   evidence：对抗扰动下的生成模型保护
+2. [FedAFD: Multimodal Federated Learning via Adversarial Fusion and Distillation](/202603/13/2603.04890v1-fedafd-multimodal-federated-learning-via-adversarial-fusion-and-distillation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
+   evidence：对抗攻击的图像防御策略
+3. [An Efficient Stochastic First-Order Algorithm for Nonconvex-Strongly Concave Minimax Optimization beyond Lipschitz Smoothness](/202603/13/2603.04940v1-an-efficient-stochastic-first-order-algorithm-for-nonconvex-strongly-concave-minimax-optimization-beyond-lipschitz-smoothness)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗训练算法
+4. [Label Hijacking in Track Consensus-Based Distributed Multi-Target Tracking](/202603/13/2603.05023v1-label-hijacking-in-track-consensus-based-distributed-multi-target-tracking)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击下的标签劫持
+5. [Embedded Inter-Subject Variability in Adversarial Learning for Inertial Sensor-Based Human Activity Recognition](/202603/13/2603.05371v1-embedded-inter-subject-variability-in-adversarial-learning-for-inertial-sensor-based-human-activity-recognition)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+6. [Securing Cryptography in the Age of Quantum Computing and AI: Threats, Implementations, and Strategic Response](/202603/13/2603.06969v1-securing-cryptography-in-the-age-of-quantum-computing-and-ai-threats-implementations-and-strategic-response)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击的防御方法
 
 ### 速读区论文标签
-1. [Revisiting the Role of Foundation Models in Cell-Level Histopathological Image Analysis under Small-Patch Constraints -- Effects of Training Data Scale and Blur Perturbations on CNNs and Vision Transformers](/202603/12/2603.04081v1-revisiting-the-role-of-foundation-models-in-cell-level-histopathological-image-analysis-under-small-patch-constraints----effects-of-training-data-scale-and-blur-perturbations-on-cnns-and-vision-transformers)  
+1. [DSH-Bench: A Difficulty- and Scenario-Aware Benchmark with Hierarchical Subject Taxonomy for Subject-Driven Text-to-Image Generation](/202603/13/2603.08090v1-dsh-bench-a-difficulty--and-scenario-aware-benchmark-with-hierarchical-subject-taxonomy-for-subject-driven-text-to-image-generation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对图像生成模型的影响
-2. [How far have we gone in Generative Image Restoration? A study on its capability, limitations and evaluation practices](/202603/12/2603.05010v1-how-far-have-we-gone-in-generative-image-restoration-a-study-on-its-capability-limitations-and-evaluation-practices)  
+   evidence：对抗攻击的图像防御策略
+2. [Comparative Analysis of Patch Attack on VLM-Based Autonomous Driving Architectures](/202603/13/2603.08897v1-comparative-analysis-of-patch-attack-on-vlm-based-autonomous-driving-architectures)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型影响
-3. [Frequency-Aware Error-Bounded Caching for Accelerating Diffusion Transformers](/202603/12/2603.05315v1-frequency-aware-error-bounded-caching-for-accelerating-diffusion-transformers)  
+   evidence：对抗攻击分析
+3. [NetDiffuser: Deceiving DNN-Based Network Attack Detection Systems with Diffusion-Generated Adversarial Traffic](/202603/13/2603.08901v1-netdiffuser-deceiving-dnn-based-network-attack-detection-systems-with-diffusion-generated-adversarial-traffic)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：提升生成图像的鲁棒性
-4. [AdaGen: Learning Adaptive Policy for Image Synthesis](/202603/12/2603.06993v1-adagen-learning-adaptive-policy-for-image-synthesis)  
+   evidence：对抗攻击的图像防御策略
+4. [When Detectors Forget Forensics: Blocking Semantic Shortcuts for Generalizable AI-Generated Image Detection](/202603/13/2603.09242v1-when-detectors-forget-forensics-blocking-semantic-shortcuts-for-generalizable-ai-generated-image-detection)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：自适应生成策略用于图像合成
-5. [Variational Flow Maps: Make Some Noise for One-Step Conditional Generation](/202603/12/2603.07276v1-variational-flow-maps-make-some-noise-for-one-step-conditional-generation)  
+   evidence：对抗攻击防御技术
+5. [When Denoising Becomes Unsigning: Theoretical and Empirical Analysis of Watermark Fragility Under Diffusion-Based Image Editing](/202603/13/2603.04696v1-when-denoising-becomes-unsigning-theoretical-and-empirical-analysis-of-watermark-fragility-under-diffusion-based-image-editing)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像扰动与噪声学习
-6. [TDM-R1: Reinforcing Few-Step Diffusion Models with Non-Differentiable Reward](/202603/12/2603.07700v1-tdm-r1-reinforcing-few-step-diffusion-models-with-non-differentiable-reward)  
+   evidence：与对抗扰动下的图像水印相关
+6. [Mario: Multimodal Graph Reasoning with Large Language Models](/202603/13/2603.05181v1-mario-multimodal-graph-reasoning-with-large-language-models)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动与生成模型优化相关
-7. [Choose What to Observe: Task-Aware Semantic-Geometric Representations for Visuomotor Policy](/202603/12/2603.07875v1-choose-what-to-observe-task-aware-semantic-geometric-representations-for-visuomotor-policy)  
+   evidence：多模态对抗防御
+7. [ImageEdit-R1: Boosting Multi-Agent Image Editing via Reinforcement Learning](/202603/13/2603.08059v1-imageedit-r1-boosting-multi-agent-image-editing-via-reinforcement-learning)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：提升图像模型对对抗攻击的鲁棒性
-8. [Prototype-Guided Concept Erasure in Diffusion Models](/202603/12/2603.08271v1-prototype-guided-concept-erasure-in-diffusion-models)  
+   evidence：对抗攻击下的图像编辑
+8. [X-AVDT: Audio-Visual Cross-Attention for Robust Deepfake Detection](/202603/13/2603.08483v1-x-avdt-audio-visual-cross-attention-for-robust-deepfake-detection)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式对抗扰动消除
-9. [IntroductionDMD-augmented Unpaired Neural Schrödinger Bridge for Ultra-Low Field MRI Enhancement](/202603/12/2603.03769v1-introductiondmd-augmented-unpaired-neural-schrdinger-bridge-for-ultra-low-field-mri-enhancement)  
+   evidence：对抗扰动对生成模型的影响
+9. [A Simple Baseline for Unifying Understanding, Generation, and Editing via Vanilla Next-token Prediction](/202603/13/2603.04980v1-a-simple-baseline-for-unifying-understanding-generation-and-editing-via-vanilla-next-token-prediction)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动用于MRI图像增强
-10. [Lightweight Visual Reasoning for Socially-Aware Robots](/202603/12/2603.03942v1-lightweight-visual-reasoning-for-socially-aware-robots)  
+   evidence：多模态图像生成基线
+10. [Diff-ES: Stage-wise Structural Diffusion Pruning via Evolutionary Search](/202603/13/2603.05105v1-diff-es-stage-wise-structural-diffusion-pruning-via-evolutionary-search)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：与图像对抗攻击防御技术相关
-11. [Towards Generalized Multimodal Homography Estimation](/202603/12/2603.03956v1-towards-generalized-multimodal-homography-estimation)  
+   evidence：与对抗扰动生成技术相关
+11. [mAVE: A Watermark for Joint Audio-Visual Generation Models](/202603/13/2603.07090v1-mave-a-watermark-for-joint-audio-visual-generation-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：提升生成模型鲁棒性
+   evidence：对抗攻击的图像防御策略
 
 
 ### ⚡ 这个站点能做什么
