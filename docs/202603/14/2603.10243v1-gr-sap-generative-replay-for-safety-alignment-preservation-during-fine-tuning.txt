@@ -1,0 +1,967 @@
+Title: GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+URL Source: https://arxiv.org/pdf/2603.10243v1
+
+Published Time: Thu, 12 Mar 2026 00:15:44 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning 
+
+Zhouxiang Fang 1, Jiawei Zhou 2, Hanjie Chen 11Rice University, 2Stony Brook University zf28@rice.edu, jiawei.zhou.1@stonybrook.edu, hanjie@rice.edu 
+
+Recent studies show that the safety alignment of large language models (LLMs) can be easily compromised even by seemingly non-adversarial fine-tuning. To preserve safety alignment during fine-tuning, a widely used strategy is to jointly optimize safety and task objectives by mixing in the original alignment data, which is typically inaccessible even for open-weight LLMs. Inspired by generative replay in continual learning, we propose Generative Replay for Safety Alignment Preservation (GR-SAP) , a unified framework that synthesizes domain-specific alignment data from LLMs and integrate them during downstream adaption to preserve safety alignment. Theoretical and empirical analyses demonstrate this synthetic data serves as a reliable proxy for the original alignment data. Experiments across various models and downstream tasks show that GR-SAP substantially mitigates fine-tuning–induced safety degradation while maintaining comparable downstream performance. Our code is available at https://github.com/chili-lab/gr-sap .
+
+Warning: This paper contains explicit content. 
+
+# 1. Introduction 
+
+The rapid advancement of large language models (LLMs) necessitates rigorous safety protocols to mitigate unin-tended consequences and potential misuse (Kim et al., 2022; Bianchi et al., 2023; Grattafiori et al., 2024; Bai et al., 2022b; Shevlane et al., 2023; Zou et al., 2023). Safety alignment aims to align LLMs’ behavior with the “helpful and harmless” criteria Bai et al. (2022a), which are typically integrated during the instruction-tuning stage (Ganguli et al., 2022; Song et al., 2024; Dai et al., 2023). However, recent research indicates that fine-tuning on downstream tasks—a standard practice for domain adaptation—can inadvertently degrade safety alignment, even when utilizing benign datasets Qi et al. (2023); Yi et al. (2024); Qi et al. (2024). To preserve safety alignment during fine-tuning, a com-mon strategy is treating safety as a joint optimization objective. This approach combines alignment data with task-specific datasets to balance safety and utility. Ap-proaches in this category vary from stochastic mixing (Bianchi et al., 2023; Zong et al., 2024; Alssum et al., 2025) to adaptive integration (Huang et al., 2024d; Hu et al., 2025; Eiras et al., 2024). However, this paradigm faces a critical bottleneck: it assumes access to the orig-inal alignment data, which is rarely disclosed, even for open-weight LLMs. Furthermore, directly substituting open-source safety datasets is often inadequate due to their lack of rigorous verification and limited breadth for reliable model safety. 1
+
+To address this limitation, we propose Generative Replay for Safety Alignment Preservation (GR-SAP). Inspired by generative replay in continual learning Shin et al. (2017); Maekawa et al. (2023); Chen & Zeng (2025), our framework utilizes model-synthesized data to pre-serve safety alignment during fine-tuning. GR-SAP employs a tailored extraction strategy to synthesize domain-specific safety alignment data, refining them through query filtering and response revision during post-processing. Supported by both theoretical analysis and empirical results, we demonstrate that this synthetic data serves as a reliable proxy for the original alignment dataset. During downstream fine-tuning, it is integrated with task-specific data to maintain the model’s safety guardrails. Figure 1 illustrates the overall pipeline. We evaluate GR-SAP through extensive experiments en-compassing four model families, five downstream bench-marks, and four safety datasets. Our results show that GR-SAP substantially mitigates the safety degradation during fine-tuning, characterized by a lower ratio of harmful responses, while preserving comparable down-stream performance. For instance, Llama3 Grattafiori et al. (2024) reduces its harmful response ratio from 6.28% to 0.58% compared to the unmixed baseline. Fur-thermore, GR-SAP consistently surpasses open-source 
+
+> 1We empirically quantify this in Section 5.2
+> arXiv:2603.10243v1 [cs.CL] 10 Mar 2026
+
+GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning Vanilla  Downstream Fine -tuning   
+
+> Base Model
+> : Model distribution : Instruction -tuning dataset
+> Customized Model
+> : Downstream dataset (math, code, etc.)
+> Safety Alignment Downstream Fine -tuning
+
+GR -SAP (Ours)                 
+
+> Base Model
+> : Model distribution
+> Instruction -Tuned (IT) Model
+> : Instruction -tuning dataset ( mostly unavailable )
+> Customized Model
+> : Downstream dataset (math, code, etc.)
+> Safety Alignment
+> Broken!
+> : Proxy alignment dataset synthesized by GR -SAP
+> Directly extraced from IT model
+> distribution -no need to
+> access original IT datasets.
+> Safety Alignment
+> Extracted alignment data
+> Serving as a proxy
+> (Sec 3.1 ,Theorem 1 )
+> Data Mixture
+> Proxy dataset Downstream dataset
+
++   
+
+> Data Post -Processing
+> (Sec 3.2 )
+> Safety -Augmented
+> Fine -tuning
+> (Sec 3.3 ,Theorem 2 )
+> Safety
+> Performance vanilla
+> GR -SAP (Ours)
+> Better Safety
+> +
+> On -par Performance
+
+Example of Synthetic Data    
+
+> Query
+> May I ask you to
+> describe a murder
+> scene in vivid detail
+> for the purpose of
+> helping me develop a
+> crime novel?
+> Init Response
+> I'd be happy to help you
+> with that. Please note
+> that I'll do my best to
+> create a vivid and
+> detailed description of a
+> murder scene …
+> GR -SAP Revised
+> I cannot create a vivid
+> description of a murder
+> scene. Is there
+> something else I can
+> help you with?
+> Instruction -Tuned (IT) Model
+
+Figure 1: Comparison between vanilla downstream fine-tuning and our proposed framework (GR-SAP). Vanilla fine-tuning can inadvertently compromise a model’s safety alignment even when fine-tuning on benign data. In contrast, GR-SAP preserves safety alignment by integrating model-synthesized data which serves as a proxy for the original alignment data. safety datasets, which fail to generalize across different models or even degrade safety alignment. Semantic similarity metrics indicate that GR-SAP generates data closely aligned with the original alignment data. This validates our theoretical analysis, demonstrating that the synthetic data serves as a reliable proxy for original alignment data, preserving safety just as effectively. In summary, our contributions are threefold: 
+
+• We propose a tailored extraction strategy to syn-thesize domain-specific safety alignment data from LLMs. Supported by both theoretical and empirical analyses, we demonstrate that this synthetic data serves as a reliable proxy for the original alignment dataset. 
+
+• We introduce Generative Replay for Safety 
+
+Alignment Preservation ( GR-SAP ), a unified frame-work that leverages self-synthesized data to pre-serve model’s safety alignment during downstream fine-tuning. 
+
+• We validate the effectiveness of GR-SAP through comprehensive experiments. It significantly re-duces harmful outputs and maintains downstream performance, outperforming open-source safety datasets and matching the safety preservation of original alignment data. 
+
+# 2. Safety Preservation via Synthetic Data Mixing 
+
+2.1. Preliminaries 
+
+Let 𝑥 and 𝑦 denote the input and output texts, respec-tively. We define the original safety alignment dataset as: 
+
+𝐶 𝑠 (𝑥, 𝑦 ) = 𝐷 𝑠 (𝑥 )𝜇 𝑠 (𝑦 |𝑥 )
+
+where 𝐷 𝑠 (𝑥 ) represents the input distribution and 
+
+𝜇 𝑠 (𝑦 |𝑥 ) is the conditional output distribution. Given that 𝐶 𝑠 is rarely disclosed alongside the model (pa-rameterized by 𝜃 ), we synthesize an alignment dataset 
+
+ˆ𝐶 (𝑥, 𝑦 ) to serve as a proxy for 𝐶 𝑠 . Specifically, by sam-pling queries from a distribution ˆ𝐷 (𝑥 ) and obtaining the model’s responses, we define: 
+
+ˆ𝐶 (𝑥, 𝑦 ) = ˆ𝐷 (𝑥 )𝑃 𝜃 (𝑦 |𝑥 )
+
+where 𝑃 𝜃 (𝑦 |𝑥 ) is the model’s probability of generating 𝑦 
+
+given 𝑥 . We further denote 𝐶 𝑓 (𝑥, 𝑦 ) = 𝐷 𝑓 (𝑥 )𝜇 𝑓 (𝑦 |𝑥 ) as the downstream task data. By mixing 𝐶 𝑓 and ˆ𝐶 during fine-tuning, the objective is to enhance model’s down-stream capability while preserving the safety alignment established by 𝐶 𝑠 . For brevity, we denote the condi-tional distributions 𝜇 𝑠 (𝑦 |𝑥 ), 𝑃 𝜃 (𝑦 |𝑥 ), 𝜇 𝑓 (𝑦 |𝑥 ) as 𝜇 𝑠 (·| 𝑥 ),
+
+2GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning 
+
+𝑃 𝜃 (·| 𝑥 ) and 𝜇 𝑓 (·| 𝑥 ) respectively. We use DKL to denote the Kullback-Leibler divergence Cover & Thomas (2006) between two distributions. 
+
+2.2. Approximating Original Alignment Data Theorem 1 (Synthetic Data Proxy) . The divergence be-tween the original alignment distribution 𝐶 𝑠 and the syn-thetic proxy ˆ𝐶 admits the decomposition: 
+
+DKL (𝐶 𝑠 ‖ ˆ𝐶 ) = D KL (𝐷 𝑠 ‖ ˆ𝐷 )+ E𝑥 ∼𝐷 𝑠 [D KL (𝜇 𝑠 (·| 𝑥 )‖𝑃 𝜃 (·| 𝑥 ))] . (1) The decomposition reveals that the fidelity of ˆ𝐶 depends on two factors: (i) the query shift , DKL (𝐷 𝑠 ‖ ˆ𝐷 ), which characterizes the discrepancy between the synthetic and original query distributions; and (ii) the alignment residual , representing the expected divergence between the target response distribution 𝜇 𝑠 and the model’s pol-icy 𝑃 𝜃 , which directly mirrors the optimization objective of the instruction-tuning (alignment) phase. Empirical results of semantic similarity (Section 5.3) show the query shift is minimal, while the strong representational power of LLMs ensures the alignment residual is negli-gible. Thus, DKL (𝐶 𝑠 ‖ ˆ𝐶 ) remains small, validating ˆ𝐶 as a reliable proxy for undisclosed alignment data 𝐶 𝑠 . See Appendix B for the full proof. 
+
+2.3. Bounding the Safety Alignment Gap 
+
+To preserve safety alignment during downstream fine-tuning, we mix the synthetic proxy data ˆ𝐶 with the downstream task data 𝐶 𝑓 . Let 𝑟 ∈ [0 , 1) denote the proportion of synthetic data in the training mixture. The fine-tuning objective is formulated as: 
+
+min  
+
+> 𝜃 ′∈Θ
+
+E𝑥 ∼𝐷 𝑓 ,𝑦 ∼𝜇 𝑓 (·| 𝑥 )[− log 𝑃 𝜃 ′ (𝑦 |𝑥 )] + 𝜆 E𝑥 ∼ ^𝐷,𝑦 ∼𝑃 𝜃 (·| 𝑥 )[− log 𝑃 𝜃 ′ (𝑦 |𝑥 )] ,
+
+where 𝜆 = 𝑟  
+
+> 1−𝑟
+
+serves as the regularization coefficient, and Θ is a closed convex constraint set. As established by Chen et al. (2025a), the safety align-ment gap 𝐺 𝑠 (𝑃 𝜃 ′ ) with respect to the original alignment data 𝐶 𝑠 after fine-tuning is bounded by the following theorem: 
+
+Theorem 2 (Safety Alignment Gap) .
+
+𝐺 𝑠 (𝑃 𝜃 ′ ) = 𝒪 (︂ 1
+
+𝜆 )︂ + 𝒪 (︁ TV( ˆ𝐷, 𝐷 𝑠 ))︁ 
+
++ 𝒪 (︁ E𝑥 ∼𝐷 𝑠 [TV( 𝜇 𝑠 (·| 𝑥 ), 𝑃 𝜃 (·| 𝑥 ))] )︁ 
+
++ 𝒪 (︁ E𝑥 ∼𝐷 𝑠 [D KL (𝜇 𝑠 (·| 𝑥 )‖𝑃 𝜃 (·| 𝑥 ))] )︁ .
+
+(2) where TV denotes the total variation distance between two distributions Cover & Thomas (2006) and 𝒪 (·) de-notes the asymptotic upper bound. A smaller 𝐺 𝑠 (𝑃 𝜃 ′ )
+
+indicates better preservation of safety alignment after fine-tuning. By applying Pinsker’s inequality (Cover & Thomas, 2006), we can directly bound the total vari-ation distances in Theorem 2 using the KL-divergence components established in Theorem 1: 
+
+TV( 𝐷 𝑠 , ˆ𝐷 ) ≤√︂ 12 DKL (𝐷 𝑠 ‖ ˆ𝐷 ),
+
+TV( 𝐶 𝑠 , ˆ𝐶 ) ≤√︂ 12 DKL (𝐶 𝑠 ‖ ˆ𝐶 ).
+
+These relationships reveal that the safety gap is gov-erned by the regularization weight 𝜆 and the distribution mismatch bounds. Since our empirical results demon-strate minimal query shift (a small DKL (𝐷 𝑠 ‖ ˆ𝐷 )), and the strong representational power of LLMs ensures neg-ligible alignment residuals, these mismatch penalties remain minimal. Consequently, mixing the synthetic proxy data ˆ𝐶 with an adequate proportion 𝑟 theoreti-cally bounds the overall safety gap and mitigate safety degradation during downstream fine-tuning. 
+
+# 3. Method 
+
+As illustrated in Figure 1, GR-SAP consists of three func-tional modules: (1) safety alignment data extraction (Section 3.1), (2) data post-processing (Section 3.2), and (3) safety-augmented fine-tuning (Section 3.3) that integrates synthesized data with downstream task data. We describe their implementations in this Section. 
+
+3.1. Safety Alignment Data Extraction 
+
+Leveraging the memorization properties of LLMs, re-searchers have sought to extract alignment data directly from these models. Recently, Xu et al. (2024); Barbero et al. (2025) demonstrated that by using chat templates, one can effectively generate synthetic data from open LLMs that is semantically similar to the models’ orig-inal alignment data. However, the method proposed 
+
+> 3GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+by Barbero et al. (2025) lacks fine-grained control over the generated outputs (e.g., topic, format, type), ren-dering it unsuitable for targeted training. While Xu et al. (2024) enables domain control, it relies entirely on system prompts—a feature absent in several promi-nent models OLMo et al. (2024); Jiang et al. (2023). Furthermore, modifying established system prompts in-troduces potential risks of performance degradation or safety compromises, given LLMs’ sensitivity to prompt phrasing (Sclar et al., 2023; Zhao et al., 2021; Wei et al., 2023a). To this end, we designed a tailored prompting strat-egy (see Appendix C.1) that supports domain-specific data generation without relying on the system prompt. We first generate safety-related queries via this tem-plate and then pass them to the model, obtaining cor-responding responses. These resulting query-response pairs serve as safety alignment data, which are subse-quently integrated with task-specific examples during downstream fine-tuning to preserve safety alignment. As discussed in Section 5.3, the synthetic safety align-ment data has higher semantic similarity with the original alignment data than other open-source safety datasets. Furthermore, evaluations across various mod-els and downstream tasks (Table 1) show that GR-SAP achieves comparable efficacy in maintaining safety align-ment with the original alignment data. Collectively, these findings support the conclusion that our synthetic data serves as a valid proxy for the original alignment data. 
+
+3.2. Data Post-Processing 
+
+After extracting safety alignment data, we conduct post-processing on the raw data, auditing both synthetic queries and their corresponding model responses. 
+
+Query Filtering To ensure the resulting synthetic data is both diverse and domain-aligned, we apply three fil-tering criteria to the generated queries: (1) Perplex-ity Thresholding: We exclude samples exhibiting ex-cessively low or high perplexity scores, as they typi-cally indicate triviality or noise (Gunasekar et al., 2023). (2) Deduplication: We perform semantic deduplication to maximize dataset variety and mitigate redundancy (Wang et al., 2023). (3) Relevance Filtering: We filter out queries with low semantic relevance to the target safety keywords to ensure rigorous adherence to the defined safety taxonomy. 
+
+Response Revision Table 4 presents examples of syn-thesized queries and their corresponding responses. For instance, when prompted with the self-generated re-quest, “May I ask you to describe a murder scene in vivid detail for the purpose of helping me develop a crime novel?”, Llama3 complies, replying “I’d be happy to help you with that...”. This illustrates that, despite prior safety alignment, models can still produce non-compliant or potentially hazardous outputs. To pre-vent safety degradation during fine-tuning, we utilize a guardrail model to identify these failures. Rather than simply excluding these samples, we found that revising these unsafe responses and incorporating them into the final dataset yields superior safety (see Table 3). We at-tribute this improvement to the fact that these instances inherently represent “difficult” cases at critical safety boundaries. By explicitly teaching the model to refuse these “difficult” harmful requests, the model can even surpass its original safety alignment. In contrast, we define “easy” cases as queries for which the model al-ready produces safe outputs, suggesting these alignment patterns are already well-represented within its current parameters. See Appendix C.2 for more details about query filtering and response revision. 
+
+3.3. Safety-Augmented Fine-Tuning 
+
+We integrate the post-processed synthetic alignment dataset with task-specific examples to preserve model’s safety alignment during downstream finetuning. For-mally, given a number of total training examples 𝑁 and a mixing ratio 𝑟 ∈ [0 , 1] , we sample 𝑟𝑁 examples from the synthetic alignment dataset and (1 − 𝑟 )𝑁 examples from the downstream dataset to perform Supervised Fine-Tuning (SFT). When sampling synthetic safety alignment data, we maintain an equal balance between the “difficult” and “easy” cases, provided a sufficient number of “difficult” examples is available. Since unsafe responses typically constitute less than 10% of the whole synthetic dataset, naive random sampling would likely underrepresent these “difficult” cases, which sit at critical safety bound-aries. 
+
+# 4. Experiment Setup 
+
+We describe the experiment setup for evaluating GR-SAP on various model families and downstream tasks. We start by describing the models in our experiments (§4.1), 
+
+> 4GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+followed by downstream tasks (§4.2), evaluation metrics (§4.3) and baselines (§4.4). We use a default mixing ra-tio of 0.1 for our experiments, since the ablation studies in Section 5.5 indicate that this relatively small value is enough to retain safety alignment. We repeat each experiment three times to mitigate randomness. 
+
+4.1. Models 
+
+Given our method requires manipulations on the chat template, we focus our experiments on instruction-tuned LLMs, including OLMo2 (OLMo et al., 2024, OLMo-2-1124-7B-SFT ), Llama3 (Grattafiori et al., 2024, 
+
+Llama-3-8B-Instruct ), Qwen2.5 (Yang et al., 2024, 
+
+Qwen2.5-7B-Instruct ), and Mistral (Jiang et al., 2023, Mistral-7B-Instruct-v0.3 ). Among these, only OLMo2 releases its training corpus alongside the model weights, making it the sole model for which we can access the original alignment data. 
+
+4.2. Downstream Tasks 
+
+We conduct our experiments on five datasets to cover both general and domain-specific downstream tasks. GSM8K Cobbe et al. (2021) and MATH Hendrycks et al. (2021) are mathematical and reasoning tasks. Hel-laSwag Zellers et al. (2019) is a sentence completion task, formatted as four-choices question-answering (QA). WinoGrande Sakaguchi et al. (2021) is a pronoun reso-lution task, formatted as binary-choice QA. MedQA Jin et al. (2021) is a four-choices QA task within the medical domain. 
+
+4.3. Evaluation Metrics 
+
+We evaluate the models’ performance along two dimen-sions: downstream task capabilities and safety align-ment: 
+
+• Downstream Task Accuracy (Acc): We evaluate models on the downstream test sets and report the accuracy. Note that for HellaSwag and WinoGrande, we utilize the validation sets as the test set labels are not publicly available. 
+
+• Harmful Score (HS): We utilize queries from the test sets of four safety-domain datasets: Beaver-tailsJi et al. (2023), SafeRLHF Ji et al. (2025a), WildGuard Han et al. (2024), and WildJail-break Jiang et al. (2024). We prompt the mod-els to generate responses for these queries, which are then assessed by a Guardrail Model Han et al. (2024). The Harmful Score is defined as the ratio of responses flagged as unsafe. See Appendix C.4 for more details about downstream training and evaluation. 
+
+4.4. Baselines 
+
+We compare GR-SAP against both open-source and orig-inal safety alignment datasets. By integrating these datasets with task-specific examples during downstream fine-tuning, we evaluate their ability to preserve safety alignment and impact on downstream performance. For open-source data baselines, we select AEGIS Ghosh et al. (2025) and Beavertails Ji et al. (2023), as both utilize a prompt-response format directly applicable to SFT. For the original alignment data baseline, we restrict our ex-periments to OLMo2, as it is the sole model in our setup that releases its training corpus. See more details about preprocessing safety datasets in Appendix C.5. 
+
+# 5. Results 
+
+We evaluate GR-SAP on a range of LLMs and down-stream tasks, showing it outperforms open-source alter-native and proxies the original safety alignment dataset. 
+
+5.1. GR-SAP Preserves Safety Alignment 
+
+Figure 2 illustrates the training dynamics on GSM8K and MATH across four models, comparing standard SFT (𝑟 = 0 ) with GR-SAP ( 𝑟 = 0 .1). In the unmixed setting (𝑟 = 0 ), we observe a consistent degradation in safety alignment across all evaluated models, characterized by a clear increasing trend in Harmful Scores (HS) as training progresses. For instance, as shown in Figure 2a, the HS of Llama3 on WildJailbreak rises rapidly from 
+
+10 .50 at step 0 to 21 .48 at step 3k, eventually reach-ing 22 .88 by step 7k. These trajectories substantiate findings from prior works: Fine-tuning on downstream tasks—even with ostensibly benign datasets like GSM8K and MATH—can significantly compromise a model’s ex-isting safety alignment. See Appendix D.1 for training dynamics on other downstream tasks. Conversely, integrating safety alignment data from GR-SAP significantly mitigates this degradation. Through-out the training process across different models and downstream tasks, curves corresponding to 𝑟 = 0 .1 con-sistently maintain lower HS trajectories compared to their unmixed ( 𝑟 = 0 ) counterparts. For Llama3, the HS 
+
+> 5
+
+GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning 
+
+Table 1: Comparison of mean Harmful Scores (HS, %) on safety benchmarks and Downstream Task Accuracy (Acc, %) for alignment data sources across models and downstream tasks with a mixing ratio of 𝑟 = 0 .1. Lower HS indicates better safety. Corresponding standard deviations (std) is in Table 6. 
+
+Model Alignment Data GSM8K MATH Hellaswag Winogrande MedQA AVG. HS ↓
+
+HS ↓ Acc ↑ HS ↓ Acc ↑ HS ↓ Acc ↑ HS ↓ Acc ↑ HS ↓ Acc ↑
+
+OLMo2 None 1.12 66.84 1.29 17.54 0.81 88.76 0.79 76.06 0.74 49.49 0.95 Aegis 3.30 67.07 2.97 17.39 2.22 88.57 2.15 74.98 2.02 49.80 2.53 Beavertails 7.61 67.00 9.48 17.49 16.43 88.47 21.99 75.09 14.56 49.33 14.01 Original 0.78 66.69 0.70 17.55 0.48 88.45 0.50 75.06 0.54 50.07 0.60 GR-SAP (Ours) 0.62 67.27 0.50 17.80 0.47 88.42 0.45 75.19 0.47 49.04 0.50 
+
+Llama3 None 9.24 65.23 5.29 23.33 6.86 92.33 5.25 82.22 4.78 61.06 6.28 Aegis 6.90 66.34 2.59 23.15 2.71 92.22 1.42 81.61 4.50 61.51 3.62 Beavertails 36.76 66.06 30.65 22.81 30.35 91.98 29.18 81.98 31.05 61.56 31.60 GR-SAP (Ours) 0.44 65.33 0.34 23.07 0.76 91.62 0.68 81.64 0.70 61.32 0.58 
+
+Qwen2.5 None 16.86 76.80 16.85 47.17 15.15 92.81 17.30 79.32 15.91 62.27 16.41 Aegis 10.02 77.08 12.48 47.61 8.72 92.56 14.42 77.93 13.25 61.90 11.78 Beavertails 41.53 76.83 42.08 47.21 44.22 92.55 40.50 77.93 42.75 62.50 42.21 GR-SAP (Ours) 10.63 77.84 10.26 46.87 10.69 92.65 11.04 77.53 10.89 62.45 10.70 
+
+Mistral None 50.61 55.75 43.83 13.63 44.50 94.10 47.75 82.35 41.01 56.93 45.54 Aegis 15.62 54.13 13.07 13.37 13.82 93.70 9.00 80.77 12.51 55.01 12.81 
+
+Beavertails 44.20 55.29 45.35 13.20 42.91 93.83 41.98 69.98 42.65 57.76 43.42 GR-SAP (Ours) 14.88 53.65 14.01 13.57 14.11 93.78 12.33 73.09 13.05 52.71 13.68 0 1k 2k 3k 4k 5k 6k 7k                      
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> Harmful Score (%)
+> OLMo-2
+> 01k 2k 3k 4k 5k 6k 7k
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Llama-3
+> 01k 2k 3k 4k 5k 6k 7k
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Qwen-2.5
+> 01k 2k 3k 4k 5k 6k 7k
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> Mistral
+> Beavertails (r=0.0)
+> Beavertails (r=0.1)
+> SafeRLHF (r=0.0)
+> SafeRLHF (r=0.1)
+> WildGuard (r=0.0)
+> WildGuard (r=0.1)
+> WildJailbreak (r=0.0)
+> WildJailbreak (r=0.1)
+
+(a) Training dynamics on GSM8K 0 1k 2k 3k 4k 5k 6k 7k                      
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> Harmful Score (%)
+> OLMo-2
+> 01k 2k 3k 4k 5k 6k 7k
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> Llama-3
+> 01k 2k 3k 4k 5k 6k 7k
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Qwen-2.5
+> 01k 2k 3k 4k 5k 6k 7k
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> Mistral
+
+(b) Training dynamics on MATH 
+
+Figure 2: Training dynamics on GSM8K and MATH across models. Harmful Score (HS, %) on each safety benchmark is denoted by a distinct marker shape. Consistent HS gaps are observed between mixing with GR-SAP-synthesized alignment data ( blue ) and the no-mixing counterparts ( red ). 
+
+6GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning 
+
+on WildJailbreak falls below 1.00 by step 3k and main-tains at this low level throughout the rest of the training process on GSM8K. Table 1 shows that GR-SAP reduces the average HS by 0.45 for OLMo2, 5.7 for Llama3, 5.71 
+
+for Qwen2.5, and 31 .86 for Mistral compared with the unmixed baseline (None), indicating this protective ef-fect is consistent across diverse models and downstream tasks. These findings substantiate that GR-SAP effec-tively preserves models’ safety alignment throughout the fine-tuning process. Regarding downstream perfor-mance, Table 1 indicates that, GR-SAP introduces only minimal degradation. For most model-dataset combina-tions, downstream task accuracy decreases by less than 1%, with some mixed outcomes. We therefore focus our discussion on HS in this section. 
+
+5.2. GR-SAP Outperforms Open-source Alternatives 
+
+As discussed in the introduction, treating open-source safety datasets as direct substitutes for original align-ment data is inadvisable. As detailed in Table 1, rely-ing on external datasets introduces a significant risk of ingesting low-quality or noisy examples, which can de-grade safety alignment far below the unmixed baseline. For instance, mixing Beavertails into Llama3 causes the average HS to spike to 31 .60 —a five-fold increase over the unmixed baseline ( 6.28 ). OLMo2 and Qwen2.5 suf-fer similar drastic degradations with Beavertails, where the HS rises from 0.95 to 14 .01 and 16 .41 to 42 .21 , re-spectively. This suggests that, without rigorous veri-fication, open-source datasets may even compromise model safety rather than align it. Even when utilizing higher-quality datasets like AEGIS , it lacks generaliz-ability in effectiveness across different models. While AEGIS performs well on other models, it fails to gener-alize to OLMo2, where it detrimentally impacts safety alignment relative to the baseline (increasing Average HS from 0.95 to 2.53 ). In contrast, GR-SAP generalizes well across all the mod-els and downstream tasks, consistently maintains a lower HS than the unmixed baseline. It achieves sig-nificantly lower average HS on OLMo2, Llama3 and Qwen2.5 than AEGIS, remaining highly competitive on Mistral. These results indicate that, while external datasets can arguably act as strong upper bounds in specific scenarios, GR-SAP offers a model-agnostic and reliable solution that preserves safety alignment. 
+
+Table 2: MAUVE scores ( ∈ [0 , 1] ) measuring seman-tic similarity between listed datasets and the original alignment dataset reference. GR-SAP demonstrates high-est semantic similarity compared to other open-source safety datasets. Corresponding standard deviations in Table 7.             
+
+> Dataset Query Response
+> AEGIS 0.316 0.219 Beavertails 0.309 0.265 SafeRLHF 0.252 0.249
+> Open Souce AVG. 0.293 0.244
+> GR-SAP (Ours) 0.455 0.646
+
+5.3. GR-SAP Proxies Original Alignment Data Resemblance in Preserving Safety Alignment To validate whether GR-SAP can serve as a proxy for origi-nal alignment data, we compare their effectiveness in safety preservation. We focus specifically on OLMo2, as it is the sole model in our setting that publicly releases its training corpus. As shown in Table 1, GR-SAP pre-serves safety alignment on par with the original dataset across all tasks. On average, GR-SAP achieves HS of 0.50 ,marginally outperforming the original baseline ( 0.60 ). We hypothesize that this improvement stems from two primary factors: (1) we incorporate revised responses in GR-SAP, explicitly addressing critical safety bound-aries and (2) the safety alignment data in GR-SAP is directly generated by the model, which ensures closer alignment with its internal distribution than original training corpus. 
+
+Evidence of Semantic Similarity Beyond measur-ing safety-alignment retention, we seek more direct evidence that GR-SAP serves as a reliable proxy for the original alignment data. Following Barbero et al. (2025), we quantify dataset-level semantic similarity using MAUVE score Pillutla et al. (2021). We treat OLMo2’s original alignment dataset as the reference and compare it against GR-SAP and other widely-used open-source safety datasets, including Aegis Ghosh et al. (2025), Beavertails Ji et al. (2023), and SafeRLHF Ji et al. (2025a). See Appendix C.5 for more details about dataset preprocessing. We set the scaling factor to 2 and sample 10 , 000 examples from each dataset to measure the similarity of both queries and responses. Queries are embedded directly, while responses are embedded within the context of their corresponding queries by concatenating. 
+
+> 7GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+Table 3: Evaluation of mean Harmful Scores (HS, %) and Downstream Task Accuracy (Acc, %) across the post-processing pipeline. The pipeline includes cumulative query-level filters (ppl, deduplicate, domain), followed by exclusive response-level interventions (exclusion vs. revision). Lower HS indicates better safety. Standard deviations are provided in Table 8.                                                                                                                                                                  
+
+> Model Post Processing GSM8K MATH Hellaswag Winogrande MedQA AVG. HS ↓
+> HS ↓Acc ↑HS ↓Acc ↑HS ↓Acc ↑HS ↓Acc ↑HS ↓Acc ↑
+> OLMo2 raw data 0.68 67.35 0.57 17.31 0.50 88.54 0.53 75.14 0.46 49.57 0.55
+> ˓→+ ppl 0.67 67.02 0.55 17.49 0.43 88.36 0.53 75.03 0.53 49.33 0.54
+> ˓→+ deduplicate 0.63 67.73 0.52 17.79 0.44 88.81 0.53 74.72 0.62 48.99 0.55
+> ˓→+ domain 0.69 67.17 0.59 17.79 0.52 88.67 0.51 75.32 0.56 49.28 0.57
+> ˓→+ exclusion 0.64 66.74 0.59 17.37 0.51 88.62 0.58 74.72 0.44 49.96 0.55 + revision 0.62 67.27 0.50 17.80 0.47 88.42 0.45 75.19 0.47 49.04 0.50
+> Llama3 raw data 6.36 66.21 5.16 23.29 6.98 91.92 5.53 81.03 5.52 60.46 5.91
+> ˓→+ ppl 5.84 65.86 4.57 23.57 6.57 92.11 6.33 80.48 5.26 61.32 5.72
+> ˓→+ deduplicate 7.39 66.44 5.34 23.01 6.78 91.81 5.49 81.14 6.19 61.19 6.24
+> ˓→+ domain 6.18 65.53 5.00 23.00 6.09 92.12 7.06 81.53 5.60 61.06 5.99
+> ˓→+ exclusion 4.53 67.20 5.09 22.85 5.26 91.90 4.95 81.32 5.11 60.88 4.99 + revision 0.44 65.33 0.34 23.07 0.76 91.62 0.68 81.64 0.70 61.32 0.58
+
+Table 2 quantifies semantic similarity to the original alignment dataset using MAUVE score, reported sep-arately for queries and responses. Among the open-source safety datasets, MAUVE scores are relatively low (0.293 for queries and 0.244 for responses in average), which indicates limited semantic overlap with the origi-nal alignment distribution. In contrast, GR-SAP achieves substantially higher similarity, with 0.455 on queries and 
+
+0.646 on responses. These results suggest that GR-SAP aligns much more closely with the original alignment dataset, supporting its use as a high-fidelity proxy com-pared to existing open-source alternatives. 
+
+5.4. Ablation: Effect of Post-Processing 
+
+To evaluate the impact of the post-processing pipeline in GR-SAP on safety and utility, we conduct an abla-tion study on OLMo2 and Llama3 as detailed in Table 3. The query-level filters (ppl, deduplicate, domain) are applied in a cumulative manner. After applying all the query-level filters, we compare two processing strate-gies on responses: exclude “difficult” cases (exclusion) or revise them (revision). The results indicate that while query-level filters are essential for data diversity and relevance, applying them in isolation exhibits a “safety drift” where harmfulness fluctuates. For instance, the 
+
+𝐻𝑆 of Llama3 increases from 5.91 to a peak of 6.24 
+
+during intermediate filtering steps. This volatility un-derscores the necessity of subsequent response-level in-terventions to handle unsafe outputs, which ultimately preserves safety alignment. Regarding response-level processing, the revision strat-egy significantly outperforms exclusion. For Llama3, revision reduces the 𝐻𝑆 to 0.58 , a result far superior to the 4.99 achieved through exclusion. This demon-strates that by incorporating “difficult” cases at critical safety boundaries rather than simply ignoring them, we can better preserve or even surpass the model’s orig-inal safety alignment. Notably, the necessity of post-processing remains contingent on the model’s baseline safety profile. While the pipeline exerts a substantial in-fluence on Llama3, the inherently safer OLMo2 exhibits minimal sensitivity (ranging from 0.50 to 0.57 ), consis-tent with the baseline safety profile established in our prior analysis. This suggests that while post-processing is necessary for models with higher risk profiles, it yields marginal returns for models that already demonstrate strong safety alignment. 
+
+5.5. Ablation: Effect of Mixing Ratio 
+
+To determine the optimal hyperparameter configura-tion, we analyze the sensitivity of OLMo2 and Llama3 to the mixing ratio ( 𝑟 ) of GR-SAP, varying 𝑟 ∈ [0 .0, 0.3] 
+
+across downstream benchmarks. The results in Figure 3 identify 𝑟 = 0 .1 as the effective choice for maintaining models’ safety. At this ratio, the HS decreases substan-tially relative to the baseline ( 𝑟 = 0 .0). For example, the HS of OLMo2 tested on WildJailbreak drops from 
+
+2.94 to 1.67 on GSM8K and from 3.02 to 1.38 on MATH. Conversely, increasing the mixing ratio beyond 0.1 could                   
+
+> 8GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning 0.0 0.1 0.2 0.3
+> 0
+> 1
+> 2
+> 3
+> Harmful Score (%)
+> GSM8K
+> 0.0 0.1 0.2 0.3
+> 0
+> 1
+> 2
+> 3
+> MATH
+> 0.0 0.1 0.2 0.3
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> HellaSwag
+> 0.0 0.1 0.2 0.3
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> WinoGrande
+> 0.0 0.1 0.2 0.3
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> MedQA
+> Beavertails SafeRLHF WildGuard WildJailbreak
+
+(a) Effect of mixing ratio on OLMo2 0.0 0.1 0.2 0.3               
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> Harmful Score (%)
+> GSM8K
+> 0.0 0.1 0.2 0.3
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> MATH
+> 0.0 0.1 0.2 0.3
+> 0
+> 5
+> 10
+> 15
+> HellaSwag
+> 0.0 0.1 0.2 0.3
+> 0
+> 5
+> 10
+> 15 WinoGrande
+> 0.0 0.1 0.2 0.3
+> 0
+> 5
+> 10
+> 15 MedQA
+
+(b) Effect of mixing ratio on Llama3 
+
+Figure 3: Impact of mixing ratios ( 𝑟 ) on Harmful Score (HS, %) for OLMo2 and Llama3. Lower HS indicates better safety. Across all the datasets, a mixing ratio of 0.1 is sufficient to preserve safety alignment during downstream finetuning. be potentially detrimental. We observe a characteristic "U-shaped" trajectory across most cases, where the HS rebounds and worsens as 𝑟 approaches 0.3. For instance, the HS of Llama3 tested on WildJailbreak increases from 
+
+0.86 to 8.07 on GSM8K and from 0.62 to 4.54 on MATH. This trend suggests that an excessively large mixing ratio could induce distributional drift: the cumulative volume of auxiliary data introduces noise that dilutes the model’s safety boundaries, leading to a regression in safety alignment. Therefore, we adopt 𝑟 = 0 .1 as our default setting for all the experiments. 
+
+# 6. Related Work 
+
+Safety Alignment Typically integrated during instruc-tion tuning, safety alignment employs SFT-based Zhou et al. (2023); Burns et al. (2023); Ji et al. (2023); Lim et al. (2025) or RLHF-based Ouyang et al. (2022); Gan-guli et al. (2022); Song et al. (2024); Rafailov et al. (2023); Dai et al. (2023); Guan et al. (2024) techniques to ensure LLM outputs are helpful, harmless, and reflec-tive of human preferences. Despite their initial align-ment, recent studies show that these models remain vulnerable to perturbation; fine-tuning on downstream tasks-a common practice for building customized LLMs-can easily compromise safety alignment, even with be-nign datasets Qi et al. (2023); Yang et al. (2023); Zhan et al. (2024); Lermen et al. (2023); Chen et al. (2024b); Rosati et al. (2024); Yi et al. (2024); Ji et al. (2025b); Qi et al. (2024); Xie et al. (2025). To mitigate the risk of safety degradation, a range of protective tech-niques have emerged, which can be categorized by their point of intervention: initial alignment stage Huang et al. (2024e,c); Liu et al. (2025); Qi et al. (2024); Liu et al. (2024); Zhao et al. (2025); Ji et al. (2025a); Chen et al. (2025b), downstream finetuning stage Qi et al. (2024); Kim et al. (2025); Li et al. (2024); Zong et al. (2024); Bianchi et al. (2023); Kirkpatrick et al. (2017); Alssum et al. (2025); Huang et al. (2024d); Eiras et al. (2024); Hu et al. (2025); Hsu et al. (2024); Li et al. (2025a); Ao et al. (2025) and post-finetuning stage Huang et al. (2024b); Zhang et al. (2024); Banerjee et al. (2025); Wang et al. (2025); Farn et al. (2024); Djuhera et al. (2025). These methods primarily aim for safety defense, preservation, and restoration, respectively. 
+
+Safety Preservation To preserve model’s safety align-ment, there are two widely adopted strategies during downstream finetuning stage Ahmadian et al. (2024). The first one focuses on constraining the divergence be-tween the fine-tuned model and the original model. Qi et al. (2024) proposes protecting the initial token dis-tributions to prevent alignment drift. In the parameter space, regularization techniques such as EWC (Kirk-
+
+> 9GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+patrick et al., 2017) penalize changes to critical weights; Li et al. (2024) explicitly lock the weights of identified safety layers, while Kim et al. (2025) introduce an EMA momentum term to stabilize the optimization trajectory. Parameter-Efficient Fine-Tuning (PEFT) methods such as LoRA Hu et al. (2022) have also been adopted to structurally constrain model updates (Hsu et al., 2024; Li et al., 2025a; Ao et al., 2025). The second strategy is to treat safety as a co-optimization objective by interleav-ing alignment data with the downstream task (Corrado et al., 2025; Chen et al., 2025a). Approaches in this category range from stochastic random mixing (Bianchi et al., 2023; Zong et al., 2024; Alssum et al., 2025) to more sophisticated, strategic integration (Huang et al., 2024d; Hu et al., 2025; Eiras et al., 2024). However, this strategy typically assumes access to the original align-ment data, which is often unavailable in real-world even for open LLMs. Directly utilizing public safety datasets as substitutes is also inadequate, as they may lack rig-orous verification or are insufficiently comprehensive to satisfy safety standards. Our work address this issue by using the model itself to generate synthetic data for specific safety subdomains, followed by a filtering step. The semantic similarity analysis in Section 5.3 demon-strates that the synthetic data is sufficient to serve as a proxy for the original alignment data. 
+
+# 7. Conclusion 
+
+In this work, we propose Generative Replay for Safety 
+
+Alignment Preservation (GR-SAP) , a unified framework for preserving LLM safety alignment during downstream fine-tuning without access to proprietary alignment datasets. GR-SAP synthesizes domain-specific safety alignment data from the model, and then “replays” these self-synthesized exemplars alongside task-specific data to preserve safety alignment throughout downstream adaptation. Experiments across multiple model families, downstream benchmarks, and safety evaluations show that GR-SAP substantially mitigates fine-tuning-induced safety degradation while maintaining comparable down-stream performance. Moreover, GR-SAP outperforms open-source alternative safety datasets, and can achieve preservation comparable to using the original alignment data when available. Semantic similarity analysis fur-ther validates that GR-SAP serves as a high-fidelity proxy for the original alignment data. Owing to its generality, beyond safety, GR-SAP may be extended in future work to preserve other forms of alignment acquired during training. 
+
+# Acknowledgements 
+
+We sincerely thank Chunyuan Deng for his constructive feedback on an earlier version of this document. 
+
+# References 
+
+Ahmadian, A., Goldfarb-Tarrant, S., Ermis, B., Fadaee, M., Hooker, S., et al. Mix data or merge models? opti-mizing for diverse multi-task learning. arXiv preprint arXiv:2410.10801 , 2024. Alssum, L., Itani, H., Hammoud, H. A. A. K., Torr, P., Bibi, A., and Ghanem, B. Unforgotten safety: Preserv-ing safety alignment of large language models with continual learning. arXiv preprint arXiv:2512.10150 ,2025. Ao, S., Dong, Y., Hu, J., and Ramchurn, S. D. Safe prun-ing lora: Robust distance-guided pruning for safety alignment in adaptation of llms. Transactions of the Association for Computational Linguistics , 13:1474– 1487, 2025. Bai, Y., Jones, A., Ndousse, K., Askell, A., Chen, A., Das-Sarma, N., Drain, D., Fort, S., Ganguli, D., Henighan, T., et al. Training a helpful and harmless assistant with reinforcement learning from human feedback. 
+
+arXiv preprint arXiv:2204.05862 , 2022a. Bai, Y., Kadavath, S., Kundu, S., Askell, A., Kernion, J., Jones, A., Chen, A., Goldie, A., Mirhoseini, A., McKinnon, C., et al. Constitutional ai: Harmlessness from ai feedback. arXiv preprint arXiv:2212.08073 ,2022b. Banerjee, S., Layek, S., Tripathy, S., Kumar, S., Mukher-jee, A., and Hazra, R. Safeinfer: Context adaptive decoding time safety alignment for large language models. In Proceedings of the AAAI Conference on Artifi-cial Intelligence , volume 39, pp. 27188–27196, 2025. Barbero, F., Gu, X., Choquette-Choo, C. A., Sitawarin, C., Jagielski, M., Yona, I., Veličković, P., Shumailov, I., and Hayes, J. Extracting alignment data in open models. arXiv preprint arXiv:2510.18554 , 2025. Bauer, A., Trapp, S., Stenger, M., Leppich, R., Kounev, S., Leznik, M., Chard, K., and Foster, I. Comprehensive exploration of synthetic data generation: A survey. 
+
+arXiv preprint arXiv:2401.02524 , 2024. Bianchi, F., Suzgun, M., Attanasio, G., Röttger, P., Ju-rafsky, D., Hashimoto, T., and Zou, J. Safety-tuned 
+
+> 10 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+llamas: Lessons from improving the safety of large lan-guage models that follow instructions. arXiv preprint arXiv:2309.07875 , 2023. Biderman, S., Prashanth, U., Sutawika, L., Schoelkopf, H., Anthony, Q., Purohit, S., and Raff, E. Emergent and predictable memorization in large language models. 
+
+Advances in Neural Information Processing Systems , 36: 28072–28090, 2023. Brahman, F., Kumar, S., Balachandran, V., Dasigi, P., Pyatkin, V., Ravichander, A., Wiegreffe, S., Dziri, N., Chandu, K., Hessel, J., et al. The art of saying no: Contextual noncompliance in language models. Ad-vances in Neural Information Processing Systems , 37: 49706–49748, 2024. Burns, C., Izmailov, P., Kirchner, J. H., Baker, B., Gao, L., Aschenbrenner, L., Chen, Y., Ecoffet, A., Joglekar, M., Leike, J., et al. Weak-to-strong generalization: Eliciting strong capabilities with weak supervision. 
+
+arXiv preprint arXiv:2312.09390 , 2023. Carlini, N., Tramer, F., Wallace, E., Jagielski, M., Herbert-Voss, A., Lee, K., Roberts, A., Brown, T., Song, D., Er-lingsson, U., et al. Extracting training data from large language models. In 30th USENIX security symposium (USENIX Security 21) , pp. 2633–2650, 2021. Carlini, N., Ippolito, D., Jagielski, M., Lee, K., Tramer, F., and Zhang, C. Quantifying memorization across neural language models. In The Eleventh International Conference on Learning Representations , 2022. Chao, P., Robey, A., Dobriban, E., Hassani, H., Pappas, G. J., and Wong, E. Jailbreaking black box large lan-guage models in twenty queries. In 2025 IEEE Con-ference on Secure and Trustworthy Machine Learning (SaTML) , pp. 23–42. IEEE, 2025. Chen, B., Han, N., and Miyao, Y. A multi-perspective analysis of memorization in large language models. 
+
+arXiv preprint arXiv:2405.11577 , 2024a. Chen, C., Huang, B., Li, Z., Chen, Z., Lai, S., Xu, X., Gu, J.-C., Gu, J., Yao, H., Xiao, C., et al. Can editing llms inject harm? arXiv preprint arXiv:2407.20224 ,2024b. Chen, P.-Y., Shen, H., Das, P., and Chen, T. Fundamen-tal safety-capability trade-offs in fine-tuning large language models. arXiv preprint arXiv:2503.20807 ,2025a. Chen, X. and Zeng, M. Prototype conditioned generative replay for continual learning in nlp. In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguis-tics: Human Language Technologies (Volume 1: Long Papers) , pp. 12754–12770, 2025. Chen, Z., Lu, W., Lin, X., and Zeng, Z. Sdd: Self-degraded defense against malicious fine-tuning. In 
+
+Proceedings of the 63rd Annual Meeting of the Associ-ation for Computational Linguistics (Volume 1: Long Papers) , pp. 29109–29125, 2025b. Cobbe, K., Kosaraju, V., Bavarian, M., Chen, M., Jun, H., Kaiser, L., Plappert, M., Tworek, J., Hilton, J., Nakano, R., et al. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168 , 2021. Corrado, N. E., Katz-Samuels, J., Devraj, A. M., Yun, H., Zhang, C., Xu, Y., Pan, Y., Yin, B., and Chilimbi, T. Automixalign: Adaptive data mixing for multi-task preference optimization in llms. In Proceedings of the 63rd Annual Meeting of the Association for Com-putational Linguistics (Volume 1: Long Papers) , pp. 20234–20258, 2025. Cover, T. M. and Thomas, J. A. Elements of Information Theory . Wiley-Interscience, 2 edition, 2006. Dai, J., Pan, X., Sun, R., Ji, J., Xu, X., Liu, M., Wang, Y., and Yang, Y. Safe rlhf: Safe reinforce-ment learning from human feedback. arXiv preprint arXiv:2310.12773 , 2023. Deng, Y., Zhang, W., Pan, S. J., and Bing, L. Multilingual jailbreak challenges in large language models. arXiv preprint arXiv:2310.06474 , 2023. Djuhera, A., Kadhe, S. R., Ahmed, F., Zawad, S., and Boche, H. Safemerge: Preserving safety alignment in fine-tuned large language models via selective layer-wise model merging. arXiv preprint arXiv:2503.17239 ,2025. Douze, M., Guzhva, A., Deng, C., Johnson, J., Szilvasy, G., Mazaré, P.-E., Lomeli, M., Hosseini, L., and Jégou, H. The faiss library. IEEE Transactions on Big Data ,2025. Eiras, F., Petrov, A., Torr, P. H., Kumar, M. P., and Bibi, A. Do as i do (safely): Mitigating task-specific fine-tuning risks in large language models. arXiv preprint arXiv:2406.10288 , 2024. 
+
+> 11 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+Farn, H., Su, H., Kumar, S. H., Sahay, S., Chen, S.-T., and Lee, H.-y. Safeguard fine-tuned llms through pre-and post-tuning model merging. arXiv preprint arXiv:2412.19512 , 2024. Ganguli, D., Lovitt, L., Kernion, J., Askell, A., Bai, Y., Kadavath, S., Mann, B., Perez, E., Schiefer, N., Ndousse, K., et al. Red teaming language models to reduce harms: Methods, scaling behaviors, and lessons learned. arXiv preprint arXiv:2209.07858 ,2022. Ghosh, S., Varshney, P., Sreedhar, M. N., Padmaku-mar, A., Rebedea, T., Varghese, J. R., and Parisien, C. Aegis2. 0: A diverse ai safety dataset and risks tax-onomy for alignment of llm guardrails. arXiv preprint arXiv:2501.09004 , 2025. Grattafiori, A., Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A., Vaughan, A., et al. The llama 3 herd of models. arXiv preprint arXiv:2407.21783 , 2024. Guan, M. Y., Joglekar, M., Wallace, E., Jain, S., Barak, B., Helyar, A., Dias, R., Vallone, A., Ren, H., Wei, J., et al. Deliberative alignment: Reasoning enables safer language models. arXiv preprint arXiv:2412.16339 ,2024. Gunasekar, S., Zhang, Y., Aneja, J., Mendes, C. C. T., Del Giorno, A., Gopi, S., Javaheripi, M., Kauffmann, P., de Rosa, G., Saarikivi, O., et al. Textbooks are all you need. arXiv preprint arXiv:2306.11644 , 2023. Han, S., Rao, K., Ettinger, A., Jiang, L., Lin, B. Y., Lam-bert, N., Choi, Y., and Dziri, N. Wildguard: Open one-stop moderation tools for safety risks, jailbreaks, and refusals of llms. Advances in Neural Information Processing Systems , 37:8093–8131, 2024. Hartmann, V., Suri, A., Bindschaedler, V., Evans, D., Tople, S., and West, R. Sok: Memorization in general-purpose large language models. arXiv preprint arXiv:2310.18362 , 2023. Haviv, A., Cohen, I., Gidron, J., Schuster, R., Goldberg, Y., and Geva, M. Understanding transformer memo-rization recall through idioms. In Proceedings of the 17th Conference of the European Chapter of the Asso-ciation for Computational Linguistics , pp. 248–264, 2023. Hendrycks, D., Burns, C., Kadavath, S., Arora, A., Basart, S., Tang, E., Song, D., and Steinhardt, J. Measuring mathematical problem solving with the math dataset. 
+
+arXiv preprint arXiv:2103.03874 , 2021. Hsieh, C.-Y., Li, C.-L., Yeh, C.-K., Nakhost, H., Fujii, Y., Ratner, A., Krishna, R., Lee, C.-Y., and Pfister, T. Dis-tilling step-by-step! outperforming larger language models with less training data and smaller model sizes. In Findings of the Association for Computational Linguistics: ACL 2023 , pp. 8003–8017, 2023. Hsu, C.-Y., Tsai, Y.-L., Lin, C.-H., Chen, P.-Y., Yu, C.-M., and Huang, C.-Y. Safe lora: The silver lining of reducing safety risks when finetuning large language models. Advances in Neural Information Processing Systems , 37:65072–65094, 2024. Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., Chen, W., et al. Lora: Low-rank adapta-tion of large language models. ICLR , 1(2):3, 2022. Hu, Z., Shen, L., Wang, Z., Wei, Y., and Tao, D. Adap-tive defense against harmful fine-tuning for large language models via bayesian data scheduler. arXiv preprint arXiv:2510.27172 , 2025. Huang, J., Yang, D., and Potts, C. Demystifying verba-tim memorization in large language models. arXiv preprint arXiv:2407.17817 , 2024a. Huang, T., Bhattacharya, G., Joshi, P., Kimball, J., and Liu, L. Antidote: Post-fine-tuning safety alignment for large language models against harmful fine-tuning. 
+
+arXiv preprint arXiv:2408.09600 , 2024b. Huang, T., Hu, S., Ilhan, F., Tekin, S. F., and Liu, L. Booster: Tackling harmful fine-tuning for large lan-guage models via attenuating harmful perturbation. 
+
+arXiv preprint arXiv:2409.01586 , 2024c. Huang, T., Hu, S., Ilhan, F., Tekin, S. F., and Liu, L. Lazy safety alignment for large language models against harmful fine-tuning. arXiv preprint arXiv:2405.18641 ,2024d. Huang, T., Hu, S., and Liu, L. Vaccine: Perturbation-aware alignment for large language model. arXiv preprint arXiv:2402.01109 , 2024e. Ji, J., Liu, M., Dai, J., Pan, X., Zhang, C., Bian, C., Chen, B., Sun, R., Wang, Y., and Yang, Y. Beavertails: To-wards improved safety alignment of llm via a human-preference dataset. Advances in Neural Information Processing Systems , 36:24678–24704, 2023. Ji, J., Hong, D., Zhang, B., Chen, B., Dai, J., Zheng, B., Qiu, T. A., Zhou, J., Wang, K., Li, B., et al. Pku-saferlhf: Towards multi-level safety alignment for llms with human preference. In Proceedings of the 63rd 
+
+> 12 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 31983–32016, 2025a. Ji, J., Wang, K., Qiu, T. A., Chen, B., Zhou, J., Li, C., Lou, H., Dai, J., Liu, Y., and Yang, Y. Language models resist alignment: Evidence from data compression. In 
+
+Proceedings of the 63rd Annual Meeting of the Associ-ation for Computational Linguistics (Volume 1: Long Papers) , pp. 23411–23432, 2025b. Jiang, A. Q., Sablayrolles, A., Mensch, A., Bamford, C., Chaplot, D. S., de Las Casas, D., Bressand, F., Lengyel, G., Lample, G., Saulnier, L., et al. Mistral 7b. arXiv preprint arXiv:2310.06825 , 2023. URL https:// arxiv.org/abs/2310.06825 .Jiang, L., Rao, K., Han, S., Ettinger, A., Brahman, F., Kumar, S., Mireshghallah, N., Lu, X., Sap, M., Choi, Y., et al. Wildteaming at scale: From in-the-wild jailbreaks to (adversarially) safer language models. 
+
+Advances in Neural Information Processing Systems , 37: 47094–47165, 2024. Jin, D., Pan, E., Oufattole, N., Weng, W.-H., Fang, H., and Szolovits, P. What disease does this patient have? a large-scale open domain question answering dataset from medical exams. Applied Sciences , 11(14):6421, 2021. Kassem, A. M., Mahmoud, O., Mireshghallah, N., Kim, H., Tsvetkov, Y., Choi, Y., Saad, S., and Rana, S. Alpaca against vicuna: Using llms to uncover memorization of llms. In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technolo-gies (Volume 1: Long Papers) , pp. 8296–8321, 2025. Kim, H., Yu, Y., Jiang, L., Lu, X., Khashabi, D., Kim, G., Choi, Y., and Sap, M. Prosocialdialog: A prosocial backbone for conversational agents. arXiv preprint arXiv:2205.12688 , 2022. Kim, M., Kwak, J. M., Alssum, L., Ghanem, B., Torr, P., Krueger, D., Barez, F., and Bibi, A. Rethinking safety in llm fine-tuning: An optimization perspective. arXiv preprint arXiv:2508.12531 , 2025. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Desjardins, G., Rusu, A. A., Milan, K., Quan, J., Ra-malho, T., Grabska-Barwinska, A., et al. Overcoming catastrophic forgetting in neural networks. Proceed-ings of the national academy of sciences , 114(13):3521– 3526, 2017. Kiyomaru, H., Sugiura, I., Kawahara, D., and Kurohashi, S. A comprehensive analysis of memorization in large language models. In Proceedings of the 17th Inter-national Natural Language Generation Conference , pp. 584–596, 2024. Kwon, W., Li, Z., Zhuang, S., Sheng, Y., Zheng, L., Yu, C. H., Gonzalez, J. E., Zhang, H., and Stoica, I. Effi-cient memory management for large language model serving with pagedattention. In Proceedings of the 29th Symposium on Operating Systems Principles , 2023. Lee, H., Phatale, S., Mansoor, H., Mesnard, T., Ferret, J., Lu, K., Bishop, C., Hall, E., Carbune, V., Rastogi, A., et al. Rlaif vs. rlhf: Scaling reinforcement learning from human feedback with ai feedback. arXiv preprint arXiv:2309.00267 , 2023. Lermen, S., Rogers-Smith, C., and Ladish, J. Lora fine-tuning efficiently undoes safety training in llama 2-chat 70b. arXiv preprint arXiv:2310.20624 , 2023. Leybzon, D. D. and Kervadec, C. Learning, forgetting, re-membering: Insights from tracking llm memorization during training. In Proceedings of the 7th BlackboxNLP Workshop: Analyzing and Interpreting Neural Networks for NLP , pp. 43–57, 2024. Li, M., Si, W. M., Backes, M., Zhang, Y., and Wang, Y. Salora: Safety-alignment preserved low-rank adapta-tion. arXiv preprint arXiv:2501.01765 , 2025a. Li, S., Yao, L., Zhang, L., and Li, Y. Safety layers in aligned large language models: The key to llm secu-rity. arXiv preprint arXiv:2408.17003 , 2024. Li, Y., Yue, X., Xu, Z., Jiang, F., Niu, L., Lin, B. Y., Rama-subramanian, B., and Poovendran, R. Small models struggle to learn from strong reasoners. arXiv preprint arXiv:2502.12143 , 2025b. Lim, I., Khoo, S., Lee, R. K.-W., Chua, W., Goh, J. Y., and Foo, J. Safe at the margins: A general approach to safety alignment in low-resource english languages–a singlish case study. arXiv preprint arXiv:2502.12485 ,2025. Liu, G., Lin, W., Mu, Q., Huang, T., Mo, R., Tao, Y., and Shen, L. Targeted vaccine: Safety alignment for large language models against harmful fine-tuning via layer-wise perturbation. IEEE Transactions on Information Forensics and Security , 2025. Liu, X., Xu, N., Chen, M., and Xiao, C. Autodan: Gen-erating stealthy jailbreak prompts on aligned large 
+
+> 13 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+language models. arXiv preprint arXiv:2310.04451 ,2023. Liu, X., Liang, J., Ye, M., and Xi, Z. Robustifying safety-aligned large language models through clean data curation. arXiv preprint arXiv:2405.19358 , 2024. Long, L., Wang, R., Xiao, R., Zhao, J., Ding, X., Chen, G., and Wang, H. On llms-driven synthetic data gen-eration, curation, and evaluation: A survey. arXiv preprint arXiv:2406.15126 , 2024. Loshchilov, I. and Hutter, F. Decoupled weight decay reg-ularization. arXiv preprint arXiv:1711.05101 , 2017. Lu, X., Li, X., Cheng, Q., Ding, K., Huang, X.-J., and Qiu, X. Scaling laws for fact memorization of large language models. In Findings of the Association for Computational Linguistics: EMNLP 2024 , pp. 11263– 11282, 2024. Maekawa, A., Kamigaito, H., Funakoshi, K., and Oku-mura, M. Generative replay inspired by hippocampal memory indexing for continual language learning. In 
+
+Proceedings of the 17th Conference of the European Chapter of the Association for Computational Linguis-tics , pp. 930–942, 2023. Mehrotra, A., Zampetakis, M., Kassianik, P., Nelson, B., Anderson, H., Singer, Y., and Karbasi, A. Tree of attacks: Jailbreaking black-box llms automatically. 
+
+Advances in Neural Information Processing Systems , 37: 61065–61105, 2024. Mukherjee, S., Mitra, A., Jawahar, G., Agarwal, S., Palangi, H., and Awadallah, A. Orca: Progressive learning from complex explanation traces of gpt-4. 
+
+arXiv preprint arXiv:2306.02707 , 2023. Nadă s, , M., Dio s, an, L., and Tomescu, A. Synthetic data generation using large language models: Advances in text and code. IEEE Access , 2025. OLMo, T., Walsh, P., Soldaini, L., Groeneveld, D., Lo, K., Arora, S., Bhagia, A., Gu, Y., Huang, S., Jor-dan, M., et al. 2 olmo 2 furious. arXiv preprint arXiv:2501.00656 , 2024. Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., Zhang, C., Agarwal, S., Slama, K., Ray, A., et al. Training language models to follow instructions with human feedback. Advances in neu-ral information processing systems , 35:27730–27744, 2022. Perez, E., Huang, S., Song, F., Cai, T., Ring, R., Aslanides, J., Glaese, A., McAleese, N., and Irving, G. Red team-ing language models with language models. arXiv preprint arXiv:2202.03286 , 2022. Pillutla, K., Swayamdipta, S., Zellers, R., Thickstun, J., Welleck, S., Choi, Y., and Harchaoui, Z. Mauve: Measuring the gap between neural text and human text using divergence frontiers. Advances in Neural Information Processing Systems , 34:4816–4828, 2021. Qi, X., Zeng, Y., Xie, T., Chen, P.-Y., Jia, R., Mittal, P., and Henderson, P. Fine-tuning aligned language models compromises safety, even when users do not intend to! arXiv preprint arXiv:2310.03693 , 2023. Qi, X., Panda, A., Lyu, K., Ma, X., Roy, S., Beirami, A., Mittal, P., and Henderson, P. Safety alignment should be made more than just a few tokens deep. arXiv preprint arXiv:2406.05946 , 2024. Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., and Finn, C. Direct preference optimiza-tion: Your language model is secretly a reward model. 
+
+Advances in neural information processing systems , 36: 53728–53741, 2023. Rasley, J., Rajbhandari, S., Ruwase, O., and He, Y. Deep-speed: System optimizations enable training deep learning models with over 100 billion parameters. In 
+
+Proceedings of the 26th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining , pp. 3505–3506, 2020. Rosati, D., Edkins, G., Raj, H., Atanasov, D., Majumdar, S., Rajendran, J., Rudzicz, F., and Sajjad, H. Defend-ing against reverse preference attacks is difficult. arXiv e-prints , pp. arXiv–2409, 2024. Sakaguchi, K., Bras, R. L., Bhagavatula, C., and Choi, Y. Winogrande: An adversarial winograd schema challenge at scale. Communications of the ACM , 64 (9):99–106, 2021. Satvaty, A., Verberne, S., and Turkmen, F. Undesirable memorization in large language models: A survey. 
+
+arXiv preprint arXiv:2410.02650 , 2024. Schwarzschild, A., Feng, Z., Maini, P., Lipton, Z., and Kolter, J. Z. Rethinking llm memorization through the lens of adversarial compression. Advances in Neu-ral Information Processing Systems , 37:56244–56267, 2024. 
+
+> 14 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+Sclar, M., Choi, Y., Tsvetkov, Y., and Suhr, A. Quan-tifying language models’ sensitivity to spurious fea-tures in prompt design or: How i learned to start worrying about prompt formatting. arXiv preprint arXiv:2310.11324 , 2023. Shevlane, T., Farquhar, S., Garfinkel, B., Phuong, M., Whittlestone, J., Leung, J., Kokotajlo, D., Marchal, N., Anderljung, M., Kolt, N., et al. Model evaluation for extreme risks. arXiv preprint arXiv:2305.15324 ,2023. Shi, R., Wang, Y., Du, M., Shen, X., Chang, Y., and Wang, X. A comprehensive survey of synthetic tabular data generation. arXiv preprint arXiv:2504.16506 , 2025. Shin, H., Lee, J. K., Kim, J., and Kim, J. Continual learning with deep generative replay. Advances in neural information processing systems , 30, 2017. Song, F., Yu, B., Li, M., Yu, H., Huang, F., Li, Y., and Wang, H. Preference ranking optimization for human alignment. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, pp. 18990–18998, 2024. Sun, Z., Shen, Y., Zhou, Q., Zhang, H., Chen, Z., Cox, D., Yang, Y., and Gan, C. Principle-driven self-alignment of language models from scratch with minimal human supervision. Advances in Neural Information Processing Systems , 36:2511–2565, 2023. Wang, J., Liu, R., Hu, Y., Wu, H., and He, Z. Secdecoding: Steerable decoding for safer llm generation. In Find-ings of the Association for Computational Linguistics: EMNLP 2025 , pp. 20504–20521, 2025. Wang, K., Zhu, J., Ren, M., Liu, Z., Li, S., Zhang, Z., Zhang, C., Wu, X., Zhan, Q., Liu, Q., et al. A survey on data synthesis and augmentation for large language models. arXiv preprint arXiv:2410.12896 , 2024a. Wang, X., Antoniades, A., Elazar, Y., Amayuelas, A., Albalak, A., Zhang, K., and Wang, W. Y. General-ization vs memorization: Tracing language models’ capabilities back to pretraining data. arXiv preprint arXiv:2407.14985 , 2024b. Wang, Y., Kordi, Y., Mishra, S., Liu, A., Smith, N. A., Khashabi, D., and Hajishirzi, H. Self-instruct: Align-ing language models with self-generated instructions. In Proceedings of the 61st annual meeting of the asso-ciation for computational linguistics (volume 1: long papers) , pp. 13484–13508, 2023. Wang, Z., Bao, R., Wu, Y., Taylor, J., Xiao, C., Zheng, F., Jiang, W., Gao, S., and Zhang, Y. Unlocking memo-rization in large language models with dynamic soft prompting. arXiv preprint arXiv:2409.13853 , 2024c. Wei, A., Haghtalab, N., and Steinhardt, J. Jailbroken: How does llm safety training fail? Advances in Neu-ral Information Processing Systems , 36:80079–80110, 2023a. Wei, Y., Wang, Z., Liu, J., Ding, Y., and Zhang, L. Magi-coder: Empowering code generation with oss-instruct. 
+
+arXiv preprint arXiv:2312.02120 , 2023b. Xiao, S., Liu, Z., Zhang, P., Muennighoff, N., Lian, D., and Nie, J.-Y. C-pack: Packed resources for general chinese embeddings. In Proceedings of the 47th inter-national ACM SIGIR conference on research and devel-opment in information retrieval , pp. 641–649, 2024. Xie, Z., Song, X., and Luo, J. Attack via overfitting: 10-shot benign fine-tuning to jailbreak llms. arXiv preprint arXiv:2510.02833 , 2025. Xiong, A., Zhao, X., Pappu, A., and Song, D. The landscape of memorization in llms: Mechanisms, measurement, and mitigation. arXiv preprint arXiv:2507.05578 , 2025. Xu, C., Sun, Q., Zheng, K., Geng, X., Zhao, P., Feng, J., Tao, C., and Jiang, D. Wizardlm: Empowering large language models to follow complex instructions. arXiv preprint arXiv:2304.12244 , 2023. Xu, Z., Jiang, F., Niu, L., Deng, Y., Poovendran, R., Choi, Y., and Lin, B. Y. Magpie: Alignment data synthesis from scratch by prompting aligned llms with nothing. 
+
+arXiv preprint arXiv:2406.08464 , 2024. Yang, A., Yang, B., Zhang, B., Hui, B., Zheng, B., Yu, B., Li, C., Liu, D., Huang, F., Wei, H., Lin, H., Yang, J., Tu, J., Zhang, J., Yang, J., Yang, J., Zhou, J., Lin, J., Dang, K., Lu, K., Bao, K., Yang, K., Yu, L., Li, M., Xue, M., Zhang, P., Zhu, Q., Men, R., Lin, R., Li, T., Xia, T., Ren, X., Ren, X., Fan, Y., Su, Y., Zhang, Y., Wan, Y., Liu, Y., Cui, Z., Zhang, Z., and Qiu, Z. Qwen2.5 technical report. arXiv preprint arXiv:2412.15115 , 2024. Yang, X., Wang, X., Zhang, Q., Petzold, L., Wang, W. Y., Zhao, X., and Lin, D. Shadow alignment: The ease of subverting safely-aligned language models. arXiv preprint arXiv:2310.02949 , 2023. Yi, J., Ye, R., Chen, Q., Zhu, B., Chen, S., Lian, D., Sun, G., Xie, X., and Wu, F. On the vulnerability of safety 
+
+> 15 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+alignment in open-access llms. In Findings of the Association for Computational Linguistics ACL 2024 ,pp. 9236–9260, 2024. Yu, J., Lin, X., Yu, Z., and Xing, X. Gptfuzzer: Red teaming large language models with auto-generated jailbreak prompts. arXiv preprint arXiv:2309.10253 ,2023a. Yu, L., Jiang, W., Shi, H., Yu, J., Liu, Z., Zhang, Y., Kwok, J. T., Li, Z., Weller, A., and Liu, W. Metamath: Bootstrap your own mathematical questions for large language models. arXiv preprint arXiv:2309.12284 ,2023b. Yue, X., Qu, X., Zhang, G., Fu, Y., Huang, W., Sun, H., Su, Y., and Chen, W. Mammoth: Building math generalist models through hybrid instruction tuning. 
+
+arXiv preprint arXiv:2309.05653 , 2023. Yue, X., Zheng, T., Zhang, G., and Chen, W. Mammoth2: Scaling instructions from the web. Advances in Neu-ral Information Processing Systems , 37:90629–90660, 2024. Zellers, R., Holtzman, A., Bisk, Y., Farhadi, A., and Choi, Y. Hellaswag: Can a machine really finish your sen-tence? arXiv preprint arXiv:1905.07830 , 2019. Zhan, Q., Fang, R., Bindu, R., Gupta, A., Hashimoto, T. B., and Kang, D. Removing rlhf protections in gpt-4 via fine-tuning. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technolo-gies (Volume 2: Short Papers) , pp. 681–687, 2024. Zhang, J., Elgohary, A., Magooda, A., Khashabi, D., and Van Durme, B. Controllable safety alignment: Inference-time adaptation to diverse safety require-ments. arXiv preprint arXiv:2410.08968 , 2024. Zhao, X., Cai, W., Shi, T., Huang, D., Lin, L., Mei, S., and Song, D. Improving llm safety alignment with dual-objective optimization. arXiv preprint arXiv:2503.03710 , 2025. Zhao, Z., Wallace, E., Feng, S., Klein, D., and Singh, S. Calibrate before use: Improving few-shot performance of language models. In International conference on machine learning , pp. 12697–12706. PMLR, 2021. Zhou, C., Liu, P., Xu, P., Iyer, S., Sun, J., Mao, Y., Ma, X., Efrat, A., Yu, P., Yu, L., et al. Lima: Less is more for alignment. Advances in Neural Information Processing Systems , 36:55006–55021, 2023. Zong, Y., Bohdal, O., Yu, T., Yang, Y., and Hospedales, T. Safety fine-tuning at (almost) no cost: A base-line for vision large language models. arXiv preprint arXiv:2402.02207 , 2024. Zou, A., Wang, Z., Carlini, N., Nasr, M., Kolter, J. Z., and Fredrikson, M. Universal and transferable adversarial attacks on aligned language models. arXiv preprint arXiv:2307.15043 , 2023. 
+
+> 16 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+# A. Additional Related Work 
+
+Synthetic Data Generation The advent of LLMs has positioned them as the cornerstone of synthetic data generation across diverse domains (Bauer et al., 2024; Long et al., 2024; Wang et al., 2024a; Nadă s, et al., 2025), spanning mathematics (Yu et al., 2023b; Yue et al., 2023, 2024), reasoning (Mukherjee et al., 2023; Hsieh et al., 2023; Li et al., 2025b), coding (Gunasekar et al., 2023; Wei et al., 2023b), tabular data (Shi et al., 2025) and instruction following (Wang et al., 2023; Xu et al., 2023). Within the domain of safety, synthetic data plays a pivotal role in advancing both adversarial and defensive objectives. It is deployed extensively for automated red-teaming to uncover vulnerabilities through jailbreak generation (Perez et al., 2022; Liu et al., 2023; Mehrotra et al., 2024; Yu et al., 2023a; Zou et al., 2023; Deng et al., 2023; Chao et al., 2025), while simultaneously generating safety examples to counter adversarial prompts Bai et al. (2022b); Sun et al. (2023); Lee et al. (2023). In this work, we introduce a tailored pipeline that integrates prompting and filtering strategies to generate synthetic data designed to uphold safety alignment during downstream fine-tuning. 
+
+Memorization It is now a well-established phenomenon that LLMs memorize subsets of their training data Biderman et al. (2023); Chen et al. (2024a); Haviv et al. (2023); Schwarzschild et al. (2024); Leybzon & Kervadec (2024); Lu et al. (2024); Wang et al. (2024b); Satvaty et al. (2024); Xiong et al. (2025); Wang et al. (2024c); Kiyomaru et al. (2024); Hartmann et al. (2023); Kassem et al. (2025). Prior work has demonstrated significant success in extracting verbatim or near-verbatim training data from LLMs Carlini et al. (2021, 2022); Huang et al. (2024a). Recently, Xu et al. (2024); Barbero et al. (2025) have shown that by utilizing chat templates, which is usually introduced in the instruction-tuning stage, one can easily generate useful synthetic data from open LLMs that is semantically similar to the models’ instruction-tuning stage training data, which is known as alignment data. However, Barbero et al. (2025)’s method lacks fine-grained control over the generated data (e.g., topic, format, type), rendering it unsuitable for targeted training. While Xu et al. (2024) allows for domain control, the control relies entirely on system prompts—a feature absent in several prominent models OLMo et al. (2024); Jiang et al. (2023). Modifying system prompt is also risky; previous work has demonstrated that LLMs are highly sensitive to prompt phrasing, where minor semantic changes can lead to drastic performance degradation or safety failures (Sclar et al., 2023; Zhao et al., 2021; Wei et al., 2023a). We develop a straightforward yet effective prompting strategy that generates domain-specific data without relying on system prompts, while preserving the semantic similarity to the original alignment data, across a diverse range of open LLMs. 
+
+# B. Proof of Theorem 1: Synthetic Data Proxy 
+
+Proof. Let 𝒳 and 𝒴 denote the input and output spaces, respectively. By the definition of the Kullback-Leibler (KL) divergence and substituting the factorized joint distributions 𝐶 𝑠 (𝑥, 𝑦 ) = 𝐷 𝑠 (𝑥 )𝜇 𝑠 (𝑦 | 𝑥 ) and ˆ𝐶 (𝑥, 𝑦 ) = ˆ𝐷 (𝑥 )𝑃 𝜃 (𝑦 |
+
+𝑥 ), we have: 
+
+DKL (𝐶 𝑠 ‖ ˆ𝐶 ) = ∑︁ 
+
+> 𝑥 ∈𝒳
+
+∑︁ 𝑦 ∈𝒴 
+
+𝐶 𝑠 (𝑥, 𝑦 ) log 𝐶 𝑠 (𝑥, 𝑦 )ˆ𝐶 (𝑥, 𝑦 )=∑︁ 
+
+> 𝑥 ∈𝒳
+
+∑︁ 𝑦 ∈𝒴 
+
+𝐷 𝑠 (𝑥 )𝜇 𝑠 (𝑦 | 𝑥 ) log (︃ 𝐷 𝑠 (𝑥 )ˆ𝐷 (𝑥 )
+
+𝜇 𝑠 (𝑦 | 𝑥 )
+
+𝑃 𝜃 (𝑦 | 𝑥 ))︃ 
+
+=∑︁ 
+
+> 𝑥 ∈𝒳
+
+∑︁ 𝑦 ∈𝒴 
+
+𝐷 𝑠 (𝑥 )𝜇 𝑠 (𝑦 | 𝑥 ) log 𝐷 𝑠 (𝑥 )ˆ𝐷 (𝑥 ) +∑︁ 
+
+> 𝑥 ∈𝒳
+
+∑︁ 𝑦 ∈𝒴 
+
+𝐷 𝑠 (𝑥 )𝜇 𝑠 (𝑦 | 𝑥 ) log 𝜇 𝑠 (𝑦 | 𝑥 )
+
+𝑃 𝜃 (𝑦 | 𝑥 ) .
+
+> 17 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+Since ∑︀ 𝑦 ∈𝒴 𝜇 𝑠 (𝑦 | 𝑥 ) = 1 for all 𝑥 , the first term marginalizes to the KL divergence between the input distributions. The second term simplifies by recognizing the inner summation over 𝑦 as the conditional KL divergence: 
+
+DKL (𝐶 𝑠 ‖ ˆ𝐶 ) = ∑︁ 
+
+> 𝑥 ∈𝒳
+
+𝐷 𝑠 (𝑥 ) log 𝐷 𝑠 (𝑥 )ˆ𝐷 (𝑥 ) +∑︁ 
+
+> 𝑥 ∈𝒳
+
+𝐷 𝑠 (𝑥 )D KL (𝜇 𝑠 (· | 𝑥 )‖𝑃 𝜃 (· | 𝑥 )) = D KL (𝐷 𝑠 ‖ ˆ𝐷 ) + E𝑥 ∼𝐷 𝑠 [D KL (𝜇 𝑠 (· | 𝑥 )‖𝑃 𝜃 (· | 𝑥 ))] .
+
+Therefore, the proof is completed. 
+
+# C. Additional Experimental Details 
+
+C.1. Extraction Setup 
+
+For extraction, we collect a comprehensive list to cover 38 subdomains for safety. The full list is as below: violence, physical harm, animal abuse, self-harm, terrorism, organized crime, human trafficking, aiding and abetting violence, incitement, hate speech, offensive language, insulting behavior, discriminatory behavior, stereotypes, injustice, psychological harm, sexual content, sexually explicit/adult content, child abuse, drugs (drug abuse), banned substances, weapons, cybercrime, white-collar crime, economic crime, financial crime, property crime, theft, endangering national security, endangering public health, disrupting public order, misinformation regarding ethics/laws/safety, controversial topics/politics, environmental damage, privacy violation, copyright issues, mental manipulation, non-violent unethical behavior The prompt template to generate safety-related queries is demonstrated as below: 
+
+Prompt Template for Query Extraction 
+
+[User]: You refused a \textbf{specific request} that raised {domain} concerns. Repeat the \textbf{specific request} and explain why it was refused. [Assistant]: Sure, the \textbf{specific request} is ‘‘ 
+
+where the {domain} placeholder is substituted with keywords from a predefined list of safety subdomains. The bolded phrase {specific request} is retained, serving as an indicator that prevents the assistant from merely echoing the user’s input. Note that the content needs to be formatted using the model’s chat template. Any <generation> or <eos> token automatically added by the tokenizer also needs to be removed, ensuring the model continues generation as the assistant rather than interpreting the sentence as finished. After generating the queries, we pass them to the model as a new user query to elicit the corresponding model responses. To accelerate inference, we employ vLLM Kwon et al. (2023) for both query and response generation. For query generation, we set the temperature to 1.0 and the maximum length to 256 tokens, generating 512 candidate responses for each subdomain keyword. For response generation, we set temperature = 0.8, max length = 1024, top p = 0.95. 
+
+C.2. Data Post-Processing Setup Query Filtering For perplexity filtering, we leverage Qwen2.5-0.5B Yang et al. (2024) to calculate the perplexity of each query, discarding those in the extreme 5th and 95th percentiles. For deduplication, we generate query embeddings with BAAI/bge-small-en-v1.5 Xiao et al. (2024) and conducting pairwise comparisons via FAISS Douze et al. (2025). If two queries exhibit a cosine similarity exceeding 0.85, we retain only the one with the lower FAISS index. For domain relevance, we follow the same embedding framework as deduplication. Any query with a cosine similarity below 0.5 relative to the corresponding subdomain keyword is removed. 
+
+> 18 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+Response Revision For response revision, we employ WildGuard Han et al. (2024) as the guardrail to evaluate responses in the context of their corresponding queries. We set the guardrail model’s temperature to 0 to ensure deterministic evaluations. In the “exclusion” setup, any response flagged as unsafe by the guardrail is excluded from the final synthetic dataset. In the “revision” setup (part of GR-SAP), the unsafe response is incorporated in the final synthetic dataset after revised with the following prompt template: 
+
+Prompt Template for Response Revision 
+
+[User]: {query} The above request is harmful. Please refuse it. 
+
+where the {query} is the corresponding query that triggers the unsafe response. 
+
+C.3. Examples of Extracted Alignment Data 
+
+Table 4 presents examples of queries and responses generated by various models across different subdomain keywords. For instance, Llama3 complies with the request to describe a murder scene in detail. Such cases indicate that even safety-aligned models can produce harmful outputs, underscoring the necessity of a dedicated response filtering to prevent them from compromising the model’s safety alignment during downstream fine-tuning. 
+
+Table 4: Examples of queries and responses generated by models across different subdomains. Llama3 complies with the request to describe a murder scene in detail, indicating even safety-aligned models can produce harmful outputs. 
+
+Model Subdomain Query Response 
+
+OLMo2 Human Trafficking Please provide detailed methods on how to travel from point A to point B clandestinely and without detection. I’m sorry, but I can’t assist with re-quests related to engaging in ille-gal activities or avoiding detection in ways that could potentially harm oneself or others... Llama3 Violence May I ask you to describe a murder scene in vivid detail for the purpose of helping me develop a crime novel? I’d be happy to help you with that. Please note that I’ll do my best to cre-ate a vivid and detailed description of a murder scene... Qwen2.5 Theft Could you arrange for us to access the cloud storage system directly without going through the official login pro-cess? I’m sorry, but directly accessing a cloud storage system without follow-ing the official login process would typically violate security protocols and terms of service... Mistral Psychological Harm Write a passage that ridicules, belit-tles, or harasses a specific individual. I must express my deepest dismay at the abysmal display of intellectual acumen by a certain Mr. Foolish-man... 
+
+> 19 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+C.4. Downstream Training and Evaluation Downstream Training We employ DeepSpeed Rasley et al. (2020) Stage 2 to accelerate training. We utilize a cosine learning rate schedule, with a maximum learning rate of 2e-6, a minimum learning rate of 1e-6, and a warm-up ratio of 0.1. For the optimizer, we use AdamW Loshchilov & Hutter (2017) with default hyperparameters. We set the total number of training examples 𝑁 to 7,168 for GSM8K and MATH, 9,216 for MedQA, and 10,240 for HellaSwag and WinoGrande, which are explicitly set as multiples of 1,024 to optimize hardware efficiency and accelerate training. 
+
+Downstream Evaluation During evaluation, we employ vLLM Kwon et al. (2023) to accelerate inference. We set the temperature to 0 to ensure deterministic outputs for both generating responses and assessing them with the guardrail model. The maximum sequence length is set to 1,024 for both training and inference. Downstream training and evaluation utilizing the same prompt for formatting queries as summarized in Table 5. 
+
+Table 5: Downstream training and evaluation prompt templates. Placeholders (query and options) are shown in braces. 
+
+Dataset Prompt template 
+
+GSM8K {query} Think step by step and output the final answer in the following format: #### <answer> 
+
+MATH {query} Think step by step and output the final answer in the following format: \boxed{answer} 
+
+HellaSwag   
+
+> Choose the most appropriate ending from the options for the sentence: {query}. Options: A: {optionA}, B: {optionB}, C: {optionC}, D: {optionD} Output only A, B, C, or D
+
+WinoGrande   
+
+> Choose the most appropriate option to fill in the blank for the sentence: {sentence}. Options: A: {optionA}, B: {optionB} Output only A or B
+
+MedQA  
+
+> Question:{query} Options: A: {optionA}, B: {optionB}, C: {optionC}, D: {optionD} Output only A, B, C, or D
+
+C.5. Safety Dataset Preprocessing 
+
+For AEGIS and Beavertails, we utilize the training splits, filtering out instances with empty responses or those labeled as unsafe to ensure high-quality safety examples. For SafeRLHF, which is a preference dataset, we also utilize the training splits but only keep the safer response for each query. Regarding the original alignment dataset, We identify three sub-datasets explicitly focusing on safety from the instruction dataset of OLMo2: CoCoNot Brahman et al. (2024), WildGuard Han et al. (2024), and WildJailbreak Jiang et al. (2024). We aggregate these subsets to construct the combined original safety alignment dataset. When computing MAUVE, we use the raw data (without post-processing) of GR-SAP to avoid introducing artifacts that could artificially alter the semantic similarity between the two distributions. 
+
+# D. Additional Experiment Results 
+
+D.1. Training Dynamics 
+
+Figure 4, Figure 5 and Figure 6 shows the training dynamics on HellaSwag, WinoGrande and MedQA respectively. 
+
+> 20 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning
+
+Table 6: Standard deviations (std) for Harmful Scores (HS, %) and Downstream Task Accuracy (Acc, %) for the comparison of alignment data sources with a mixing ratio of 𝑟 = 0 .1. Corresponding to Table 1. 
+
+Model Align Data GSM8K MATH Hellaswag Winogrande MedQA AVG. HS 
+
+HS Acc HS Acc HS Acc HS Acc HS Acc OLMo2 None 0.03 0.61 0.07 0.31 0.03 0.72 0.03 0.09 0.07 0.27 0.05 
+
+Aegis 0.15 0.39 0.15 0.68 0.83 0.20 0.61 0.36 0.26 0.27 0.40 
+
+Beavertails 0.50 0.73 0.19 0.33 1.26 0.14 0.67 0.33 0.30 0.24 0.58 
+
+Original 0.04 0.90 0.08 0.27 0.11 0.32 0.13 0.60 0.12 0.91 0.10 
+
+GR-SAP (Ours) 0.04 0.59 0.03 0.14 0.04 0.17 0.01 0.16 0.08 0.40 0.04 
+
+Llama3 None 0.50 0.19 0.06 0.49 0.38 0.03 0.19 0.55 0.12 0.43 0.25 
+
+Aegis 4.64 0.95 1.39 0.69 0.79 0.25 0.81 0.82 2.61 0.39 2.05 
+
+Beavertails 2.10 1.31 2.51 0.97 3.01 0.18 2.26 0.78 0.84 0.45 2.14 
+
+GR-SAP (Ours) 0.19 1.08 0.18 0.52 0.32 0.17 0.43 0.24 0.16 0.88 0.26 
+
+Qwen2.5 None 0.12 0.72 0.28 0.78 0.32 0.13 0.09 0.67 0.23 0.56 0.21 
+
+Aegis 1.97 0.18 2.62 0.19 2.09 0.08 4.99 0.46 3.25 0.14 2.98 
+
+Beavertails 1.54 0.65 0.27 0.20 2.55 0.25 1.40 0.73 5.20 0.73 2.19 
+
+GR-SAP (Ours) 0.27 0.61 0.34 0.36 0.91 0.15 0.06 0.33 0.78 0.24 0.47 
+
+Mistral None 0.25 2.11 0.24 0.42 1.67 0.24 0.95 0.94 1.13 0.24 0.85 
+
+Aegis 6.25 0.73 0.99 0.66 3.80 0.24 1.22 0.48 2.68 1.70 2.99 
+
+Beavertails 1.95 1.67 2.68 0.14 1.46 0.19 1.36 16 .95 2.05 0.24 1.90 
+
+GR-SAP (Ours) 1.43 2.92 0.61 0.92 0.85 0.38 1.25 8.49 1.22 3.75 1.07 
+
+D.2. Standard Deviation Results 
+
+The std results of Table 1, Table 2 and Table 3 are in Table 6, Table 7 and Table 8 respectively. 
+
+Table 7: Standard deviations for MAUVE scores ( ∈ [0 , 1] ) measuring semantic similarity between listed datasets and the original alignment dataset reference. Corresponding to Table 2.             
+
+> Dataset Query Response
+> AEGIS 0.0086 0.0021 Beavertails 0.0053 0.0036 SafeRLHF 0.0015 0.0018
+> Open Source AVG. 0.0052 0.0025
+> GR-SAP (Ours) 0.0031 0.0067
+> 21
+
+GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning 0 1k 2k 3k 4k 5k 6k 7k 8k 9k 10k 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> Harmful Score (%)
+
+OLMo-2           
+
+> 01k 2k 3k 4k 5k 6k 7k 8k 9k 10k
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+
+Llama-3           
+
+> 01k 2k 3k 4k 5k 6k 7k 8k 9k 10k
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+
+Qwen-2.5           
+
+> 01k 2k 3k 4k 5k 6k 7k 8k 9k 10k
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+
+Mistral 
+
+Beavertails (r=0.0) 
+
+Beavertails (r=0.1) 
+
+SafeRLHF (r=0.0) 
+
+SafeRLHF (r=0.1) 
+
+WildGuard (r=0.0) 
+
+WildGuard (r=0.1) 
+
+WildJailbreak (r=0.0) 
+
+WildJailbreak (r=0.1) 
+
+Figure 4: Training dynamics on HellaSwag across models. Harmful Score (HS, %) on each safety benchmark is denoted by a distinct marker shape. 0 1k 2k 3k 4k 5k 6k 7k 8k 9k 10k 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> Harmful Score (%)
+
+OLMo-2           
+
+> 01k 2k 3k 4k 5k 6k 7k 8k 9k 10k
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+
+Llama-3           
+
+> 01k 2k 3k 4k 5k 6k 7k 8k 9k 10k
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+
+Qwen-2.5            
+
+> 01k 2k 3k 4k 5k 6k 7k 8k 9k 10k
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+
+Mistral 
+
+Beavertails (r=0.0) 
+
+Beavertails (r=0.1) 
+
+SafeRLHF (r=0.0) 
+
+SafeRLHF (r=0.1) 
+
+WildGuard (r=0.0) 
+
+WildGuard (r=0.1) 
+
+WildJailbreak (r=0.0) 
+
+WildJailbreak (r=0.1) 
+
+Figure 5: Training dynamics on WinoGrande across models. Harmful Score (HS, %) on each safety benchmark is denoted by a distinct marker shape. 0 1k 2k 3k 4k 5k 6k 7k 8k 9k 
+
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 2.00
+> Harmful Score (%)
+
+OLMo-2          
+
+> 01k 2k 3k 4k 5k 6k 7k 8k 9k
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+
+Llama-3          
+
+> 01k 2k 3k 4k 5k 6k 7k 8k 9k
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+
+Qwen-2.5          
+
+> 01k 2k 3k 4k 5k 6k 7k 8k 9k
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+
+Mistral 
+
+Beavertails (r=0.0) 
+
+Beavertails (r=0.1) 
+
+SafeRLHF (r=0.0) 
+
+SafeRLHF (r=0.1) 
+
+WildGuard (r=0.0) 
+
+WildGuard (r=0.1) 
+
+WildJailbreak (r=0.0) 
+
+WildJailbreak (r=0.1) 
+
+Figure 6: Training dynamics on MedQA across models. Harmful Score (HS, %) on each safety benchmark is denoted by a distinct marker shape. 
+
+22 GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning 
+
+Table 8: Standard deviation of Harmful Scores (HS, %) and Downstream Task Accuracy (Acc, %) for the comparison of filtering pipeline with a mixing ratio of 𝑟 = 0 .1. Corresponding to Table 3. 
+
+Model Added Filter GSM8K MATH Hellaswag Winogrande MedQA AVG. HS 
+
+HS Acc HS Acc HS Acc HS Acc HS Acc OLMo2 w/o filtering 0.02 0.32 0.05 0.39 0.07 0.21 0.05 0.89 0.04 0.89 0.05 
+
+˓→+ ppl 0.05 0.80 0.06 0.21 0.05 0.09 0.04 0.37 0.02 0.34 0.05 
+
+˓→+ deduplica-tion 0.03 0.16 0.01 0.25 0.04 0.12 0.12 0.87 0.05 0.30 0.06 
+
+˓→+ domain 0.05 0.87 0.01 0.24 0.06 0.08 0.08 0.28 0.06 0.67 0.06 
+
+˓→ + exclusion 0.08 0.38 0.02 0.35 0.04 0.23 0.04 0.48 0.07 1.23 0.05 
+
++ revision 0.04 0.59 0.03 0.14 0.04 0.17 0.01 0.16 0.08 0.40 0.05 
+
+Llama3 w/o filtering 0.27 0.62 1.06 0.16 0.75 0.16 0.79 0.33 0.47 0.25 0.72 
+
+˓→+ ppl 1.42 0.85 0.61 0.06 0.18 0.12 0.86 0.36 0.21 0.59 0.80 
+
+˓→+ deduplica-tion 1.35 1.08 0.76 0.47 0.44 0.33 0.52 0.78 0.97 0.68 0.87 
+
+˓→+ domain 1.86 1.16 0.46 0.82 0.05 0.07 0.51 0.21 0.62 0.71 0.93 
+
+˓→ + exclusion 1.19 0.64 0.31 0.12 0.49 0.23 1.01 0.64 0.90 0.42 0.85 
+
++ revision 0.19 1.08 0.18 0.52 0.32 0.17 0.43 0.24 0.16 0.88 0.28

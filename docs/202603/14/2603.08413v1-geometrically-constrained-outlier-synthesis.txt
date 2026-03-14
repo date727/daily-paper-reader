@@ -1,0 +1,868 @@
+Title: Geometrically Constrained Outlier Synthesis
+
+URL Source: https://arxiv.org/pdf/2603.08413v1
+
+Published Time: Tue, 10 Mar 2026 02:22:45 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Geometrically Constrained Outlier Synthesis 
+
+Daniil Karzanov 1 2 Marcin Detyniecki 1 3 4 
+
+Abstract 
+
+Deep neural networks for image classification of-ten exhibit overconfidence on out-of-distribution (OOD) samples. To address this, we intro-duce Geometrically Constrained Outlier Synthesis (GCOS), a training-time regularization framework aimed at improving OOD robustness during infer-ence. GCOS addresses a limitation of prior syn-thesis methods by generating virtual outliers in the hidden feature space that respect the learned man-ifold structure of in-distribution (ID) data. The synthesis proceeds in two stages: (i) a dominant-variance subspace extracted from the training features identifies geometrically informed, off-manifold directions; (ii) a conformally-inspired shell, defined by the empirical quantiles of a non-conformity score from a calibration set, adap-tively controls the synthesis magnitude to pro-duce boundary samples. The shell ensures that generated outliers are neither trivially detectable nor indistinguishable from in-distribution data, facilitating smoother learning of robust features. This is combined with a contrastive regulariza-tion objective that promotes separability of ID and OOD samples in a chosen score space, such as Mahalanobis or energy-based. Experiments demonstrate that GCOS outperforms state-of-the-art methods using standard energy-based infer-ence on near-OOD benchmarks, defined as tasks where outliers share the same semantic domain as in-distribution data. As an exploratory exten-sion, the framework naturally transitions to con-formal OOD inference, which translates uncer-tainty scores into statistically valid p-values and enables thresholds with formal error guarantees, providing a pathway toward more predictable and reliable OOD detection.                
+
+> 1AXA AI Research; 2EPFL, Lausanne, Switzerland; 3TRAIL, Sorbonne Universit ´e, Paris, France; 4Polish Academy of Science, IBS PAN, Warsaw, Poland. Correspondence to:
+> <daniil.karzanov@axa.com >.
+> Preprint. March 10, 2026.
+
+1. Introduction 
+
+Test-time out-of-distribution (OOD) detection is an impor-tant component of any machine learning model. For classi-fication tasks, the ability to identify an input as an outlier rather than as an instance of one of the training set classes is crucial for robustly handling novel or unexpected inputs that inevitably arise outside the curated training environment. Classification models trained without explicit regularization for outliers can develop overconfident decision boundaries, where instances far from all classes may still be confidently assigned to the nearest class (Du et al., 2022; Vernekar et al., 2019). To illustrate how uncertainty-aware objectives shape rep-resentations in practice, we begin by discussing Virtual Outlier Synthesis (VOS) (Du et al., 2022), which leads to more robust decision boundaries. VOS addresses the chal-lenge of data imbalance in anomaly detection, particularly when anomalous examples are scarce or entirely absent dur-ing training. The core idea behind VOS is to artificially generate synthetic outliers, enabling the model to better dif-ferentiate between in-distribution (ID) and OOD patterns. Unlike traditional data augmentation, which typically relies on perturbations of existing samples or generation of OOD data in the data space (i.e. the space of input images), VOS models and samples from regions in the feature space that are statistically unlikely under the distribution of ID data. This approach helps simulate plausible yet diverse abnormal examples. Among existing methods, our work is similar to VOS in its emphasis on OOD-aware representation learning. How-ever, a fundamental limitation of the VOS-based approach is the assumption that outliers can be modeled as samples drawn from a simple distribution (e.g., Gaussian) outside the support of the normal data (Siddiqi et al., 2023). This simplification may fail to capture the complex and often non-Gaussian nature of real-world anomalies, which can exhibit structured or domain-specific characteristics (Tao et al., 2023). Consequently, the synthesized outliers may not accurately reflect the true anomaly space, potentially leading to poor generalization. The effectiveness of VOS also depends on the geometry of the learned feature space. If the latent space does not adequately separate normal and abnormal regions, synthetic outliers may overlap with nor-1
+
+> arXiv:2603.08413v1 [cs.LG] 9 Mar 2026 Geometrically Constrained Outlier Synthesis
+
+mal samples or fall into irrelevant regions, reducing their utility. One of our key contributions is to replace the reliance on pre-defined parametric distributions (such as class-conditional Gaussians) for outlier modeling. Instead, we propose a geo-metric synthesis framework that generates outliers by prob-ing low-variance subspaces of the learned feature manifold, as identified by Principal Component Analysis in the feature space. To control the difficulty of the synthetic outliers, we aim to generate meaningful examples for regularization that are neither too close to real data embeddings (making them inseparable), nor trivially obvious outliers that are too easy for the model to identify as OOD. Another key limitation in existing OOD literature is the heavy focus on far-OOD benchmarks, where test data is semantically distant from the training domain (e.g., eval-uating an animal classifier on industrial objects). While useful, these benchmarks overlook what we argue is the more critical challenge for robust AI: near-OOD detec-tion, where models must separate fine-grained categories within the same super-class (e.g., unseen animal breeds). Such cases are more likely to trigger catastrophic failures in practice due to high feature-space similarity. Accord-ingly, alongside standard far-OOD benchmarks, our work places strong emphasis on evaluating methods against near-OOD tasks, where samples come from the same domain as in-distribution classes but remain unseen during training. Conformal prediction (CP) (Vovk et al., 2005) addresses this challenge from a complementary perspective. CP provides a model-agnostic framework for quantifying uncertainty with formal statistical guarantees. It can be applied at inference time to any base predictor (Shafer & Vovk, 2008; Saunders et al., 1999; Vovk et al., 2017). Specifically, CP outputs a set or interval that contains the true label with guaranteed cov-erage. While OOD detection and CP originate from distinct lines of work, both ultimately aim to assess when a model’s predictions should not be trusted. This motivates our ex-ploration of whether CP can, during training , strengthen a model’s robustness and its ability to internally flag outliers. We further investigate whether combining CP during infer-ence offers a promising approach for more predictable and reliable OOD detection by translating uncertainty scores into statistically valid p-values with formal error guarantees. The contributions of this paper can be summarized as fol-lows: We first introduce a novel geometrically-driven outlier synthesis approach based on a conformal heuristic. Second, we propose a loss function incorporating nonconformity scores. Finally, we explore an alternative to energy-based inference as future work: conformal hypothesis testing for OOD detection. Introducing our conformal heuristic into loss regulariza-tion via outlier synthesis (first and second contributions) establishes a robust framework for OOD detection. Beyond this core method, we also provide an exploratory extension aimed at bridging the gap to provably reliable systems, by providing a formal statistical framework that governs their behavior under uncertainty. We discuss how this approach can be applied and, in doing so, open a new avenue for future research, with promising preliminary results on the Colored MNIST and Retinopathy datasets. 
+
+2. Background 
+
+2.1. Outlier Exposure 
+
+VOS regularization is based on the principle of Outlier Ex-posure (Hendrycks et al., 2018). During training, a set of virtual outliers, Zood , are generated (e.g., by sampling from the tails of class-conditional Gaussian distributions fitted to in-distribution features). The OOD detection capability is learned by forcing a distinction between the energy scores (LeCun et al., 2007; Ngiam et al., 2011; Grathwohl et al., 2019) of ID and virtual outlier samples. 
+
+E(z; θ) = − log 
+
+> K
+
+X
+
+> k=1
+
+exp( fk(z; θ)) (1) Following the formulation in the VOS paper, the energy score for a feature vector z with model parameters θ is de-fined as the negative log partition function (1) where fk(z; θ)
+
+is the k-th logit from the classifier for K classes. A low energy score corresponds to a confident, in-distribution-like prediction. The model then learns a function ϕ that maps this energy score to a new logit, which determines the prob-ability of the input being in-distribution. The uncertainty regularization loss, Luncertainty , is the binary cross-entropy loss for this task, where ID samples have a target label of 1 and virtual outliers have a target label of 0. 
+
+Luncertainty = Ezin ∼Z in 
+
+h
+
+− log 11+exp( −ϕ(E(zin ;θ))) 
+
+i
+
++Ezood ∼Z ood 
+
+h
+
+− log exp( −ϕ(E(zood ;θ))) 1+exp( −ϕ(E(zood ;θ))) 
+
+i (2) Here, Zin is the distribution of features of the in-domain data and Zood is the distribution of synthesized virtual outliers. The first term pushes the probability of ID samples being recognized as ID towards 1, while the second term pushes the probability of virtual outliers being recognized as ID towards 0. 
+
+2.2. Energy-Based Inference 
+
+A common and widely adopted approach for OOD detection is the energy-based OOD detection score (Liu et al., 2020), 2Geometrically Constrained Outlier Synthesis 
+
+which uses the value in equation (1) directly as the outlier signal, bypassing any auxiliary heads. Higher energy indi-cates lower model confidence and thus a greater likelihood of OOD. Conceptually, this plays the same role as a proba-bility score in binary classification, providing a per-sample measure of “outlierness.” To ensure comparability with prior work and consistency with the VOS evaluation protocol, we report results in Section 5 using the general energy score as the OOD detection score. While energy-based scores provide a simple heuristic, their thresholds are tuned on validation data and lack formal guarantees on novel inputs. In Section 6, we explore an al-ternative approach that converts raw scores into statistically valid p-values, enabling thresholds with formally controlled error rates. 
+
+2.3. Conformal Prediction 
+
+Conformal prediction provides a distribution-free frame-work for constructing prediction sets with guaranteed cover-age under the assumption that the data points are exchange-able. Let Dcal = {(xi, y i)}ni=1 denote a calibration set drawn from the same distribution as the test points. For a new input xn+1 , a nonconformity score function S(x, ˆy)
+
+measures how unusual a candidate label ˆy is relative to the calibration data. The conformal prediction set for xn+1 is then defined as C(xn+1 ) = {ˆy : S(xn+1 , ˆy) ≤ Q1−α},
+
+where Q1−α is the (1 − α)-quantile of the nonconformity scores on the calibration set. Under the exchangeability assumption, this guarantees that the prediction set covers the true label with probability at least 1 − α. The choice of nonconformity score is flexible and can be adapted to differ-ent types of models and tasks. For classification, it is often derived from model probabilities or logits; for regression, it can be based on residuals or prediction intervals. Conformal prediction in the context of OOD detection can be formulated as hypothesis testing, where the nonconfor-mity score functions as a test statistic. For a candidate test point, CP computes a p-value by comparing its score to the calibration scores from the training data, which is analo-gous to accepting or rejecting a null hypothesis (Vovk et al., 2014; Barber et al., 2023; Tibshirani et al., 2020). Simi-lar to classical hypothesis testing, controlling Type I error (coverage guarantee) often comes at the cost of low power, i.e., the ability to correctly reject false hypotheses. Some OOD points may not appear “strange” enough to be flagged, particularly if the nonconformity score computed from the model’s internal representations is weak. The nonconfor-mity score derived from the model’s final prediction ˆy may not fully capture uncertainty. A single prediction must si-multaneously serve as an effective uncertainty measure and as an accurate estimate of the true label or class probability, which can be a limiting constraint. In contrast, deriving the score from logits or the model’s hidden states provides more flexibility and often produces a more informative nonconfor-mity measure. Consequently, in this work, we repurpose the conformal prediction framework as a geometric heuristic for training-time outlier synthesis. We note that this usage leverages the descriptive power of nonconformity scores to define decision boundaries, without claiming the statistical coverage guarantees which are strictly valid only under ex-changeability conditions at inference time. At the end of this manuscript (Section 6), we discuss how we can restore the guarantees with a post-hoc calibration. 
+
+3. Conformal Shell Synthesis 
+
+We introduce a geometrically-driven synthesis of virtual out-liers via Principal Component Analysis (Hotelling, 1933). An eigen-decomposition is applied to the hidden representa-tions Zin obtained from the backbone network immediately preceding the classification layer. Once the eigenvectors and eigenvalues, Vtrain and Λtrain , are computed, they are split into “large” and “small” components. The first K prin-cipal components that account for at least η (e.g. 90%) of the variance are marked as “large,” while the remaining 
+
+Vk 
+
+> small, train
+
+are considered “small.” These small PCs are the main building blocks for outlier synthesis: they correspond to directions with the smallest variability in the data, mean-ing that moving along them produces unlikely points while still remaining near the data centroid μ. Similar to VOS, we use a rolling per-class buffer to compute the covariance matrix Σ and the mean. Let v be the direction of a chosen small PC (see the scatter plot in figure 1). We can then generate an OOD feature as zood (α) = μ + αv , where α is a scalar. The problem of outlier synthesis is thus reduced to sampling a single scalar. Choosing α requires care: very small values produce synthetic points too close to real features to be separable, while very large values produce trivially easy outliers that are not useful for generalization. To address this, we apply a conformal prediction-inspired heuristic to determine appropriate values for α. This heuris-tic evaluates how “strange” a point is relative to a calibration set set aside at the beginning of training, ensuring that gen-erated outliers avoid being overly simple, unrealistically extreme, or, at the other extreme, indistinguishably close to ID data. For a given choice of the score (uncertainty) func-tion S, we compute the quantiles of the scores of the features derived from the calibration data. These quantiles then serve as thresholds to define a conformal shell [αinner , α outer ]. Intu-itively, the conformal shell defines a range of deviation mag-nitudes, α, that produce outliers of a specific “strangeness.” The boundaries of this shell, αinner and αouter , are determined by the 95th and 99th percentile nonconformity score thresh-olds ( q95 and q99 respectively), which are derived from the 3Geometrically Constrained Outlier Synthesis 
+
+Figure 1. GCOS Training Procedure Schematic. Illustration of the data flow in our online synthesis and regularization method. Epoch-level calibration on Dcalib produces class-conditional subspace models Mcalib and Mahalanobis quantiles q. During batch-level training, features are used to update a queue that generates proposer subspace models Mtrain and identifies off-manifold directions v.Outliers zood are synthesized to match the target quantiles q, as evaluated by Mcalib . The final regularization loss, Lreg , is a contrastive objective computed on the energy scores of in-distribution batch features and the synthesized outliers zood and added to cross-entropy loss, LCE , from the main classification task. 
+
+calibration set. Formally, αinner is the minimum deviation re-quired such that the nonconformity score of the synthesized point equals the lower threshold, i.e., S(zood (αinner )) = q95 .This establishes αinner as the precise boundary where, for any infinitesimal ϵ > 0, the point zood (αinner − ϵ) would still be considered in-distribution by this threshold, while 
+
+zood (αinner + ϵ) would not. Similarly, αouter is determined using the higher score threshold q99 . New OOD features, 
+
+zood (α), are then generated by sampling α uniformly from this “hard-negative” shell: α ∼ U [αinner , α outer ].When choosing the direction v, we consider two options. Having identified the “small” eigenvectors Vk
+
+> small, train
+
+, we either average them to obtain a single generation direction 
+
+v = 1
+
+> |Vk
+> small, train |
+
+P
+
+> vi∈Vk
+> small, train
+
+vi (3) or we apply the outlier synthesis procedure separately for each vi ∈ Vk 
+
+> small, train
+
+or its subset. We refer to the former ap-proach as the average direction method and the latter as the 
+
+per direction method. Refer to Appendix H for the ablation study. Additionally, moving in the opposite direction of v is also possible, which we implement by randomly selecting the sign of the direction. Since the model is updated continuously and the calibration data participates in this feedback loop, the strict exchange-ability assumption of traditional conformal prediction is violated. To address this, we maintain two calibration sets: one for online calibration and outlier synthesis during train-ing, and another for final calibration, which is later used for the conformal hypothesis testing during OOD evaluation in Section 6. If the score function is monotonic in α (i.e., uncertainty increases as we move farther from the centroid), α can be determined through single-variable optimization. Given the binary nature of OOD detection, where the goal is simply to determine if the score crosses a target quantile, a binary search can also be employed, as described in Algorithm 1.The Mahalanobis distance (Mahalanobis, 2018) in (4) sat-isfies this criterion. 
+
+SM ahal (z, μ, {λi}, {vi}) = 
+
+> D
+
+X
+
+> i=1
+
+ (z − μ)T vi
+
+2
+
+λi + ϵ (4) To directly optimize the feature space for OOD separability, we propose a geometric regularization loss, Lreg . This loss is formulated as a contrastive objective that minimizes the nonconformity scores of in-distribution samples while maximizing the scores of synthesized OOD samples. Let 
+
+SL(z | M k) denote the nonconformity score of a feature vector z with respect to the calibration model Mk for class 
+
+k. The loss is defined as (5) where yid is the true class label for the ID virtual sample zid .4Geometrically Constrained Outlier Synthesis 
+
+Lreg = E zid ∼Z id 
+
+> zood ∼Z ood
+
+
+
+max(0 , SL(zid |M yid )
+
+− min  
+
+> k
+
+SL(zood |M k) + m)
+
+ (5) In equation (5), the positive term, SL(zid |M yid ), represents the score of an in-distribution sample against its own class’s reference model, which we aim to minimize. The negative term, min k SL(zood |M k), is the score of a synthesized out-lier against its best-fitting (i.e., minimum score) class model, which we aim to maximize. The nonconformity score func-tion SL(·) can be either the Mahalanobis distance, in which case Mk corresponds to the leading variance directions of the class-conditional feature distribution, parameterized by 
+
+(μk, Vk, Λk), or the energy strangeness score (6), where 
+
+Mk is implicitly the shared classifier head. The adaptive margin m is set to the difference between the 95th and 50th percentiles of the positive scores in the batch, ensuring a dynamically scaled separation between ID and OOD score distributions. Refer to Appendix B for adaptive margin calculation. Building on the general framework, we next present its instantiation in our proposed GCOS configuration. First, the set of virtual outliers Zood is generated using our geometric synthesis method where the conformal shell boundaries are determined by quantiles of the Mahalanobis distance score function. Second, for the loss in equation (5), we define the nonconformity score SL(·) to be the Energy Strangeness Score: 
+
+SL(z) = log 
+
+> K
+
+X
+
+> i=1
+
+wi · exp( hϕ(z)i) (6) Since this score is class-agnostic, the min k SL(zood |M k)
+
+term in the loss simplifies to SL(zood ). This hybrid ap-proach leverages the geometric properties of the feature space to propose effective outlier locations, while directly optimizing the energy landscape which has shown to be a robust indicator for OOD detection (Du et al., 2022). We also evaluated our outlier synthesis approach using the reg-ularization loss from VOS, and examined the case where both synthesis and loss regularization scores are given by the Mahalanobis distance (i.e., SL(·) = S(·) = SM ahal (·)), detailed in Appendix F. 
+
+4. Experimental Setup 
+
+Many previous works have primarily focused on far-outliers, i.e., they evaluated models on OOD datasets that are un-related to the training data (e.g., CIFAR-10 for ID and Textures for OOD). We argue that such scenarios are not realistic in practice. Therefore, we propose evaluating on 5 0 5 10 15        
+
+> UMAP Component 1
+> 5.0
+> 2.5
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> UMAP Component 2
+> Feature Space Visualization
+> Categories
+> GCOS_Outlier
+> ID Class 0
+> ID Class 1
+> ID Class 2
+> ID Class 3
+> ID Class 4
+> ID Class 5
+> ID Class 6
+> ID Class 7
+> ID Class 8
+> ID Class 9 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5
+> UMAP Component 1
+> 5
+> 4
+> 3
+> 2
+> 1
+> 0
+> 1
+> 2
+> UMAP Component 2
+> Feature Space Visualization
+> Categories
+> GCOS_Outlier
+> VOS_Outlier
+> ID Class 0
+> ID Class 8
+
+Figure 2. UMAP Projection of Learned Features. Top: the overall feature space, showing that classes form varying shapes and are largely well separated. Bottom: a zoomed-in view highlighting the distribution of GCOS outliers in off-manifold regions and VOS outliers near cluster edges for two clusters. The panels illustrate how GCOS generates points in challenging regions beyond the main clusters, while VOS outliers remain close to class boundaries. 
+
+near-OOD data - images that are not included in the training set but originate from the same field or domain. We consider four problems. The first dataset, Colored MNIST , assigns each digit in MNIST (LeCun, 1998) a fixed RGB color. The in-distribution split uses consistent digit-color associations, while the out-of-distribution split per-mutes these associations so that each digit appears with a different color. This construction yields an ID training set, an ID test set, and an OOD evaluation set, enabling con-trolled assessment of generalization under distribution shifts. The second dataset, MVTec , is based on images of defec-tive industrial objects. From the original MVTec dataset (Bergmann et al., 2019), we construct the in-distribution training and test sets by splitting the “good”, non-defective, samples of each class, while the OOD evaluation set consists of all defective samples from the same classes. This setup enables the evaluation of models on both normal variations and diverse anomalous patterns. The third dataset, based 5Geometrically Constrained Outlier Synthesis 
+
+Table 1. OOD detection performance across four datasets. Best values per column shown in bold.                                                                                                                                                                
+
+> C-MNIST Dogs MVTec Retino Method AUROC AUPR FPR95 AUROC AUPR FPR95 AUROC AUPR FPR95 AUROC AUPR FPR95 Avg. AUC No Reg. 85.60 99.47 32.50 88.35 97.72 80.00 94.86 98.91 27.69 69.74 98.43 81.50 84.64 VOS (Du et al., 2022) 94.71 99.87 18.50 99.25 99.85 5.00 80.37 95.83 70.77 70.52 98.56 80.00 86.21 MSP (Hendrycks & Gimpel, 2016) 92.10 89.88 21.12 56.15 13.81 96.96 56.58 34.72 82.20 67.02 94.09 90.52 67.96 MaxLogit (Hendrycks et al., 2019) 88.88 85.68 27.59 58.42 14.27 93.69 55.30 39.20 90.24 77.21 96.41 81.39 69.95 ReAct (Sun et al., 2021) 89.41 86.60 24.69 57.77 14.08 94.04 57.31 36.74 87.09 77.37 96.43 75.84 70.47 GradNorm (Huang et al., 2021) 93.62 94.09 36.74 57.13 91.40 94.00 55.62 76.35 99.08 64.87 16.14 86.43 67.81 KL-Matching (Hendrycks et al., 2019) 91.96 89.70 21.41 56.39 13.82 93.11 56.29 34.55 83.62 69.00 94.48 84.28 68.41 ViM (Wang et al., 2022) 96.54 96.80 19.26 40.50 87.23 99.00 60.80 77.54 95.09 77.08 36.95 76.82 68.73 Dream-OOD (Du et al., 2023) 96.00 99.91 25.50 79.00 94.76 80.00 94.69 98.60 27.69 73.35 98.95 89.00 85.76 NCIS (Doorenbos et al., 2024) 96.72 99.93 24.50 99.35 99.87 10.00 96.50 99.09 3.08 75.29 99.05 85.50 91.97
+> GCOS (Ours) 99.50 99.99 1.00 99.55 99.91 0.00 95.61 99.08 23.08 79.23 99.16 73.00 93.47
+
+on Stanford Dogs , involves classifying multiple dog breeds (Khosla et al., 2011). In this case, the OOD data comprises breeds that are similar, but not identical, to those in the training set (e.g., golden retriever in the training set and labrador retriever as an OOD breed). Finally, the Retinopa-thy dataset (Karthik & Dane, 2019) consists of retinal fun-dus images curated for the classification of eye disorders. The in-distribution subset includes five diabetic retinopa-thy (DR) severity levels: No DR, Mild, Moderate, Severe, and Proliferative. To evaluate OOD detection, the dataset also provides fundus images with other ocular pathologies (Schwartz, 2020), such as glaucoma, age-related macular degeneration (AMD), and pathological myopia. 
+
+5. Results 
+
+5.1. Baseline Methods 
+
+We evaluate the trained models on the OOD detection task, where unseen ID test samples and OOD samples are mixed together, and the model is required to distinguish between them. We compare our approach against a model trained with Gaussian outlier synthesis with VOS regularization loss with an energy-based inference method, and a baseline model without regularization under energy-based inference. Additionally, we selected a representative set of baselines spanning different OOD detection paradigms. Among clas-sical scoring methods, we utilize MSP (Hendrycks & Gim-pel, 2016), which relies on the maximum softmax proba-bility as a direct confidence proxy. Similarly, MaxLogit (Hendrycks et al., 2019) bypasses softmax normalization entirely, demonstrating that unnormalized logit magnitudes often carry more discriminative information regarding un-certainty than probability distributions. Moving to feature-space regularization, we evaluate ReAct (Sun et al., 2021), which truncates activations in the penultimate layer at a fixed threshold to suppress the abnormally high feature responses often triggered by OOD data. We also include ViM (Wang et al., 2022), which explicitly models the ID manifold by combining standard logits with a residual score derived from the projection of features onto the null space of the principal components. In the gradient-based category, we use Grad-Norm (Huang et al., 2021), leveraging the observation that the vector norm of gradients backpropagated from the out-put layer is consistently higher for in-distribution inputs. We further represent distribution matching techniques with KL-Matching (Hendrycks et al., 2019), which detects anomalies by minimizing the Kullback-Leibler divergence between a sample’s prediction and the mean class-conditional distribu-tions. Finally, we compare against two SOTA methods for OOD detection. Dream-OOD (Du et al., 2023) pioneers the use of generative diffusion models for out-of-distribution detection by perturbing text embeddings to synthesize arti-ficial outliers near the class boundaries. NCIS (Doorenbos et al., 2024) extends Dream-OOD by replacing the simple linear perturbation strategy with a normalizing flow-based mechanism (cVPN) that synthesizes outliers by modeling the complex, non-linear manifold of the in-distribution data. For our experiments, recent diffusion-based methods were adapted per dataset through focused hyperparameter tuning to ensure fair comparison. For evaluation, we report the area under the ROC curve (AUROC; higher is better), the area under the precision-recall curve (AUPR; higher is better), and the false positive rate at 95% true positive rate (FPR95; lower is better). The first two metrics are threshold-agnostic, whereas the latter is defined for a threshold γ such that 95% of in-distribution images are correctly identified as ID. 
+
+5.2. Discussion 
+
+As shown in Table 1, our approach - conformally driven outlier exposure with geometric regularization loss under energy-based inference - outperforms competing methods in terms of AUROC and AUPR. Moreover, it consistently achieves substantially lower FPR95 than VOS and no-regularization across all datasets (23.08% vs. 27.69% and 70.77%; 1% vs. 32.5% and 18.5%; < 0.01% vs. 80% and 5%; 73% vs. 81.50% and 80%). Interestingly, VOS reduces the false positive rate compared to no-regularization on the Colored MNIST dataset; however, the trend reverses on the MVTec dataset, where the model without outlier expo-sure performs better than VOS. Nevertheless, our approach 6Geometrically Constrained Outlier Synthesis 
+
+demonstrates superior and consistent performance across both datasets. GCOS substantially outperforms a diverse set of baseline methods spanning classical scoring approaches, post-hoc regularization techniques, gradient-based methods, distribu-tion matching, and non-parametric outlier synthesis. GCOS demonstrates state-of-the-art performance with the highest average AUROC of 93.47%, outperforming modern com-petitive methods such as NCIS (91.97%) and Dream-OOD (85.76%). While NCIS achieves slightly better performance on MVTec, our approach is more lightweight and scalable, avoiding the computational cost of diffusion model infer-ence during training. The consistent superiority across di-verse datasets suggests that geometry-aware outlier synthe-sis with conformal calibration provides fundamental advan-tages over both classical scoring methods that operate on fixed representations and synthesis methods that lack ge-ometric guidance. The particularly large gaps on datasets with complex class distributions (such as Colored MNIST) indicate that adaptive per-class calibration is crucial when class geometries are heterogeneous, while the more mod-est improvements on MVTec suggest these datasets may have simpler decision boundaries where standard methods already perform near-optimally. We decided to visualize the resulting feature space of our model using a UMAP projection (McInnes et al., 2018) in figure 2. We observe that our method separates most of the classes effectively. The shapes of the resulting “clusters” are not uniform; some appear more spherical while oth-ers are elongated. This may indicate that class-conditional Gaussian tail sampling does not fully capture the complex, low-dimensional manifold structure of learned feature repre-sentations, and that methods leveraging the geometry of the feature space are necessary. Another interesting property of the obtained representations is the behavior of GCOS outliers: they tend to cluster on the opposite sides of two nearby classes. This can be clearly seen in the bottom panel of figure 2, where VOS outliers are distributed around the cluster, including regions between classes where the deci-sion boundary lies, whereas GCOS outlier synthesis behaves as intended. Rather than attempting to affect the main clas-sification boundary, it instead pushes the decision boundary beyond both the cluster and the classification region closer to the data. As noted before if an outlier lies far beyond both the classification boundary between clusters and one of the clusters, models trained without OOD regularization will be confidently misclassifying such points as belonging to the adjacent class. By focusing on off-manifold directions, our method generates points in these challenging regions, thereby flanking the decision boundary more tightly around the data clusters. To summarize, GCOS improves OOD detection by gener-ating outliers that respect the geometry of in-distribution data, consistently outperforming baseline methods across multiple metrics. Feature-space visualizations show that GCOS tightly enclose the decision boundary around data clusters, reducing overconfidence on challenging outliers. These results highlight the value of geometry-aware outlier synthesis for robust neural networks and point toward future integration with formal conformal guarantees. 
+
+6. Moving Towards OOD Detection with Statistical Guarantees 
+
+The following section presents an exploratory extension of our framework along with preliminary results for future work. At inference, the goal of OOD detection is to decide whether an unseen sample comes from the in-distribution or not. Traditional approaches assign a score and compare it against a threshold tuned on validation data. While often effective, such heuristic thresholding provides no formal guarantee of performance on unseen data. 
+
+Inference via Conformal Hypothesis Testing. OOD de-tection using conformal inference provides a principled way to assess how unusual a new data point is, translating raw scores into statistically meaningful p-values and enabling formal hypothesis testing. In contrast, simple energy-based thresholding relies on heuristics - a cutoff tuned on past data that may fail when conditions change. By offering thresh-olds with rigorous error guarantees, conformal inference ensures that decisions remain reliable even on unseen data. Knowing the uncertainty measure in advance may help guide the model’s hidden representations to facilitate inference-time conformal prediction, either during training or post-training. Therefore, our work integrates procedures from conformal inference into the learning process of deep learning models, illustrated on a computer vision classifi-cation task with OOD detection. We believe that this idea could represent a promising new direction in research. The manual choice of the nonconformity score function is remi-niscent of handcrafted filters in the early days of computer vision (Szeliski, 2022; LeCun et al., 2015), which were later largely replaced by learned convolutional layers. In a sim-ilar spirit, recent methods have explored ways to integrate uncertainty-aware mechanisms directly into the learning process (Kendall & Gal, 2017; Lakshminarayanan et al., 2017; Gal & Ghahramani, 2016; Kuleshov et al., 2018). Af-ter training concludes, we run a single calibration step on a separate held-out calibration set to prepare the model for inference. This final calibration is distinct from the online calibration performed during training, which relies on the network’s temporary state at the start of each epoch to build an adaptive heuristic for guiding outlier synthesis. Further details are provided in Appendix C. 7Geometrically Constrained Outlier Synthesis 
+
+Table 2. Results using formal hypothesis testing (7) as OOD classification head.                                                        
+
+> MVTec Colored MNIST Stanford Dogs Retinopathy AUROC AUPR FPR95 AUROC AUPR FPR95 AUROC AUPR FPR95 AUROC AUPR FPR95 GCOS + Luncertainty 50.92 83.68 100.00 98.75 99.97 2.00 50.00 83.33 100.00 67.60 98.37 77.00 GCOS + Lreg (Mahalanobis) 63.67 88.07 100.00 98.93 99.98 1.50 50.00 83.33 100.00 37.58 96.27 97.00 GCOS + Lreg (Energy) 70.62 88.50 72.31 76.00 97.85 34.00 2.40 65.43 100.00 31.11 95.30 98.00
+
+Empirical Analysis of Conformal Guarantees. During inference, we attempt to apply a formal hypothesis test-ing framework based on conformal prediction to determine whether an unseen sample ID or OOD. This procedure re-places the energy-based inference in (1), where OOD detec-tion relies on a computing energy score from the logits of the main classification head. Given a test sample with feature vector ztest , we first com-pute its nonconformity score, S(ztest ), using the score func-tion obtained during final calibration (e.g., Energy or Ma-halanobis). This score is then used to derive a p-value, which quantifies the likelihood that ztest belongs to the ID distribution under the null hypothesis. To account for the multi-class nature of the ID data, we calculate a p-value for the test sample with respect to each class’s reference distribution. For class k, this p-value is the fraction of samples in the final calibration set Sfinal 
+
+> calib,k
+
+whose scores are greater than or equal to the test sample’s score: 
+
+pk(ztest ) = 1 + |{ s ∈ S final  
+
+> calib,k
+
+| s ≥ S(ztest |M k)}| 
+
+1 + |S final 
+
+> calib,k
+
+| (7) The overall p-value for the test sample is the maximum across all classes, pfinal (ztest ) = max k∈{ 1,...,K } pk(ztest ),reflecting its compatibility with the most likely ID class. A sample is classified as OOD if this final p-value is less than the significance level, and as ID otherwise. We can observe from Table 2 that the use of conformal hypothesis testing as an OOD detection head, instead of energy-based inference discussed in section 2.2, yields mixed results. In some cases, this technique collapses to a nearly random classifier. On the simple Colored MNIST dataset, it achieves competitive scores, with an outstanding 1.5% FPR95 when applying geometric score-based regular-ization loss using the Mahalanobis distance. Interestingly, geometric loss with energy shows performance improve-ment on the MVTec dataset, reaching an AUROC of approx-imately 70.62%. For the Retinopathy dataset, our outlier synthesis combined with the logistic regression uncertainty loss from (2) (GCOS + Luncertainty ) achieves comparable AU-ROC performance to VOS and the model without regular-ization evaluated under energy-based inference and reported in Table 1, while also improving FPR95. Despite mixed performance, these results come with sta-tistical guarantees. At present, the technique demonstrates promising potential and represents an emerging area for fur-ther research. In the main results section, we demonstrated that incorporating conformal-inspired techniques improve the model’s accuracy on OOD detection, representing a step toward a more advanced framework. If the community succeeds in making the procedure more consistent and accu-rate while retaining conformal guarantees, it could establish a framework in which the predictive model is inherently equipped with uncertainty quantification - a property that is essential in domains such as medicine, where the need for reliable uncertainty estimation is known in advance, even before training the model. 8Geometrically Constrained Outlier Synthesis 
+
+References 
+
+Angelopoulos, A. N. and Bates, S. A gentle introduction to conformal prediction and distribution-free uncertainty quantification, 2022. URL https://arxiv.org/ abs/2107.07511 .Angelopoulos, A. N., Bates, S., Fisch, A., Lei, L., and Schuster, T. Conformal risk control. arXiv preprint arXiv:2208.02814 , 2022. Barber, R. F., Candes, E. J., Ramdas, A., and Tibshirani, R. J. Conformal prediction beyond exchangeability. The Annals of Statistics , 51(2):816–845, 2023. Bergmann, P., Fauser, M., Sattlegger, D., and Steger, C. Mvtec ad–a comprehensive real-world dataset for un-supervised anomaly detection. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 9592–9600, 2019. Cimpoi, M., Maji, S., Kokkinos, I., Mohamed, S., and Vedaldi, A. Describing textures in the wild. In Pro-ceedings of the IEEE conference on computer vision and pattern recognition , pp. 3606–3613, 2014. Djurisic, A., Bozanic, N., Ashok, A., and Liu, R. Extremely simple activation shaping for out-of-distribution detec-tion, 2023. URL https://arxiv.org/abs/2209. 09858 .Doorenbos, L., Sznitman, R., and M ´arquez-Neila, P. Non-linear outlier synthesis for out-of-distribution detection. 
+
+arXiv preprint arXiv:2411.13619 , 2024. Du, X., Wang, Z., Cai, M., and Li, Y. Vos: Learning what you don’t know by virtual outlier synthesis. arXiv preprint arXiv:2202.01197 , 2022. Du, X., Sun, Y., Zhu, J., and Li, Y. Dream the impossible: Outlier imagination with diffusion models. Advances in Neural Information Processing Systems , 36:60878– 60901, 2023. Du, X., Fang, Z., Diakonikolas, I., and Li, Y. How does un-labeled data provably help out-of-distribution detection? 
+
+arXiv preprint arXiv:2402.03502 , 2024. Gal, Y. and Ghahramani, Z. Dropout as a bayesian approx-imation: Representing model uncertainty in deep learn-ing. In international conference on machine learning , pp. 1050–1059. PMLR, 2016. Grathwohl, W., Wang, K.-C., Jacobsen, J.-H., Duvenaud, D., Norouzi, M., and Swersky, K. Your classifier is secretly an energy based model and you should treat it like one. 
+
+arXiv preprint arXiv:1912.03263 , 2019. Hendrycks, D. and Gimpel, K. A baseline for detecting misclassified and out-of-distribution examples in neural networks. arXiv preprint arXiv:1610.02136 , 2016. Hendrycks, D., Mazeika, M., and Dietterich, T. Deep anomaly detection with outlier exposure. arXiv preprint arXiv:1812.04606 , 2018. Hendrycks, D., Basart, S., Mazeika, M., Zou, A., Kwon, J., Mostajabi, M., Steinhardt, J., and Song, D. Scaling out-of-distribution detection for real-world settings. arXiv preprint arXiv:1911.11132 , 2019. Hotelling, H. Analysis of a complex of statistical variables into principal components. Journal of educational psy-chology , 24(6):417, 1933. Hsu, Y.-C., Shen, Y., Jin, H., and Kira, Z. Generalized odin: Detecting out-of-distribution image without learn-ing from out-of-distribution data. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 10951–10960, 2020. Huang, R. and Li, Y. Mos: Towards scaling out-of-distribution detection for large semantic space. In Pro-ceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , pp. 8710–8719, 2021. Huang, R., Geng, A., and Li, Y. On the importance of gradients for detecting distributional shifts in the wild. 
+
+Advances in Neural Information Processing Systems , 34: 677–689, 2021. Karthik, M. and Dane, S. Aptos 2019 blindness detection. 
+
+https://www.kaggle.com/competitions/ aptos2019-blindness-detection , 2019. Accessed: 2025-08-30. Kendall, A. and Gal, Y. What uncertainties do we need in bayesian deep learning for computer vision? Advances in neural information processing systems , 30, 2017. Khosla, A., Jayadevaprakash, N., Yao, B., and Li, F.-F. Novel dataset for fine-grained image categorization: Stan-ford dogs. In Proc. CVPR workshop on fine-grained visual categorization (FGVC) , volume 2, 2011. Krizhevsky, A., Hinton, G., et al. Learning multiple layers of features from tiny images. 2009. Kuleshov, V., Fenner, N., and Ermon, S. Accurate uncer-tainties for deep learning using calibrated regression. In 
+
+International conference on machine learning , pp. 2796– 2804. PMLR, 2018. Lakshminarayanan, B., Pritzel, A., and Blundell, C. Simple and scalable predictive uncertainty estimation using deep ensembles. Advances in neural information processing systems , 30, 2017. 9Geometrically Constrained Outlier Synthesis 
+
+LeCun, Y. The mnist database of handwritten digits. 
+
+http://yann. lecun. com/exdb/mnist/ , 1998. LeCun, Y., Chopra, S., Ranzato, M., and Huang, F.-J. Energy-based models in document recognition and com-puter vision. In Ninth International Conference on Docu-ment Analysis and Recognition (ICDAR 2007) , volume 1, pp. 337–341. IEEE, 2007. LeCun, Y., Bengio, Y., and Hinton, G. Deep learning. nature ,521(7553):436–444, 2015. Lee, K., Lee, H., Lee, K., and Shin, J. Training confidence-calibrated classifiers for detecting out-of-distribution sam-ples. arXiv preprint arXiv:1711.09325 , 2017. Lee, K., Lee, K., Lee, H., and Shin, J. A simple unified framework for detecting out-of-distribution samples and adversarial attacks. Advances in neural information pro-cessing systems , 31, 2018. Li, H. and Zhang, T. Outlier synthesis via hamiltonian monte carlo for out-of-distribution detection. arXiv preprint arXiv:2501.16718 , 2025. Liang, S., Li, Y., and Srikant, R. Enhancing the reliability of out-of-distribution image detection in neural networks. 
+
+arXiv preprint arXiv:1706.02690 , 2017. Liao, Q., Yang, S., Zhao, B., Luo, P., and Zhao, H. Bood: Boundary-based out-of-distribution data gener-ation. arXiv preprint arXiv:2508.00350 , 2025. Liu, W., Wang, X., Owens, J., and Li, Y. Energy-based out-of-distribution detection. In Advances in Neural Informa-tion Processing Systems , volume 33, pp. 21464–21475, 2020. Mahalanobis, P. C. On the generalized distance in statistics. 
+
+Sankhy ¯a: The Indian Journal of Statistics, Series A (2008-), 80:S1–S7, 2018. McInnes, L., Healy, J., and Melville, J. Umap: Uniform manifold approximation and projection for dimension reduction. arXiv preprint arXiv:1802.03426 , 2018. Ming, Y., Fan, Y., and Li, Y. Poem: Out-of-distribution detection with posterior sampling. In International con-ference on machine learning , pp. 15650–15665. PMLR, 2022. Ngiam, J., Chen, Z., Koh, P. W., and Ng, A. Y. Learning deep energy models. In Proceedings of the 28th inter-national conference on machine learning (ICML-11) , pp. 1105–1112, 2011. Novello, P., Dalmau, J., and Andeol, L. Out-of-distribution detection should use conformal prediction (and vice-versa?), 2024. URL https://arxiv.org/abs/ 2403.11532 .Prinster, D., Stanton, S., Liu, A., and Saria, S. Confor-mal validity guarantees exist for any data distribution (and how to find them), 2024. URL https://arxiv. org/abs/2405.06627 .Roth, K., Pemula, L., Zepeda, J., Sch ¨olkopf, B., Brox, T., and Gehler, P. Towards total recall in industrial anomaly detection. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 14318– 14328, 2022. Sastry, C. S. and Oore, S. Detecting out-of-distribution examples with gram matrices. In International conference on machine learning , pp. 8491–8501. PMLR, 2020. Saunders, C., Gammerman, A., and Vovk, V. Transduction with confidence and credibility. 1999. Sch ¨olkopf, B., Smola, A., and M ¨uller, K.-R. Kernel princi-pal component analysis. In International conference on artificial neural networks , pp. 583–588. Springer, 1997. Schwartz, K. Ocular disease recognition (odir-5k). https: //www.kaggle.com/datasets/andrewmvd/ ocular-disease-recognition-odir5k , 2020. Accessed: 2025-08-30. Shafer, G. and Vovk, V. A tutorial on conformal prediction. 
+
+Journal of Machine Learning Research , 9(3), 2008. Siddiqi, S., Qureshi, F., Lindstaedt, S., and Kern, R. De-tecting outliers in non-iid data: A systematic literature review. IEEE Access , 11:70333–70352, 2023. Sun, Y., Guo, C., and Li, Y. React: Out-of-distribution detection with rectified activations. Advances in neural information processing systems , 34:144–157, 2021. Sun, Y., Ming, Y., Zhu, X., and Li, Y. Out-of-distribution de-tection with deep nearest neighbors. In International con-ference on machine learning , pp. 20827–20840. PMLR, 2022. Szeliski, R. Computer vision: algorithms and applications .Springer Nature, 2022. Tack, J., Mo, S., Jeong, J., and Shin, J. Csi: Novelty de-tection via contrastive learning on distributionally shifted instances. Advances in neural information processing systems , 33:11839–11852, 2020. Tao, L., Du, X., Zhu, X., and Li, Y. Non-parametric outlier synthesis, 2023. URL https://arxiv.org/abs/ 2303.02966 .Tibshirani, R. J., Barber, R. F., Candes, E. J., and Ramdas, A. Conformal prediction under covariate shift, 2020. URL 
+
+https://arxiv.org/abs/1904.06019 .10 Geometrically Constrained Outlier Synthesis 
+
+Vernekar, S., Gaurav, A., Denouden, T., Phan, B., Abdelzad, V., Salay, R., and Czarnecki, K. Analysis of confident-classifiers for out-of-distribution detection. arXiv preprint arXiv:1904.12220 , 2019. Vovk, V., Gammerman, A., and Shafer, G. Algorithmic learning in a random world . Springer, 2005. Vovk, V., Petej, I., and Fedorova, V. From conformal to probabilistic prediction. In IFIP International Conference on Artificial Intelligence Applications and Innovations ,pp. 221–230. Springer, 2014. Vovk, V., Shen, J., Manokhin, V., and Xie, M.-g. Non-parametric predictive distributions based on conformal prediction. In Conformal and probabilistic prediction and applications , pp. 82–102. PMLR, 2017. Wang, H., Li, Z., Feng, L., and Zhang, W. Vim: Out-of-distribution with virtual-logit matching. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 4921–4930, 2022. Wang, Q., Fang, Z., Zhang, Y., Liu, F., Li, Y., and Han, B. Learning to augment distributions for out-of-distribution detection. Advances in neural information processing systems , 36:73274–73286, 2023. Yang, J., Zhou, K., Li, Y., and Liu, Z. Generalized out-of-distribution detection: A survey. International Journal of Computer Vision , 132(12):5635–5662, 2024. Yang, P., Liang, J., Cao, J., and He, R. Auto: Adaptive outlier optimization for online test-time ood detection. 
+
+arXiv preprint arXiv:2303.12267 , 2023. Yu, F., Seff, A., Zhang, Y., Song, S., Funkhouser, T., and Xiao, J. Lsun: Construction of a large-scale image dataset using deep learning with humans in the loop. arXiv preprint arXiv:1506.03365 , 2015. Zhou, B., Lapedriza, A., Khosla, A., Oliva, A., and Tor-ralba, A. Places: A 10 million image database for scene recognition. IEEE transactions on pattern analysis and machine intelligence , 40(6):1452–1464, 2017. 11 Geometrically Constrained Outlier Synthesis 
+
+Appendix A. Related Work 
+
+Out-of-distribution detection has been widely studied across several related tasks, including anomaly detection, novelty detection, and open-set recognition. Yang et al. (2024) provide a unified framework that situates these tasks as special cases, reviewing classification-, density-, and distance-based approaches and highlighting challenges such as calibration and realistic outlier modeling. A common strategy for improving OOD detection is to leverage auxiliary outlier data. Hendrycks et al. (2018) introduced Outlier Exposure, showing that training on auxil-iary outliers improves detection of unseen anomalies. Wang et al. (2023) extend this idea by crafting a set of worst-case OOD distributions around auxiliary data, theoretically reduc-ing the discrepancy to unseen OOD samples. Li & Zhang (2025) propose synthesizing virtual outliers directly from in-distribution data using Hamiltonian Monte Carlo, gener-ating diverse OOD samples without requiring an external dataset. Ming et al. (2022) also focus on informative out-lier selection, using posterior sampling to learn a compact decision boundary between ID and OOD data. Tao et al. (2023) introduced Non-Parametric Outlier Syn-thesis (NPOS), which relaxes the restrictive Gaussian as-sumption of prior works by employing a non-parametric framework to synthesize outliers via rejection sampling. Addressing the challenge of high-dimensional generation, Du et al. (2023) proposed Dream-OOD, utilizing diffusion models to generate photo-realistic outliers in pixel space by sampling from low-likelihood regions of a text-conditioned latent space. Similarly, Liao et al. (2025) developed BOOD, a framework that specifically targets the decision boundary by perturbing in-distribution features to cross into OOD regions before decoding them into images using diffusion models. Doorenbos et al. (2024) presented NCIS to fur-ther enhance synthetic outlier quality, operating directly within a diffusion model’s embedding space and employing a conditional volume-preserving network to model complex class manifolds. Finally, in the specific context of industrial anomaly detection, Roth et al. (2022) proposed PatchCore, which uses a memory bank of nominal patch-level features to achieve state-of-the-art performance on benchmarks like MVTec AD without requiring outlier supervision. Other methods focus on feature-space metrics or model activations. Lee et al. (2018) use Mahalanobis distance to define a confidence score, while Sun et al. (2022) em-ploy non-parametric nearest-neighbor distances for flexible, assumption-free detection. Hsu et al. (2020) decompose confidence scoring and modify input preprocessing to im-prove detection without relying on OOD data. Sun et al. (2021) show that controlling internal activations can mitigate overconfidence on OOD samples. Several works address scalability and structured label spaces. Huang & Li (2021) propose MOS scoring, grouping labels to simplify decision boundaries and reduce false positives. Hendrycks & Gim-pel (2016) establish the maximum softmax probability as a competitive baseline, and Du et al. (2024) demonstrate that unlabeled data can be leveraged to identify candidate outliers and train OOD classifiers with theoretical guaran-tees. Test-time adaptation has been explored as a dynamic approach to OOD detection. Yang et al. (2023) propose AUTO, which selectively updates the model using stream-ing pseudo-labeled in/out samples to improve robustness without requiring auxiliary OOD data. 
+
+Conformal prediction (Vovk et al., 2005) has emerged as a practical and widely applicable framework for uncertainty quantification. Angelopoulos & Bates (2022) provide an accessible overview of the methodology, emphasizing its distribution-free validity guarantees, ease of use, and adapt-ability to diverse domains such as computer vision, natural language processing, and reinforcement learning. Tibshirani et al. (2020) extend the approach to handle covariate shift by introducing a weighted version of conformal prediction that incorporates likelihood ratios between training and test dis-tributions, thereby enabling valid prediction intervals even when data distributions differ. The interplay between con-formal prediction and OOD detection has been explored, but to a limited extent. Novello et al. (2024) show that confor-mal methods can provide conservative corrections to OOD evaluation metrics, while OOD scores can improve confor-mal prediction sets when used as nonconformity measures. Finally, the theoretical scope of conformal prediction has been expanded substantially, as Prinster et al. (2024) prove that validity guarantees hold under any data distribution, in-cluding sequential feedback settings, and propose tractable algorithms for scenarios such as black-box optimization and active learning. 
+
+B. Model Training 
+
+Algorithm 3 summarizes the end-to-end training procedure of our proposed GCOS framework. The process consists of two phases embedded in the standard training loop: an epoch-level online calibration step and a batch-level synthe-sis and regularization step. 
+
+Epoch-Level Online Calibration. The purpose of this step is to establish a stable “Judge” model that guides syn-thesis throughout the epoch. At the beginning of each epoch (after a warm-up period Estart ), the model is evaluated on the held-out calibration set Dcalib to obtain feature repre-sentations Zcalib for all in-distribution classes. For each class, a class-conditional linear subspace model Mkcalib is fit to its features, and the resulting Mahalanobis score dis-12 Geometrically Constrained Outlier Synthesis 
+
+tribution SM ahal,k calib is computed. From this distribution, the quantiles qkinner and qkouter are extracted and stored as syn-thesis boundaries for the upcoming training iterations. For correctness of the subspace estimation, the data should be normalized across all dimensions so that dimensions with larger magnitudes do not bias the resulting components. We opt for a linear formulation (Hotelling, 1933) rather than a kernelized variant (Sch ¨olkopf et al., 1997) because we work in the feature space immediately before the final clas-sification layer, where the data should already be linearly separable by the main classification head. 
+
+Batch-Level Training. Each batch begins with a standard forward pass and cross-entropy loss computation. The ex-tracted features Zid are stored in a running feature buffer 
+
+Qtrain , which serves as a “Proposer” by maintaining an estimate of the recent feature distribution. When the buffer is filled and the warm-up phase is complete, the GCOS synthesis and regularization procedure is applied. A Pro-poser PCA model Mtrain is constructed from Qtrain , and synthetic outliers are generated on a per-class basis. Specif-ically, for each class, we identify the low-variance princi-pal components Vksmall,train . Along these directions, the 
+
+FindBoundaryAlpha subroutine determines the α val-ues that place a candidate feature on the pre-computed quan-tile shells qkinner and qkouter . Outliers zood are then sampled from these shells as perturbations of the class mean μktrain .After the synthesis step, the regularization loss is computed. In GCOS-Hybrid (Mahalanobis score for synthesis, energy-based score for regularisation loss), this involves calculating energy-based strangeness scores for both the real ID features (Spos ) and the synthesized outliers ( Sneg ). An adaptive mar-gin, determined from the batch statistics of Spos , is used to construct the contrastive regularization loss Lreg . The final training loss combines the cross-entropy objective with the weighted regularization term, λLreg , which is minimized through backpropagation to update the model. 
+
+C. Final Post-Hoc Calibration for Inference 
+
+After training is complete, we perform a final, one-time calibration to prepare the model for inference. It is crucial to distinguish this final step from the “online” calibration performed during training. The online calibration uses the network’s transient state at the start of each epoch to create an adaptive heuristic for guiding outlier synthesis. In contrast, this final calibration operates on the fixed, fully-trained model and on another held-out calibration set. We perform a full forward pass of the calibration data, Dcalib ,through this final model to generate a permanent reference distribution of nonconformity scores, denoted Sfinal 
+
+> calib
+
+. Cru-cially, this final distribution is distinct from the ephemeral, epoch-dependent distributions, S(e)
+
+> calib
+
+, used during training 
+
+Algorithm 1 FindBoundaryAlpha           
+
+> Require: Start point μtrain , direction vj, target score qtarget , score function S,search range αmax , steps Nsteps
+> Ensure: Boundary deviation αboundary
+
+1: s0 ← S (μtrain )
+
+2: if s0 ≥ qtarget then 
+
+3: return 0
+
+4: end if 
+
+5: smax ← S (μtrain + αmax · vj )
+
+6: if smax < q target then 
+
+7: return αmax 
+
+8: end if 
+
+9: αlow ← 0, αhigh ← αmax 
+
+10: for i = 1 to Nsteps do 
+
+11: αmid ← (αlow + αhigh )/2
+
+12: zcand ← μtrain + αmid · vj
+
+13: scand ← S (zcand )
+
+14: if scand < q target then 
+
+15: αlow ← αmid 
+
+16: else 
+
+17: αhigh ← αmid 
+
+18: end if 
+
+19: end for 
+
+20: return αhigh 
+
+Algorithm 2 AdaptiveMargin           
+
+> Require: Set of positive scores Spos
+> Require: Low percentile plow , high percentile phigh
+> Require: Default margin mdef ault
+> Ensure: Margin m
+
+1: if |S pos | > 1 then 
+
+2: qlow ← plow /100 .0
+
+3: qhigh ← phigh /100 .0
+
+4: Stypical ← Quantile (Spos , q low )
+
+5: Sboundary ← Quantile (Spos , q high )
+
+6: m ← max(0 , S boundary − Stypical )
+
+7: else 
+
+8: m ← mdef ault 
+
+9: end if 
+
+10: Return m
+
+(i.e., Sfinal 
+
+> calib
+
+̸ = S(e) 
+
+> calib
+
+for any epoch e before training com-pletion). Because the model is now a fixed function, this final calibration step satisfies the exchangeability assump-tion of conformal prediction. This allows Sfinal  
+
+> calib
+
+to be used for generating statistically valid p-values for OOD hypoth-esis testing on unseen data, a formal guarantee the online heuristic cannot provide. 
+
+D. Datasets 
+
+Examples of images used for model training and evaluation are presented in figure 3. For the training set, we employ a set of augmentations to increase sample diversity and en-hance model generalization. The standard pipeline consists of the following sequential operations: 1. Resizing and Cropping: Images are first resized so that their shorter edge is 256 pixels. A patch of 224 × 224 pixels is then randomly cropped from the image. For datasets with substantial object size variation, such as Stanford Dogs, a more aggressive 
+
+RandomResizedCrop with a scale range from 0.3 13 Geometrically Constrained Outlier Synthesis 
+
+Algorithm 3 GCOS Training Procedure 
+
+Require: Training data Dtrain , Calibration data Dcalib , Network (fθ , h ϕ)
+
+(backbone f , classifier head h), 
+
+E epochs, start epoch Estart , loss weight λ, shell percentiles 
+
+(pinner , p outer )
+
+1: Initialize network parameters θ, ϕ 
+
+2: Initialize feature queues Qtrain ← ∅ 
+
+3: for epoch e = 1 to E do 
+
+4: if e ≥ Estart and Dcalib is available then 
+
+5: # Epoch-Level Online Calibration (The "Judge") 
+
+6: Set network to eval mode 
+
+7: for each class k do 
+
+8: Extract features Zkcalib from Dcalib using fθ
+
+9: Compute Mkcalib = ( μkcalib , Vkcalib , Λkcalib ) ← PCA (Zkcalib )
+
+10: Compute Mahalanobis scores SM ahal,k calib ←
+
+Mahalanobis (Zkcalib , Mkcalib )
+
+11: Compute thresholds qkinner , q kouter ←
+
+Quantiles (SM ahal,k calib , p inner , p outer )
+
+12: end for 
+
+13: Set network to train mode 
+
+14: end if 
+
+15: for batch (X, Y ) ∈ D train do 
+
+16: Zid ← fθ (X); L ← hϕ(Zid )
+
+17: LCE ← CrossEntropy (L, Y )
+
+18: Update Qtrain with Zid 
+
+19: Lreg ← 0
+
+20: if Qtrain is full and e ≥ Estart then 
+
+21: # GCOS Synthesis (Geometric Proposer) 
+
+22: Compute Mtrain = ( μtrain , Vtrain , Λtrain ) from Qtrain 
+
+23: Zood ← ∅ 
+
+24: for each class k do 
+
+25: Identify small components Vksmall,train from Vktrain based on variance explained threshold η
+
+26: for direction vj ∈ Vksmall,train do 
+
+27: # Algorithm 1. 
+
+28: αinner ← FindBoundaryAlpha (μtrain , vj , q kinner , S)
+
+29: αouter ← FindBoundaryAlpha (μtrain , vj , q kouter , S)
+
+30: Sample α ∼ U[αinner , α outer ]
+
+31: zood ← μktrain + sign · α · vj
+
+32: Zood ← Z ood ∪ { zood }
+
+33: end for 
+
+34: end for 
+
+35: # Regularization Loss (Energy-Based) 
+
+36: Compute Energy strangeness scores: Spos ← logsumexp (hϕ(Zid )) ,
+
+Sneg ← logsumexp (hϕ(Zood )) 
+
+37: m ← AdaptiveMargin (Spos )
+
+38: Lreg ← Mean (ReLU (Spos − Sneg + m)) 
+
+39: end if 
+
+40: Ltotal ← L CE + λLreg 
+
+41: Update θ, ϕ using gradients of Ltotal 
+
+42: end for 
+
+43: end for Ensure: Trained network (fθ , h ϕ)
+
+to 1.0 of the original image area is applied. 2. Geometric Transformations: Random rotations (up to ±15 degrees) and random horizontal flips are ap-plied to encourage rotational and reflectional invari-ance. 3. Photometric Transformations: For datasets where color variations are informative, such as Stanford Dogs, 
+
+ColorJitter is applied to randomly modify bright-ness, contrast, and saturation. Additionally, a small probability of converting the image to grayscale is in-cluded for the Stanford Dogs dataset. 4. Tensor Conversion and Normalization: Finally, the 
+
+Table 3. Number of ID and OOD images in each dataset.                     
+
+> Dataset ID train ID test OOD Total
+> Colored MNIST 60,000 10,000 10,000 80,000 MVTec 1,319 326 635 2,280 Stanford Dogs 1,394 100 856 2,350 Retinopathy 28,086 7,022 865 35,973
+
+augmented image is normalized using the standard ImageNet per-channel mean and standard deviation. For simpler datasets, such as CIFAR-10 and CIFAR-100 (Krizhevsky et al., 2009), a similar but smaller-scale pipeline is used, consisting of random horizontal flips and random crops on the original 32 × 32 images, followed by normal-ization using CIFAR-specific statistics. The specific class compositions for the ID and OOD splits used in our experiments are detailed below. 
+
+Colored MNIST 
+
+• ID Classes: Digits 0–9, each correlated with a specific color. • OOD Data: Test set digits with novel color-digit pair-ings. 
+
+Stanford Dogs 
+
+• ID Classes (10): Beagle, Boxer, Border Terrier, Dingo, German Shepherd, Giant Schnauzer, Golden Retriever, Old English Sheepdog, Siberian Husky, Standard Schnauzer. • OOD Classes (5): Airedale, Labrador Retriever, Mala-mute, Malinois, Standard Poodle. 
+
+MVTec AD 
+
+• ID Classes (7 defect-free categories): Bottle, Cable, Capsule, Metal Nut, Screw, Transistor, Zipper. • OOD Data (Anomalies): Test set images of the same categories containing various defects. 
+
+Retinopathy 
+
+• ID Classes (5 DR severity levels): No DR, Mild, Mod-erate, Severe, Proliferative. • OOD Data (Other Pathologies): Fundus images de-picting other diseases (e.g., Glaucoma, AMD, Patho-logical Myopia). 14 Geometrically Constrained Outlier Synthesis 
+
+(a) Colored MNIST (b) MVTec (c) Stanford Dogs (d) Retinopathy 
+
+Figure 3. Example images from four datasets. First row in each box: in-distribution; second row: outliers. 
+
+E. Other Evaluations 
+
+E.1. Near-OOD Datasets 
+
+We also evaluate our approaches on datasets that are com-monly used in outlier exposure studies. Many previous works train classification models on datasets such as CIFAR-10 or CIFAR-100 and evaluate OOD detection on classical benchmarks like LSUN (Yu et al., 2015), Places365 (Zhou et al., 2017), and Textures (Cimpoi et al., 2014). A key limitation of this evaluation setting is that these datasets are primarily far-OOD: the ID data consist of categories such as cats, cars, and birds, while the OOD sets contain images of ground, bedrooms, towers, and similar content. Although this task is not necessarily easier, it is less representative of practical scenarios. In contrast, the main part of this paper emphasizes near-OOD classes, which are more relevant for safety-critical AI systems. Nevertheless, we also evaluated our methods on these widely used far-OOD datasets and compared GCOS not only with VOS but also with other methods from the literature. As shown in Tables 4, 5, and Tables 6, 7, our approaches achieve competitive performance relative to existing meth-ods. 
+
+E.2. Multi-Seed Validation 
+
+We also evaluate GCOS performance across multiple ran-dom seeds (n=5 per dataset) showing mean ± standard deviation. Low variance across all metrics demonstrates hy-perparameter robustness and result reproducibility; AUPR remains highly stable across all seeds. This consistency suggests that the method is not dependent on initialization lucky streaks. 
+
+E.3. Object Detection 
+
+Table 9. OOD detection comparison on PASCAL-VOC (In-Distribution) with MS-COCO and OpenImages as OOD datasets.                                        
+
+> Method FPR95 ↓AUROC ↑mAP (ID) ↑
+> OOD: MS-COCO / OpenImages MSP (Hendrycks & Gimpel, 2016) 70.99 / 73.13 83.45 / 81.91 48.7 ODIN (Liang et al., 2017) 59.82 / 63.14 82.20 / 82.59 48.7 Mahalanobis (Lee et al., 2018) 96.46 / 96.27 59.25 / 57.42 48.7 Energy score (Liu et al., 2020) 56.89 / 58.69 83.69 / 82.98 48.7 Gram matrices (Sastry & Oore, 2020) 62.75 / 67.42 79.88 / 77.62 48.7 Generalized ODIN (Hsu et al., 2020) 59.57 / 70.28 83.12 / 79.23 48.1 CSI (Tack et al., 2020) 59.91 / 57.41 81.83 / 82.95 48.1 GAN-synthesis (Lee et al., 2017) 60.93 / 59.97 83.67 / 82.67 48.5 VOS-ResNet50 47.53 ±2.9 / 51.33 ±1.6 88.70 ±1.2 / 85.23 ±0.6 48.9 ±0.2 VOS-RegX4.0 47.77 ±1.1 / 48.33 ±1.6 89.00 ±0.4 / 87.59 ±0.2 51.6 ±0.1
+> GCOS (Ours) 51.28 ±<0.01 / 60.69 ±<0.01 87.72 ±<0 / 86.57 ±<0.01 48.8 ±<0.01
+
+We also investigate how the GCOS method performs in object detection settings. As shown in Table 9, GCOS represents a significant advancement over traditional OOD detection methods, achieving 4-6 percentage point improve-ments in AUROC on both COCO and OpenImages OOD datasets. GCOS achieves competitive performance with the state-of-the-art VOS method, particularly excelling in AU-ROC on OpenImages (86.57 vs 85.23 for VOS-ResNet50) while maintaining comparable in-distribution mAP (48.8 vs 48.9), demonstrating that the method does not sacrifice primary task performance. The method successfully demon-strates that conformal prediction-based outlier synthesis can effectively improve OOD detection while maintaining strong in-distribution performance. GCOS shows robust performance across both OOD datasets, with standard devi-ation less than 0.01 across three independent training runs, indicating high reproducibility and stability. In conclusion, the key contribution of GCOS is a principled, geometry-based approach to OOD detection that outper-forms heuristic-based methods and competes with the best synthesis-based approaches across both classification and object detection scenarios. 
+
+F. Score function and Loss Ablations 
+
+Throughout this work, we use the Mahalanobis distance to define the synthesis shell because its value reliably increases 15 Geometrically Constrained Outlier Synthesis 
+
+Table 4. Comparison of out-of-distribution detection performance trained on CIFAR-10.                                                                      
+
+> CIFAR-100 LSUN-C Places Textures Mean AUPR AUROC FPR95 AUPR AUROC FPR95 AUPR AUROC FPR95 AUPR AUROC FPR95 AUPR AUROC FPR95 Gaussian OOD +Luncertainty 99.61 87.08 49.0 99.97 98.56 6.5 99.66 89.1 39.5 99.68 88.34 49.0 99.73 90.77 36.0
+> GCOS OOD +Luncertainty 99.48 83.63 56.5 99.97 98.74 7.0 99.6 88.36 42.5 99.48 82.39 60.5 99.64 88.28 41.63 GCOS OOD +Lreg 99.54 82.48 72.5 99.96 98.12 8.5 99.82 92.3 41.5 99.76 90.19 50.5 99.77 90.77 43.25
+
+Table 5. Comparison of out-of-distribution detection performance trained on CIFAR-100.                                                                      
+
+> CIFAR-10 LSUN-C Places Textures Mean AUPR AUROC FPR95 AUPR AUROC FPR95 AUPR AUROC FPR95 AUPR AUROC FPR95 AUPR AUROC FPR95 Gaussian OOD +Luncertainty 99.35 76.47 80.0 99.92 96.54 21.5 99.32 75.51 84.0 99.3 74.53 84.5 99.47 80.76 67.5 GCOS OOD +Luncertainty 99.33 76.13 83.5 99.94 97.1 17.0 99.37 77.18 81.0 99.23 72.96 87.5 99.47 80.84 67.25
+> GCOS OOD +Lreg 99.16 72.53 89.5 99.79 91.63 38.0 99.16 72.95 84.5 99.3 76.79 78.0 99.35 78.47 72.5
+
+Table 6. Results on CIFAR-10.                      
+
+> Textures Places365 AUROC FPR95 AUROC FPR95 Free Energy (Liu et al., 2020) 85.35 52.46 90.02 40.11 ASH (Djurisic et al., 2023) 86.07 50.90 89.79 40.89 VOS (Du et al., 2022) 88.34 49.00 89.10 39.50 GCOS + Lreg 90.19 50.50 92.3 41.50
+
+Table 7. Results on CIFAR-100.                      
+
+> Textures Places365 AUROC FPR95 AUROC FPR95 Free Energy (Liu et al., 2020) 76.35 79.63 75.65 80.18 ASH (Djurisic et al., 2023) 83.59 63.69 74.87 79.70 VOS (Du et al., 2022) 74.53 84.50 75.51 84.00 GCOS + Lreg 76.79 78.00 72.95 84.50
+
+as a point moves away from a class mean along a principal component. In contrast, the Energy Strangeness score lacks this property at the beginning of training: its landscape can be complex and non-monotonic, so a larger geometric deviation α does not necessarily correspond to a higher, more OOD-like energy score, making it unsuitable for our boundary-finding search algorithm and thus for synthesis. It is a notable finding that while optimizing for Mahalanobis geometric loss, Lreg (Mahalanobis), it effectively regular-izes the energy-based confidence of the classifier, the re-verse is not true, as the non-monotonic nature of the energy landscape makes it an unreliable guide for our geometric synthesis search. From Table 10, we observe high scores for the GCOS outliers + Lreg (Mahalanobis) configuration, along with a slight improvement over the GCOS outliers + Luncertainty uncertainty loss (2) for MVTec and Colored MNIST. This suggests a deep and powerful connection be-tween the geometric structure of the feature space and the confidence landscape of the classifier’s logits. This relation-ship may be explained as follows: • Geometric Compactness as a Regularizer. Constrain-ing feature clusters to remain geometrically compact through a Mahalanobis-based geometric loss encour-ages the network to place in-distribution class features 
+
+Table 8. Multi-Seed Validation.                          
+
+> Dataset Mean AUROC Mean AUPR Mean FPR95 Std(AUROC) Std(AUPR) Colored MNIST 92.90% 99.81% 23.50% ±3.01% ±0.10% Stanford Dogs 97.39% 99.51% 24.00% ±2.11% ±0.39% Retinopathy 76.60% 99.05% 80.00% ±0.55% ±0.02% MVTec 98.71% 99.66% 3.08% ±0.29% ±0.12%
+
+on low-dimensional manifolds. This facilitates the fi-nal classifier layer’s ability to assign high-confidence logits, leading to consistently low energy scores. • Coupling of Geometric and Confidence-Based Strangeness. A feature vector that is geometrically atypical - i.e., associated with a high Mahalanobis score - also tends to elicit classifier uncertainty, manifested as high energy. Since the classifier learns linear bound-aries in feature space, points located far from their cluster are more likely to fall into ambiguous regions with weak logits. Consequently, optimizing geomet-ric OOD scores based on Mahalanobis distance can effectively serve as a proxy for energy-based OOD optimization. 
+
+G. Conformal Risk Control 
+
+Note on Decision-Making with Conformal Risk Control. 
+
+In addition to the direct hypothesis test described in equa-tion (7), the p-values can be converted into a continuous OOD score to enable explicit conformal risk control (An-gelopoulos et al., 2022). We define the final OOD score for a test sample as SOOD (ztest ) = 1 − pfinal (ztest ), where higher values indicate a higher likelihood of being OOD. Using this score, a decision threshold τ can be chosen to control a desired error rate on the in-distribution data. For instance, in VOS, the logistic regression threshold was set so that 95% of ID data is labeled as in-distribution; here, we adopt a similar logic using p-value thresholding. Specifically, to control the False Negative Rate - the rate at which ID samples are incorrectly classified as OOD-at a level of αrisk , we may set τ to be the (1 − αrisk )-quantile of the OOD scores computed on the final calibration set 
+
+Dcalib . A test sample is then classified as OOD if its OOD 16 Geometrically Constrained Outlier Synthesis 
+
+Table 10. Ablation study of proposed contributions . OOD detection results on MVTec, Colored MNIST, Stanford Dogs and Retinopathy datasets. First row: GCOS outliers combined with the standard energy-based separation loss Luncertainty in (2). Second row: GCOS outliers combined with the geometric loss Lreg in (5) using the Mahalanobis score function SL = SMahal .
+
+MVTec Colored MNIST Stanford Dogs Retinopathy AUROC AUPR FPR95 AUROC AUPR FPR95 AUROC AUPR FPR95 AUROC AUPR FPR95 GCOS + Luncertainty 93.07 98.56 33.85 93.21 99.82 25.50 99.42 99.89 0.86 80.05 99.23 71.00 
+
+GCOS + Lreg (Mahalanobis) 97.56 99.51 20.00 95.65 99.91 25.00 97.90 99.61 20.00 77.89 99.17 79.00 0 25 50 75 100 
+
+num_directions     
+
+> 0.74
+> 0.76
+> 0.78
+> 0.80
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> AUROC
+> shared_cov=False, synthesis=avg_direction
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> FPR95 025 50 75 100
+
+num_directions     
+
+> 0.68
+> 0.70
+> 0.72
+> 0.74
+> 0.76
+> 0.78
+> AUROC
+> shared_cov=False, synthesis=per_direction
+> 0.54
+> 0.56
+> 0.58
+> 0.60
+> 0.62
+> 0.64
+> 0.66
+> FPR95 025 50 75 100
+
+num_directions     
+
+> 0.73
+> 0.74
+> 0.75
+> 0.76
+> 0.77
+> 0.78
+> AUROC
+> shared_cov=True, synthesis=avg_direction
+> 0.54
+> 0.56
+> 0.58
+> 0.60
+> 0.62
+> 0.64
+> 0.66
+> FPR95 025 50 75 100
+
+num_directions   
+
+> 0.675
+> 0.700
+> 0.725
+> 0.750
+> 0.775
+> 0.800
+> 0.825
+> 0.850
+> AUROC
+> shared_cov=True, synthesis=per_direction
+> 0.525
+> 0.550
+> 0.575
+> 0.600
+> 0.625
+> 0.650
+> 0.675
+> 0.700
+> FPR95 50 100 150
+
+synthesis_per_class   
+
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> AUROC
+> shared_cov=False, synthesis=avg_direction
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> FPR95 50 100 150
+
+synthesis_per_class   
+
+> 0.70
+> 0.72
+> 0.74
+> 0.76
+> 0.78
+> 0.80
+> 0.82
+> 0.84
+> AUROC
+> shared_cov=False, synthesis=per_direction
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> FPR95 50 100 150
+
+synthesis_per_class   
+
+> 0.74
+> 0.75
+> 0.76
+> 0.77
+> 0.78
+> AUROC
+> shared_cov=True, synthesis=avg_direction
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> FPR95 50 100 150
+
+synthesis_per_class     
+
+> 0.72
+> 0.74
+> 0.76
+> 0.78
+> 0.80
+> 0.82
+> AUROC
+> shared_cov=True, synthesis=per_direction
+> 0.53
+> 0.54
+> 0.55
+> 0.56
+> 0.57
+> FPR95 0.90 0.92 0.94 0.96 0.98
+
+variance_threshold     
+
+> 0.74
+> 0.76
+> 0.78
+> 0.80
+> 0.82
+> 0.84
+> AUROC
+> shared_cov=False, synthesis=avg_direction
+> 0.50
+> 0.52
+> 0.54
+> 0.56
+> 0.58
+> 0.60
+> 0.62
+> FPR95 0.90 0.92 0.94 0.96 0.98
+
+variance_threshold     
+
+> 0.74
+> 0.75
+> 0.76
+> 0.77
+> 0.78
+> 0.79
+> 0.80
+> AUROC
+> shared_cov=False, synthesis=per_direction
+> 0.57
+> 0.58
+> 0.59
+> 0.60
+> 0.61
+> 0.62
+> 0.63
+> FPR95 0.90 0.92 0.94 0.96 0.98
+
+variance_threshold     
+
+> 0.765
+> 0.770
+> 0.775
+> 0.780
+> 0.785
+> AUROC
+> shared_cov=True, synthesis=avg_direction
+> 0.50
+> 0.52
+> 0.54
+> 0.56
+> 0.58
+> 0.60
+> 0.62
+> FPR95 0.90 0.92 0.94 0.96 0.98
+
+variance_threshold 
+
+> 0.74
+> 0.75
+> 0.76
+> 0.77
+> 0.78
+> AUROC
+> shared_cov=True, synthesis=per_direction
+> 0.50
+> 0.51
+> 0.52
+> 0.53
+> 0.54
+> 0.55
+> 0.56
+> 0.57
+> FPR95
+
+Figure 4. Hyperparameter ablation study. 
+
+score exceeds τ , and as ID otherwise. This approach ensures that the FNR on future data is ap-proximately controlled at αrisk . While the direct p-value test enforces a fixed statistical significance level, the risk-controlled method provides flexibility by allowing threshold selection to achieve a specific desired performance on the ID data, such as the 95% True Positive Rate (corresponding to a 5% FNR) often used for computing FPR@95TPR. 
+
+H. Hyperparameter Sensitivity 
+
+Our approach introduces several hyperparameters that influ-ence model performance across different settings, as illus-trated in figure 4. The hyperparameters appear to exhibit synergies and correlated effects on performance. The number of directions denotes the number of vectors in ˜V ⊆ Vk
+
+small, train , a random subsample of Vk
+
+small, train . For the avg direction configuration, a single outlier is generated along the direction of the average vector v as in (3), whereas 
+
+per direction generates | ˜V | OOD vectors. The effect of the number of directions (first row of the figure 4) depends on the values of other hyperparameters. For avg direction 
+
+(columns 1 and 3), increasing num directions consistently improves AUROC and decreases FPR95, suggesting that averaging more diverse directions produces better and more informative outliers. Shared Covariance controls the estimation strategy for the covariance matrix of the “Proposer” PCA models. When enabled, a single shared covariance matrix is estimated from the pooled, class-centered features of all categories in the training queue, under the assumption of a common underly-ing geometric structure. When disabled, a distinct per-class covariance is estimated, allowing for more specific manifold modeling at the expense of statistical robustness for classes 17 Geometrically Constrained Outlier Synthesis 
+
+with fewer samples. Its impact appears most notable for very small values of num directions ; beyond this regime, its effect on performance is minimal. The value of synthesis per class (second row of the figure 4) dictates the number of virtual outliers generated for each class per training iteration. It directly controls the cardi-nality of the synthetic OOD set, Zood , used to compute the regularization loss, thereby modulating the strength of the outlier exposure signal in each optimization step. The ef-fect of this hyperparameter depends on the values of other hyperparameters, with no clear trend observed, suggesting that the total number of outliers may be less important than their quality and diversity. The variance threshold (third row of the figure 4), η ∈ (0 , 1) ,determines the partitioning of the principal components of the “Proposer” models into a high-variance signal subspace, 
+
+Vlarge , and a low-variance off-manifold subspace, Vsmall .Components are classified according to the minimum num-ber of principal components required to explain at least 
+
+η proportion of the total feature variance; the remaining components form Vsmall and serve as directions for outlier synthesis. A value of 0.9 appears to provide the best perfor-mance, being sufficiently permissive to include more com-ponents in Vk
+
+> small, train
+
+, which allows for more diverse and flexible outlier generation. As the threshold approaches 1.0, performance tends to decline, indicating that a more conser-vative definition of off-manifold directions (e.g., η = 0 .99 )leaves too few directions in Vk 
+
+> small, train
+
+for effective synthe-sis. This highlights the importance of aggressively defining off-manifold directions. 18
