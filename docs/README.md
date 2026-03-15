@@ -6,73 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-03-14
-- 运行时间：2026-03-14 19:25:26 UTC
+- 最新运行日期：2026-03-15
+- 运行时间：2026-03-15 19:28:11 UTC
 - 运行状态：成功
-- 本次总论文数：17
-- 精读区：6
-- 速读区：11
+- 本次总论文数：19
+- 精读区：7
+- 速读区：12
 
 ### 今日简报（AI）
-1) 2026年3月14日，共精读6篇、速读11篇论文，涵盖生成模型与安全对抗领域。  
-2) 最值得关注的是生成模型的水印脆弱性分析及生成对抗中的安全对齐保持方法。  
-3) 建议对生成模型的可解释性与安全性感兴趣的朋友重点阅读精读论文。
-- 详情：[/202603/14/README](/202603/14/README)
+1) 2026年3月15日，完成了19篇论文的阅读与整理，涵盖深度学习与图像生成领域。  
+2) 精读聚焦于图像生成模型的技术演进与高效扩散模型，速读则关注模型可解释性与超分辨率技术。  
+3) 建议对图像生成和模型优化感兴趣的读者优先阅读精读论文，以深入了解核心技术进展。
+- 详情：[/202603/15/README](/202603/15/README)
 
 ### 精读区论文标签
-1. [Geometrically Constrained Outlier Synthesis](/202603/14/2603.08413v1-geometrically-constrained-outlier-synthesis)  
+1. [Image Generation Models: A Technical History](/202603/15/2603.07455v1-image-generation-models-a-technical-history)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：综述图像生成模型技术
+2. [Reviving ConvNeXt for Efficient Convolutional Diffusion Models](/202603/15/2603.09408v1-reviving-convnext-for-efficient-convolutional-diffusion-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-2. [The Orthogonal Vulnerabilities of Generative AI Watermarks: A Comparative Empirical Benchmark of Spatial and Latent Provenance](/202603/14/2603.10323v1-the-orthogonal-vulnerabilities-of-generative-ai-watermarks-a-comparative-empirical-benchmark-of-spatial-and-latent-provenance)  
+   evidence：提升生成模型的鲁棒性
+3. [Contract And Conquer: How to Provably Compute Adversarial Examples for a Black-Box Model?](/202603/15/2603.10689v2-contract-and-conquer-how-to-provably-compute-adversarial-examples-for-a-black-box-model)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：提出生成式AI水印的比较基准
-3. [Obliviator Reveals the Cost of Nonlinear Guardedness in Concept Erasure](/202603/14/2603.07529v1-obliviator-reveals-the-cost-of-nonlinear-guardedness-in-concept-erasure)  
+   evidence：图像对抗扰动生成技术
+4. [SODA: Sensitivity-Oriented Dynamic Acceleration for Diffusion Transformer](/202603/15/2603.07057v1-soda-sensitivity-oriented-dynamic-acceleration-for-diffusion-transformer)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：扩散模型用于提升视觉生成效率
+5. [SODA: Sensitivity-Oriented Dynamic Acceleration for Diffusion Transformer](/202603/15/2603.07057v2-soda-sensitivity-oriented-dynamic-acceleration-for-diffusion-transformer)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：扩散模型在图像生成中的研究
+6. [Integration of deep generative Anomaly Detection algorithm in high-speed industrial line](/202603/15/2603.07577v1-integration-of-deep-generative-anomaly-detection-algorithm-in-high-speed-industrial-line)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-4. [How Long Can Unified Multimodal Models Generate Images Reliably? Taming Long-Horizon Interleaved Image Generation via Context Curation](/202603/14/2603.07540v1-how-long-can-unified-multimodal-models-generate-images-reliably-taming-long-horizon-interleaved-image-generation-via-context-curation)  
+   evidence：基于生成对抗网络的异常检测框架
+7. [Diffusion-Based Data Augmentation for Image Recognition: A Systematic Analysis and Evaluation](/202603/15/2603.08364v1-diffusion-based-data-augmentation-for-image-recognition-a-systematic-analysis-and-evaluation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-5. [DistillGuard: Evaluating Defenses Against LLM Knowledge Distillation](/202603/14/2603.07835v1-distillguard-evaluating-defenses-against-llm-knowledge-distillation)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御方法评估
-6. [Generative Adversarial Regression (GAR): Learning Conditional Risk Scenarios](/202603/14/2603.08553v1-generative-adversarial-regression-gar-learning-conditional-risk-scenarios)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗生成与防御框架
+   evidence：系统分析对抗扰动数据增强方法
 
 ### 速读区论文标签
-1. [Game-Theoretic Modeling of Stealthy Intrusion Defense against MDP-Based Attackers](/202603/14/2603.09587v1-game-theoretic-modeling-of-stealthy-intrusion-defense-against-mdp-based-attackers)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的防御策略
-2. [Generative Drifting is Secretly Score Matching: a Spectral and Variational Perspective](/202603/14/2603.09936v1-generative-drifting-is-secretly-score-matching-a-spectral-and-variational-perspective)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动生成方法与理论分析
-3. [GR-SAP: Generative Replay for Safety Alignment Preservation during Fine-Tuning](/202603/14/2603.10243v1-gr-sap-generative-replay-for-safety-alignment-preservation-during-fine-tuning)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：生成对抗扰动以保持安全对齐
-4. [Enhancing Network Intrusion Detection Systems: A Multi-Layer Ensemble Approach to Mitigate Adversarial Attacks](/202603/14/2603.10413v1-enhancing-network-intrusion-detection-systems-a-multi-layer-ensemble-approach-to-mitigate-adversarial-attacks)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：使用对抗方法生成恶意网络流量
-5. [Looking Back and Forth: Cross-Image Attention Calibration and Attentive Preference Learning for Multi-Image Hallucination Mitigation](/202603/14/2603.07048v1-looking-back-and-forth-cross-image-attention-calibration-and-attentive-preference-learning-for-multi-image-hallucination-mitigation)  
+1. [Class Visualizations and Activation Atlases for Enhancing Interpretability in Deep Learning-Based Computational Pathology](/202603/15/2603.07170v2-class-visualizations-and-activation-atlases-for-enhancing-interpretability-in-deep-learning-based-computational-pathology)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+2. [Disentangled Textual Priors for Diffusion-based Image Super-Resolution](/202603/15/2603.07430v1-disentangled-textual-priors-for-diffusion-based-image-super-resolution)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：扩散模型用于图像超分辨率
+3. [CONSTANT: Towards High-Quality One-Shot Handwriting Generation with Patch Contrastive Enhancement and Style-Aware Quantization](/202603/15/2603.07543v1-constant-towards-high-quality-one-shot-handwriting-generation-with-patch-contrastive-enhancement-and-style-aware-quantization)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：基于扩散模型的手写生成
+4. [SGI: Structured 2D Gaussians for Efficient and Compact Large Image Representation](/202603/15/2603.07789v1-sgi-structured-2d-gaussians-for-efficient-and-compact-large-image-representation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：基于结构化高斯的图像表示
+5. [TIQA: Human-Aligned Text Quality Assessment in Generated Images](/202603/15/2603.07119v1-tiqa-human-aligned-text-quality-assessment-in-generated-images)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：多图像幻觉缓解框架
-6. [BiCLIP: Domain Canonicalization via Structured Geometric Transformation](/202603/14/2603.08942v1-biclip-domain-canonicalization-via-structured-geometric-transformation)  
+   evidence：图像对抗攻击与防御
+6. [Latent Generative Models with Tunable Complexity for Compressed Sensing and other Inverse Problems](/202603/15/2603.07357v2-latent-generative-models-with-tunable-complexity-for-compressed-sensing-and-other-inverse-problems)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：图像对抗攻击防御技术
-7. [One Token, Two Fates: A Unified Framework via Vision Token Manipulation Against MLLMs Hallucination](/202603/14/2603.10360v1-one-token-two-fates-a-unified-framework-via-vision-token-manipulation-against-mllms-hallucination)  
+   evidence：生成式图像对抗鲁棒性
+7. [Missing No More: Dictionary-Guided Cross-Modal Image Fusion under Missing Infrared](/202603/15/2603.08018v1-missing-no-more-dictionary-guided-cross-modal-image-fusion-under-missing-infrared)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：通过视觉标记对抗生成模型幻觉
-8. [Probabilistic Verification of Voice Anti-Spoofing Models](/202603/14/2603.10713v2-probabilistic-verification-of-voice-anti-spoofing-models)  
+   evidence：对抗攻击下的图像融合方法
+8. [VSDiffusion: Taming Ill-Posed Shadow Generation via Visibility-Constrained Diffusion](/202603/15/2603.08020v1-vsdiffusion-taming-ill-posed-shadow-generation-via-visibility-constrained-diffusion)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击防御技术
-9. [Evaluating Multi-Agent LLM Architectures for Rare Disease Diagnosis](/202603/14/2603.06856v1-evaluating-multi-agent-llm-architectures-for-rare-disease-diagnosis)  
+   evidence：图像阴影生成方法
+9. [Adversarial Latent-State Training for Robust Policies in Partially Observable Domains](/202603/15/2603.07313v1-adversarial-latent-state-training-for-robust-policies-in-partially-observable-domains)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型影响分析
-10. [VisualDeltas: Learning Preferences from Visual Quality Perturbations](/202603/14/2603.07272v1-visualdeltas-learning-preferences-from-visual-quality-perturbations)  
+   evidence：对抗潜态训练提升部分可观测域策略鲁棒性
+10. [AQuA: Toward Strategic Response Generation for Ambiguous Visual Questions](/202603/15/2603.07394v1-aqua-toward-strategic-response-generation-for-ambiguous-visual-questions)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：从视觉质量扰动中学习偏好
-11. [Training for Trustworthy Saliency Maps: Adversarial Training Meets Feature-Map Smoothing](/202603/14/2603.07302v1-training-for-trustworthy-saliency-maps-adversarial-training-meets-feature-map-smoothing)  
+   evidence：对抗扰动对生成模型的影响
+11. [UnSCAR: Universal, Scalable, Controllable, and Adaptable Image Restoration](/202603/15/2603.07406v1-unscar-universal-scalable-controllable-and-adaptable-image-restoration)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击训练提升图像解释鲁棒性
+   evidence：对抗攻击下的图像恢复方法
+12. [One-for-All Model Initialization with Frequency-Domain Knowledge](/202603/15/2603.07523v1-one-for-all-model-initialization-with-frequency-domain-knowledge)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：图像对抗扰动生成方法
 
 
 ### ⚡ 这个站点能做什么

@@ -1,0 +1,939 @@
+Title: Adversarial Latent-State Training for Robust Policies in Partially Observable Domains
+
+URL Source: https://arxiv.org/pdf/2603.07313v1
+
+Published Time: Tue, 10 Mar 2026 00:53:51 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# Adversarial Latent-State Training for Robust Policies in Partially Observable Domains 
+
+Angad Singh Ahuja Constrained Image-Synthesis Lab March 10, 2026 
+
+Abstract 
+
+Robustness under latent distribution shift remains challenging in partially observable reinforce-ment learning. We formalize a focused setting where an adversary selects a hidden initial latent distribution before the episode, termed an adversarial latent-initial-state POMDP. Theoretically, we prove a latent minimax principle, characterize worst-case defender distributions, and derive approximate best-response certificates with finite-sample guarantees, providing formal meaning to empirical training diagnostics. Empirically, using a Battleship benchmark, we demonstrate that targeted exposure to shifted latent distributions reduces average robustness gaps between Spread and Uniform distributions from 10 .3 to 3.1 shots at equal budget. Furthermore, iterative best-response training exhibits budget-sensitive behavior entirely consistent with our approximate certificate theory. Ultimately, we show that for latent-initial-state problems, our framework yields precise diagnostic principles and confirms that structured adversarial exposure effectively mitigates worst-case vulnerabilities. 
+
+## 1 Motivation and Claim 
+
+Many partially observable control problems are dominated not by stepwise stochasticity, but by a hidden condition selected before interaction begins. A diagnosis system may face an unknown fault configuration. A robotics policy may confront an unobserved physical parameter regime. A constrained graphics system may act under a fixed but hidden process condition such as dot gain, substrate behavior, or capture distortion. In each case, the agent interacts sequentially, but the principal source of uncertainty is a latent variable drawn at the start of the episode and then held fixed. This paper studies that setting through a deliberately restricted adversarial lens. The adversary does not modify transitions online and does not inject arbitrary trajectory-level noise. It acts only once, at time 0, by choosing the hidden initial latent state or a distribution over such latent states. We refer to this problem class as adversarial latent-initial-state POMDPs . Battleship is a particularly clean benchmark for this class. The hidden ship layout is exactly the latent variable. Conditional on the layout, transitions and observations are deterministic. The action space is discrete and constrained in a transparent way by already-fired cells. Strong scripted baselines are available. Most importantly, the hidden placement distribution can be varied in controlled ways to induce latent distribution shift. The central claim of the paper has two parts. The first is theoretical. Adversarial latent-initial-state POMDPs admit a compact theorem package that is both exact and practically interpretable: the 1
+
+> arXiv:2603.07313v1 [cs.LG] 7 Mar 2026
+
+defender’s optimization is a genuine finite minimax problem over latent distributions; approximate best responses imply explicit inequalities for the main training diagnostics; and finite-sample concentration guarantees certify when empirical signs of those diagnostics can be trusted. The second part is empirical. In Battleship, training exposure to shifted latent distributions substantially reduces robustness gaps under held-out stress distributions. However, full iterative best response only behaves as intended when the defender is itself optimized strongly enough to be genuinely adversarial. The present benchmark is also motivated, in a modest way, by a broader graphics-for-ML agenda. In constrained image synthesis and sequential graphics control problems, one often faces hidden physical or process latents that remain fixed throughout a generation trajectory. Although this paper does not study those domains directly, the formal development is meant to be reusable there. Battleship is used here because it makes the latent-state structure exact and the theoretical analysis verifiable. 
+
+## 2 Related Work 
+
+The closest classical background is robust Markov decision process theory, where uncertainty typically enters through transition kernels or rewards and the control objective becomes minimax optimization over a model uncertainty set [ 1, 2 ]. That literature is foundational, but its uncertainty model differs from the one studied here. In our setting, the adversary does not alter transition kernels throughout the episode. Instead, it selects a hidden initial latent condition, after which the environment evolves conditionally on that latent. This restriction is not merely cosmetic. It yields a simpler strategic object and, as we show, a cleaner theorem package. Adversarial reinforcement learning has also been studied in forms where the adversary acts throughout the trajectory. Representative examples include robust adversarial reinforcement learning with a disturbance player [ 3 ], as well as broader lines of work on adversarial observations, adversarial state perturbations, and online disturbance robustness. These approaches are important and practically relevant, but they are structurally different from hidden-latent robustness. In those settings, the adversary is a trajectory-level controller. In the present paper, the adversary is a selector of initial latent conditions. Partially observable sequential decision-making is naturally framed using POMDPs [ 4 ]. In a general POMDP, the canonical sufficient statistic for optimal control is the posterior belief over hidden states. That perspective matters here because Battleship is fundamentally a search-under-uncertainty problem. It also explains why belief-style scripted baselines are so strong in this benchmark: they approximate posterior occupancy over hidden layouts. Our contribution, however, is not a new posterior filter or a new search baseline. It is a theorem-backed way of thinking about robustness when the hidden variable itself is adversarially chosen. On the optimization side, we use PPO [ 5] together with action masking. This is a natural choice in Battleship because invalid actions are rule-defined rather than learned. For evaluation, we use not only mean episode length but also tail metrics such as the 95 th percentile and conditional value-at-risk [ 6, 7 ]. This is important because robustness failures under latent shift often appear first in the tails rather than in the mean. The game-theoretic training protocol is related to fictitious play and iterative best-response ideas [8, 9 ]. However, our defender is intentionally restricted. It does not act as an unrestricted online adversary, nor does it directly optimize over all legal layouts in one step. It learns within a structured 2latent-selection class and is then evaluated through the induced distribution over layouts. This restricted viewpoint is central to the empirical story: the theoretical diagnostics are meaningful precisely because the defender’s role is mathematically clear, but their empirical success depends on whether that restricted defender can be optimized well enough to behave adversarially in practice. Finally, the present work should be read as part of a broader methodological tendency in machine learning toward robustness under hidden nuisance variation. Domain randomization and stress-distribution training pursue a related intuition, namely that controlled exposure to variation can improve out-of-distribution performance. The present paper differs in two ways. First, the latent variable is hidden and fixed rather than directly observed or resampled within an episode. Second, the main contribution is not simply an empirical robustness gain, but a mathematically explicit set of statements connecting the game formulation, the training objectives, and the diagnostics used to interpret them. 
+
+## 3 Methodology, Theoretical Development, and Diagnostics 
+
+The problem formulation and the methodological choices are best presented together. The formal game specifies the hidden latent layout, the observation channel, the feasible action set, and the objective. The solution space then specifies how that game is operationalized in learning: the reward surrogate used during optimization, the policy class actually implemented, the self-play protocol, and the evaluation quantities that connect the experiments back to the theory. Let the board be an H × W grid. In the implementation and in the analysis below, cells are indexed as 
+
+C = {0, 1, . . . , HW − 1}.
+
+A legal hidden ship layout is an element B ∈ B , where B is the finite set of all placements satisfying the standard legality constraints. The latent layout is treated as hidden because the attacker never observes ship locations directly. Instead it receives only immediate shot outcomes: miss, hit, or a sunk event for a specific ship. This is the minimum information required to preserve the actual information structure of the game. The underlying state at time t may be written as 
+
+st = ( B, M t, H t, U t),
+
+where Mt and Ht denote the public miss and hit indicators and Ut denotes the remaining unsunk ship structure. The action set consists of valid grid cells not yet fired upon, 
+
+A(st) = {a ∈ C : Mt(a) = 0 ∧ Ht(a) = 0 }.
+
+Conditioned on B, the environment is deterministic. The only randomness under standard play enters through the initial layout draw. 
+
+Definition 1 (Battleship POMDP) . A Battleship episode is a POMDP 
+
+M = ( S, A, O, T , Z, R, γ )
+
+such that a hidden layout B is sampled once at time 0 and then fixed; the public state evolves deterministically through the hit, miss, and sunk updates; observations are deterministic shot outcomes conditional on the hidden layout and public shot record; and the default reward is a step penalty until all ships are sunk. 
+
+3The natural performance criterion is shots-to-win. Let τ denote the first time all ships are sunk. The game-level objective is 
+
+min  
+
+> π
+
+Eπ[τ ].
+
+The following lemma, which is standard but operationally important, explains why the sparse step-penalty reward is the principled default. 
+
+Lemma 1 (Step penalty and shots-to-win) . Suppose the training reward is 
+
+rt = −1 for t < τ, rτ = 0 .
+
+Then for any policy π,
+
+J(π) := Eπ 
+
+> [τ−1∑
+> t=0
+
+rt
+
+> ]
+
+= −Eπ[τ ].
+
+Therefore maximizing expected return is exactly equivalent to minimizing expected shots-to-win. 
+
+The exact POMDP sufficient statistic is the posterior belief over legal layouts, 
+
+bt(B) = P(B | ht),
+
+where ht denotes the interaction history up to time t. In principle, optimal control could be stated entirely in belief space. In practice, the implemented agents do not maintain that posterior explicitly. Instead, they receive a public board record encoded as a three-channel tensor with channels Hit, Miss, and Unknown, where Unknown is computed deterministically as 
+
+Unknown = 1 − (Hit + Miss ).
+
+This design is faithful to the implementation and keeps the policy class computationally tractable. Conceptually, however, the posterior remains important: it explains why belief-based baselines are strong and why the hidden-latent view of the game is the correct one. The formal extension that matters for robustness is now immediate. 
+
+Definition 2 (Adversarial latent-initial-state POMDP) . An adversarial latent-initial-state POMDP is a POMDP in which a latent variable z ∈ Z is sampled once at time 0 from a defender-chosen distribution ρ, after which the transition and observation laws remain fixed conditional on z, and the attacker acts under partial observability to optimize expected return. 
+
+Battleship instantiates this definition exactly, with z = B ∈ B . The defender’s strategic role is therefore not to perturb the agent online, but to choose a hidden initial condition that changes the induced difficulty distribution over episodes. We measure robustness relative to a nominal defender distribution ρnom and a stress defender distribution ρstress . For an attacker policy π, the mean robustness gap is 
+
+∆rob (π) = Eρstress [τ (π)] − Eρnom [τ (π)] .
+
+We also use tail-sensitive analogues, 
+
+∆(p95) rob (π) = p95 ρstress (τ (π)) − p95 ρnom (τ (π)) ,
+
+and 
+
+∆(CVaR) rob (π) = CVaR 0.10 ,ρ stress (τ (π)) − CVaR 0.10 ,ρ nom (τ (π)) .
+
+4These quantities match the evaluation protocol actually used in the experiments. At this point the main theorem package can be stated. The first result is the central mathematical claim of the paper. Because the horizon, action set, and observation set are finite in Battleship, the set of deterministic history-dependent attacker policies is finite, although large. This permits an exact reduction of the attacker-defender interaction to a finite zero-sum game. 
+
+Definition 3 (Deterministic history-dependent attacker policy) . Let H be the finite set of all feasible attacker histories up to a finite horizon Tmax . A deterministic history-dependent attacker policy is a map 
+
+π : H → A 
+
+that assigns a legal action to each feasible history. 
+
+Let Πdet denote the finite set of all such deterministic attacker policies. Let the defender class be a compact convex polytope 
+
+P = conv {ρ1, . . . , ρ m}
+
+of admissible latent distributions over a finite latent set Z. For each π ∈ Πdet and each latent z ∈ Z ,define the latent-conditioned loss 
+
+L(π, z ) := E[τ (π) | z].
+
+Theorem 1 (Latent minimax principle) . Assume that the horizon Tmax is finite, the action and observation alphabets are finite, the latent set Z is finite, and the defender class P is a compact convex polytope of latent distributions. Then: 
+
+min 
+
+> μ∈∆(Π det )
+
+max  
+
+> ρ∈P
+
+V (μ, ρ ) = max  
+
+> ρ∈P
+
+min 
+
+> μ∈∆(Π det )
+
+V (μ, ρ ),
+
+where 
+
+V (μ, ρ ) = ∑
+
+> π∈Πdet
+> ∑
+> z∈Z
+
+μ(π)ρ(z)L(π, z ).
+
+In particular, adversarial latent-state training is a genuine finite minimax problem over attacker mixtures and defender distributions. 
+
+The immediate corollary is that worst-case defenders can be sought at extreme points. 
+
+Corollary 1 (Extreme-point defenders) . For any fixed attacker mixture μ, the defender optimization 
+
+max  
+
+> ρ∈P
+
+V (μ, ρ )
+
+attains its maximum at an extreme point of P.
+
+This matters conceptually because it justifies training against defender distributions . In this setting, distributions are not a heuristic relaxation of the true game; they are the natural strategy objects induced by the latent minimax formulation. The next result family is more directly tied to training logs. The exact best-response interpretation is too strong for practical optimization, so we formulate approximate certificates. 
+
+Definition 4 (Defender ε-best response) . Fix an attacker policy π and defender class P. A defender distribution ρε ∈ P is an εD-best response to π if 
+
+sup 
+
+> ρ∈P
+
+Eρ[τ (π)] − Eρε [τ (π)] ≤ εD.
+
+5Definition 5 (Attacker ε-best response to a mixture) . Fix an attacker policy class Π and let 
+
+μ = λρ D + (1 − λ)ρU , λ ∈ (0 , 1) .
+
+A policy πε ∈ Π is an εA-best response to μ if 
+
+Eμ[τ (πε)] − inf  
+
+> π∈Π
+
+Eμ[τ (π)] ≤ εA.
+
+Theorem 2 (Approximate best-response certificates) . Let ρU denote the nominal UNIFORM defender distribution. If ρk is an εD-best response to attacker πk−1 over a defender class containing 
+
+ρU , then 
+
+Eρk [τ (πk−1)] − EρU [τ (πk−1)] ≥ − εD.
+
+Equivalently, 
+
+defender_adversarial k ≥ − εD.
+
+If, further, πk is an εA-best response to the mixture 
+
+μk = λρ k + (1 − λ)ρU ,
+
+then 
+
+λ
+
+> (
+
+Eρk [τ (πk)] − Eρk [τ (πk−1)] 
+
+> )
+
++ (1 − λ)
+
+> (
+
+EρU [τ (πk)] − EρU [τ (πk−1)] 
+
+> )
+
+≤ εA.
+
+Equivalently, 
+
+λ · attacker_adaptation k + (1 − λ) · uniform_drift k ≤ εA.
+
+These inequalities are the formal reason the Stage-2 diagnostics are useful. A negative de-fender_adversarial is not merely an undesirable scalar; it is evidence that the defender did not reach an adequate best response under the current optimization budget or representational con-straints. Likewise, a positive weighted residual involving attacker_adaptation and uniform_drift 
+
+indicates that the attacker phase failed to sufficiently optimize the stated mixture objective. Because the experiments report empirical means from finitely many evaluation episodes, one also wants a statistical statement ensuring that the observed sign of a diagnostic is trustworthy. Since Battleship episode length is bounded by the finite board size, concentration bounds are available. In the Battleship benchmark considered here, valid masking ensures that no cell can be fired at more than once. Therefore, in the no-truncation setting, 
+
+τ ≤ HW almost surely .
+
+If evaluation uses an external truncation cap Tcap , then all bounds below hold with 
+
+Tmax = min( HW, T cap ).
+
+We state the theorem using a generic Tmax so that the result remains valid under either evaluation protocol. 
+
+Theorem 3 (Finite-sample sign certification) . Suppose evaluation episodes are independent and episode lengths are almost surely bounded in [0 , T max ], where in Battleship one may take Tmax = HW 
+
+in the no-truncation setting and Tmax = min (HW, T cap ) when an external truncation cap is imposed. Let ̂
+
+∆D =̂ Eρk [τ (πk−1)] −̂ EρU [τ (πk−1)] 
+
+6be estimated from nD independent episodes under ρk and nU independent episodes under ρU . Then for any δ ∈ (0 , 1) , with probability at least 1 − δ,
+
+> ∣∣∣̂
+
+∆D − ∆D 
+
+> ∣∣∣
+
+≤ Tmax 
+
+> √
+
+log(4 /δ )2nD
+
++ Tmax 
+
+> √
+
+log(4 /δ )2nU
+
+,
+
+where 
+
+∆D = Eρk [τ (πk−1)] − EρU [τ (πk−1)] .
+
+Consequently, if 
+
+|̂ ∆D| > T max 
+
+> √
+
+log(4 /δ )2nD
+
++ Tmax 
+
+> √
+
+log(4 /δ )2nU
+
+,
+
+then the sign of ̂ ∆D matches the sign of ∆D with probability at least 1 − δ. An analogous bound holds for the weighted attacker residual 
+
+λ · attacker_adaptation k + (1 − λ) · uniform_drift k.
+
+The final structural proposition explains why defender-shift analysis should not rely only on single-cell occupancy marginals. 
+
+Proposition 1 (Marginal insufficiency for fixed policies) . There exist adversarial latent-initial-state POMDPs, two defender distributions ρ and ρ′ with identical one-coordinate marginals over the latent variable, and a deterministic attacker policy π such that 
+
+Eρ[τ (π)] ̸ = Eρ′ [τ (π)] .
+
+Hence one-coordinate marginals are not sufficient to characterize adversarial hardness for fixed policies, and higher-order latent structure can matter even when marginals agree. 
+
+Remark 1. This proposition is intentionally modest. It does not claim that identical one-coordinate marginals change the value of the fully optimal attacker in every setting. It claims only that low-order marginals are insufficient to determine hardness for fixed policies, which is already enough to justify the use of structure-aware defender metrics in the empirical analysis. 
+
+The empirical diagnostics are therefore not ad hoc. The quantity defender_adversarial operationalizes the defender certificate theorem. The weighted combination of attacker_adaptation and uniform_drift 
+
+operationalizes the attacker certificate theorem. The finite-sample theorem explains when the empirical signs of these quantities are trustworthy. This is the conceptual bridge from theory to the tables and curves in the later sections. The certificate theorems should therefore be read as 
+
+optimization diagnostics for empirically estimated quantities , not as claims that every observed sign pattern must hold exactly at finite budget and finite sample size. There is also a useful multiobjective reading of the attacker-training regimes. If one regards nominal loss and adversarial loss as two objectives, then training against a mixture 
+
+λρ D + (1 − λ)ρU
+
+is a scalarization of the nominal-versus-adversarial tradeoff. This leads to the following small but useful consequence. 
+
+Corollary 2 (Supported weakly Pareto-optimal points under mixture training) . Fix a defender distribution ρD and a nominal defender distribution ρU . Any exact minimizer of 
+
+λEρD [τ (π)] + (1 − λ)EρU [τ (π)] 
+
+7Algorithm 1 Stage-1 attacker training  
+
+> 1:
+
+Initialize attacker policy π 
+
+> 2:
+
+for each training iteration do  
+
+> 3:
+
+Sample defender mode according to the chosen regime: 
+
+• A: always UNIFORM 
+
+• B: fixed scripted mixture 
+
+• C: alternating nominal and stress-heavy blocks  
+
+> 4:
+
+Collect masked rollouts  
+
+> 5:
+
+Update π with PPO  
+
+> 6:
+
+Periodically evaluate on UNIFORM and SPREAD  
+
+> 7:
+
+end for Algorithm 2 Restricted iterative best response  
+
+> 1:
+
+Initialize attacker πA, 0 from a Stage-1 regime  
+
+> 2:
+
+for k = 1 , . . . , G do  
+
+> 3:
+
+Train defender πD,k against frozen attacker πA,k −1 
+
+> 4:
+
+Extract a defender-induced latent distribution ρk 
+
+> 5:
+
+Train attacker πA,k against mixture λρ k + (1 − λ)ρU 
+
+> 6:
+
+Evaluate πA,k −1 and πA,k on ρU , ρstress , and ρk 
+
+> 7:
+
+Log defender_adversarial k, attacker_adaptation k, and uniform_drift k 
+
+> 8:
+
+end for 
+
+for some λ ∈ (0 , 1) attains a supported weakly Pareto-optimal point of the achievable nominal-versus-adversarial loss region. 
+
+The solution-space choices are now easy to state. The reported experiments use the sparse step-penalty reward as the baseline reward, because it is exactly aligned with shots-to-win. A shaped reward family is conceptually possible and is discussed in the solution-space specification, but it is not the focus of the reported results. The attacker policy actually implemented for the main experiments is a feedforward masked PPO policy over the public three-channel board tensor rather than a recurrent explicit-belief controller. This is a methodological choice rather than a property of the problem itself. The baseline self-play protocol is alternating optimization: hold the defender fixed while training the attacker, then hold the attacker fixed while training the defender. More elaborate game-theoretic stabilizers are possible, but they are not needed to define the present benchmark. For clarity, the two main training procedures are summarized below. 
+
+## 4 Results 
+
+The experiments are organized around four questions. The first asks whether stress exposure reduces the robustness gap under scripted latent shift. The second asks whether restricted iterative best response discovers harder latent distributions. The third asks whether the attacker adapts without sacrificing too much nominal performance. The fourth asks whether defender budget is the main determinant of whether the Stage-2 game behaves in the intended minimax fashion. The clearest answer comes from the first question. Table 1 reports the Stage-1 results aggregated across three seeds. Regime B, which trains on a fixed mixture of nominal and shifted defenders, 8Table 1: Stage-1 results aggregated across three seeds. Nominal = UNIFORM; stress = SPREAD. Lower is better. Regime UNIFORM mean SPREAD mean Gap ∆rob SPREAD p95 SPREAD CVaR 0.10                                              
+
+> A (uniform-only) 90.00 ±1.72 100.33 ±1.18 10.33 ±0.54 100.00 ±0.00 100.00 ±0.00 B (fixed mixture) 91.33 ±0.62 94.47 ±0.62 3.13 ±1.17 100.00 ±0.00 99.33 ±1.15 C (alternating stress) 93.33 ±2.04 84.44 ±1.62 -8.89 ±2.42 99.00 ±1.73 98.89 ±1.92
+
+Table 2: Final Stage-2 iterative best-response diagnostics across three independent seeds. Defender budgets are restricted to 50k steps per generation to simulate a computationally constrained adversarial threat model. Seed Generation ( k) UNIFORM SPREAD Dk defender_adversarial attacker_adaptation uniform_drift 42 1 90.3 91.8 90.5 -2.15 -1.37 -0.96 42 2 89.8 90.9 90.0 -0.14 -0.45 0.06 42 3 89.1 89.1 88.5 0.26 0.73 0.18 123 1 88.8 92.3 89.1 1.47 1.49 -0.31 123 2 89.2 87.1 89.6 1.93 1.17 0.35 123 3 89.2 82.8 87.5 -1.35 -0.23 0.53 777 1 89.7 88.5 89.3 -1.93 -0.50 -1.04 777 2 89.3 86.3 89.5 0.18 0.05 -0.13 777 3 87.9 83.2 88.6 3.19 3.38 -0.88 sharply reduces the mean robustness gap between SPREAD and UNIFORM from approximately 
+
+10 .3 shots to 3.1 shots at equal environment-step budget. This is the strongest empirical support for the paper’s main claim. Regime C, which alternates more aggressively between nominal and stress exposure, drives the gap negative, but at the cost of worse nominal performance. This is consistent with the scalarization view introduced above: stronger adversarial emphasis can move the solution farther along the nominal-versus-stress tradeoff frontier, but not necessarily in a way that improves both objectives simultaneously. These Stage-1 gains should be interpreted as relative robustness gains rather than as evidence of strong absolute gameplay. The strongest scripted baselines in this benchmark remain substantially better than the learned attackers at the current budgets. That point matters and should be made plainly. The present paper is about robustness under hidden latent shift, not about solving Battleship optimally. The Stage-2 results are more nuanced and, in some ways, more informative. Table 2 gives the final three-seed iterative best-response diagnostics now contained in the uploaded paper. The quantity 
+
+defender_adversarial is the key empirical bridge to the theory. Positive values indicate that the learned defender is harder than the nominal UNIFORM defender for the current attacker. Under exact best response, Theorem 2 says this quantity cannot be negative. In the table, it is sometimes positive and sometimes negative. This is exactly the optimization-sensitive behavior the theorem package is meant to diagnose. The negative entries do not undermine the formulation. Rather, they suggest that the defender phase has not reached a sufficiently good best response under the current budget or defender class. The Stage-2 table also clarifies the third experimental question. The attacker does adapt in some generations, but that adaptation is not uniformly clean. The correct way to read the table is not to ask whether attacker_adaptation is always negative in isolation. Theorem 2 says that the correct 9Table 3: Defender-budget ablation. Positive defender_adversarial implies that the learned defender induces a harder distribution than the nominal distribution for the current attacker. Budget (τD) Seed Gen (k) defender_adversarial attacker_adaptation 50k 42 1 -1.42 -0.87 50k 42 2 -2.02 1.40 50k 42 3 0.02 1.68 50k 123 1 1.33 -1.37 50k 123 2 0.34 1.21 50k 123 3 0.19 -0.91 200k 42 1 0.10 -1.69 Table 4: Scripted defender-shift metrics. Defender CentroidDistMean ClusterScore MarginalEntropy QuadrantMassStd UNIFORM 0.000 18.05 0.451 0.012 EDGE 1.866 18.04 0.449 0.013 CLUSTER 2.266 21.55 0.399 0.016 SPREAD 2.947 15.97 0.416 0.026 PARITY 1.502 18.50 0.434 0.034 object is the weighted combination of attacker adaptation and nominal drift. In other words, a small amount of nominal degradation can still be acceptable if it is compensated by sufficient improvement against the learned defender. The empirical picture is therefore not one of failure, but of partial success under a budget-limited adversarial regime. That budget-limited interpretation becomes much clearer in the defender-budget ablation. Table 3 varies defender optimization budget while keeping the attacker side fixed. At 50 k defender steps, the defender frequently fails to remain reliably adversarial, especially for seed 42. At 200 k steps, the first generation for seed 42 becomes positively adversarial. This is exactly the sort of evidence one would hope for if the negative defender_adversarial values were primarily due to insufficient defender optimization rather than to a conceptual flaw in the game formulation. The defender-shift metrics support the interpretation that the scripted defender families correspond to real structural shifts rather than only relabeled samplers. Table 4 reports centroid distance, cluster score, marginal entropy, and quadrant mass asymmetry. SPREAD is the strongest geometric shift in this family, which is consistent with its role as the main stress distribution in the Stage-1 results. The results therefore support a differentiated conclusion. Stage 1 provides a strong and stable robustness result: exposure to shifted latent distributions substantially reduces robustness gaps. Stage 2 provides a more conditional result: iterative best response is meaningful, but only when the defender is optimized strongly enough to act as a true adversary. This is not a weakness of the theory. On the contrary, it is precisely where the theory earns its place: the diagnostic quantities are interpretable because they are tied to explicit certificate theorems. 10 5 Discussion and Future Work 
+
+The theoretical and empirical halves of the paper point to the same conclusion, but in different ways. The theoretical development shows that adversarial latent-state training is not merely an intuitive adaptation of robust RL language. In finite-horizon hidden-latent problems, it is a genuine minimax problem over attacker mixtures and defender latent distributions. This matters because it clarifies what the defender is, what the attacker is optimizing against, and what can and cannot be concluded from empirical diagnostics. The approximate best-response theorems then explain how to read imperfect training runs: not as contradictions of the game formulation, but as evidence about optimization quality and representational limitations. The experiments, in turn, support two claims of different strengths. The first claim is comparatively strong: training exposure to latent shift reduces robustness gaps under latent shift. This is supported clearly by Stage 1 and is stable across three seeds. The second claim is more cautious: full iterative best response can discover harder latent distributions and yield meaningful attacker adaptation, but only when the defender side is trained strongly enough. This is why the defender-budget ablation matters so much. It turns what could otherwise be dismissed as unstable self-play into a concrete scientific result about when the adversarial training game is or is not being solved well enough to justify its interpretation. A further reason to take this formulation seriously is that it is not intrinsically tied to Battleship. The hidden-layout interpretation is especially clear there, but the same mathematics may apply whenever a sequential controller acts under a fixed hidden process condition. This is where the graphics-for-ML motivation becomes relevant. In sequential halftoning, print planning, or physically constrained image-generation loops, one can imagine hidden process latents such as substrate behavior, optical blur, dot gain, viewing condition, or calibration drift being selected at the beginning of a trajectory and then remaining fixed. If those settings are cast as sequential decision problems, the present theorem package offers a natural robustness language: the adversary chooses the hidden process condition, the controller acts sequentially, and the resulting diagnostics have a principled interpretation. We therefore see one natural direction for future work as the transfer of this adversarial latent-state framework to sequential graphics problems, especially DRL-based halftoning under hidden process shift. There are also purely methodological next steps. One is to strengthen the defender in Stage 2 so that the empirical game comes closer to the exact best-response regime described by the theory. Another is to test whether the theorem-guided diagnostics can be made useful online, for instance as stopping criteria or adaptive budget-allocation signals during attacker-defender training. A third is to move beyond a single benchmark family. The current paper argues that Battleship is enough to make the latent-state structure exact and analyzable. A subsequent paper should test how much of the theory survives in other hidden-latent sequential tasks. 
+
+## 6 Limitations 
+
+The first limitation is absolute performance. The learned attackers are not yet close to the strongest scripted baselines in this benchmark. That is not fatal for the current paper, because the central claim is comparative rather than absolute, but it places a natural limit on how strongly one should interpret the practical performance of the learned policies. The second limitation concerns the defender side of the game. The theoretical statements are exact 11 under exact best responses and become approximate under ε-best responses. The experiments strongly suggest that the defender is often the optimization bottleneck. This means that Stage-2 failures should not be over-read as failures of the minimax formulation itself. At the same time, it means the empirical IBR evidence is only as convincing as the defender optimization budget and class are strong. The third limitation is scope. Battleship is a single benchmark family. It is a particularly useful one for this question, because the hidden-latent structure is exact and transparent, but it is still a single family. The graphics-for-ML motivation discussed above is therefore a plausible research trajectory rather than an empirical result of the present paper. Similarly, the marginal-insufficiency proposition is intentionally limited to fixed policies; the paper does not claim that low-order marginals are insufficient to determine the value of a fully optimized attacker in every hidden-latent problem. The fourth limitation is representational. The formal POMDP sufficient statistic is the full posterior over legal layouts, whereas the implemented neural policy observes only the public three-channel board tensor. This is the right implementation choice for tractability, but it means the policy class is not an explicit belief-state controller. Part of the gap to the strongest scripted baselines may therefore be representational rather than purely optimization-based. 
+
+## 7 Conclusion 
+
+This paper introduced adversarial latent-initial-state POMDPs as a restricted but mathematically tractable class of robustness problems. For this class, it proved a latent minimax principle, an extreme-point characterization of worst-case defenders, approximate best-response certificates, finite-sample sign-certification results, and a structural marginal-insufficiency proposition. These results are modest in scope, but they serve a clear purpose: they give exact mathematical meaning to the diagnostics used during adversarial latent-state training. Empirically, the Battleship benchmark shows that training exposure to shifted latent distributions substantially reduces robustness gaps under held-out stress distributions. At the same time, iterative best response is shown to be sensitive to defender budget, which is precisely the behavior the approximate-certificate theorems suggest one should expect. The contribution of the paper is therefore not that it solves Battleship, nor that it proves a broad universal theorem about all adversarial training. Its contribution is narrower and, we believe, more useful: it identifies a specific hidden-latent robustness setting, proves the right structural statements for that setting, and shows that those statements help explain both the successes and the failures of the training dynamics observed in practice. 12 8 Appendixes A Notation Table 
+
+Table 5: Notation used in the paper. Symbol Meaning 
+
+H, W Board height and width. 
+
+C Set of grid cells, indexed in the implementation as {0, 1, . . . , HW − 1}.
+
+B Hidden Battleship layout. 
+
+B Set of legal Battleship layouts. 
+
+Mt, H t Public miss and hit indicator grids at time t.
+
+Ut Remaining unsunk ship structure at time t.
+
+st Full underlying state at time t, typically written as (B, M t, H t, U t).
+
+τ Episode length, i.e. shots-to-win. 
+
+z Generic hidden latent variable. 
+
+Z Latent state space. 
+
+ρ Defender distribution over latent states. 
+
+ρU Nominal UNIFORM defender distribution. 
+
+ρD Learned or stress defender distribution. 
+
+ρnom , ρ stress Nominal and stress defender distributions in the robustness evaluation. 
+
+H Set of feasible attacker histories up to a finite horizon. 
+
+Πdet Finite set of deterministic history-dependent attacker policies. 
+
+∆(Π det ) Simplex of randomized mixtures over deterministic attacker policies. 
+
+P Defender class, assumed to be a compact convex polytope of latent distributions. 
+
+L(π, z ) Latent-conditioned expected loss of attacker policy π when latent state is z.
+
+V (μ, ρ ) Bilinear expected loss under attacker mixture μ and defender distri-bution ρ.
+
+∆rob Mean robustness gap between stress and nominal distributions. 
+
+CVaR 0.10 Conditional value-at-risk at the worst 10% tail. 
+
+λ Mixture weight on the defender-induced distribution in Stage 2. 
+
+defender_adversarial k Difference in expected shots-to-win between the learned defender distribution and the nominal defender at generation k, evaluated against the pre-update attacker. 
+
+attacker_adaptation k Difference in expected shots-to-win on the learned defender distribution between the post-update and pre-update attackers at generation k.
+
+uniform_drift k Difference in expected shots-to-win on the nominal defender distribu-tion between the post-update and pre-update attackers at generation 
+
+k.
+
+## B Proofs 
+
+B.1 Proof of the latent minimax principle 
+
+We prove Theorem 1 step by step. 13 Because the horizon Tmax is finite and both the action and observation alphabets are finite, the number of feasible attacker histories is finite. A deterministic history-dependent attacker policy is a map from this finite history set into the finite action set. Therefore the number of deterministic history-dependent attacker policies is finite. Denote this finite set by Πdet .Because the latent set Z is finite by assumption, and because the defender class P is a compact convex polytope in the finite-dimensional simplex over Z, there exist finitely many extreme points 
+
+ρ1, . . . , ρ m
+
+such that 
+
+P = conv {ρ1, . . . , ρ m}.
+
+Fix any deterministic attacker policy π ∈ Πdet and any extreme defender distribution ρj . By definition, 
+
+L(π, ρ j ) = ∑
+
+> z∈Z
+
+ρj (z)L(π, z ).
+
+This defines a finite matrix game whose attacker pure strategies are indexed by Πdet and whose defender pure strategies are indexed by the extreme points ρ1, . . . , ρ m.Now let μ ∈ ∆(Π det ) be any mixed attacker strategy, and let ρ ∈ P be any defender distribution. Since ρ lies in the convex hull of the extreme points, it can be written as a convex combination of them. The expected loss under (μ, ρ ) is then 
+
+V (μ, ρ ) = ∑
+
+> π∈Πdet
+
+μ(π) ∑
+
+> z∈Z
+
+ρ(z)L(π, z ) = ∑
+
+> π∈Πdet
+> ∑
+> z∈Z
+
+μ(π)ρ(z)L(π, z ).
+
+This expression is bilinear in (μ, ρ ).Because the game is finite and zero-sum, von Neumann’s minimax theorem applies directly [ 10 ]. Therefore 
+
+min 
+
+> μ∈∆(Π det )
+
+max  
+
+> ρ∈P
+
+V (μ, ρ ) = max  
+
+> ρ∈P
+
+min 
+
+> μ∈∆(Π det )
+
+V (μ, ρ ).
+
+This proves the theorem. 
+
+B.2 Proof of the extreme-point corollary 
+
+Fix an attacker mixture μ. The map 
+
+ρ 7 → V (μ, ρ )
+
+is linear in ρ, since 
+
+V (μ, ρ ) = ∑
+
+> π∈Πdet
+> ∑
+> z∈Z
+
+μ(π)ρ(z)L(π, z )
+
+is affine, hence linear up to the simplex constraint. A standard fact from convex analysis is that a linear functional over a compact convex polytope attains its maximum at an extreme point. Therefore the defender optimum is realized at an extreme point of P.14 B.3 Proof of the approximate best-response certificates 
+
+We begin with the defender certificate. By definition, ρk is an εD-best response to πk−1 if 
+
+sup 
+
+> ρ∈P
+
+Eρ[τ (πk−1)] − Eρk [τ (πk−1)] ≤ εD.
+
+Rearranging, 
+
+Eρk [τ (πk−1)] ≥ sup 
+
+> ρ∈P
+
+Eρ[τ (πk−1)] − εD.
+
+Because the nominal defender distribution ρU belongs to P,
+
+sup 
+
+> ρ∈P
+
+Eρ[τ (πk−1)] ≥ EρU [τ (πk−1)] .
+
+Combining the two inequalities gives 
+
+Eρk [τ (πk−1)] ≥ EρU [τ (πk−1)] − εD.
+
+Subtracting EρU [τ (πk−1)] from both sides yields 
+
+Eρk [τ (πk−1)] − EρU [τ (πk−1)] ≥ − εD.
+
+This is exactly the claimed lower bound for defender_adversarial k.We now prove the attacker certificate. Let 
+
+μk = λρ k + (1 − λ)ρU .
+
+By definition, πk is an εA-best response to μk if 
+
+Eμk [τ (πk)] − inf  
+
+> π∈Π
+
+Eμk [τ (π)] ≤ εA.
+
+Since πk−1 ∈ Π, we have 
+
+inf  
+
+> π∈Π
+
+Eμk [τ (π)] ≤ Eμk [τ (πk−1)] .
+
+Therefore 
+
+Eμk [τ (πk)] ≤ Eμk [τ (πk−1)] + εA.
+
+Expanding the definition of μk,
+
+λEρk [τ (πk)] + (1 − λ)EρU [τ (πk)] ≤ λEρk [τ (πk−1)] + (1 − λ)EρU [τ (πk−1)] + εA.
+
+Subtract the two terms on the right-hand side from both sides. This yields 
+
+λ
+
+(
+
+Eρk [τ (πk)] − Eρk [τ (πk−1)] 
+
+)
+
++ (1 − λ)
+
+(
+
+EρU [τ (πk)] − EρU [τ (πk−1)] 
+
+)
+
+≤ εA.
+
+This is exactly the claimed weighted certificate inequality. 15 B.4 Proof of finite-sample sign certification 
+
+We first prove the bound for the defender diagnostic. Let 
+
+X1, . . . , X nD
+
+be the independent episode lengths collected under ρk when evaluating πk−1, and let 
+
+Y1, . . . , Y nU
+
+be the independent episode lengths collected under ρU when evaluating πk−1. By assumption, 
+
+0 ≤ Xi ≤ Tmax , 0 ≤ Yj ≤ Tmax 
+
+almost surely. Define 
+
+X = 1
+
+nDnD∑
+
+> i=1
+
+Xi, Y = 1
+
+nUnU∑
+
+> j=1
+
+Yj .
+
+Then ̂
+
+∆D = X − Y
+
+and 
+
+∆D = E[X] − E[Y ].
+
+By Hoeffding’s inequality [11], for any ηD > 0,
+
+P
+
+(
+
+|X − E[X]| > η D
+
+)
+
+≤ 2 exp 
+
+(
+
+− 2nDη2
+
+> D
+
+T 2max 
+
+)
+
+.
+
+Similarly, for any ηU > 0,
+
+P
+
+(
+
+|Y − E[Y ]| > η U
+
+)
+
+≤ 2 exp 
+
+(
+
+− 2nU η2
+
+> U
+
+T 2max 
+
+)
+
+.
+
+Choose 
+
+ηD = Tmax 
+
+√
+
+log(4 /δ )2nD
+
+, ηU = Tmax 
+
+√
+
+log(4 /δ )2nU
+
+.
+
+Then 
+
+P
+
+(
+
+|X − E[X]| > η D
+
+)
+
+≤ δ
+
+2 , P
+
+(
+
+|Y − E[Y ]| > η U
+
+)
+
+≤ δ
+
+2 .
+
+By a union bound, with probability at least 1 − δ,
+
+|X − E[X]| ≤ ηD and |Y − E[Y ]| ≤ ηU
+
+simultaneously. On that event, 
+
+|̂ ∆D − ∆D| = |(X − Y ) − (E[X] − E[Y ]) |
+
+= |(X − E[X]) − (Y − E[Y ]) |≤ | X − E[X]| + |Y − E[Y ]| ≤ ηD + ηU .
+
+16 Substituting the chosen values of ηD and ηU yields the claimed bound. The sign-certification statement is now immediate. If 
+
+|̂ ∆D| > η D + ηU ,
+
+then the interval 
+
+[̂ ∆D − (ηD + ηU ),̂ ∆D + ( ηD + ηU )] 
+
+does not contain zero. Since ∆D lies inside that interval with probability at least 1 − δ, the sign of 
+
+∆D must match that of ̂ ∆D on that event. For the weighted attacker residual, write the empirical quantity as a fixed linear combination of four independent empirical means, ̂
+
+Rk = λ(X1 − X2) + (1 − λ)( Y 1 − Y 2),
+
+where each empirical mean is again formed from bounded i.i.d. episode lengths in [0 , T max ]. Apply Hoeffding’s inequality separately to each empirical mean, choose each deviation bound so that its failure probability is at most δ/ 4, and apply a union bound. The same algebra as above gives the stated weighted confidence radius. 
+
+B.5 Proof of marginal insufficiency for fixed policies 
+
+We prove the proposition by explicit construction. Let the latent space be 
+
+Z = {0, 1}2, z = ( z1, z 2).
+
+Consider two defender distributions 
+
+ρ+ : (0 , 0) and (1 , 1) each with probability 12 ,ρ− : (0 , 1) and (1 , 0) each with probability 12 .
+
+Under both distributions, 
+
+P(z1 = 1) = 12 , P(z2 = 1) = 12 .
+
+Therefore the one-coordinate marginals are identical. Now define a two-step adversarial latent-initial-state POMDP as follows. At step 1, the attacker observes z1 exactly. At step 2, the attacker outputs a guess ˆz2 ∈ { 0, 1} for the second coordinate. Define the episode length by 
+
+τ =
+
+> {
+
+0, if ˆz2 = z2,
+
+1, if ˆz2̸ = z2.
+
+Equivalently, shorter episodes correspond to correct prediction and longer episodes correspond to incorrect prediction. Consider the deterministic attacker policy 
+
+πsame : ˆz2 = z1.
+
+17 Under ρ+, the only possible latent states are (0 , 0) and (1 , 1) , so always 
+
+z2 = z1.
+
+Hence πsame is always correct and therefore 
+
+Eρ+ [τ (πsame )] = 0 .
+
+Under ρ−, the only possible latent states are (0 , 1) and (1 , 0) , so always 
+
+z2 = 1 − z1.
+
+Hence πsame is always incorrect and therefore 
+
+Eρ− [τ (πsame )] = 1 .
+
+Thus 
+
+Eρ+ [τ (πsame )] ̸ = Eρ− [τ (πsame )] ,
+
+even though ρ+ and ρ− have identical one-coordinate marginals. This proves that one-coordinate marginals are not sufficient to characterize adversarial hardness for fixed policies. 
+
+## C Hyperparameters and Training Metadata 
+
+The exact PPO hyperparameters used for all Stage-1 and Stage-2 attacker training runs in the uploaded paper are listed below. Table 6: Proximal Policy Optimization (PPO) hyperparameters. Hyperparameter Value Learning Rate 3 × 10 −4
+
+nsteps (per environment) 2048 Batch Size 1024 Number of Epochs 5Discount Factor ( γ) 0.99 GAE Lambda 0.95 Clip Range 0.2 Entropy Coefficient 0.01 Max Gradient Norm 0.5 Number of Parallel Environments 16 Optimizer Adam Total Environment Steps (Stage 1) 2,000 ,000 
+
+Total Environment Steps (Stage 2) 1,000 ,000 per generation 18 D Additional Baselines 
+
+The absolute performance scale of three scripted baselines is summarized below. While the primary focus of this paper is the comparison between learned attackers and learned defenders, establishing absolute bounds on optimal and random play is crucial for calibration. The Battleship domain allows us to define several canonical non-learned strategies: 
+
+• Random: This baseline fires uniformly at random at any valid, un-targeted cell. It maintains no state and leverages no game rules beyond the legality of actions. Its performance essentially bounds the worst possible coherent play. 
+
+• ProbMap (Heuristic Probability Map): This baseline maintains a dense probability map of all possible ship placements given the current hit/miss history. It always targets the cell with the highest marginal probability of containing a ship. After a hit, it aggressively targets adjacent cells (parity tracking). ProbMap is an excellent proxy for strong human play because it greedily minimizes stepwise uncertainty. 
+
+• Particle Belief: This baseline maintains an explicit particle filter tracking a set of valid board configurations consistent with the history constraint. Given a large number of particles, it approximates the exact Bayesian posterior over hidden layouts. In partially observable settings like Battleship, an exact belief state is the sufficient statistic for optimal control; therefore, Particle Belief represents an extremely strong, pseudo-optimal search baseline. As shown in Table 7, the performance gap between random play and belief-based play is nearly 50 shots. Furthermore, while the learned policies presented in the main text demonstrate significant relative robustness gains under adversarial shift, they do not yet attain the absolute efficiency of the belief state searchers on the nominal Uniform distribution. Table 7: Baseline absolute performance (mean shots-to-win ± standard deviation) against UNIFORM and SPREAD. Scripted Policy UNIFORM SPREAD Random 96 .0 ± 4.2 95 .5 ± 4.8
+
+ProbMap 44 .7 ± 8.9 49 .5 ± 7.8
+
+Particle Belief 48 .2 ± 9.3 51 .1 ± 7.9
+
+19 E Training Dynamics and IBR Diagnostics 
+
+This appendix provides the final generation-wise diagnostic figure, as well as additional training and tail-performance curves that confirm the robustness and optimization claims made in the main text. 0.0M 0.2M 0.5M 0.8M 1.0M 1.2M 1.5M 1.8M 2.0M         
+
+> Timesteps
+> 86
+> 88
+> 90
+> 92
+> 94
+> 96
+> 98
+> E[  ] (shots-to-win, lower = better)
+> UNIFORM defender
+> Regime A (UNIFORM-only)
+> Regime B (Fixed mixture)
+> Regime C (IBR-lite)
+> 0.0M 0.2M 0.5M 0.8M 1.0M 1.2M 1.5M 1.8M 2.0M
+> Timesteps
+> 82.5
+> 85.0
+> 87.5
+> 90.0
+> 92.5
+> 95.0
+> 97.5
+> 100.0
+> E[  ] (shots-to-win, lower = better)
+> SPREAD defender
+> Regime A (UNIFORM-only)
+> Regime B (Fixed mixture)
+> Regime C (IBR-lite)
+
+Learning Curves: Mean Shots-to-Win 
+
+(a) Stage-1: Attacker learning curves Regime A (UNIFORM-only)   
+
+> Regime B (Fixed mixture)
+> Regime C (IBR-lite)
+> IBR (Full adversarial)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> p90 of  under SPREAD
+> SPREAD p90
+> Regime A (UNIFORM-only)
+> Regime B (Fixed mixture)
+> Regime C (IBR-lite)
+> IBR (Full adversarial)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> 120
+> CVaR(0.1) of  under SPREAD
+> SPREAD cvar_10
+
+Tail Performance: p90 and CVaR(0.1) lower is better (b) Stage-1: Tail optimization curves 1 2 3
+
+IBR Generation k 
+
+60 
+
+50 
+
+40 
+
+30 
+
+20 
+
+10 
+
+0
+
+10 
+
+> shots-to-win
+
+IBR Generation Diagnostics 3 proof conditions 
+
+defender_adversarial [check A: must > 0] 
+
+attacker_adaptation [check B: must < 0] 
+
+uniform_drift [check C: must 0] 
+
+(c) Stage-2: Final IBR generation diagnostics 
+
+Figure 1: Training dynamics and IBR diagnostics averaged over independent seeds. (a) Fixed-mixture and alternating stress approaches readily acquire nominal proficiency without catastrophic gameplay degradation. (b) Direct targeted adversarial exposure effectively limits extreme worst-case trajectory vulnerabilities, explicitly lowering tail severity ( CVaR 0.10 and p95 ). (c) In Stage 2, tracked IBR metrics confirm sufficient optimization bandwidth yields positive defender_adversarial shifts that provoke direct attacker_adaptation , fulfilling the theoretical diagnostic certificates mapping to the latent minimax formulation. 20 References 
+
+[1] Garud N. Iyengar. Robust dynamic programming for markov decision processes. Mathematics of Operations Research , 30(2):257–280, 2005. doi: 10.1287/moor.1050.0149. [2] Arnab Nilim and Laurent El Ghaoui. Robust control of markov decision processes with uncertain transition matrices. Operations Research , 53(5):780–798, 2005. doi: 10.1287/opre.1050.0217. [3] Lerrel Pinto, James Davidson, Rahul Sukthankar, and Abhinav Gupta. Robust adversarial reinforcement learning. In Proceedings of the 34th International Conference on Machine Learning , pages 2817–2826, 2017. [4] Leslie Pack Kaelbling, Michael L. Littman, and Anthony R. Cassandra. Planning and acting in partially observable stochastic domains. Artificial Intelligence , 101(1–2):99–134, 1998. doi: 10.1016/S0004-3702(98)00023-X. [5] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms, 2017. [6] R. Tyrrell Rockafellar and Stanislav Uryasev. Optimization of conditional value-at-risk. Journal of Risk , 2(3):21–42, 2000. [7] Yinlam Chow, Aviv Tamar, Shie Mannor, and Marco Pavone. Risk-sensitive and robust decision-making: A CVaR optimization approach. In Advances in Neural Information Processing Systems ,2015. [8] George W. Brown. Iterative solution of games by fictitious play. Technical report, RAND Corporation, 1951. [9] Johannes Heinrich and David Silver. Deep reinforcement learning from self-play in imperfect-information games, 2016. [10] John von Neumann. Zur theorie der gesellschaftsspiele. Mathematische Annalen , 100(1): 295–320, 1928. doi: 10.1007/BF01448847. [11] Wassily Hoeffding. Probability inequalities for sums of bounded random variables. Journal of the American Statistical Association , 58(301):13–30, 1963. doi: 10.1080/01621459.1963.10500830. 21

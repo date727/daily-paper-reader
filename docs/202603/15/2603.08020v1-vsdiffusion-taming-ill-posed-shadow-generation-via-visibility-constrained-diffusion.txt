@@ -1,0 +1,493 @@
+Title: VSDiffusion: Taming Ill-Posed Shadow Generation via Visibility-Constrained Diffusion
+
+URL Source: https://arxiv.org/pdf/2603.08020v1
+
+Published Time: Tue, 10 Mar 2026 01:56:52 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# VSDiffusion: Taming Ill-Posed Shadow Generation via Visibility-Constrained Diffusion 
+
+## Jing Li Jing Zhang ∗
+
+## East China University of Science and Technology, Shanghai, China  
+
+> lij1@mail.ecust.edu.cn jingzhang@ecust.edu.cn
+
+## Abstract 
+
+Generating realistic cast shadows for inserted foreground objects is a crucial yet challenging problem in image composition, where maintaining geometric consistency of shadow and object in complex scenes remains difficult due to the ill-posed nature of shadow formation. To address this issue, we propose VSDiffusion, a visibility-constrained two-stage framework designed to narrow the solution space by incorporating visibility priors. In Stage I, we predict a coarse shadow mask to localize plausible shadow gener-ated regions. And in Stage II, conditional diffusion is per-formed guided by lighting and depth cues estimated from the composite to generate accurate shadows. In VSDiffu-sion, we inject visibility priors through two complementary pathways. First, a visibility control branch with shadow-gated cross attention that provides multi-scale structural guidance. Then, a learned soft prior map that reweights training loss in error-prone regions to enhance geometric correction. Additionally, we also introduce high-frequency guided enhancement module to sharpen boundaries and improve texture interaction with the background. Exper-iments on widely used public DESOBAv2 dataset demon-strated that our proposed VSDiffusion can generate accu-rate shadow, and establishes new SOTA results across most evaluation metrics. 
+
+## 1. Introduction 
+
+“The beginnings and ends of shadow lie between light and darkness.”–da Vinci. In recent years, diffusion models[14, 33] and their con-ditional control techniques [47] have greatly advanced im-age synthesis, enabling high-resolution, realistic, and con-trollable generation. However, in real-world applications such as film production and e-commerce design, where a foreground object must be composited into a specific back-ground, the realism of the generated image often depends on physical consistency. If the foreground shadow is miss-ing, has an incorrect direction, or exhibits an implausible shape, the composite can look unnatural even when the ob-ject itself is well aligned. As noted by Hu et al . [17], shad-ows are an indispensable component of image compositing and are critical for scene understanding and editing consis-tency. Therefore, generating shadows that are geometrically correct and perceptually realistic is essential for improving composited image quality, and it is the goal of this work. Existing shadow generation methods can mainly be di-vided into two categories: rendering-based methods[36– 38] and non-rendering methods [15, 26, 49]. The former rely on strong assumptions such as accurate lighting and material properties, which are hard to satisfy in real work-flows. The latter learn the mapping between the input and the shadow in a data-driven manner and have become the mainstream direction. Early work such as SGRNet[15] con-structed the DESOBA dataset and used a two-stage pipeline with geometric localization followed by appearance com-pletion. SGDiffusion[26] introduced this task into the diffu-sion framework and expanded the dataset to DESOBAv2 to improve shadow quality. GPSDiffusion[49] further added geometric priors, such as shape prototypes, to refine shadow shape and placement. In the above training and inference settings of shadow generation model, the model only ob-serves a composited image and limited shadow supervision (e.g ., a binary mask), while key physical information, such as the precise light distribution and scene geometry, is miss-ing. This results in the same input corresponding to multiple visually plausible shadow outputs, and learning can degen-erate into fitting local image textures, which makes it hard to guarantee geometrically correct shadows. From a computational and mathematical perspective, shadow generation is inherently ill-posed [19], as multiple plausible shadows can correspond to the same scene, and small changes in scene configuration can lead to large vari-ations in shadow appearance. From a physical standpoint, a shadow is an interpretable phenomenon caused by occlu-sion: when light rays are blocked, visibility changes [5, 9]. The idea of visibility editing in graphics [29] further shows that explicitly controlling visibility, decoupled from illumi-1        
+
+> arXiv:2603.08020v1 [cs.CV] 9 Mar 2026 Ill-posed problem
+> (b) Solution space shrinkage schematic
+> one-to-many
+> (a) Instance-level view
+> Input
+> multiple plausible solutions
+> Constrain ed solution space Visibility-derived constraints
+> Visibility analysis
+> (shadow formation):
+> V{0, 1} from occlusion
+> Caster
+> Shadow
+> Receiver
+> Light
+> shrink solution space
+> V=0 V=1
+> X1
+> Y3
+> X2X3
+> Y2Y1
+> V
+> ：1->0
+> projection axis 1
+> projection axis 2
+> Ωall
+> Ωdata Ωvis
+> 2D conceptual projection (for visualization only)
+> (constraints from
+> data input)
+> (all plausible
+> shadows)
+> constraints from visibility
+> (light/caster/receiver)
+> s*:selected solution
+
+Figure 1. (a) Shadow generation is an ill-posed problem: one input may correspond to multiple visually plausible shadows. With visibility analysis, geometric constraints from the light source, caster, and the shadow receiver can significantly narrow the solution space. (b) further illustrates how the solution space is progressively narrowed. The hatched area indicates the intersection of Ωvis , Ωdata , and Ωall . S* is the selected solution that balances data fidelity with geometric plausibility. 
+
+nation and materials, allows shadow geometry to be manip-ulated precisely. Motivated by this insight, we try to revisit shadow gen-eration from a visibility-centric viewpoint and settle it by narrowing the solution space of ill-posed problems. With-out relying on full physical simulation, we use available physical cues to approximately infer visibility changes in the scene. These cues act as strong constraints and sub-stantially shrink the solution space. Under this perspective, we prioritize geometric plausibility, (especially layout con-sistency and lighting direction), and then refine appearance details, providing a more robust starting point for method design of shadow generation. Based on above analysis, we formalize the problem as illustrated in Fig. 1 Fig. 1. Because the input (a compos-ite image) lacks precise physical quantities, shadow genera-tion is a typical one-to-many mapping with a large solution space, which is a classical ill-posed problem. We then an-alyze shadow formation through visibility: a shadow arises when the visibility between a light point x and a receiver point y is blocked by intermediate geometry[22]. If the path is unobstructed, V (x, y ) = 1 and y is not in shadow; if it is fully blocked, V (x, y ) = 0 and y lies in shadow. The transition of V from 1 to 0 defines the shadow boundary. Therefore, shadow geometry is mainly determined by the spatial relationship among the light source, the caster, and the shadow receiver [13, 42], and we introduce these fac-tors as constraints in the generation process to narrow the solution space. Based on the above analysis, we propose visibility-constrained shadow diffusion model(VSDiffusion), in which visibility-derived priors are injected into the diffu-sion process in two complementary ways. First, we extract prior features with a Visibility Control Branch (VCB) and design a Shadow-Gated Cross Attention (SGCA) module, which injects conditional features into denoising in a multi-scale and sparsely localized manner to provide controllable structural guidance. Second, we adopt a lightweight U-Net [34] to predict a visibility-guided spatial weight map, which reweights the training loss to emphasize error-prone shadow regions and improve geometric alignment. Moreover, to address blurry shadow contours and weak texture interac-tions, we introduce High-Frequency Guided Enhancement (HFGE) module to refine boundary transitions and improve texture fusion with the background, further enhancing per-ceptual realism. The main contributions of this paper are listed as follows: • We formalized the shadow generation as a ill-posed prob-lem and proposed a two-stage shadow generation model that advances shadow generation from purely data-driven approach toward visibility priors guided framework, thus effectively reducing the solution space and improving ge-ometric consistency of generated shadows. • We integrated two complementary forms of prior injec-tion: structured guidance via SGCA module during de-noising, and spatially weighted optimization constraints that focus learning on geometrically critical regions. This combination effectively enhances geometric plausibility. • We introduced HFGE module to strengthen high-frequency detail modeling, improving shadow edge qual-ity and the realism of background texture interactions. 
+
+## 2. Related Work 
+
+In this section, we review some methods that are closely related to our research, including image composition and shadow generation. 22.1. Image Composition 
+
+Image composition [27] aims to place a foreground object into a background and generate a realistic composite im-age. Early methods treated it as a signal processing prob-lem. They mainly reduced low-level discontinuities and boundary artifacts. The Porter–Duff operator [31] provides an alpha-based linear compositing model that standardizes image overlay. Poisson image editing [30] further en-forces seamless boundaries via gradient-domain optimiza-tion. However, these methods are mostly local smoothing. They do not model high-level semantics or illumination. In the deep learning era, image composition shifted from pixel-domain optimization to data-driven semantic consis-tency modeling. Many methods use encoder–decoder back-bones, such as U-Net [34]. They can also adopt conditional GANs [18] with adversarial training to improve structural and textural realism. This line of work has branched into more focused directions, including learning-based image blending [44, 46], object placement assessment [24, 28], and image harmonization [2, 3, 6]. Despite better global statistics and color matching, these methods often produce semantic mismatches and structural artifacts near occlu-sion boundaries. A key reason is the difficulty of model-ing complex 3D interactions using only 2D feature maps. More recently, diffusion-model-based generative methods [4, 21, 35] shifted composition from patching pixels to re-generating content under strong priors. Composition is no longer simple layer overlaying. Instead, it becomes an it-erative denoising process conditioned on the background and an initial mask. These methods improve visual real-ism. However, their priors favor plausible appearances. It is still hard to guarantee both physical consistency and fine-grained structural fidelity in complex scenes. 
+
+2.2. Shadow Generation 
+
+Shadow generation is crucial for the realism and spatial co-herence of composite images. Existing methods mainly follow two paradigms. Rendering-based methods synthe-size shadows using explicit geometry or interpretable rep-resentations, requiring accurate geometric input. Classical techniques like shadow mapping [25, 41] and its variants [7, 8, 39] enable real-time rendering but suffer from arti-facts. Recent advances integrate neural rendering for im-proved control and realism. For instance, SSN [36] gener-ates interactive soft shadows from 2D masks, using ambi-ent light to enhance consistency. Methods like Pixel Height Maps [37] and PixHt-Lab [38] incorporate per-pixel height to create a projectable 3D representation, moving beyond pure 2D synthesis. Non-rendering methods learn shadow mappings directly from paired shadow and shadow-free images. Early GAN-based methods include ShadowGAN [48] and ARShad-owGAN [23]. ShadowGAN [48] introduced conditional GANs for shadow generation and improved visual qual-ity. ARShadowGAN [23] uses attention and known back-ground shadows as references to model the relation be-tween foreground shadows and scene context. In addi-tion, some shadow removal methods can also provide use-ful cues for shadow generation, such as Mask-ShadowGAN [16]. Two-stage networks such as SGRNet [15] decouple shadow region detection and shading for more reliable re-sults. DMASNet [40] further decomposes mask predic-tion into box-level localization and shape refinement, im-proving boundary quality and generalization in complex scenes. With the development of diffusion models, SGDif-fusion [26] improves controllability of shadow appearance via conditional control branches and intensity modulation. GPSDiffusion [49] introduces geometric priors ( e.g ., shape prototypes) to constrain shadow position and shape. Despite these advances, data-driven methods with implicit physi-cal constraints still often fail to ensure plausible shadows in complex scenes. 
+
+In summary. General image composition methods mainly optimize appearance consistency and often leave cast-shadow geometry implicit. Dedicated shadow gen-eration methods face a trade-off: rendering-based ap-proaches lack generalization, while data-driven approaches lack physical constraints. These gaps motivate incorporat-ing visibility-derived constraints into diffusion-based gen-eration to shrink the feasible solution space and improve geometric consistency without full physical simulation. 
+
+## 3. Method 
+
+We first present an overview of the proposed VSDiffusion framework, and then describe each major module in detail. 
+
+3.1. Overview 
+
+Our method aims to generate physically consistent shadows for foreground objects in composited images. Given a com-posite image Ic where the inserted foreground object lacks its corresponding shadow, along with a foreground mask 
+
+Mf o and a background shadow mask Mbs , the goal is to infer plausible shadow. This problem is ill-posed [19], lead-ing to non-unique and ambiguous solutions. To mitigate this ambiguity, we propose a two-stage framework that progres-sively constrains the solution space as shown in Fig. 2. In the first stage, we predict a coarse foreground shadow mask M (1)  
+
+> f s
+
+, which serves as a spatial prior and reduces geometric uncertainty. Specifically, the background en-coder Eb and foreground encoder Ef process (Ic, M bs ) and 
+
+(Ic, M f o ), respectively. Their features interact via cross-attention integration [15] to produce M (1)  
+
+> f s
+
+, which is then combined with Mf o to form Mcomb . In the second stage, we incorporate visibility priors into the diffusion process to 341        
+
+> ZtZ0
+> S
+> G
+> C
+> A
+> (b) Diffusion Model
+> Mbs Mfo
+> Mfs (1)
+> D
+> EfEb
+> Ic
+> Stage1: Coarse Mfs Prediction
+> (a) Visibility Control Branch
+> Residual
+> Control
+> Encoder
+> Ilight Idepth
+> Depth
+> Estimator
+> Illumination
+> Model
+> 1x1 conv
+> QKV
+> 1x1 Conv Projections
+> Softmax
+
+CAI C      
+
+> H
+> F
+> G
+> E
+> H
+> F
+> G
+> E
+> S
+> G
+> C
+> A
+> S
+> G
+> C
+> A
+> Cross-Attention Integration CConcat element-wise multiplication CAI Traine dFrozen
+> Ic
+> Ig'
+> Mfs '
+> OR
+> Mcomb
+> OR element-wise or
+> …
+> …
+> Fe
+
+Stage2: Diffusion Model   
+
+> Encoder
+> Shadow
+> Decoder
+> Albedo
+> Decoder
+> Normal
+> Decoder
+> Xt-1
+> Iteration t= T ... 1
+> Visibility Prior
+> Estimator
+
+Figure 2. Framework of our VSDiffusion. It consists of two stages. Stage 1 predicts a coarse foreground shadow mask M (1)  
+
+> f s
+
+. Stage 2 includes two sub-modules: (a) the Visibility Control Branch (VCB), which utilizes visibility prior estimator to extract Ilight and Idepth from 
+
+Ic, subsequently encoded by RCE to provide structural guidance. (b) Under this guidance, the U-Net progressively denoises Zt into Z0.
+
+further regularize the shadow generation and alleviate the inherent ill-posedness. These priors guide the denoising U-Net. At each timestep, the U-Net denoises (Ic, M comb , x t)
+
+and outputs the final shadowed image I′ 
+
+> g
+
+.In this work, these visibility priors are injected through two complementary pathways: (i) As structurally control-lable conditional guidance, VCB injects priors via SGCA, which sparsely injects guidance at three U-Net scales to align geometry, preserve global layout, and refine bound-aries. (ii) As a training-level spatial supervision signal, we introduce Sprior -Weighted Loss (SWL), which uses a soft prior map to spatially reweight pixel-level supervision to focus on error-prone regions. These two components are complementary, providing both architectural constraints and adaptive optimization guidance. In addition, HFGE ex-tracts high-frequency cues from shallow encoder layers and residually injects them during high-resolution decoding to enhance shadow boundaries and texture details. The VCB is introduced in Sec. 3.2. SGCA and HFGE are detailed in Sec. 3.3. The SWL term is described in Sec. 3.4. 
+
+3.2. Visibility Control Branch 
+
+Predicting shadows from a single input image Ic remains highly ambiguous without explicit constraints on scene structure and illumination, often yielding multiple visually plausible yet non-unique solutions. Therefore, we propose the Visibility Control Branch (VCB) to guide the denois-ing network by incorporating visibility-derived constraints, thereby narrowing the solution space. As shown in Fig. 2 (a), the VCB comprises two components: visibility prior estimator [32, 45] and Residual Control Encoder [20]. The visibility prior estimator is designed to extract visibility-related priors (light and depth) from Ic. For illu-mination estimation, it employs a shared encoder followed by three lightweight decoders to predict shadow, albedo, and normal maps. These estimated attributes, together with 
+
+Ic, are then fed into an illumination model based on Lam-bertian reflectance [1, 11]. This model recovers the second-order spherical harmonics coefficients representing global illumination, which are visualized as an illumination map 
+
+Ilight to depict light direction and intensity. Since the illu-mination I can be derived analytically from the input image 4and the estimated albedo α, shadow weight s, and surface normal n, no separate network branch is required for light-ing prediction. For a pixel (x, y ), the image formation pro-cess is formulated as: 
+
+i(x, y ) = α(x, y ) ⊙ s(x, y ) B n(x, y ) I (1) where i(x, y ) is the pixel value in Ic, ⊙ denotes element-wise multiplication, B(n) denotes the second-order SH ba-sis functions evaluated at the surface normal n, and I de-notes the unknown second-order SH coefficients, i.e . Ilight .By formulating this as a least-squares problem, I can be solved via inversion. Overall, Ilight is obtained following an inverse-rendering framework [45]. Additionally, the vis-ibility prior estimator utilizes a pre-trained MiDaS model [32] as a monocular depth estimator to produce a depth map 
+
+Idepth from Ic.To stably integrate these visibility priors, we employ a Residual Control Encoder [20] for feature extraction. This encoder adopts a lightweight residual design (7 blocks) with zero convolutions, in contrast to the encoder in ControlNet [47], which may ignore control signals during early training and cause instability. This design ensures that the diffusion process gradually incorporates Ilight and Idepth , improving geometric and illumination alignment. 
+
+3.3. Geometry-Detail Denoiser 
+
+3.3.1. Shadow-Gated Cross Attention Module 
+
+To effectively exploit visibility priors, we propose Shadow-Gated Cross-Attention (SGCA) module. Unlike conven-tional dense conditioning across many layers [47], SGCA injects these priors ( Ilight , I depth ) into three strategically se-lected U-Net anchors (early, mid, and late) for geometric alignment, global layout, and refinement. Dense injection maybe restrict the generation space, compromise consis-tency, and cause over-conditioning. By injecting guidance at these anchors, SGCA maintains controllability while avoiding over-conditioning and redundant computation, of-fering a better trade-off between conditioning strength and generative fidelity. Here, sparse refers to the sparsity of in-jection locations rather than token-level attention sparsity. As shown in Fig. 3, let X(s) ∈ RB×Cs×Hs×Ws denote the U-Net feature at scale s, and C(s) represent the aligned con-ditional feature from the Residual Control Encoder. SGCA computes cross-attention where the queries Q are projected from X(s), and keys K and values V are derived from C(s).To adaptively regulate the influence of external priors, a Shadow Gate G(s) is predicted from C(s) by a lightweight head ψ(·):
+
+G(s) = σ
+
+
+
+ψ
+
+
+
+C(s) 
+
+(2) 
+
+ˆX(s) = X(s) + G(s) ⊙ unflat 
+
+
+
+A(s)
+
+(3) QX   
+
+> C
+> pixel-wise multiplication
+> Multi-Head
+> Cross Attention
+> KV
+> Shadow Gate
+> Sigmoid
+> conv Dropout
+> Residual Connection
+> pixel-wise addition
+
+Figure 3. Architecture of the Shadow-Gated Cross-Attention (SGCA) module. SGCA computes cross-attention between U-Net features X (queries) and conditional features C (keys/values). Shadow Gate mechanism, consisting of dropout, convolution, and sigmoid, adaptively modulates the attention output before it is residually added to X, ensuring robust and selective integration of visibility priors. 
+
+where σ is the sigmoid function, unflat( ·) restores the attention tokens to spatial dimensions, and A(s) =
+
+M HA (Q, K, V ). The gate strengthens the injection when conditional features are beneficial for shadow inference and suppresses them otherwise, preventing texture degradation and artifact amplification. 
+
+3.3.2. High-Frequency Guided Enhancement 
+
+Shadow generation often suffers from blurry boundaries, jagged artifacts, and over-smoothed background textures. To address these issues, we introduce High-Frequency Guided Enhancement (HFGE). HFGE extracts robust high-frequency cues from shallow U-Net encoder features and in-jects them as residual guidance into the late decoder stages, ensuring sharp shadow edges without compromising back-ground fidelity. We extract high-frequency information from shallow en-coder features Fe based on two key insights. First, shal-low features contain mixed-frequency signals, including lo-cal gradients and texture responses, which are suitable for describing edges and fine details. Second, in diffusion models, high-frequency details are typically refined in later steps. As observed by Falck et al . [10], high-frequency components enter the low Signal-to-Noise Ratio (SNR) regime earlier and faster during the DDPM forward process. Low-frequency structures tend to appear first, while high-frequency details emerge gradually at later stages. Thus, injecting guidance at late high-resolution decoding stages aligns with this natural refinement order. Conversely, in-jecting too early, e.g ., in the encoder or bottleneck, risks feature dilution through downsampling or introducing noise that degrades global shadow formation. As shown in Fig. 4, the HFGE module consists of two main stages: High-Frequency Extraction (blue region) and High-Frequency Adaptation (green region). For High-Frequency Extraction, we extract robust high-frequency 5resize  
+
+> & norm
+> CBAM
+> H(F e)
+
+γ  
+
+> Gaussian Blur
+> norm
+> Sobel
+> Laplacian
+> High-Frequency Extraction High-Frequency Adaptation Fd'
+> pixel-wise add
+> 1x1 conv
+> 1x1 conv
+> Residual skip connection
+> (shallow
+> encoder)
+> (late decoder)
+> Fe
+> Fd
+
+Figure 4. Architecture of the High-Frequency Guided Enhancement (HFGE) module. HFGE consists of High-Frequency Extraction (blue) to capture structural cues from Fe, and High-Frequency Adaptation (green) to align and calibrate these signals via CBAM. The refined guidance is residually added to decoder features Fd to enhance shadow boundaries and textures. 
+
+cues from shallow encoder features Fe through four sequen-tial steps. First, we apply spatial Gaussian smoothing to Fe
+
+to filter out local pseudo-textures, producing ˜Fe. Second, we use Sobel filters to compute gradients gx and gy , ob-taining the gradient magnitude G to emphasize structural boundaries: 
+
+G =
+
+q
+
+g2 
+
+> x
+
++ g2 
+
+> y
+
++ ϵ (4) Third, to further capture fine-grained structures like thin edges, we incorporate the response L from the Laplacian operator. Finally, we normalize the magnitude over spatial dimensions to obtain the high-frequency feature H(Fe):
+
+H(Fe) = Norm( G + αL ) (5) where α is a weighting factor and Norm( ·) denotes spatial magnitude normalization. For High-Frequency Adaptation, since H(Fe) and decoder features Fd reside in different fea-ture spaces, we introduce an adaptation branch to align the signals. Specifically, we employ a 1 × 1 convolution and bilinear interpolation to match the channel dimensions and spatial resolution of Fd. Then, a lightweight CBAM [43] is applied to adaptively reweight the responses, focusing on critical shadow contours. The calibrated guidance is then residually added to Fd:
+
+F ′ 
+
+> d
+
+= Fd + γ · CBAM  ϕ(H(Fe))  (6) where ϕ(·) denotes projection and scale alignment, and γ
+
+controls the injection strength. This design allows high-frequency details to refine boundaries while preserving the underlying background texture. 
+
+3.4. Training Losses 
+
+We adopt a three-step training strategy: (i) pretraining Stage I alone to learn basic geometric localization; (ii) training Stage II for shadow synthesis with Stage I frozen; and (iii) joint fine-tune the full framework at a lower learning rate. We optimize the model with the following loss functions. 
+
+3.4.1. First Stage Loss 
+
+The coarse foreground shadow mask M (1)  
+
+> fs
+
+is supervised by a combination of Binary Cross-Entropy (BCE) and Dice loss against the ground truth Mfs :
+
+Ls1 = Lbce 
+
+ M (1)  
+
+> f s
+
+, M f s 
+
+ + Ldice 
+
+ M (1)  
+
+> f s
+
+, M f s 
+
+ (7) 
+
+3.4.2. Second Stage Loss 
+
+Stage II focuses on high-fidelity shadow reconstruction and mask refinement via two terms. 1) Base Loss: To ensure pixel-level consistency for the gen-erated image ˜I and refined mask ˜Mf s , we define the base loss as: 
+
+Lbase = 1
+
+N
+
+X
+
+> x,y
+
+
+
+∥ ˜I(x, y ) − I(x, y )∥1
+
++ λ1∥ ˜Mf s (x, y ) − Mf s (x, y )∥22
+
+ (8) where I is the ground truth shadowed image, and N is the pixel count. 2) Sprior -Weighted Loss (SWL): Shadow errors tend to fo-cus on small but critical regions, such as thin shadow edges or misaligned boundaries. Standard global loss often dilute gradient in these critical areas. Thus, we introduce a soft prior map Sprior to spatially re-weight the optimization pro-cess. As described in Fig. 5, this map is generated by a lightweight U-Net network Gp, which aggregates visibility-related cues and maps the output to [0,1] via a sigmoid func-tion: 6Table 1. Quantitative comparisons on DESOBAv2. We evaluate shadow generation with RMSE, SSIM, and BER. BOS denotes test images with background shadow references. ↑/↓ indicate higher/lower is better. Best results are highlighted in bold. 
+
+Method BOS Test Images BOS-free Test Images GR ↓ LR ↓ GS ↑ LS ↑ GB ↓ LB ↓ GR ↓ LR ↓ GS ↑ LS ↑ GB ↓ LB ↓
+
+ShadowGAN[48] 7.511 67.464 0.961 0.197 0.446 0.890 17.325 76.508 0.901 0.060 0.425 0.842 Mask-SG[16] 8.997 79.418 0.951 0.180 0.500 1.000 19.338 94.327 0.906 0.044 0.500 1.000 AR-SG[23] 7.335 58.037 0.961 0.241 0.383 0.682 16.067 63.713 0.908 0.104 0.349 0.682 SGRNet[15] 7.184 68.255 0.964 0.206 0.301 0.596 15.596 60.350 0.909 0.100 0.271 0.534 DMASNet[40] 8.256 59.380 0.961 0.228 0.276 0.547 18.725 86.694 0.913 0.055 0.297 0.574 SGDiffusion[26] 6.098 53.611 0.971 0.370 0.245 0.487 15.110 55.874 0.913 0.117 0.233 0.452 GPSDiffusion[49] 5.896 46.713 0.966 0.374 0.213 0.423 13.809 55.616 0.917 0.166 0.197 0.384 Ours 6.422 46.542 0.964 0.377 0.182 0.360 14.629 55.377 0.912 0.184 0.194 0.373 Concat  Lightweight Predictor G p  
+
+> (U-Net)
+> Light Map
+> Ilight
+> Depth Map
+> Idepth
+> Foreground Mask
+> Mfo
+> Coarse Shadow
+> Mask Mfs (1)
+> Mean
+> Normalization
+> (mean=1)
+> Normalized Prior Map
+> Sigmoid
+> Sprior
+
+Figure 5. Generation of the spatial prior in SWL. Visibility-related inputs {Ilight , I depth , M fo , M (1)  
+
+> fs
+
+} are concatenated and fed into a lightweight predictor Gp, followed by sigmoid to obtain Sprior .Mean normalization then produces ˆSprior (with mean 1), which is used for spatial reweighting in SWL. 
+
+Sprior = σ
+
+
+
+Gp
+
+
+
+Ilight , I depth , M f o , M (1) 
+
+> f s
+
+ 
+
+, Sprior ∈ [0 , 1] 
+
+(9) where Gp is the lightweight Sprior predictor, σ(·) is the Sig-moid function, Ilight and Idepth provide visibility-related in-formation, and Mfo is the foreground object mask. More-over, Gp is jointly optimized with the second stage in an end-to-end manner, without additional explicit supervision, allowing it to adaptively identify challenging areas during the reconstruction process. However, the model might min-imize Ls2 by simply driving Sprior toward a near-zero map. To avoid this gradient collapse, we apply mean normaliza-tion to enforce budget-preserving gradient reallocation: 
+
+ˆSprior (x, y ) = Sprior (x, y )
+
+> 1
+> N
+
+P 
+
+> i,j
+
+Sprior (i, j ) + ϵ . (10) We retain the global basic supervision and add the spatially weighted correction term within Sprior :
+
+Lswl = 1
+
+N
+
+X
+
+> x,y
+
+ ˆSprior (x, y ) · ℓbase (x, y )
+
+
+
+. (11) SWL allocates more gradient budget to the error-prone shadow regions, thus improving boundary alignment and re-ducing shadow leakage. Thus, the entire loss for the second stage is: 
+
+Ls2 = Lbase + λ2Lswl , (12) 
+
+3.4.3. Joint Loss 
+
+Finally, we jointly fine-tune both stages using the following loss function. where λ1, λ2, and γ are hyperparameters used to balance the different loss terms. 
+
+Ljoint = Ls2 + γLs1, (13) 
+
+## 4. Experiments 
+
+To systematically assess the performance of VSDiffusion in shadow generation, we perform extensive quantitative com-parisons, qualitative evaluations, ablation analyses, and lim-itations. 
+
+4.1. Dataset and Implementation Details 
+
+We conduct experiments on DESOBAv2, using the train/test split from [26], which contains 27,823 training images and 750 test images. The test set includes 500 BOS samples (with background object–shadow pairs) and 250 BOS-free samples. We evaluate both image quality and mask quality. For image quality, we report RMSE and SSIM over the full image, denoted as global RMSE (GR) and global SSIM (GS), respectively. We also compute local RMSE (LR) and local SSIM (LS) within the ground-truth foreground shadow region to better reflect shadow fidelity. For mask quality, we measure the balanced error rate (BER) between the ground-truth binary foreground shadow mask and the predicted mask binarized with a threshold of 0.5. We report global BER (GB) on the full image and local BER (LB) within the ground-truth foreground shadow region. Our VSDiffusion is implemented in PyTorch and trained on two NVIDIA RTX 3090 GPUs with batch size 18 per GPU. We use Adam ( β1=0 .9, β2=0 .999 ) for 700 epochs with an initial learning rate of 3 × 10 −5. We apply Kaiming initialization and EMA with decay 0.9999. All images are resized to 256 ×256 for both training and testing. Following 70        
+
+> Composite Mask ShadowGAN AR-SG SGRNet SGDiffusion GPSDiffusion Ours Ground-truth
+
+Figure 6. Qualitative comparison on the DESOBAv2. From left to right: the composite image (without foreground shadows), the fore-ground object mask, results of ShadowGAN [48], AR-SG [23], SGRNet [15], SGDiffusion [26], GPSDiffusion [49], our VSDiffusion, and the ground truth. With visibility constraints, the proposed method generates shadows with more consistent projection direction, plausible contact, and sharper boundary alignment, especially under the BOS-free setting. 
+
+[12], we adopt an image-space conditional diffusion archi-tecture to better preserve background textures for image-to-image shadow generation. Loss weights are set to λ1=0 .2,
+
+λ2=0 .5, and γ=0 .1.
+
+4.2. Comparative experiments 
+
+In this section, we mainly compared with representa-tive non-rendering shadow generation methods, including ShadowGAN [48], Mask-SG [16], AR-SG [23], SGRNet [15], DMASNet [40], SGDiffusion [26], and GPSDiffusion [49]. These baselines covered both one-stage and two-stage pipelines, as well as GAN-based and diffusion-based gen-erators. 
+
+4.2.1. Quantitative comparison 
+
+Tab. 1 summarizes the quantitative results on DESOBAv2. Under both BOS and BOS-free settings, our method achieves the best or consistently competitive performance on the local metrics and BER, which are more sensitive to shadow geometry and boundary alignment. BOS setting. 
+
+Compared with the current state-of-the-art method GPSD-iffusion [49], our approach reduces global BER (GB) and local BER (LB) by approximately 0.03 and 0.06, respec-tively, while achieving slight improvements in local RMSE (LR) and local SSIM (LS). BOS-free setting. When back-ground object–shadow references are removed, most meth-ods exhibit noticeable performance degradation, indicating increased ambiguity in the solution space. Despite this challenge, our method maintains stable performance, im-proving LS by about 0.02 and further reducing GB and LB by approximately 0.003 and 0.01, compared with the SOTA method. These results demonstrate that the pro-posed visibility-aware constraints and prior-guided super-vision generalize effectively, enabling plausible shadow ge-8Table 2. Ablation study on DESOBAv2. VCB and SWL are two visibility-inspired ways to inject priors into the diffusion model. SWL is short for the Sprior -Weighted Loss. HFGE denotes the High-Frequency Guided Enhancement module. ↑/↓ indicate higher/lower is better, and best results are in bold. VCB HFGE SWL GR ↓ LR ↓ GS ↑ LS ↑ GB ↓ LB ↓
+
+6.655 50.598 0.962 0.364 0.221 0.438 
+
+✓ 6.592 48.265 0.963 0.366 0.203 0.403 
+
+✓ ✓ 6.571 48.147 0.964 0.374 0.193 0.381 
+
+✓ ✓ ✓ 6.422 46.542 0.964 0.377 0.182 0.360 Composite  w/o SWL  Effective supervision  Shadow_mask  Shadow_img w/ SWL 
+
+Figure 7. Qualitative ablation of VSDiffusion. Visual comparisons demonstrate that our SWL effectively concentrates supervision on critical shadow boundaries and penumbras. In Effective supervi-sion, the red regions i.e ., high weight × high error. 
+
+ometry and well-aligned boundaries even in the absence of explicit references. 
+
+4.2.2. Qualitative comparison 
+
+We evaluate VSDiffusion against other methods under both BOS-free (rows 1-4) and BOS (rows 5-7) settings in Fig. 6. While existing diffusion-based models achieve basic dark-ening, they often struggle with shadow direction, shape fi-delity, and boundary alignment. For instance, in row 2, SGDiffusion [26] and GPSDiffusion [49] show direction er-rors, where the generated shadows are inconsistent with the scene lighting direction. In row 5, AR-SG [23] produces distorted shadow shapes, and the contours do not match the object geometry. In addition, SGRNet [15] often produces blurred edges and halo-like transitions across multiple ex-amples, which reduces local boundary accuracy. In con-trast, VSDiffusion generates shadows with more consistent geometry and sharper boundaries across diverse scenes, and the advantage is more evident under BOS-free. This work introduces visibility priors to constrain shadow direction and contact relationships, which narrows the feasible solu-tion space even without reference cues. It further applies the Sprior -Weighted Loss (SWL) to emphasize boundary-critical regions and uses High-Frequency Guided Enhance-ment (HFGE) to enhance high-frequency details, leading to more accurate contours and boundaries. 
+
+Table 3. Ablation on light/depth priors in VCB on DESOBAv2. “w/o light” and “w/o depth” remove the corresponding condition while keeping all other components unchanged. The full model achieves the best overall performance. ↓/↑ indicate lower/higher is better, and best results are in bold. Method GR ↓ LR ↓ GS ↑ LS ↑ GB ↓ LB ↓
+
+Baseline 6.655 50.598 0.962 0.364 0.221 0.438 w/o light 6.545 48.149 0.963 0.373 0.197 0.390 w/o depth 6.456 47.990 0.963 0.371 0.187 0.369 Ours 6.422 46.542 0.964 0.377 0.182 0.360 
+
+4.3. Ablation Study 
+
+As shown in Tab. 2, we evaluate the effectiveness of each component on the DESOBAv2 dataset. Overall, the results indicate that both visibility-aware priors and high-frequency refinement play essential roles in improving shadow geom-etry consistency and boundary alignment. 1) Visibility Priors (VCB & SWL). The Visibility Control Branch (VCB) and Sprior -Weighted Loss (SWL) incorporate visibility guidance through complementary structural con-ditioning and adaptive supervision. Specifically, VCB im-poses architectural constraints to regularize shadow place-ment, thereby improving geometry-related metrics such as BER and LR. SWL reshapes the training signal in a spatially adaptive manner. As visualized in Fig. 7 (col. 3), we show the effective supervision map ˆSprior · ℓbase . Here, red regions correspond to high weight × high error , indicating that SWL emphasizes supervision on difficult regions, typically around shadow boundaries and penumbras. Consequently, with SWL (col. 4), the refined shadow mask exhibits bet-ter boundary alignment with the ground-truth mask (col. 5) than the setting without SWL (col. 2). Quantitatively, SWL further reduces LR by 1.605 and LB by 0.021 compared with the third row in Tab. 2. 2) High-Frequency Refinement (HFGE): The HFGE mod-ule improves local structural fidelity by leveraging high-frequency encoder representations. By enhancing fine-grained geometric cues, HFGE suppresses texture-level dis-tortion and improves Local SSIM (LS) by 0.008 over the second row. Our earlier visibility analysis shows that shadow geom-etry is mainly determined by the spatial relationship among the light source, the caster, and the shadow receiver. There-fore, VCB uses two conditions, i.e ., Light and Depth. To verify whether these two conditions are redundant, we re-move each condition separately under the same training setup. As shown in Tab. 3, removing either condition de-grades performance, while using both gives the best re-sults. This shows that Light and Depth are complementary rather than redundant: Light constrains illumination geom-etry, while Depth provides scene-structure cues. Together, 9they more effectively shrink the feasible set of shadow so-lutions. 
+
+## 5. Limitations and Future Work Composite  Mask  Ours  Ground-truth 
+
+Figure 8. Limitations in BOS-free scenarios: our shadows match geometry but may slightly deviate in intensity from the ground truth. 
+
+Despite our VSDiffusion generating geometrically con-sistent shadows in most cases, we observe slight shadow-intensity inconsistency in a small number of BOS-free sce-narios, without a background reference. As shown in Fig. 8, under the BOS-free setting, our result matches the ground truth well in shadow direction and shape, while the shadow intensity can be slightly underestimated. We attribute this issue mainly to insufficient cues under the BOS-free setting: the input Mf o provides only a contour-level hint of the fore-ground and contact area, while lacking material-related sig-nals, such as reflectance, translucency and local occlusion cues that are important to stably calibrate shadow opacity and intensity. In future work, we plan to extend our framework to photorealistic subject-driven image editing. To further im-prove realism in BOS-free scenarios, we will introduce a background-reference-free adaptive calibration mechanism to better regulate shadow intensity while preserving geo-metric consistency. 
+
+## 6. Conclusion 
+
+In this paper, we present VSDiffusion for physically consistent shadow generation. We formulate shadow generation as an inherently ill-posed problem and reduce its ambiguity by explicitly modeling the visibility formation process to progressively constrain the solution space. Our two-stage framework combines coarse shadow localiza-tion with diffusion refinement guided by visibility priors derived from light, caster, and shadow receiver modeling. Structurally controllable conditioning and adaptive spatial supervision serve as complementary mechanisms that enable effective prior integration, while a high-frequency enhancement module improves boundary sharpness and texture fidelity. Extensive experiments demonstrate stable improvements in geometric alignment and visual real-ism, particularly under reference-free settings. These results highlight the effectiveness of visibility-derived constraints in reducing ambiguity in shadow generation. 
+
+## References 
+
+[1] Ronen Basri and David W Jacobs. Lambertian reflectance and linear subspaces. IEEE transactions on pattern analysis and machine intelligence , 25(2):218–233, 2003. 4 [2] Haoxing Chen, Zhangxuan Gu, Yaohui Li, Jun Lan, Changhua Meng, Weiqiang Wang, and Huaxiong Li. Hierar-chical dynamic image harmonization. In Proceedings of the 31st ACM International Conference on Multimedia , pages 1422–1430, 2023. 3 [3] Jianqi Chen, Yilan Zhang, Zhengxia Zou, Keyan Chen, and Zhenwei Shi. Dense pixel-to-pixel harmonization via con-tinuous image representation. IEEE Transactions on Circuits and Systems for Video Technology , 34(5):3876–3890, 2023. 3[4] Xi Chen, Lianghua Huang, Yu Liu, Yujun Shen, Deli Zhao, and Hengshuang Zhao. Anydoor: Zero-shot object-level im-age customization. In Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , pages 6593–6602, 2024. 3 [5] Michael F Cohen and John R Wallace. Radiosity and realis-tic image synthesis . Morgan Kaufmann, 1993. 1 [6] Wenyan Cong, Jianfu Zhang, Li Niu, Liu Liu, Zhixin Ling, Weiyuan Li, and Liqing Zhang. Dovenet: Deep image harmonization via domain verification. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8394–8403, 2020. 3 [7] William Donnelly and Andrew Lauritzen. Variance shadow maps. In Proceedings of the 2006 symposium on Interactive 3D graphics and games , pages 161–165, 2006. 3 [8] Hang Dou, Yajie Yan, Ethan Kerzner, Zeng Dai, and Chris Wyman. Adaptive depth bias for shadow maps. In Proceed-ings of the 18th meeting of the ACM SIGGRAPH Symposium on Interactive 3D Graphics and Games , pages 97–102, 2014. 3[9] Philip Dutr´ e. Global illumination compendium. Computer Graphics, Department of Computer Science, Katholieke Uni-versiteit Leuven , 2003. 1 [10] Fabian Falck, Teodora Pandeva, Kiarash Zahirnia, Rachel Lawrence, Richard Turner, Edward Meeds, Javier Zazo, and Sushrut Karmalkar. A fourier space perspective on diffusion models. arXiv preprint arXiv:2505.11278 , 2025. 5 [11] David A Forsyth and Jean Ponce. A modern approach. Com-puter vision: a modern approach , 17(21-48):1, 2003. 4 [12] Lanqing Guo, Chong Wang, Wenhan Yang, Siyu Huang, Yufei Wang, Hanspeter Pfister, and Bihan Wen. Shadowd-iffusion: When degradation prior meets diffusion model for shadow removal. In Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , pages 14049–14058, 2023. 8 
+
+10 [13] Eric Haines and Tomas Akenine-M¨ oller. Ray Tracing Gems: High-Quality and Real-Time Rendering with DXR and Other APIs . Apress, 2019. 2 [14] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising dif-fusion probabilistic models. Advances in neural information processing systems , 33:6840–6851, 2020. 1 [15] Yan Hong, Li Niu, and Jianfu Zhang. Shadow generation for composite image in real-world scenes. In Proceedings of the AAAI conference on artificial intelligence , pages 914–922, 2022. 1, 3, 7, 8, 9 [16] Xiaowei Hu, Yitong Jiang, Chi-Wing Fu, and Pheng-Ann Heng. Mask-shadowgan: Learning to remove shadows from unpaired data. In Proceedings of the IEEE/CVF interna-tional conference on computer vision , pages 2472–2481, 2019. 3, 7, 8 [17] Xiaowei Hu, Zhenghao Xing, Tianyu Wang, Chi-Wing Fu, and Pheng-Ann Heng. Unveiling deep shadows: A sur-vey and benchmark on image and video shadow detection, removal, and generation in the deep learning era. arXiv preprint arXiv:2409.02108 , 2024. 1 [18] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, and Alexei A Efros. Image-to-image translation with conditional adver-sarial networks. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 1125–1134, 2017. 3 [19] Sergey I. Kabanikhin. Inverse and Ill-Posed Problems: The-ory and Applications . De Gruyter, Berlin, Boston, 2011. 1, 3[20] Peter Kocsis, Julien Philip, Kalyan Sunkavalli, Matthias Nießner, and Yannick Hold-Geoffroy. Lightit: Illumination modeling and control for diffusion models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 9359–9369, 2024. 4, 5 [21] Sumith Kulal, Tim Brooks, Alex Aiken, Jiajun Wu, Jimei Yang, Jingwan Lu, Alexei A Efros, and Krishna Kumar Singh. Putting people in their place: Affordance-aware hu-man insertion into scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 17089–17099, 2023. 3 [22] Samuli Laine. An incremental shaft subdivision algorithm for computing shadows and visibility. Master’s thesis, Helsinki University of Technology, 2006. 2 [23] Daquan Liu, Chengjiang Long, Hongpan Zhang, Hanning Yu, Xinzhi Dong, and Chunxia Xiao. Arshadowgan: Shadow generative adversarial network for augmented reality in sin-gle light scenes. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8139– 8148, 2020. 3, 7, 8, 9 [24] Liu Liu, Zhenchen Liu, Bo Zhang, Jiangtong Li, Li Niu, Qingyang Liu, and Liqing Zhang. Opa: object placement assessment dataset. arXiv preprint arXiv:2107.01889 , 2021. 3[25] Nan Liu and Ming-Yong Pang. Shadow mapping algorithms: A complete survey. In 2009 International Symposium on Computer Network and Multimedia Technology , pages 1–5. IEEE, 2009. 3 [26] Qingyang Liu, Junqi You, Jianting Wang, Xinhao Tao, Bo Zhang, and Li Niu. Shadow generation for composite im-age using diffusion model. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 8121–8130, 2024. 1, 3, 7, 8, 9 [27] L Niu, W Cong, L Liu, Y Hong, B Zhang, J Liang, and L Zhang. Making images real again: A comprehen-sive survey on deep image composition. arXiv preprint arXiv:2106.14490 , 2021. 3 [28] Li Niu, Qingyang Liu, Zhenchen Liu, and Jiangtong Li. Fast object placement assessment. arXiv preprint arXiv:2205.14280 , 2022. 3 [29] Juraj Obert, Fabio Pellacini, and Sumanta Pattanaik. Vis-ibility editing for all-frequency shadow design. Computer Graphics Forum , 29(4):1441–1449, 2010. 1 [30] Patrick P´ erez, Michel Gangnet, and Andrew Blake. Poisson image editing. ACM Transactions on Graphics , 22(3):313– 318, 2003. 3 [31] Thomas Porter and Tom Duff. Compositing digital images. In Proceedings of the 11th annual conference on Computer graphics and interactive techniques , pages 253–259, 1984. 3 [32] Ren´ e Ranftl, Katrin Lasinger, David Hafner, Konrad Schindler, and Vladlen Koltun. Towards robust monocular depth estimation: Mixing datasets for zero-shot cross-dataset transfer. IEEE transactions on pattern analysis and machine intelligence , 44(3):1623–1637, 2022. 4, 5 [33] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨ orn Ommer. High-resolution image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10684–10695, 2022. 1 [34] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical image segmen-tation. In International Conference on Medical image com-puting and computer-assisted intervention , pages 234–241. Springer, 2015. 2, 3 [35] Vishnu Sarukkai, Linden Li, Arden Ma, Christopher R´ e, and Kayvon Fatahalian. Collage diffusion. In Proceedings of the IEEE/CVF winter conference on applications of computer vision , pages 4208–4217, 2024. 3 [36] Yichen Sheng, Jianming Zhang, and Bedrich Benes. Ssn: Soft shadow network for image compositing. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 4380–4390, 2021. 1, 3 [37] Yichen Sheng, Yifan Liu, Jianming Zhang, Wei Yin, A Cen-giz Oztireli, He Zhang, Zhe Lin, Eli Shechtman, and Bedrich Benes. Controllable shadow generation using pixel height maps. In European Conference on Computer Vision , pages 240–256. Springer, 2022. 3 [38] Yichen Sheng, Jianming Zhang, Julien Philip, Yannick Hold-Geoffroy, Xin Sun, He Zhang, Lu Ling, and Bedrich Benes. Pixht-lab: Pixel height based light effect generation for im-age compositing. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition , pages 16643–16653, 2023. 1, 3 [39] Marc Stamminger and George Drettakis. Perspective shadow maps. In Proceedings of the 29th annual conference on Com-
+
+11 puter graphics and interactive techniques , pages 557–562, 2002. 3 [40] Xinhao Tao, Junyan Cao, Yan Hong, and Li Niu. Shadow generation with decomposed mask prediction and attentive shadow filling. In Proceedings of the AAAI Conference on Artificial Intelligence , pages 5198–5206, 2024. 3, 7, 8 [41] Lance Williams. Casting curved shadows on curved surfaces. In Proceedings of the 5th annual conference on Computer graphics and interactive techniques , pages 270–274, 1978. 3[42] Andrew Woo, Pierre Poulin, and Alain Fournier. A survey of shadow algorithms. IEEE Computer Graphics and Applica-tions , 10(6):13–32, 2002. 2 [43] Sanghyun Woo, Jongchan Park, Joon-Young Lee, and In So Kweon. Cbam: Convolutional block attention module. In 
+
+Proceedings of the European conference on computer vision (ECCV) , pages 3–19, 2018. 6 [44] Huikai Wu, Shuai Zheng, Junge Zhang, and Kaiqi Huang. Gp-gan: Towards realistic high-resolution image blending. In Proceedings of the 27th ACM international conference on multimedia , pages 2487–2495, 2019. 3 [45] Ye Yu and William AP Smith. Outdoor inverse rendering from a single image using multiview self-supervision. IEEE Transactions on Pattern Analysis and Machine Intelligence ,44(7):3659–3675, 2021. 4, 5 [46] Jinsong Zhang, Kalyan Sunkavalli, Yannick Hold-Geoffroy, Sunil Hadap, Jonathan Eisenman, and Jean-Franc ¸ois Lalonde. All-weather deep outdoor lighting estimation. In 
+
+Proceedings of the IEEE/CVF conference on Computer Vi-sion and Pattern Recognition , pages 10158–10166, 2019. 3 [47] Lvmin Zhang, Anyi Rao, and Maneesh Agrawala. Adding conditional control to text-to-image diffusion models. In 
+
+Proceedings of the IEEE/CVF international conference on computer vision , pages 3836–3847, 2023. 1, 5 [48] Shuyang Zhang, Runze Liang, and Miao Wang. Shadowgan: Shadow synthesis for virtual objects with conditional adver-sarial networks. Computational Visual Media , 5(1):105–115, 2019. 3, 7, 8 [49] Haonan Zhao, Qingyang Liu, Xinhao Tao, Li Niu, and Guangtao Zhai. Shadow generation using diffusion model with geometry prior. In Proceedings of the Computer Vi-sion and Pattern Recognition Conference , pages 7603–7612, 2025. 1, 3, 7, 8, 9 
+
+12
