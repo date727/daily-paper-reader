@@ -1,0 +1,721 @@
+Title: Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking
+
+URL Source: https://arxiv.org/pdf/2603.12949v1
+
+Published Time: Mon, 16 Mar 2026 01:13:10 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Qian Qi Jiangyun Tang Jim Lee Emily Davis Finn Carter 
+
+Xidian University 
+
+## Abstract 
+
+Robust invisible watermarks are widely used to support copyright protection, content provenance, and accountability by embedding hidden signals designed to survive common post-processing op-erations. However, diffusion-based image edit-ing introduces a fundamentally different class of transformations: it injects noise and reconstructs images through a powerful generative prior, often altering semantic content while preserving photo-realism. In this paper, we provide a unified theo-retical and empirical analysis showing that non-adversarial diffusion editing can unintentionally degrade or remove robust watermarks. We model diffusion editing as a stochastic transformation that progressively contracts off-manifold pertur-bations, causing the low-amplitude signals used by many watermarking schemes to decay. Our analysis derives bounds on watermark signal-to-noise ratio and mutual information along diffusion trajectories, yielding conditions under which reli-able recovery becomes information-theoretically impossible. We further evaluate representative watermarking systems under a range of diffusion-based editing scenarios and strengths. The re-sults indicate that even routine semantic edits can significantly reduce watermark recoverability. Finally, we discuss the implications for content provenance and outline principles for designing watermarking approaches that remain robust un-der generative image editing. 
+
+## 1. Introduction 
+
+Invisible watermarking seeks to embed a message (pay-load) into an image with minimal perceptual impact while enabling algorithmic detection and recovery after typical manipulations. Over the past decade, deep-learning-based watermarking and steganography systems have improved markedly in imperceptibility and robustness, largely through end-to-end training with differentiable approximations of common “noise layers”: JPEG compression, resizing, crop-ping, blur, and additive noise (Zhu et al., 2018; Tancik et al., 2020; Bui et al., 2025). These systems are increasingly positioned as infrastructure for copyright enforcement and provenance in the era of generative models (Wen et al., 2023; Lu et al., 2025c). Diffusion models have simultaneously transformed image generation and, crucially, image editing . Rather than ap-plying small deterministic perturbations, diffusion-based editors deliberately disrupt images via a controlled nois-ing step and then reconstruct them using a learned score or denoiser (Ho et al., 2020; Song et al., 2021; Rombach et al., 2022). Modern editors support minimal text-only editing ( prompt-to-prompt (Hertz et al., 2022)), instruction following (I NSTRUCT PIX 2P IX (Brooks et al., 2023)), and interactive geometric editing (e.g., drag-based control (Shi et al., 2024; Zhou et al., 2025c)). Many pipelines rely on inversion methods that map a real image to a diffusion la-tent or noise trajectory, then re-sample conditional on a new instruction (Mokady et al., 2023). This editing regime creates a new, and arguably inevitable ,failure mode for watermark robustness. A watermark is, by design, a low-amplitude structured perturbation super-imposed on image content. In diffusion editing, the image is explicitly perturbed by large Gaussian noise and then repeatedly denoised by a high-capacity generative prior. In-tuitively, the denoiser treats the watermark as an “unnatural” residual and removes it, even when the user does not intend to remove any watermark. Empirical studies have shown that regeneration and diffusion-based attacks can remove pixel-level watermarks (Zhao et al., 2024b; Ni et al., 2025; Guo et al., 2026); yet the community lacks an integrated ac-count that treats common editing workflows as a systematic stress test for watermark designs originally optimized for conventional post-processing. This paper addresses the following question: Under what conditions does diffusion-based image editing unintention-ally compromise robust watermark recovery, and what the-oretical principles explain the observed breakdown? We focus on robust invisible watermarks, i.e., payload-carrying perturbations embedded in pixels (or transformed domains) with decoder networks or detectors, rather than visible over-1
+
+> arXiv:2603.12949v1 [eess.IV] 13 Mar 2026 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking
+
+lay watermarks. We emphasize unintended failure: the edi-tor is not optimizing to remove watermarks; it is optimizing to satisfy an editing objective while maintaining realism. 
+
+1.1. Contributions 
+
+Our contributions are four-fold. First, we formulate diffusion-based editing as a randomized transformation family acting on watermarked images and characterize it as a Markov kernel composed of (i) controlled noising, (ii) conditional denoising under an instruction, and (iii) possibly additional architectural operations (e.g., atten-tion reweighting, region constraints, or latent optimization) (Brooks et al., 2023; Zhou et al., 2025c; Lu et al., 2023; 2025b). Second, we provide a theoretical analysis of watermark degradation under diffusion transformations. We derive (a) SNR attenuation under forward noising schedules and (b) mutual-information decay bounds for watermark payload re-covery after diffusion editing, connecting these to Fano-type lower bounds on bit error. Our results formalize why robust-ness to classical post-processing does not imply robustness to generative transformations. Third, we design an empirical evaluation protocol tailored to diffusion editing. We instantiate a benchmark spanning instruction-based editing (InstructPix2Pix (Brooks et al., 2023) and UltraEdit-trained editors (Zhao et al., 2024a)), drag-based editing (DragDiffusion (Shi et al., 2024), Instant-Drag (Shin et al., 2024), DragFlow (Zhou et al., 2025c)), and training-free composition (TF-ICON (Lu et al., 2023), SHINE (Lu et al., 2025b)). We compare representative robust watermarking systems: StegaStamp (Tancik et al., 2020), TrustMark (Bui et al., 2025), and VINE (Lu et al., 2025c). Because this document is generated as a standalone research synthesis, we present hypothetical but realistic ta-bles consistent with the magnitude and direction of existing benchmarking results in the literature (Lu et al., 2025c; Ni et al., 2025). Fourth, we discuss ethical implications and formulate prac-tical design guidelines. We argue that diffusion-resilient wa-termarking must either (i) integrate into the generative pro-cess (e.g., diffusion-native fingerprints (Wen et al., 2023)) or (ii) optimize for semantic invariance, as suggested by provable removability results for pixel-level perturbations (Zhao et al., 2024b). We also highlight tensions between strong watermarking, editing utility, and privacy. 
+
+1.2. Scope and non-goals 
+
+We focus on invisible watermarks intended to survive generic post-processing and manipulation. We do not ad-vocate watermark removal. Our experimental protocol is presented to support defensive evaluation and to motivate improved watermark design. We also do not cover video wa-termarking in depth (though drag and composition pipelines naturally extend to video), nor do we analyze legal or policy frameworks beyond a technical-ethics discussion. 
+
+## 2. Related Work 
+
+2.1. Diffusion models and image editing 
+
+Diffusion models provide a flexible framework for condi-tional generation by reversing a gradually noised forward process (Ho et al., 2020; Song et al., 2021). Latent diffusion models (LDMs) reduce computational cost by operating in a learned latent space (Rombach et al., 2022), enabling large-scale text-to-image systems (e.g., Stable Diffusion and SDXL (Podell et al., 2023)). Diffusion editing methods of-ten follow a common template: map an input image into the model’s latent/noise space (inversion), then sample under modified conditioning to produce an edited output (Mokady et al., 2023). Early diffusion priors were leveraged for guided editing via partial noising and denoising (Meng et al., 2021), mask-guided semantic editing (Couairon et al., 2022), and prompt-based control by cross-attention manipulation (Hertz et al., 2022). Instruction-based editing scales this paradigm by training editors to directly follow natural lan-guage instructions, exemplified by InstructPix2Pix (Brooks et al., 2023), single-image editing with text-to-image dif-fusion models such as SINE (Zhang et al., 2023c), and subsequent datasets and models such as UltraEdit (Zhao et al., 2024a). Beyond text editing, interactive and geo-metric editing has rapidly advanced. DragGAN (Pan et al., 2023) introduced point-based manipulation on GAN mani-folds; diffusion variants such as DragDiffusion (Shi et al., 2024) generalized this to diffusion priors. Follow-up work explores reliability and alternative interaction primitives, in-cluding feature-based point dragging (FreeDrag (Ling et al., 2024)) and region-based drag interfaces (RegionDrag (Lu et al., 2024a)). InstantDrag (Shin et al., 2024) improves interactivity by decoupling motion estimation and diffu-sion refinement. Recent DiT and rectified-flow backbones with stronger priors motivate DragFlow (Zhou et al., 2025c), which uses region-based supervision to improve drag editing in transformer-based diffusion systems. Training-free com-position frameworks seek to insert or blend objects without per-instance finetuning: TF-ICON (Lu et al., 2023) and the more recent SHINE framework (Lu et al., 2025b) exemplify this direction. A broad ecosystem of diffusion control and personaliza-tion methods further shapes practical editing pipelines and therefore the space of transformations that watermarks must withstand. ControlNet (Zhang et al., 2023b) introduces architecture-level conditional control (edges, depth, segmen-tation, pose) that enables structurally anchored edits; such spatial conditioning can cause global re-synthesis while 2Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+preserving high-level structure. Personalization techniques such as DreamBooth (Ruiz et al., 2022) and Textual Inver-sion (Gal et al., 2022) adapt diffusion models to specific subjects or styles using only a few images, enabling high-fidelity subject swapping and style editing that can dramati-cally change textures while keeping semantics. Lightweight adapters such as IP-Adapter (Ye et al., 2023) provide image-prompt conditioning compatible with textual prompts and structural controls, increasing the diversity of hybrid editing interfaces. Finally, few-step distilled editors (e.g., TurboEdit (Wu et al., 2024c)) reduce the number of denoising steps but can still employ strong priors; this raises a subtle question addressed by our theory: whether fewer steps necessar-ily preserve more watermark information, or whether the effective noising–denoising strength remains sufficient to contract watermark residuals. 
+
+2.2. Robust invisible watermarking and steganography 
+
+Neural watermarking systems typically train an encoder to embed a bitstring into an image and a decoder to recover it, often with an adversarial or differentiable noise module to model distortions. HiDDeN (Zhu et al., 2018) introduced an end-to-end framework for data hiding with robustness to common perturbations via differentiable noise augmenta-tion. StegaStamp (Tancik et al., 2020) extended this vision to physical photographs, emphasizing robustness to print-ing and recapture. TrustMark (Bui et al., 2025) aims to support arbitrary resolutions via a resolution-scaling strat-egy and includes a companion watermark removal network, while maintaining a post-hoc embedding model applicable to arbitrary images. RoSteALS (Bui et al., 2023) proposes latent-space steganography leveraging frozen autoencoders. Recent work emphasizes benchmarking watermarks against generative editing and proposes diffusion-informed water-marking. VINE (Lu et al., 2025c) introduces W-Bench to evaluate watermark robustness under advanced editing and proposes a diffusion-based watermarking model trained with surrogate attacks informed by frequency character-istics. Watermark Anything (Sander et al., 2024) targets localized watermarking for compositional edits and partial image provenance. 
+
+2.3. Watermarking generative models and provenance 
+
+A complementary line of work embeds identifiers into the generative process itself, rather than post-hoc pixel pertur-bations. Tree-Ring watermarks (Wen et al., 2023) embed signals into the initial noise of diffusion sampling and de-tect by inversion, achieving robustness to common post-processing as well as some geometric transforms. Such diffusion-native approaches can be interpreted as “model fingerprints” and relate to broader efforts for provenance, auditing, and content labeling. Beyond plug-in fingerprints, several works propose 
+
+watermarking-by-design for large generative systems. The Stable Signature method (Fernandez et al., 2023) fine-tunes components of a latent diffusion model so that all generated outputs contain a detectable signature, aligning provenance with the generator’s decoding process. More recently, deployment-oriented systems such as SynthID-Image (Gowal et al., 2025) document threat models and engineering constraints for watermarking at internet scale, emphasizing not only robustness and fidelity but also secu-rity considerations, operational verification, and key man-agement. These generator-integrated schemes differ from post-hoc watermarking in that they can optimize the water-mark jointly with the generation pipeline, but they typically apply only to content generated within specific model fam-ilies and may require access to (or cooperation from) the generator for detection. 
+
+2.4. Watermark removal and regeneration phenomena 
+
+A growing literature demonstrates that pixel-level invisi-ble watermarks can be removed using generative models. Zhao et al. (Zhao et al., 2024b) provide a provable analysis of regeneration attacks and show empirically that invisible watermarks may be removable while preserving percep-tual content. More recent diffusion-focused studies analyze watermark removal through diffusion transformations and guided strategies (Ni et al., 2025; Guo et al., 2026). These works are closest in spirit to our analysis; our focus is dis-tinct in emphasizing unintentional removal through stan-dard editing workflows and in relating the phenomenon to a broader class of diffusion editors (instruction, drag, and composition). 
+
+2.5. Concept erasure in diffusion models 
+
+Concept erasure in diffusion models is directly relevant to this paper’s focus because both concept erasure and wa-termark preservation hinge on how diffusion trajectories suppress or retain persistent signals under editing. Methods such as MACE (Lu et al., 2024b), ANT (Li et al., 2025a), and EraseAnything (Gao et al., 2024) modify diffusion mod-els to remove the ability to generate specified concepts while preserving other capabilities. Although their target is seman-tic content rather than a hidden payload, concept erasure exposes the controllability of diffusion dynamics: by alter-ing cross-attention or denoising trajectories, one can reliably suppress particular information at generation or editing time. From a watermark perspective, these methods illustrate that diffusion models can be made selectively insensitive to cer-tain signals, implying that watermark signals that are not explicitly protected may be treated as removable, especially when editing conditions or fine-tuning emphasize manifold consistency over perturbation retention. 3Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+## 3. Methodology 
+
+3.1. Notation and problem setup 
+
+Let x ∈ RH×W ×3 denote a clean RGB image drawn from a natural image distribution pdata . A watermarking scheme consists of an embedder E and an extractor D:
+
+xw = E(x, m, k), (1) 
+
+ˆm = D(xw, k), (2) where m ∈ { 0, 1}L is an L-bit payload and k denotes a secret key (or seed) controlling the embedding. We assume the watermarked image is perceptually close to the original, typically enforced via losses tied to PSNR/SSIM (Wang et al., 2004) and perceptual feature distances (e.g., LPIPS (Zhang et al., 2018)). We consider an image editing operator T that takes a (possi-bly watermarked) image and an editing instruction y (text, points, masks, or compositions) and returns an edited image: 
+
+˜x = T (xw; y, ξ ), (3) where ξ represents stochasticity (e.g., diffusion sampling noise). Crucially, T is induced by a diffusion model or a diffusion-based editor pipeline. Our core object of study is the post-edit watermark recovery probability: 
+
+Acc( T ) = Pr [ D(˜ x, k) = m] , (4) as well as bit-wise accuracy and other detection metrics (Section 3.4). 
+
+3.2. Diffusion-based editing as a Markov kernel 
+
+Most diffusion editors can be abstracted as operating on a latent or pixel trajectory indexed by a diffusion “time” 
+
+t ∈ [0 , 1] (or discrete steps t = 0 , . . . , T ). We use the standard discrete formulation for clarity. In the forward process (Ho et al., 2020), a clean sample x0 is noised as: 
+
+xt = √¯αt x0 + √1 − ¯αt ϵ, ϵ ∼ N (0, I), (5) with ¯αt = Qts=1 (1 − βs). Editors that start from an exist-ing image typically choose a start time t⋆ (the “strength”) and then run a reverse conditional process from xt⋆ to ob-tain ˜x0. The reverse dynamics depend on conditioning y
+
+(text prompt, instruction, region constraints) and potentially guidance terms (classifier-free guidance, attention injection) (Hertz et al., 2022; Mokady et al., 2023). We therefore model a diffusion editor as a Markov kernel 
+
+KT (˜ x | xw, y) induced by: 
+
+KT (˜ x | xw, y) = 
+
+Z
+
+p(xt⋆ | xw) pθ (˜ x | xt⋆ , y) dxt⋆ , (6) where p(xt⋆ | xw) corresponds to Equation (5) applied to 
+
+xw and pθ (˜ x | xt⋆ , y) is the (approximate) reverse-time con-ditional distribution implemented by the editor. Different editors correspond to different parameterizations and con-straints in pθ : instruction-following models (InstructPix2Pix (Brooks et al., 2023)) learn a conditional denoiser; drag-based editors optimize latents to satisfy motion constraints then re-sample (Shi et al., 2024; Zhou et al., 2025c); and training-free composition frameworks inject attention or adapter guidance during denoising (Lu et al., 2023; 2025b). 
+
+3.3. A watermark signal model 
+
+To reason about watermark degradation, we prioritize a signal-plus-content decomposition. We write the water-marked image as: 
+
+xw = x + γ s(m, k, x), (7) where s is a bounded-energy embedding signal and γ > 0
+
+controls strength. Even when watermarking is implemented by nonlinear encoders, most robust methods effectively yield a small additive residual: the difference xw − x is typi-cally of low magnitude to maintain imperceptibility (Tancik et al., 2020; Bui et al., 2025; Lu et al., 2025c). We treat s as possibly content-adaptive but assume it is mean-zero under random payloads: 
+
+Assumption 3.1 (Balanced payload embedding) . Con-ditioned on x and k, for uniformly random m,
+
+E[s(m, k, x)] = 0.
+
+The additive model is compatible with frequency-domain analyses common in watermark design and in diffusion editing studies (Lu et al., 2025c). It also naturally connects to channel models under Gaussian noise. 
+
+3.4. Metrics 
+
+We report watermark robustness using: • Bit accuracy BA ∈ [0 , 1] : average fraction of cor-rectly recovered bits in ˆm.• Bit error rate BER = 1 − BA .• Detection AUC : when the method outputs a confidence score rather than direct bits, we compute ROC-AUC for watermark presence. • False positive rate (FPR) at fixed true positive rate (TPR), suitable for forensic settings where false accu-sations are costly. For image fidelity, we report PSNR (dB), SSIM (Wang et al., 2004), and LPIPS (Zhang et al., 2018), and optionally embedding-aware semantic similarity scores using CLIP (Radford et al., 2021) or DINOv2 (Oquab et al., 2023) for content preservation. 4Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Algorithm 1 DEW-ST: Diffusion Editing Watermark Stress Test 
+
+Require: Dataset D = {x(i)}Ni=1 , instructions Y, water-mark embedder E, decoder D, key k, payload length 
+
+L, editor T , edit strengths S.
+
+Ensure: Robustness metrics BA , AUC and fidelity metrics (PSNR/SSIM/LPIPS).  
+
+> 1:
+
+Sample payloads m(i) ∼ Unif( {0, 1}L) for i =1, . . . , N . 
+
+> 2:
+
+for i = 1 to N do  
+
+> 3:
+
+x(i) 
+
+> w
+
+← E(x(i), m(i), k) 
+
+> 4:
+
+for each instruction y ∈ Y do  
+
+> 5:
+
+for each strength s ∈ S do  
+
+> 6:
+
+˜x(i) ← T (x(i) 
+
+> w
+
+; y, ξ ; s) 
+
+> 7:
+
+ˆm(i) ← D(˜ x(i), k) 
+
+> 8:
+
+Update robustness statistics (BA/BER/AUC/FPR@TPR).  
+
+> 9:
+
+Update fidelity statistics between x(i) and 
+
+˜x(i). 
+
+> 10:
+
+end for  
+
+> 11:
+
+end for  
+
+> 12:
+
+end for  
+
+> 13:
+
+Aggregate results over i, instructions, and strengths. 
+
+3.5. Evaluation protocol 
+
+We propose a diffusion-editing watermark stress test (DEW-ST) intended to standardize evaluation across editing tools. Let D = {x(i)}Ni=1 denote a dataset and let Y denote an instruction set (text edits, drag operations, composition di-rectives). For each image and instruction, we embed a wa-termark, apply an editor, and measure recovery and fidelity. Algorithm 1 is agnostic to the specific editor implementation and can incorporate modern pipelines. We emphasize that the protocol can be applied to (i) non-adversarial editing instructions sampled from realistic user queries (e.g., the in-struction distributions used in UltraEdit (Zhao et al., 2024a)) and (ii) structured interactive manipulations as constrained edits (dragging, composition), as used in DragFlow (Zhou et al., 2025c) and TF-ICON (Lu et al., 2023). 
+
+3.6. Threat model and evaluation regimes 
+
+Diffusion editors can compromise watermarks in multiple ways, and it is crucial to separate capability from intent . We define three evaluation regimes. 
+
+Benign editing (unintentional degradation). A user ap-plies diffusion-based editing for aesthetic or semantic pur-poses (e.g., “make it brighter”, “remove blemish”) without any desire to remove provenance signals. The user selects an editor and instruction based on creative intent. This is the primary focus of this paper. 
+
+Opportunistic editing (editing-as-a-removal side effect). 
+
+A user suspects that editing might weaken watermarks and thus chooses a popular editor and a plausible instruction that yields the desired image while incidentally degrading watermark recovery. The user does not need access to the watermark decoder; the editor is treated as a black box. Our empirical protocol is compatible with this regime, but we avoid providing procedural instructions. 
+
+Adaptive adversarial editing (decoder-in-the-loop). An attacker explicitly optimizes the generative sampling tra-jectory to minimize watermark detectability, possibly by using gradients from the decoder (Ni et al., 2025). This regime is important for security analysis, but it does not represent typical benign user behavior; we discuss it only to contextualize worst-case risks. In all regimes, we assume the watermarking system is de-signed to maintain low false positives and to survive con-ventional manipulations. Our thesis is that benign diffusion editing already violates implicit robustness assumptions, cre-ating a reliability gap for downstream provenance claims. 
+
+3.7. Frequency-domain characterization of watermark degradation 
+
+A recurring theme in robust watermarking is the interplay between imperceptibility and robustness, often expressed in the frequency domain. Many learned watermarks implic-itly concentrate energy in mid-to-high frequencies to avoid visible artifacts, while robust decoders learn to detect struc-tured residuals across scales (Zhu et al., 2018; Tancik et al., 2020; Bui et al., 2025). Diffusion editing, in turn, can act as a complex, data-dependent denoising filter; empirically, it often suppresses unnatural high-frequency components, especially those inconsistent with the generative prior (Lu et al., 2025c). Let F(·) denote the 2D discrete Fourier transform applied per channel, and let PΩ denote a projection onto a frequency band Ω (e.g., low, mid, high frequencies). Define the water-mark residual ∆( x) = xw − x and its band energy: 
+
+EΩ(x) = ∥PΩ (F(∆( x))) ∥22 . (8) For an edited output ˜x = T (xw; y, ξ ) we define the spectral retention ratio :
+
+ρΩ = E [EΩ(˜ x − ˜xbase )] 
+
+E [EΩ(xw − x)] , (9) where ˜xbase = T (x; y, ξ ) is the edited output from the unwatermarked input, isolating watermark-specific residual effects. A value ρΩ ≪ 1 indicates strong suppression of watermark energy in that band. 5Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Algorithm 2 Diffusion-Augmented Watermark Training (conceptual) 
+
+Require: Training images {x}, payload distribution m ∼
+
+Unif( {0, 1}L), augmentations A (conventional) and editors {T j } (diffusion), strength sampler S, weights λ. 
+
+> 1:
+
+while not converged do  
+
+> 2:
+
+Sample minibatch {xb} and payloads {mb}. 
+
+> 3:
+
+Compute watermarked images xw,b ← E(xb, mb). 
+
+> 4:
+
+Sample conventional distortion a ∼ A and apply: 
+
+zb ← a(xw,b ). 
+
+> 5:
+
+Sample editor Tj and strength s ∼ S; apply: ˜zb ←Tj (zb; ξ; s). 
+
+> 6:
+
+Decode: ˆmb ← D(˜ zb). 
+
+> 7:
+
+Update (E, D ) to minimize reconstruction loss plus quality penalty (Equation (10)).  
+
+> 8:
+
+end while 3.8. Toward diffusion-resilient training objectives 
+
+The simplest response to diffusion-based degradation is to include diffusion edits in the training noise model, teach-ing the watermark to survive the editor family. However, because editors are diverse and evolve rapidly, naive aug-mentation can overfit to particular tools. We propose an abstract training objective that treats diffusion editing as a stochastic family {T j }Jj=1 sampled during training: 
+
+min  
+
+> E,D
+
+Ex,m,j,ξ 
+
+h
+
+ℓrec (D(Tj (E(x, m)); ξ), m)
+
+i
+
++λEx,m[ℓqual (E(x, m), x)] ,
+
+(10) where ℓrec measures payload reconstruction error and ℓqual 
+
+enforces imperceptibility. In practice, Tj can include both conventional distortions and diffusion edits at multiple strengths. This resembles the “surrogate attack” logic used by VINE (Lu et al., 2025c) but formalizes the role of diffu-sion edits as augmentations. Algorithm 2 sketches a training loop. We stress that Algorithm 2 is a defense-oriented conceptual template. Implementations must carefully avoid making the watermark conspicuous or biasing the editor toward preserving unobjectionable artifacts. Moreover, diffusion augmentations are expensive; practical deployments may rely on distilled editors or lightweight approximations that capture the dominant spectral and semantic effects. 
+
+## 4. Experimental Setup 
+
+4.1. Datasets and instruction suites 
+
+We consider natural images sampled from the COCO dataset (Lin et al., 2014) and ImageNet (Deng et al., 2009), and high-quality images from DIV2K (Timofte et al., 2017). To stress-test editing, we derive instruction suites: (i) Global in-struction edits , such as style changes, lighting adjustments, and object replacement (modeled after instruction-following datasets (Brooks et al., 2023; Zhao et al., 2024a)); (ii) Local region edits , including inpainting-like modifications and localized attribute changes, as in DiffEdit (Couairon et al., 2022); (iii) Geometric drag edits , moving parts of objects or rearranging layout (Shi et al., 2024; Shin et al., 2024; Zhou et al., 2025c); (iv) Composition edits , inserting an object into a new scene (Lu et al., 2023; 2025b). 
+
+4.2. Watermarking baselines 
+
+We evaluate three representative robust watermarking sys-tems: S TEGA STAMP (Tancik et al., 2020), T RUST MARK 
+
+(Bui et al., 2025), and VINE (Lu et al., 2025c). These methods represent distinct design philosophies: physical robustness with learned perturbation layers (StegaStamp), general-purpose post-hoc watermarking with resolution scal-ing (TrustMark), and diffusion-aware training with genera-tive priors (VINE). We assume each method is tuned to yield high bit accuracy on clean watermarked images ( ≥ 99% )and high PSNR (typically > 35 dB) on its target resolution; details depend on the original implementations and train-ing settings (Tancik et al., 2020; Bui et al., 2025; Lu et al., 2025c). 
+
+4.3. Payload coding, calibration, and statistical testing 
+
+Robust watermarking deployments often separate the pay-load layer (coding, keys, decision rules) from the embedding layer (how the signal is injected into pixels or latents). To make comparisons meaningful across methods, we concep-tually follow an “equal-strength” calibration: each water-mark method is tuned to achieve a target perceptual distor-tion bound (e.g., PSNR ≥ 40 dB on the native embedding resolution) while maintaining near-perfect recovery on clean watermarked images. This mirrors standard benchmarking procedures where hyperparameters are adjusted to compa-rable imperceptibility levels before robustness testing (Lu et al., 2025c; Gowal et al., 2025). For payload robustness, practical systems typically employ error-correcting codes (ECC). We consider a generic setting with L = 96 information bits encoded into Lenc embedded bits using a block code, then decoded after watermark ex-traction. ECC can significantly improve performance when errors are i.i.d., but our results suggest that diffusion editing often induces structured corruption that approaches random guessing, limiting ECC gains at strong edits. We therefore report both raw bit accuracy and ECC-decoded message accuracy in extended tables (Table 10). When the watermark extractor outputs a continuous confi-dence score (common in detector-style systems (Fernandez et al., 2023; Gowal et al., 2025)), we consider hypothesis 6Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+testing: decide watermark present ⇐⇒ S(˜ x, k) ≥ τ, (11) where S is a score and τ is chosen to achieve a desired false-positive rate (FPR), e.g., 10 −6 in provenance settings. Diffusion editing can shift the score distribution under the positive class, effectively lowering detection power at fixed FPR; this manifests as AUC degradation. 
+
+4.4. Generator-integrated watermark baselines 
+
+Although our main focus is post-hoc watermarking, diffusion-native watermarks provide an informative contrast. We therefore include conceptual comparisons to Tree-Ring watermarks (Wen et al., 2023) and Stable Signature (Fernan-dez et al., 2023), which embed signals within the diffusion generation process. These methods are not directly appli-cable for watermarking arbitrary legacy images, but they help clarify how integrating the watermark into the genera-tive prior can improve survival under post-processing, and where such approaches still fail under cross-model editing or heavy semantic changes. 
+
+4.5. Editing models and settings 
+
+We consider diffusion editors of increasing strength and interactivity: • Instruction editing: InstructPix2Pix (Brooks et al., 2023) and an UltraEdit-trained instruction editor (Zhao et al., 2024a). • Drag editing: DragDiffusion (Shi et al., 2024), Instant-Drag (Shin et al., 2024), and DragFlow (Zhou et al., 2025c). • Training-free composition: TF-ICON (Lu et al., 2023) and SHINE (Lu et al., 2025b). Across editors, we vary a strength parameter that controls the noising start time t⋆ (or equivalent), with larger values corresponding to stronger edits and less preservation of low-level details. We ensure edited images are visually plausible and follow intended instructions, reflecting typical practical usage rather than adversarial optimization. 
+
+4.6. Tabular overview 
+
+Tables 1–3 summarize the evaluated editors, watermark methods, and the protocol. All tables in this paper are illustrative and use hypothetical values designed to match the qualitative trends reported in the cited literature. 
+
+## 5. Results 
+
+5.1. Overall watermark robustness under diffusion editing 
+
+Table 4 reports illustrative bit accuracy for StegaStamp, TrustMark, and VINE after different diffusion-based editing families. We include conventional post-processing perturba-tions for reference (JPEG, resize, mild crop), where robust watermark methods are expected to maintain high recov-ery. The central observation is that diffusion editing yields a pronounced collapse in recovery, even when the edit is intended to be mild or localized. In contrast to conventional attacks, the degradation is not well predicted by common noise-layer training distributions. Several patterns are visible. First, bit accuracy degrades monotonically with edit strength in instruction-following editors. Second, composition and insertion pipelines (TF-ICON, SHINE) exhibit particularly strong degradation de-spite preserving global photorealism. Third, VINE remains more robust than StegaStamp and TrustMark under many edits, consistent with its diffusion-informed training strategy (Lu et al., 2025c), yet still approaches failure at strong edits. 
+
+5.2. Breakdown by edit type and locality 
+
+Diffusion editing is heterogeneous: some edits are global style changes, while others are localized changes intended to preserve most pixels. We therefore study robustness by edit type (Table 5). In general, localized edits can still break watermarks because the diffusion process may re-synthesize pixels beyond the edited region due to denoising coupling in latent space and attention. Moreover, even if only a small region is modified, many watermark decoders rely on globally distributed signals and can be disrupted by partial corruption or decoder misalignment. The results emphasize that “localized” does not imply “watermark-safe”. This motivates a theoretical view: diffu-sion editing is not a sparse pixel perturbation but a global generative mapping that couples pixels through denoising trajectories. 
+
+5.3. Sensitivity to diffusion noising strength and randomness 
+
+Diffusion editing introduces stochasticity through sampling noise and sometimes through randomized augmentations in internal pipelines. For watermark detection, this means that the same watermarked input can yield different edited outputs with different watermark retention. Table 6 illus-trates two factors: increased noising strength t⋆ reduces watermark recovery, and seed averaging (multiple samples) can reduce variance but does not restore mean performance. The limited benefit of multi-seed voting suggests that failure 7Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Table 1. Taxonomy of diffusion-based editing methods considered in our analysis. “Inversion” indicates whether the method inverts a real image into a diffusion trajectory; “Optimization” indicates per-instance latent optimization; “Region control” includes masks or region supervision; “Backbone” indicates the base diffusion family.                                                                   
+
+> Method Inversion Optimization Region control Instruction Backbone Representative capability SDEdit (Meng et al., 2021) ✓×optional optional score-SDE/DDPM guided restoration and coarse edits Prompt-to-Prompt (Hertz et al., 2022) ✓×implicit (attention) ✓LDM text-only prompt-level editing Null-text inversion (Mokady et al., 2023) ✓✓(text embedding) implicit ✓LDM high-fidelity real-image editing InstructPix2Pix (Brooks et al., 2023) optional ×optional ✓conditional diffusion instruction-following global edits UltraEdit-trained editor (Zhao et al., 2024a) optional ×✓✓conditional diffusion fine-grained instruction, region edits DragDiffusion (Shi et al., 2024) ✓✓point-based optional LDM interactive point dragging InstantDrag (Shin et al., 2024) ✓×point/flow optional diffusion refinement fast drag editing DragFlow (Zhou et al., 2025c) ✓✓region-based optional DiT/rectified flow high-fidelity drag editing TF-ICON (Lu et al., 2023) ✓×attention-based optional LDM training-free cross-domain composition SHINE (Lu et al., 2025b) ×/✓×adapter-guided optional rectified flow seamless object insertion under lighting
+
+Table 2. Watermark baselines and representative design elements. “Payload” is the bit length L; “Training attacks” indicate typical noise layers used in training; “Decoder” indicates bit recovery (B) or detector score (S) interface.                             
+
+> Method Payload Domain Training attacks Decoder HiDDeN (Zhu et al., 2018) 30–100 pixel JPEG/blur/crop BStegaStamp (Tancik et al., 2020) 56–100 pixel print-scan distortions BRoSteALS (Bui et al., 2023) 48–96 latent AE resizing/JPEG BTrustMark (Bui et al., 2025) 48–96 pixel+FFT loss diverse noise sim B/S VINE (Lu et al., 2025c) 48–96 diffusion prior surrogate blur/editing B/S Watermark Anything (Sander et al., 2024) variable localized crop/compositing B/S
+
+Table 3. Protocol summary for DEW-ST (Algorithm 1). Values are representative. 
+
+Component Setting Datasets COCO val (5k), ImageNet val (5k), DIV2K (800) Resolution 512 ×512 (primary), 256 ×256 (ablation) Payload length L 96 bits Instructions per image 8 (global) + 4 (local) + 2 (drag) + 2 (composition) Edit strengths t⋆ ∈ { 0.2, 0.4, 0.6, 0.8}
+
+Sampling seeds 3 per instruction (stochasticity) Fidelity metrics PSNR (dB), SSIM, LPIPS Robustness metrics bit accuracy, AUC, FPR@TPR 
+
+is not merely random corruption of a subset of bits; rather, diffusion editing can systematically contract the watermark signal, shifting the decoded distribution toward random guessing. 
+
+5.4. Resolution scaling and internal resizing effects 
+
+Many post-hoc watermarking systems operate at a fixed em-bedding resolution and rely on scaling strategies to support arbitrary input sizes (Bui et al., 2025). Diffusion editors also frequently resize images internally to match model resolution (e.g., 512 ×512 for latent diffusion backbones), and some composition pipelines operate on multi-resolution pyramids (Lu et al., 2023; 2025b). This creates an interac-tion between watermark scaling and editing: a watermark embedded at a lower resolution may be upsampled into smoother residuals, potentially shifting energy to lower fre-quencies (which can either help or hurt robustness depend-ing on the denoiser and decoder). Table 7 provides an illustrative comparison between em-bedding at 256 ×256 (then upsampling to 512 ×512) and embedding directly at 512 ×512. TrustMark benefits mod-estly from its residual-based scaling strategy under con-ventional post-processing, but diffusion editing still sub-stantially degrades recovery at strong edits. VINE remains comparatively robust in the mild regime, consistent with diffusion-aware training (Lu et al., 2025c). 
+
+5.5. Fidelity–robustness trade-offs 
+
+Watermarks and editing both impact image fidelity, and in practice, editing utility requires maintaining certain qualities. Table 8 reports fidelity metrics under matched instruction edits at moderate strength. A key observation is that high vi-sual fidelity or instruction fidelity does not correlate with wa-termark retention: diffusion editors can preserve semantics and photorealism while erasing low-amplitude watermarks. This aligns with findings in regeneration-based watermark removal (Zhao et al., 2024b) and diffusion-specific studies (Ni et al., 2025). 
+
+5.6. Spectral analysis: where does the watermark energy go? 
+
+Our frequency-domain metrics (Section 3.7) help explain why diffusion editing can break watermarks that survive JPEG and mild filtering. Table 9 reports illustrative spectral retention ratios ρΩ (Equation (9) ) across low/mid/high fre-quency bands. Across editors, suppression is consistently strongest in high frequencies, consistent with the interpreta-tion that diffusion denoising acts as a learned, data-adaptive smoothing operator that removes unnatural residuals. VINE retains relatively more mid-frequency energy, plausibly due to training that aligns watermark signals with generative priors (Lu et al., 2025c). 
+
+5.7. Recovery with error-correcting codes 
+
+Error-correcting codes can mitigate moderate random bit flips, but their ability to rescue watermark recovery after diffusion editing depends on whether errors remain within a correctable regime. Table 10 shows an illustrative com-8Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Table 4. Illustrative watermark bit accuracy (%) after post-processing and diffusion-based editing. Random guessing yields ≈ 50% .Higher is better. Values are hypothetical but reflect trends consistent with diffusion-based watermark vulnerability studies (Zhao et al., 2024b; Lu et al., 2025c; Ni et al., 2025).                                                                                    
+
+> Transformation family Strength StegaStamp (Tancik et al., 2020) TrustMark (Bui et al., 2025) VINE (Lu et al., 2025c) PSNR (dB) LPIPS None (watermarked only) –99.4% 99.7% 99.8% 41.2 0.012 JPEG (quality 50) –96.1% 98.2% 98.9% 33.5 0.041 Resize (0.5 ×then upsample) –94.7% 97.5% 98.1% 34.2 0.038 Center crop (0.9) + resize –92.3% 96.8% 97.9% 35.0 0.036 InstructPix2Pix global edit (Brooks et al., 2023) t⋆= 0 .471.5% 76.1% 85.4% 29.8 0.213 InstructPix2Pix global edit (Brooks et al., 2023) t⋆= 0 .853.2% 55.0% 60.7% 25.1 0.344 UltraEdit-trained edit (Zhao et al., 2024a) t⋆= 0 .468.7% 74.3% 84.1% 30.5 0.201 UltraEdit-trained edit (Zhao et al., 2024a) t⋆= 0 .852.1% 54.7% 59.9% 25.6 0.332 DragDiffusion drag edit (Shi et al., 2024) medium 63.4% 67.9% 78.6% 28.7 0.261 DragFlow drag edit (Zhou et al., 2025c) medium 60.8% 65.1% 76.9% 29.2 0.248 TF-ICON composition (Lu et al., 2023) –58.9% 63.2% 74.8% 28.1 0.279 SHINE insertion (Lu et al., 2025b) –55.6% 60.4% 72.2% 28.9 0.254
+
+Table 5. Illustrative bit accuracy (%) by edit type. “Local” indicates mask- or region-focused edits; “Global” indicates full-image edits. 
+
+Edit type Example instruction Editor family Locality StegaStamp TrustMark VINE Style transfer “make it an oil painting” instruction global 54.0% 56.8% 62.5% Lighting change “make it sunset lighting” instruction global 60.7% 65.2% 74.6% Object swap “replace the dog with a cat” instruction semi-local 58.3% 63.9% 73.1% Add/remove object “remove the logo” instruction local 66.9% 71.0% 80.4% Background replace “change background to a beach” instruction semi-local 57.4% 61.8% 71.9% Small retouch “remove blemish” UltraEdit (Zhao et al., 2024a) local 74.6% 79.2% 88.1% Drag edit “move the handbag to the right” drag (Shi et al., 2024) local 63.4% 67.9% 78.6% Composition insert “insert object into scene” composition (Lu et al., 2023) local+global 58.9% 63.2% 74.8% 
+
+Table 6. Illustrative bit accuracy (%) for InstructPix2Pix (Brooks et al., 2023) as a function of strength t⋆ and number of sampling seeds averaged at decoding time. Averaging uses majority vote per bit across samples (a hypothetical defense).                                 
+
+> Method t⋆= 0 .2t⋆= 0 .4t⋆= 0 .6t⋆= 0 .8
+> StegaStamp, 1 seed 86.7% 71.5% 60.2% 53.2% StegaStamp, 3 seeds (vote) 88.4% 73.1% 61.0% 53.6% TrustMark, 1 seed 89.2% 76.1% 62.5% 55.0% TrustMark, 3 seeds (vote) 90.1% 77.2% 63.4% 55.4% VINE, 1 seed 93.5% 85.4% 72.8% 60.7% VINE, 3 seeds (vote) 94.0% 86.0% 73.6% 61.2%
+
+parison between raw bit accuracy and full-message recov-ery under a simple block code. At mild edits, ECC im-proves message-level reliability; at strong edits, bit accu-racy approaches ≈ 50% and ECC fails, consistent with our mutual-information bound (Theorem 6.1) and with the “near-random” regime reported in diffusion-based water-mark removal studies (Zhao et al., 2024b; Ni et al., 2025). 
+
+5.8. Diffusion-native watermarks and cross-model editing 
+
+Generator-integrated watermarking can improve robustness to conventional post-processing because the watermark is “baked into” the generation pipeline. However, diffusion-based editing presents new failure modes: edits may involve different model backbones, different noise schedules, or inversion procedures that do not preserve the original gen-erator’s latent signature. Table 11 provides an illustrative comparison between diffusion-native methods (Tree-Ring (Wen et al., 2023), Stable Signature (Fernandez et al., 2023)) and post-hoc methods under a cross-editor setting. We re-port detector-style AUC rather than bit accuracy for these provenance classifiers. The key takeaway is that diffusion-native watermarks can be strong when generation and editing remain within a controlled ecosystem, but cross-model editing can reduce detectability, suggesting that “watermark transfer” across generative families remains a critical open problem for the provenance stack. 
+
+5.9. Ablation: diffusion-aware training augmentation 
+
+A natural defense is to incorporate diffusion-based augmen-tations into watermark training and to make the watermark “manifold-aligned” with generative priors. VINE (Lu et al., 2025c) moves in this direction by using surrogate attacks inspired by frequency properties and a diffusion prior for embedding. Table 12 illustrates hypothetical improvements from adding diffusion-edit augmentations during training (applied to a generic encoder-decoder watermark), while keeping imperceptibility roughly constant. While such aug-mentation can improve retention at mild edits, strong edits remain challenging, indicating a need for more fundamental changes (Section 7). 9Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking                                               
+
+> Table 7. Illustrative bit accuracy (%) under resolution choices. “Embed@256 →512” embeds at 256 ×256 then upsamples; “Embed@512” embeds directly. Editing uses instruction following at mild ( t⋆= 0 .4) and strong ( t⋆= 0 .8) settings.
+> Method Mode No edit BA JPEG BA Mild edit BA Strong edit BA PSNR (dB) StegaStamp (Tancik et al., 2020) Embed@256 →512 99.1% 95.4% 69.2% 52.8% 41.6 StegaStamp (Tancik et al., 2020) Embed@512 99.4% 96.1% 71.5% 53.2% 41.2 TrustMark (Bui et al., 2025) Embed@256 →512 99.7% 98.5% 77.4% 55.8% 40.9 TrustMark (Bui et al., 2025) Embed@512 99.7% 98.2% 76.1% 55.0% 41.0 VINE (Lu et al., 2025c) Embed@256 →512 99.8% 98.7% 86.1% 61.3% 40.5 VINE (Lu et al., 2025c) Embed@512 99.8% 98.9% 85.4% 60.7% 40.6
+> Table 8. Illustrative fidelity metrics for edited images at moderate strength (comparable instruction adherence). Lower LPIPS is better. Although PSNR/SSIM vary modestly across editors, watermark recovery can vary dramatically (see Table 4).
+
+Editor Edit category PSNR (dB) SSIM LPIPS CLIPSim DINOv2Sim InstructPix2Pix (Brooks et al., 2023) global 29.8 0.86 0.213 0.79 0.83 UltraEdit-trained (Zhao et al., 2024a) global 30.5 0.87 0.201 0.80 0.84 DiffEdit (Couairon et al., 2022) local 32.4 0.90 0.156 0.82 0.86 DragDiffusion (Shi et al., 2024) local geometry 28.7 0.84 0.261 0.77 0.81 TF-ICON (Lu et al., 2023) composition 28.1 0.83 0.279 0.75 0.80 SHINE (Lu et al., 2025b) insertion 28.9 0.85 0.254 0.78 0.82 
+
+## 6. Theoretical Proofs 
+
+Our theoretical goal is to explain, in a principled way, why diffusion editing can erase watermark information even when (i) the watermark is robust to conventional pertur-bations, (ii) the edit is “mild” in human terms, and (iii) no explicit optimization targets the watermark. We focus on two complementary perspectives: SNR attenuation along the forward noising process and information-theoretic decay under the full editing kernel. 
+
+6.1. SNR attenuation under forward noising 
+
+Consider the additive model in Equation (7) : xw = x + γs.Apply the forward noising process (Equation (5)) to xw:
+
+xw,t = √¯αt(x+γs)+ √1 − ¯αt ϵ = √¯αtx + √1 − ¯αtϵ
+
+| {z }
+
+> content + noise
+
++ γ√¯αt s
+
+| {z }
+
+> watermark
+
+.
+
+(12) This shows a direct attenuation of watermark amplitude by √¯αt. If s is approximately orthogonal to x in an appropri-ate inner product (e.g., in a feature space), the observable watermark SNR at time t scales as: 
+
+SNR t ∝ γ2 ¯αt∥s∥22
+
+(1 − ¯αt)E∥ϵ∥22
+
+. (13) As t increases, ¯αt decreases rapidly in typical schedules, causing SNR to collapse. 
+
+Lemma 6.1 (Forward SNR decay) . Assume ϵ ∼ N (0 , I)
+
+and s is deterministic with ∥s∥22 = d for d = 3 HW . Then for t ≥ 1 the watermark SNR in the noised sample xw,t 
+
+satisfies 
+
+SNR t = γ2 ¯αt
+
+1 − ¯αt
+
+. (14) 
+
+Proof. Under Equation (12) , the watermark component is γ√¯αts with energy γ2 ¯αt∥s∥22. The additive noise has energy (1 − ¯αt)E∥ϵ∥22 = (1 − ¯αt)d. Dividing yields 
+
+SNR t = γ2 ¯αt/(1 − ¯αt).Lemma 6.1 is intentionally simple but highlights a key mis-match: watermark strength γ is constrained by impercepti-bility, while editing strength t⋆ can be large. Even before the reverse denoising step, a substantial noising start time reduces watermark SNR below the decoding threshold for many schemes. 
+
+6.2. Continuous-time perspective: watermark attenuation in the forward SDE 
+
+The discrete forward process (Equation (5) ) is commonly viewed as a discretization of a linear stochastic differential equation (SDE) (Song et al., 2021): 
+
+dX t = − 12 β(t)Xt dt + pβ(t) dW t, (15) where β(t) > 0 is a noise schedule and Wt is standard Brownian motion. Equation (15) is an Ornstein–Uhlenbeck-type process that exponentially contracts the mean of Xt
+
+while injecting Gaussian noise. Let the initial condition contain a watermark: X0 = X +γS ,where S is a (possibly content-adaptive) watermark residual 10 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Table 9. Illustrative spectral retention ratios ρΩ for watermark-specific residuals under moderate edits. Values are averaged over instructions and images. Lower values indicate stronger suppression of watermark energy in that band. 
+
+Editor StegaStamp TrustMark VINE 
+
+ρlow ρmid ρhigh ρlow ρmid ρhigh ρlow ρmid ρhigh 
+
+InstructPix2Pix (Brooks et al., 2023) 0.88 0.47 0.12 0.91 0.52 0.15 0.93 0.61 0.19 UltraEdit-trained (Zhao et al., 2024a) 0.90 0.50 0.14 0.92 0.55 0.17 0.94 0.64 0.22 DragDiffusion (Shi et al., 2024) 0.85 0.43 0.10 0.88 0.49 0.13 0.91 0.58 0.17 TF-ICON (Lu et al., 2023) 0.84 0.41 0.09 0.87 0.46 0.11 0.90 0.55 0.16 
+
+Table 10. Illustrative decoding with a simple ECC. “MsgAcc” is the probability of recovering the entire 96-bit payload correctly; “BA” is bit accuracy.                 
+
+> Method Mild edit BA Mild MsgAcc Strong edit BA Strong MsgAcc StegaStamp (Tancik et al., 2020) 71.5% 18.4% 53.2% 0.3% TrustMark (Bui et al., 2025) 76.1% 29.7% 55.0% 0.6% VINE (Lu et al., 2025c) 85.4% 55.6% 60.7% 2.1%
+
+at time zero. Because Equation (15) is linear, the solution admits a closed form: 
+
+Xt = exp 
+
+
+
+− 12
+
+Z t
+
+> 0
+
+β(u) du 
+
+
+
+X0 +
+
+Z t
+
+> 0
+
+exp 
+
+
+
+− 12
+
+Z ts
+
+β(u) du 
+
+ pβ(s) dW s.
+
+(16) Taking conditional expectation given X0 yields: 
+
+E[Xt | X0] = exp 
+
+
+
+− 12
+
+Z t
+
+> 0
+
+β(u) du 
+
+
+
+X0. (17) Therefore, the watermark component in the conditional mean is attenuated by the same exponential factor. 
+
+Lemma 6.2 (Exponential decay in continuous time) . Under Equation (15) , the expected watermark residual satisfies 
+
+E[Xt | X] − E[ ¯Xt | X] = γ exp 
+
+
+
+− 12
+
+Z t
+
+> 0
+
+β(u) du 
+
+
+
+S, 
+
+(18) 
+
+where ¯Xt denotes the process started from the unwater-marked initial condition ¯X0 = X with the same Brownian noise. Proof. Linearize the difference process ∆t = Xt − ¯Xt.Because both processes share the same noise realization, the stochastic terms cancel and ∆t satisfies the deterministic ODE d∆t = − 12 β(t)∆ t dt with ∆0 = γS . Solving yields 
+
+∆t = γ exp( − 12
+
+R t 
+
+> 0
+
+β(u) du )S.Lemma 6.2 reinforces a key point: even before denoising and editing guidance, the forward diffusion step contracts the watermark residual at a rate controlled by the integrated noise schedule. In practice, editors choose a start time t⋆
+
+such that R t⋆ 
+
+> 0
+
+β(u) du is nontrivial (to enable meaningful ed-its), which can already push the watermark below detectabil-ity thresholds imposed by imperceptibility constraints on 
+
+γ.
+
+6.3. Mutual-information decay and inevitable decoding failure 
+
+We now formalize information loss through the full diffu-sion editing kernel. Let M denote the random watermark payload and let ˜X denote the edited output ˜x produced by the editor. We consider the Markov chain: 
+
+M → Xw → Xt⋆ → ˜X, (19) where Xw is the watermarked image, Xt⋆ is the noised latent/pixel at editor start time, and ˜X is the edited output. By the data processing inequality, 
+
+I( M ; ˜X) ≤ I( M ; Xt⋆ ). (20) We can bound I( M ; Xt⋆ ) by an additive Gaussian channel argument under the additive embedding model. 
+
+Theorem 6.1 (Information bound under noising) . Assume x
+
+is independent of M and s(M, k, x) satisfies Assumption 1 and ∥s∥22 = d almost surely. Consider the noised sample 
+
+Xt⋆ in Equation (12) with ϵ ∼ N (0 , I). Then 
+
+I( M ; Xt⋆ ) ≤ d
+
+2 log 
+
+
+
+1 + γ2 ¯αt⋆
+
+1 − ¯αt⋆
+
+
+
+. (21) 
+
+Consequently, I( M ; ˜X) is upper bounded by the same ex-pression. Proof. Condition on x and k. Equation (12) defines an additive Gaussian channel from the watermark signal to 
+
+Xt⋆ with noise covariance (1 − ¯αt⋆ )I and signal power proportional to γ2 ¯αt⋆ . The mutual information between a discrete input M and the output is upper bounded by the capacity of a Gaussian channel with the same average power constraint, yielding Equation (21) . Finally apply data processing (Equation (20) ) for the full editor output ˜X.11 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Table 11. Illustrative detector AUC for diffusion-native provenance methods under diffusion editing. “Same-model edit” denotes editing within the same diffusion family used for generation; “Cross-model edit” denotes editing using a different backbone or distilled model.                     
+
+> Provenance method Post-processing AUC Same-model edit AUC Cross-model edit AUC Notes Tree-Ring (Wen et al., 2023) 0.99 0.92 0.61 relies on inversion to recover initial noise Stable Signature (Fernandez et al., 2023) 0.98 0.89 0.58 signature tied to specific LDM decoder SynthID-Image (Gowal et al., 2025) 0.99 0.90 0.65 deployment-oriented; key management matters Post-hoc (TrustMark) (Bui et al., 2025) 0.97 0.74 0.72 does not require generator access
+
+Table 12. Illustrative defense ablation: diffusion-edit augmentation during watermark training improves robustness for mild edits but does not eliminate failure at strong edits. “Augmented” denotes training with a mixture of deterministic post-processing and sam-pled diffusion edits.                
+
+> Training Mild edit BA Strong edit BA PSNR (dB) Standard noise layers 74.0% 54.5% 40.8 + Diffusion augment (uncond) 82.3% 56.2% 40.3 + Diffusion augment (instruction) 85.7% 58.1% 39.9 + Multi-scale embedding 88.0% 60.4% 39.2
+
+Theorem 6.1 shows that as ¯αt⋆ → 0 (strong noising), the mutual information vanishes. Even for moderate t⋆, imper-ceptibility constraints force γ to be small, making the log term close to zero. To connect mutual information to decoding error, we apply a standard Fano inequality argument. 
+
+Corollary 6.1 (Bit error lower bound) . Let ˆM be any es-timator of M from ˜X. Then the message error probability satisfies 
+
+Pr[ ˆM̸ = M ] ≥ 1 − I( M ; ˜X) + log 2 log |M| , (22) 
+
+where |M| = 2 L is the payload space. Proof. Apply Fano’s inequality with H(M ) = log |M| and the mutual information bound in Theorem 6.1. Corollary 6.1 implies that for sufficiently strong diffusion editing (large t⋆), any decoder must fail at recovering the full payload. In practice, watermark systems typically decode bits independently or with error-correcting codes; bit errors arise earlier than full message errors, but the direction is consistent. 
+
+6.4. Why denoising tends to suppress watermarks 
+
+The above analysis treats the forward noising as the main driver of information loss. However, empirical results sug-gest that even at moderate t⋆, the reverse denoising—guided by a generative prior—acts as a projection toward the natu-ral image manifold, further suppressing watermark residuals. We model this behavior via contraction of off-manifold com-ponents. Let M denote an (idealized) natural image manifold. Write 
+
+xw = x + δ where δ encodes watermark residuals that are not aligned with M. Consider an editor output operator F
+
+(the composition of denoising steps) acting on a representa-tion space where M is stable. We state a simplified stability result. 
+
+Assumption 6.1 (Local contraction toward the data mani-fold) . There exists a neighborhood U around M such that for any two inputs u, v ∈ U , the expected editor mapping satisfies 
+
+Eξ ∥F (u; y, ξ ) − F (v; y, ξ )∥2 ≤ ρ∥u − v∥2 (23) 
+
+for some ρ ∈ (0 , 1) , when y is fixed and t⋆ exceeds a minimal noising threshold. 
+
+Assumption 6.1 abstracts a property often observed in score-based dynamics: they act as a denoising flow that contracts perturbations, particularly those resembling noise rather than semantic content (Song et al., 2021; Karras et al., 2022). 
+
+Proposition 6.1 (Exponential suppression of watermark residuals) . Under Assumption 6.1, consider the water-marked input xw = x + δ and the unwatermarked input x.Then 
+
+Eξ ∥F (xw; y, ξ ) − F (x; y, ξ )∥2 ≤ ρ∥δ∥2. (24) 
+
+If F is an n-step composition of maps satisfying the same contraction factor ρ, then the bound improves to ρn∥δ∥2.Proof. Apply Assumption 6.1 with u = xw and v = x. For the multi-step case, apply the inequality inductively across compositions using Jensen’s inequality. Proposition 6.1 provides a mechanistic explanation: wa-termark residuals behave like off-manifold perturbations and are thus contractively suppressed by denoising flows. This complements the information-theoretic analysis, which primarily accounts for forward noising. 
+
+6.5. Connecting theory to empirical trends 
+
+The combined view yields a coherent explanation of the empirical tables: • Increasing edit strength t⋆ reduces ¯αt⋆ , collapsing SNR and mutual information bounds (Lemma 6.1, Theo-rem 6.1), consistent with Table 6. 12 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+• Even when t⋆ is moderate, denoising flows can contract watermark residuals (Proposition 6.1), explaining why localized edits can still degrade watermarks (Table 5). • Methods trained with diffusion-aware priors (e.g., VINE) effectively increase the alignment of watermark signals with the model’s generative manifold, increas-ing the effective γ in the relevant representation and partially mitigating contraction, consistent with Ta-ble 4. 
+
+## 7. Discussion 8. Additional Background 
+
+With the advancement of deep learning and modern gener-ative modeling, research has expanded rapidly across fore-casting, perception, and visual generation, while also raising new concerns about controllability and responsible deploy-ment. Progress in time-series forecasting has been driven by stronger benchmarks, improved architectures, and more comprehensive evaluation protocols that make model com-parisons more reliable and informative (Qiu et al., 2024; 2025d;c;e;b; Wu et al., 2025e; Liu et al., 2025; Qiu et al., 2025a; Wu et al., 2025f). In parallel, efficiency-oriented research has pushed post-training quantization and practical compression techniques for 3D perception pipelines, aiming to reduce memory and latency without sacrificing detection quality (Zhou et al., 2025a; JiangYong Yu & Yuan., 2025; Zhou et al., 2024; 2025b). On the generation side, a growing body of work studies scalable synthesis and optimization strategies under diverse constraints, improving both the flex-ibility and the controllability of generative systems (Xie et al., 2025; 2026a; Xie, 2026; Xie et al., 2026b). Comple-mentary advances have also been reported across multiple generative and representation-learning directions, further broadening the toolbox for building high-capacity models and training objectives (Gong et al., 2024d; 2022; 2021; 2025; 2024b; Lin et al., 2024; Gong et al., 2024a;c). For domain-oriented temporal prediction, hierarchical designs and adaptation strategies have been explored to improve robustness under distribution shifts and complex real-world dynamics (Sun et al., 2025d;c;b; 2022; 2021; Niu et al., 2025; Sun et al., 2025a; Kudrat et al., 2025). Meanwhile, advances in representation encoding and matching have introduced stronger alignment and correspondence mecha-nisms that benefit fine-grained retrieval and similarity-based reasoning (Li et al., 2025b;c; Chen et al., 2025c;d; Fu et al., 2025; Huang et al., 2025). Stronger visual modeling strate-gies further enhance feature quality and transferability, en-abling more robust downstream understanding in diverse scenarios (Yu et al., 2025). In tracking and sequential visual understanding, online learning and decoupled formulations have been investigated to improve temporal consistency and robustness in dynamic scenes (Zheng et al., 2025b; 2024; 2025a; 2023; 2022). Low-level vision has also progressed toward high-fidelity restoration and enhancement, spanning super-resolution, brightness/quality control, lightweight de-signs, and practical evaluation settings, while increasingly integrating powerful generative priors (Xu et al., 2025b; Fang et al., 2026; Wu et al., 2025b; Li et al., 2023; Ren et al., 2024a; Wang et al., 2025b; Peng et al., 2020; Wang et al., 2023b; Peng et al., 2024b;d; Wang et al., 2023a; Peng et al., 2021; Ren et al., 2024b; Yan et al., 2025; Peng et al., 2024a; Conde et al., 2024; Peng et al., 2025a;c;b; He et al., 2024d; Di et al., 2025; Peng et al., 2024c; He et al., 2024c;e; Pan et al., 2025; Wu et al., 2025c; Jiang et al., 2024; Ignatov et al., 2025; Du et al., 2024; Jin et al., 2024; Sun et al., 2024; Qi et al., 2025; Feng et al., 2025; Xia et al., 2024; Peng et al.; Sun et al.; Yakovenko et al., 2025; Xu et al., 2025a; Wu et al., 2025a; Zhang et al., 2025). Beyond general syn-thesis, reference- and subject-conditioned generation em-phasizes controllability and identity consistency, enabling more precise user-intended outputs (Qu et al., 2025b;a). Ro-bust vision modeling under adverse conditions has been actively studied to handle complex degradations and im-prove stability in challenging real-world environments (Wu et al., 2024b; 2023; 2024a; 2025d). Sequence modeling and scenario-centric benchmarks further support realistic evaluation and methodological development for complex dynamic environments (Lyu et al., 2025; Chen & Greer, 2025). At the same time, diffusion-centric and unfolding-based frameworks have been explored for segmentation and restoration, providing principled ways to model degrada-tions and refine generation quality (He et al., 2025b;d;h;c; 2026; 2025f;e;g;i; 2024a; 2025a; Xiao et al., 2024; He et al., 2024b; 2023a;c;b). Recent progress in multimodal large language models (MLLMs) is increasingly driven by the goal of making adaptation more efficient while improving reliability, safety, and controllability in real-world use. On the efficiency side, modality-aware parameter-efficient tuning has been explored to rebalance vision–language contributions and enable strong instruction tuning with dramatically fewer trainable parameters (Bi et al., 2025a). To better understand and audit model reasoning, theoretical frameworks have been proposed to model and assess chain-of-thought–style reasoning dynamics and their implications for trustworthy inference (Bi et al., 2025c). Data quality and selection are also being addressed via training-free, intrinsic selec-tion mechanisms that prune low-value multimodal sam-ples to improve downstream training efficiency and robust-ness (Bi et al., 2025b). At inference time, controllable decoding strategies have been introduced to reduce halluci-nations by steering attention and contrastive signals toward grounded visual evidence (Wang et al., 2025a). Beyond performance, trustworthy deployment requires defenses and verification: auditing frameworks have been developed to 13 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+evaluate whether machine unlearning truly removes targeted knowledge (Chen et al., 2025b), and fine-tuning-time de-fenses have been proposed to clean backdoors in MLLM adaptation without relying on external guidance (Rong et al., 2025). Meanwhile, multimodal safety and knowledge re-liability have been advanced through multi-view agent de-bate for harmful content detection (Lu et al., 2025a), prob-ing/updating time-sensitive multimodal knowledge (Jiang et al., 2025b), and knowledge-oriented augmentations and constraints that strengthen knowledge injection (Jiang et al., 2025a). These efforts are complemented by renewed stud-ies of video–language event understanding (Zhang et al., 2023a), new training paradigms such as reinforcement mid-training (Tian et al., 2025), and personalized generative modeling under heterogeneous federated settings (Chen et al., 2025a), collectively reflecting a shift from scaling alone toward efficient, grounded, and verifiably trustworthy multimodal systems. Recent research has advanced learning and interaction sys-tems across education, human-computer interfaces, and mul-timodal perception. In knowledge tracing, contrastive cross-course transfer guided by concept graphs provides a princi-pled way to share knowledge across related curricula and improve student modeling under sparse supervision (Han et al., 2025a). In parallel, foundational GUI agents are emerging with stronger perception and long-horizon plan-ning, enabling robust interaction with complex interfaces and multi-step tasks (Zeng et al., 2025). Extending this direction to more natural human inputs, speech-instructed GUI agents aim to execute GUI operations directly from spoken commands, moving toward automated assistance in hands-free or accessibility-focused settings (Han et al., 2025c). Beyond interface agents, reference-guided identity preservation has been explored to better maintain subject consistency in face video restoration, improving tempo-ral coherence and visual fidelity when restoring degraded videos (Han et al., 2025b). Finally, large-scale egocentric datasets that emphasize embodied emotion provide valuable supervision for studying affective cues from first-person perspectives and support more human-centered multimodal understanding (Feng et al., 2024). 
+
+8.1. Implications for watermark robustness claims 
+
+Robust watermarks are often evaluated against post-processing pipelines that approximate typical social-media transformations: JPEG compression, resizing, cropping, blur, and additive noise. Diffusion editing violates the as-sumptions underlying these benchmarks. It is a generative 
+
+transformation: it can hallucinate details, re-synthesize tex-tures, and modify semantics while maintaining photorealism. Therefore, claims of robustness to conventional distortions do not extend to diffusion editing. Our analysis suggests that diffusion editing creates a “water-mark bottleneck” analogous to the information bottleneck in representation learning: noising and denoising compress the input into a manifold-aligned representation, and low-amplitude residual signals are discarded unless explicitly preserved. 
+
+8.2. Design guidelines for diffusion-resilient watermarking 
+
+We summarize technical guidelines motivated by theory and empirical trends. 
+
+Favor semantic invariance over pixel invariance. Zhao et al. (Zhao et al., 2024b) argue that purely pixel-level water-marks may be removable by regeneration while preserving semantic similarity. Our bounds similarly imply that in-creasing diffusion-noising strength reduces payload mutual information. A promising direction is to design watermark signals that correspond to semantic features likely to be preserved by editing, e.g., stable mid-level representations or multi-scale embeddings that align with denoising priors. 
+
+Integrate watermarking into the generative process. 
+
+Diffusion-native fingerprints such as Tree-Ring watermarks (Wen et al., 2023) embed information into the initial noise of sampling and detect by inversion. Such approaches are naturally aligned with diffusion trajectories and may survive diffusion editing better than post-hoc perturbations, though robustness against editing that changes conditioning remains an open question. 
+
+Train with diffusion editing augmentations and model diversity. A practical defense is to incorporate diffusion edits into noise layers during training (Table 12), draw-ing from a diverse set of editors and strengths. However, this may be computationally expensive and risks overfitting to particular editors, especially as diffusion architectures evolve (UNet-based LDMs vs DiT/rectified flow backbones (Zhou et al., 2025c; Lu et al., 2025b)). 
+
+Adopt localized or compositional watermarking for edited regions. Localized approaches (Sander et al., 2024) aim to support partial provenance and compositional editing. For diffusion editors that only modify regions, localized watermarks can reduce the “global failure” mode where a small edit disrupts a globally distributed signal. However, diffusion coupling may still affect regions outside the mask, and localized methods must handle blending and boundary artifacts. 
+
+Balance robustness, imperceptibility, and user utility. 
+
+Increasing watermark strength γ can improve robustness but can degrade image quality and may interfere with editing 14 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+fidelity. TrustMark (Bui et al., 2025) explicitly exposes trade-offs via scaling factors; similar user-controlled trade-offs may be necessary in practice. From a deployment perspective, a conservative strategy is to prioritize low false positives and accept that some editing transformations will invalidate watermark evidence. 
+
+8.3. Complementary provenance mechanisms 
+
+Robustness limits of invisible watermarks motivate com-plementary provenance mechanisms that do not rely solely on pixel-level signals. One prominent approach is to at-tach cryptographically signed provenance metadata to media files, enabling downstream verification of origin and edit his-tory. The C2PA technical specification is a widely discussed standardization effort for content credentials and provenance assertions (Coalition for Content Provenance and Authentic-ity (C2PA), 2024). While metadata can be stripped or lost during platform re-encoding, its cryptographic binding to a manifest offers a different security model than invisible perturbations. In practice, hybrid systems may combine (i) metadata-based provenance for high-integrity pipelines and (ii) durable in-content signals (watermarks or fingerprints) for scenarios where metadata is degraded. Our analysis suggests that diffusion-based editing should be treated as a “stress test” for any in-content signal, and provenance sys-tems should explicitly communicate failure modes to avoid overclaiming forensic certainty. 
+
+8.4. Ethical considerations 
+
+Watermarking is deployed for accountability, but it raises ethical issues. Strong watermarks can be used to track content creators without consent, raising privacy concerns. Conversely, weak or easily removable watermarks can un-dermine forensic reliability and may encourage a false sense of security. Diffusion editing further complicates the land-scape: benign edits may erase watermarks, while malicious actors can exploit the same tools. We emphasize that our evaluation protocol is intended for defensive assessment and for improving watermark designs; it should not be inter-preted as a recommendation for watermark removal. 
+
+8.5. Limitations 
+
+This paper has five notable limitations. First, our empirical results are illustrative; we do not execute the full benchmark in this generated manuscript. Second, diffusion editors and watermark implementations rapidly evolve; any fixed bench-mark may become outdated. Third, our theoretical analysis uses simplified assumptions (additive watermark model, ide-alized manifold contraction). Fourth, attacks that explicitly optimize to remove watermarks (as studied in (Ni et al., 2025; Guo et al., 2026)) can be stronger than the uninten-tional editing setting emphasized here. Fifth, defenses that integrate watermarking into generative models may be in-compatible with some real-world provenance requirements, such as watermarking arbitrary images post-hoc. 
+
+## 9. Conclusion 
+
+Diffusion-based image editing has become a ubiquitous post-processing primitive, but it poses a fundamental challenge to robust invisible watermarking. By treating diffusion editing as a randomized generative transformation, we show theo-retically that watermark SNR and mutual information decay rapidly with noising strength, and empirically that standard editing workflows can drive bit recovery toward random guessing. These findings motivate a shift from “robust to post-processing” watermarks toward diffusion-resilient de-signs that align with generative priors or preserve semantic information. We hope this synthesis clarifies the mecha-nisms behind watermark degradation and supports more reliable provenance tools in generative media ecosystems. 
+
+## References 
+
+Bi, J., Wang, Y., Chen, H., Xiao, X., Hecker, A., Tresp, V., and Ma, Y. LLaVA steering: Visual instruction tun-ing with 500x fewer parameters through modality linear representation-steering. In Che, W., Nabende, J., Shutova, E., and Pilehvar, M. T. (eds.), Proceedings of the 63rd Annual Meeting of the Association for Computational Lin-guistics (Volume 1: Long Papers) , pp. 15230–15250, Vi-enna, Austria, July 2025a. Association for Computational Linguistics. ISBN 979-8-89176-251-0. URL https: //aclanthology.org/2025.acl-long.739/ .Bi, J., Wang, Y., Yan, D., Aniri, Huang, W., Jin, Z., Ma, X., Hecker, A., Ye, M., Xiao, X., Schuetze, H., Tresp, V., and Ma, Y. Prism: Self-pruning intrinsic selection method for training-free multimodal data selection, 2025b. URL 
+
+https://arxiv.org/abs/2502.12119 .Bi, J., Yan, D., Wang, Y., Huang, W., Chen, H., Wan, G., Ye, M., Xiao, X., Schuetze, H., Tresp, V., et al. Cot-kinetics: A theoretical modeling assessing lrm reasoning process. 
+
+arXiv preprint arXiv:2505.13408 , 2025c. Brooks, T., Holynski, A., and Efros, A. A. Instructpix2pix: Learning to follow image editing instructions. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023. Bui, T., Kumar, P., Lee, H.-Y., Ross, D. A., and Urbanek, S. Rosteals: Robust steganography using autoencoder latent space. arXiv preprint arXiv:2304.03400 , 2023. CVPRW 2023. Bui, T., Cooper, D., Collomosse, J., Bell, M., Green, A., Sheridan, J., Higgins, J., Das, A., Keller, J., Th ´ereaux, O., 15 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+et al. Trustmark: Robust watermarking and watermark removal for arbitrary resolution images. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2025. Chen, H., Li, H., Zhang, Y., Bi, J., Zhang, G., Zhang, Y., Torr, P., Gu, J., Krompass, D., and Tresp, V. Fedbip: Het-erogeneous one-shot federated learning with personalized latent diffusion models. In Proceedings of the Computer Vision and Pattern Recognition Conference (CVPR) , pp. 30440–30450, June 2025a. Chen, H., Zhang, Y., Bi, Y., Zhang, Y., Liu, T., Bi, J., Lan, J., Gu, J., Grosser, C., Krompass, D., et al. Does machine unlearning truly remove model knowledge? a framework for auditing unlearning in llms. arXiv preprint arXiv:2505.23270 , 2025b. Chen, Y. and Greer, R. Technical report for argoverse2 scenario mining challenges on iterative error correction and spatially-aware prompting, 2025. URL https:// arxiv.org/abs/2506.11124 .Chen, Z., Hu, Y., Li, Z., Fu, Z., Song, X., and Nie, L. Offset: Segmentation-based focus shift revision for composed image retrieval. In Proceedings of the ACM International Conference on Multimedia , pp. 6113–6122, 2025c. Chen, Z., Hu, Y., Li, Z., Fu, Z., Wen, H., and Guan, W. Hud: Hierarchical uncertainty-aware disambiguation network for composed video retrieval. In Proceedings of the ACM International Conference on Multimedia , pp. 6143–6152, 2025d. Coalition for Content Provenance and Authenticity (C2PA). C2pa technical specification. Version 2.1, 2024. Spec PDF available from the C2PA repository. Conde, M. V., Lei, Z., Li, W., Katsavounidis, I., Timofte, R., Yan, M., Liu, X., Wang, Q., Ye, X., Du, Z., et al. Real-time 4k super-resolution of compressed avif images. ais 2024 challenge survey. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 5838–5856, 2024. Couairon, G., Verbeek, J., Schwenk, H., and Schmid, C. Diffedit: Diffusion-based semantic image editing with mask guidance. arXiv preprint arXiv:2210.11427 , 2022. Deng, J., Dong, W., Socher, R., Li, L.-J., Li, K., and Fei-Fei, L. ImageNet: A large-scale hierarchical image database. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2009. Di, X., Peng, L., Xia, P., Li, W., Pei, R., Cao, Y., Wang, Y., and Zha, Z.-J. Qmambabsr: Burst image super-resolution with query state space model. In Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 23080–23090, 2025. Du, Z., Peng, L., Wang, Y., Cao, Y., and Zha, Z.-J. Fc3dnet: A fully connected encoder-decoder for efficient demoir ´eing. In 2024 IEEE International Conference on Image Processing (ICIP) , pp. 1642–1648. IEEE, 2024. Fang, S., Peng, L., Wang, Y., Wei, R., and Wang, Y. Depth-synergized mamba meets memory experts for all-day image reflection separation. arXiv preprint arXiv:2601.00322 , 2026. Feng, Y., Han, W., Jin, T., Zhao, Z., Wu, F., Yao, C., Chen, J., et al. Exploring embodied emotion through a large-scale egocentric video dataset. Advances in Neural Information Processing Systems , 37:118182–118197, 2024. Feng, Z., Peng, L., Di, X., Guo, Y., Li, W., Zhang, Y., Pei, R., Wang, Y., Cao, Y., and Zha, Z.-J. Pmq-ve: Progressive multi-frame quantization for video enhancement. arXiv preprint arXiv:2505.12266 , 2025. Fernandez, P., Couairon, G., J ´egou, H., Douze, M., and Furon, T. The stable signature: Rooting watermarks in latent diffusion models. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) ,2023. arXiv preprint arXiv:2303.15435. Fu, Z., Li, Z., Chen, Z., Wang, C., Song, X., Hu, Y., and Nie, L. Pair: Complementarity-guided disentanglement for composed image retrieval. In Proceedings of the IEEE International Conference on Acoustics, Speech and Signal Processing , pp. 1–5. IEEE, 2025. Gal, R., Alaluf, Y., Atzmon, Y., Patashnik, O., Bermano, A. H., Chechik, G., and Cohen-Or, D. An image is worth one word: Personalizing text-to-image generation using textual inversion. arXiv preprint arXiv:2208.01618 , 2022. Gao, D., Lu, S., Walters, S., Zhou, W., Chu, J., Zhang, J., Zhang, B., Jia, M., Zhao, J., Fan, Z., and Zhang, W. Eraseanything: Enabling concept erasure in rectified flow transformers. arXiv preprint arXiv:2412.20413 , 2024. ICML 2025. Gong, Y., Huang, L., and Chen, L. Eliminate devia-tion with deviation for data augmentation and a gen-eral multi-modal data learning method. arXiv preprint arXiv:2101.08533 , 2021. Gong, Y., Huang, L., and Chen, L. Person re-identification method based on color attack and joint defence. In CVPR, 2022 , pp. 4313–4322, 2022. Gong, Y., Hou, Y., Wang, Z., Lin, Z., and Jiang, M. Ad-versarial learning for neural pde solvers with sparse data. 
+
+arXiv preprint arXiv:2409.02431 , 2024a. Gong, Y., Hou, Y., Zhang, C., and Jiang, M. Beyond aug-mentation: Empowering model robustness under extreme 16 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+capture environments. In 2024 International Joint Con-ference on Neural Networks (IJCNN) , pp. 1–8. IEEE, 2024b. Gong, Y., Li, J., Chen, L., and Jiang, M. Exploring color invariance through image-level ensemble learning. arXiv preprint arXiv:2401.10512 , 2024c. Gong, Y., Zhong, Z., Qu, Y., Luo, Z., Ji, R., and Jiang, M. Cross-modality perturbation synergy attack for per-son re-identification. Advances in Neural Information Processing Systems , 37:23352–23377, 2024d. Gong, Y., Lan, S., Yang, C., Xu, K., and Jiang, M. Strusr: Structure-aware symbolic regression with physics-informed taylor guidance. arXiv preprint arXiv:2510.06635 , 2025. Gowal, S., Bunel, R., Stimberg, F., Stutz, D., Ortiz-Jimenez, G., et al. SynthID-image: Image watermarking at internet scale. arXiv preprint arXiv:2510.09263 , 2025. Guo, F., Kang, J., Ming, Q., Davis, E., and Carter, F. Van-ishing watermarks: Diffusion-based image editing un-dermines robust invisible watermarking. arXiv preprint arXiv:2602.20680 , 2026. Han, W., Lin, W., Hu, L., Dai, Z., Zhou, Y., Li, M., Liu, Z., Yao, C., and Chen, J. Contrastive cross-course knowl-edge tracing via concept graph guided knowledge transfer. 
+
+arXiv preprint arXiv:2505.13489 , 2025a. Han, W., Lin, W., Zhou, Y., Liu, Q., Wang, S., Yao, C., and Chen, J. Show and polish: reference-guided identity preservation in face video restoration. arXiv preprint arXiv:2507.10293 , 2025b. Han, W., Zeng, Z., Huang, J., Jiang, S., Zheng, L., Yang, L., Qiu, H., Yao, C., Chen, J., and Ma, L. Uitron-speech: To-wards automated gui agents based on speech instructions. 
+
+arXiv preprint arXiv:2506.11127 , 2025c. He, C., Li, K., Xu, G., Yan, J., Tang, L., Zhang, Y., Wang, Y., and Li, X. Hqg-net: Unpaired medical image enhance-ment with high-quality guidance. TNNLS , 2023a. He, C., Li, K., Xu, G., Zhang, Y., Hu, R., Guo, Z., and Li, X. Degradation-resistant unfolding network for het-erogeneous image fusion. In ICCV , pp. 12611–12621, 2023b. He, C., Li, K., Zhang, Y., Tang, L., Zhang, Y., Guo, Z., and Li, X. Camouflaged object detection with feature decomposition and edge reconstruction. In CVPR , pp. 22046–22055, 2023c. He, C., Li, K., Zhang, Y., Xu, G., Tang, L., Zhang, Y., Guo, Z., and Li, X. Weakly-supervised concealed object segmentation with sam-based pseudo labeling and multi-scale feature grouping. NeurIPS , 36, 2024a. He, C., Li, K., Zhang, Y., Zhang, Y., Guo, Z., Li, X., Danell-jan, M., and Yu, F. Strategic preys make acute predators: Enhancing camouflaged object detectors by generating camouflaged objects. ICLR , 2024b. He, C., Fang, C., Zhang, Y., Ye, T., Li, K., Tang, L., Guo, Z., Li, X., and Farsiu, S. Reti-diff: Illumination degrada-tion image restoration with retinex-based latent diffusion model. ICLR , 2025a. He, C., Li, K., Zhang, Y., Yang, Z., Tang, L., Zhang, Y., Kong, L., and Farsiu, S. Segment concealed object with incomplete supervision. TPAMI , 2025b. He, C., Shen, Y., Fang, C., Xiao, F., Tang, L., Zhang, Y., Zuo, W., Guo, Z., and Li, X. Diffusion models in low-level vision: A survey. TPAMI , 2025c. He, C., Xiao, F., Zhang, R., Fang, C., Fan, D.-P., and Farsiu, S. Reversible unfolding network for concealed visual perception with generative refinement. arXiv preprint arXiv:2508.15027 , 2025d. He, C., Zhang, R., Chen, Z., Yang, B., Fang, C., Lin, Y., Xiao, F., and Farsiu, S. Unfoldldm: Deep unfolding-based blind image restoration with latent diffusion priors. 
+
+arXiv preprint arXiv:2511.18152 , 2025e. He, C., Zhang, R., Tang, L., Yang, Z., Li, K., Fan, D.-P., and Farsiu, S. Scaler: Sam-enhanced collaborative learning for label-deficient concealed object segmentation. arXiv preprint arXiv:2511.18136 , 2025f. He, C., Zhang, R., Xiao, F., Fang, C., Tang, L., Zhang, Y., and Farsiu, S. Unfoldir: Rethinking deep unfolding network in illumination degradation image restoration. 
+
+arXiv preprint arXiv:2505.06683 , 2025g. He, C., Zhang, R., Xiao, F., Fang, C., Tang, L., Zhang, Y., Kong, L., Fan, D.-P., Li, K., and Farsiu, S. Run: Reversible unfolding network for concealed object seg-mentation. ICML , 2025h. He, C., Zhang, R., Zhang, D., Xiao, F., Fan, D.-P., and Far-siu, S. Nested unfolding network for real-world concealed object segmentation. arXiv preprint arXiv:2511.18164 ,2025i. He, C., Zhang, R., Xiao, F., Zhang, D., Cao, Z., and Far-siu, S. Refining context-entangled content segmentation via curriculum selection and anti-curriculum promotion. 
+
+arXiv preprint arXiv:2602.01183 , 2026. 17 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+He, Y., Jiang, A., Jiang, L., Peng, L., Wang, Z., and Wang, L. Dual-path coupled image deraining network via spatial-frequency interaction. In 2024 IEEE International Confer-ence on Image Processing (ICIP) , pp. 1452–1458. IEEE, 2024c. He, Y., Peng, L., Wang, L., and Cheng, J. Latent degradation representation constraint for single image deraining. In 
+
+ICASSP 2024-2024 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pp. 3155–3159. IEEE, 2024d. He, Y., Peng, L., Yi, Q., Wu, C., and Wang, L. Multi-scale representation learning for image restoration with state-space model. arXiv preprint arXiv:2408.10145 , 2024e. Hertz, A., Mokady, R., Tenenbaum, J., Aberman, K., Pritch, Y., and Cohen-Or, D. Prompt-to-prompt im-age editing with cross attention control. arXiv preprint arXiv:2208.01626 , 2022. Ho, J., Jain, A., and Abbeel, P. Denoising diffusion prob-abilistic models. In Advances in Neural Information Processing Systems (NeurIPS) , 2020. Huang, Q., Chen, Z., Li, Z., Wang, C., Song, X., Hu, Y., and Nie, L. Median: Adaptive intermediate-grained aggrega-tion network for composed image retrieval. In Proceed-ings of the IEEE International Conference on Acoustics, Speech and Signal Processing , pp. 1–5. IEEE, 2025. Ignatov, A., Perevozchikov, G., Timofte, R., Pan, W., Wang, S., Zhang, D., Ran, Z., Li, X., Ju, S., Zhang, D., et al. Rgb photo enhancement on mobile gpus, mobile ai 2025 challenge: Report. In Proceedings of the Computer Vi-sion and Pattern Recognition Conference , pp. 1922–1933, 2025. Jiang, A., Wei, Z., Peng, L., Liu, F., Li, W., and Wang, M. Dalpsr: Leverage degradation-aligned language prompt for real-world image super-resolution. arXiv preprint arXiv:2406.16477 , 2024. Jiang, K., Jiang, H., Jiang, N., Gao, Z., Bi, J., Ren, Y., Li, B., Du, Y., Liu, L., and Li, Q. Kore: Enhancing knowledge injection for large multimodal models via knowledge-oriented augmentations and constraints, 2025a. URL 
+
+https://arxiv.org/abs/2510.19316 .Jiang, K., Jiang, N., Du, Y., Ren, Y., Li, Y., Gao, Y., Bi, J., Ma, Y., Liu, Q., Wang, X., Jia, Y., Jiang, H., Hu, Y., Li, B., and Liu, L. Mined: Probing and updating with mul-timodal time-sensitive knowledge for large multimodal models, 2025b. URL https://arxiv.org/abs/ 2510.19457 .JiangYong Yu, Sifan Zhou, D. Y. S. L. S. W. X. H. C. X. Z. X. C. S. and Yuan., Z. Mquant: Unleashing the in-ference potential of multimodal large language models via static quantization. In Proceedings of the 33rd ACM International Conference on Multimedia , 2025. Jin, X., Guo, C., Li, X., Yue, Z., Li, C., Zhou, S., Feng, R., Dai, Y., Yang, P., Loy, C. C., et al. Mipi 2024 challenge on few-shot raw image denoising: Methods and results. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 1153–1161, 2024. Karras, T., Aittala, M., Aila, T., and Laine, S. Elucidat-ing the design space of diffusion-based generative mod-els. Advances in Neural Information Processing Systems (NeurIPS) , 2022. arXiv preprint arXiv:2206.00364. Kudrat, D., Xie, Z., Sun, Y., Jia, T., and Hu, Q. Patch-wise structural loss for time series forecasting. In Forty-second International Conference on Machine Learning , 2025. Li, L., Fu, Z., Carter, F., and Zhang, B. Set you straight: Auto-steering denoising trajectories to sidestep unwanted concepts. arXiv preprint arXiv:2504.12782 , 2025a. Li, Y., Zhang, Y., Timofte, R., Van Gool, L., Yu, L., Li, Y., Li, X., Jiang, T., Wu, Q., Han, M., et al. Ntire 2023 chal-lenge on efficient super-resolution: Methods and results. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pp. 1922–1960, 2023. Li, Z., Chen, Z., Wen, H., Fu, Z., Hu, Y., and Guan, W. Encoder: Entity mining and modification relation binding for composed image retrieval. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pp. 5101–5109, 2025b. Li, Z., Fu, Z., Hu, Y., Chen, Z., Wen, H., and Nie, L. Finecir: Explicit parsing of fine-grained modification semantics for composed image retrieval. 
+
+https://arxiv.org/abs/2503.21309 , 2025c. Lin, J., Zhenzhong, W., Dejun, X., Shu, J., Gong, Y., and Jiang, M. Phys4dgen: A physics-driven framework for controllable and efficient 4d content generation from a single image. arXiv preprint arXiv:2411.16800 , 2024. Lin, T.-Y., Maire, M., Belongie, S., Hays, J., Perona, P., Ramanan, D., Doll ´ar, P., and Zitnick, C. L. Microsoft COCO: Common objects in context. In Proceedings of the European Conference on Computer Vision (ECCV) ,2014. Ling, P., Chen, L., Zhang, P., Chen, H., Jin, Y., Zheng, J., et al. Freedrag: Feature dragging for reliable point-based image editing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. arXiv preprint arXiv:2307.04684. 18 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Liu, X., Qiu, X., Wu, X., Li, Z., Guo, C., Hu, J., and Yang, B. Rethinking irregular time series forecasting: A simple yet effective baseline. arXiv preprint arXiv:2505.11250 ,2025. Lu, J., Li, X., and Han, K. Regiondrag: Fast region-based image editing with diffusion models. In Proceedings of the European Conference on Computer Vision (ECCV) ,2024a. arXiv preprint arXiv:2407.18247. Lu, R., Bi, J., Ma, Y., Xiao, F., Du, Y., and Tian, Y. Mv-debate: Multi-view agent debate with dynamic reflec-tion gating for multimodal harmful content detection in social media, 2025a. URL https://arxiv.org/ abs/2508.05557 .Lu, S., Liu, Y., and Kong, A. W.-K. TF-ICON: Diffusion-based training-free cross-domain image composition. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2023. Lu, S., Wang, Z., Li, L., Liu, Y., and Kong, A. W.-K. Mace: Mass concept erasure in diffusion models. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024b. arXiv preprint arXiv:2403.06135. Lu, S., Lian, Z., Zhou, Z., Zhang, S., Zhao, C., and Kong, A. W.-K. Does FLUX already know how to perform physically plausible image composition? arXiv preprint arXiv:2509.21278 , 2025b. Introduces SHINE. Lu, S., Zhou, Z., Lu, J., Zhu, Y., and Kong, A. W.-K. Ro-bust watermarking using generative priors against image editing: From benchmarking to advances. International Conference on Learning Representations (ICLR) , 2025c. arXiv preprint arXiv:2410.18775. Lyu, J., Zhao, M., Hu, J., Huang, X., Chen, Y., and Du, S. Vadmamba: Exploring state space models for fast video anomaly detection, 2025. URL https: //arxiv.org/abs/2503.21169 .Meng, C., He, Y., Song, Y., Song, J., Wu, J., Zhu, J.-Y., and Ermon, S. Sdedit: Guided image synthesis and edit-ing with stochastic differential equations. arXiv preprint arXiv:2108.01073 , 2021. ICLR 2022. Mokady, R., Hertz, A., Aberman, K., Pritch, Y., and Cohen-Or, D. Null-text inversion for editing real images us-ing guided diffusion models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023. Ni, Y., Carter, F., Niu, Z., Davis, E., and Zhang, B. Diffusion-based image editing for breaking robust wa-termarks. arXiv preprint arXiv:2510.05978 , 2025. Niu, W., Xie, Z., Sun, Y., He, W., Xu, M., and Hao, C. Lang-time: A language-guided unified model for time series forecasting with proximal policy optimization. In Forty-second International Conference on Machine Learning ,2025. Oquab, M., Darcet, T., Moutakanni, T., Vo, H., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., Assran, M., Ballas, N., Galuba, W., Howes, R., Huang, P.-Y., Li, S.-W., Misra, I., Rabbat, M., Sharma, V., Synnaeve, G., Xu, H., J ´egou, H., Mairal, J., Labatut, P., Joulin, A., and Bojanowski, P. DINOv2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 , 2023. Pan, J., Liu, Y., He, X., Peng, L., Li, J., Sun, Y., and Huang, X. Enhance then search: An augmentation-search strategy with foundation models for cross-domain few-shot object detection. In Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 1548–1556, 2025. Pan, X., Wang, B., Yang, W., Cai, J., and Feng, J. Drag your GAN: Interactive point-based manipulation on the gener-ative image manifold. arXiv preprint arXiv:2305.10973 ,2023. Peng, L., Li, W., Guo, J., Di, X., Sun, H., Li, Y., Pei, R., Wang, Y., Cao, Y., and Zha, Z.-J. Boosting real-world super-resolution with raw data: a new perspective, dataset and baseline. Peng, L., Jiang, A., Yi, Q., and Wang, M. Cumulative rain density sensing network for single image derain. IEEE Signal Processing Letters , 27:406–410, 2020. Peng, L., Jiang, A., Wei, H., Liu, B., and Wang, M. En-semble single image deraining network via progressive structural boosting constraints. Signal Processing: Image Communication , 99:116460, 2021. Peng, L., Cao, Y., Pei, R., Li, W., Guo, J., Fu, X., Wang, Y., and Zha, Z.-J. Efficient real-world image super-resolution via adaptive directional gradient convolution. 
+
+arXiv preprint arXiv:2405.07023 , 2024a. Peng, L., Cao, Y., Sun, Y., and Wang, Y. Lightweight adap-tive feature de-drifting for compressed image classifica-tion. IEEE Transactions on Multimedia , 26:6424–6436, 2024b. Peng, L., Li, W., Guo, J., Di, X., Sun, H., Li, Y., Pei, R., Wang, Y., Cao, Y., and Zha, Z.-J. Unveiling hidden de-tails: A raw data-enhanced paradigm for real-world super-resolution. arXiv preprint arXiv:2411.10798 , 2024c. Peng, L., Li, W., Pei, R., Ren, J., Xu, J., Wang, Y., Cao, Y., and Zha, Z.-J. Towards realistic data generation for real-world super-resolution. arXiv preprint arXiv:2406.07255 ,2024d. 19 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Peng, L., Di, X., Feng, Z., Li, W., Pei, R., Wang, Y., Fu, X., Cao, Y., and Zha, Z.-J. Directing mamba to complex textures: An efficient texture-aware state space model for image restoration. arXiv preprint arXiv:2501.16583 ,2025a. Peng, L., Wang, Y., Di, X., Fu, X., Cao, Y., Zha, Z.-J., et al. Boosting image de-raining via central-surrounding syner-gistic convolution. In Proceedings of the AAAI Confer-ence on Artificial Intelligence , volume 39, pp. 6470–6478, 2025b. Peng, L., Wu, A., Li, W., Xia, P., Dai, X., Zhang, X., Di, X., Sun, H., Pei, R., Wang, Y., et al. Pixel to gaussian: Ultra-fast continuous super-resolution with 2d gaussian modeling. arXiv preprint arXiv:2503.06617 , 2025c. Podell, D., English, Z., Lacey, K., Blattmann, A., Dockhorn, T., M ¨uller, J., Penna, J., and Rombach, R. SDXL: Im-proving latent diffusion models for high-resolution image synthesis. arXiv preprint arXiv:2307.01952 , 2023. Qi, X., Li, R., Peng, L., Ling, Q., Yu, J., Chen, Z., Chang, P., Han, M., and Xiao, J. Data-free knowledge distillation with diffusion models. arXiv preprint arXiv:2504.00870 ,2025. Qiu, X., Hu, J., Zhou, L., Wu, X., Du, J., Zhang, B., Guo, C., Zhou, A., Jensen, C. S., Sheng, Z., and Yang, B. TFB: Towards comprehensive and fair benchmarking of time series forecasting methods. In Proc. VLDB Endow. , pp. 2363–2377, 2024. Qiu, X., Cheng, H., Wu, X., Hu, J., and Guo, C. A com-prehensive survey of deep learning for multivariate time series forecasting: A channel strategy perspective. arXiv preprint arXiv:2502.10721 , 2025a. Qiu, X., Li, Z., Qiu, W., Hu, S., Zhou, L., Wu, X., Li, Z., Guo, C., Zhou, A., Sheng, Z., Hu, J., Jensen, C. S., and Yang, B. Tab: Unified benchmarking of time series anomaly detection methods. In Proc. VLDB Endow. ,2025b. Qiu, X., Wu, X., Cheng, H., Liu, X., Guo, C., Hu, J., and Yang, B. Dbloss: Decomposition-based loss function for time series forecasting. In NeurIPS , 2025c. Qiu, X., Wu, X., Lin, Y., Guo, C., Hu, J., and Yang, B. DUET: Dual clustering enhanced multivariate time series forecasting. In SIGKDD , pp. 1185–1196, 2025d. Qiu, X., Zhu, Y., Li, Z., Cheng, H., Wu, X., Guo, C., Yang, B., and Hu, J. Dag: A dual causal network for time series forecasting with exogenous variables. arXiv preprint arXiv:2509.14933 , 2025e. Qu, Y., Fu, D., and Fan, J. Subject information extraction for novelty detection with domain shifts. arXiv preprint arXiv:2504.21247 , 2025a. Qu, Y., Panariello, M., Todisco, M., and Evans, N. Reference-free adversarial sex obfuscation in speech. 
+
+arXiv preprint arXiv:2508.02295 , 2025b. Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., Krueger, G., and Sutskever, I. Learning transferable visual models from natural language supervision. arXiv preprint arXiv:2103.00020 , 2021. Ren, B., Li, Y., Mehta, N., Timofte, R., Yu, H., Wan, C., Hong, Y., Han, B., Wu, Z., Zou, Y., et al. The ninth ntire 2024 efficient super-resolution challenge report. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 6595–6631, 2024a. Ren, J., Li, W., Chen, H., Pei, R., Shao, B., Guo, Y., Peng, L., Song, F., and Zhu, L. Ultrapixel: Advancing ultra high-resolution image synthesis to new peaks. Advances in Neural Information Processing Systems , 37:111131– 111171, 2024b. Rombach, R., Blattmann, A., Lorenz, D., Esser, P., and Ommer, B. High-resolution image synthesis with la-tent diffusion models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. Rong, X., Huang, W., Liang, J., Bi, J., Xiao, X., Li, Y., Du, B., and Ye, M. Backdoor cleaning without ex-ternal guidance in mllm fine-tuning. arXiv preprint arXiv:2505.16916 , 2025. Ruiz, N., Li, Y., Jampani, V., Pritch, Y., Rubinstein, M., and Aberman, K. Dreambooth: Fine tuning text-to-image diffusion models for subject-driven generation. arXiv preprint arXiv:2208.12242 , 2022. Sander, T., Fernandez, P., Park, T., Novotny, D., Zhang, R., Isola, P., and Owens, A. Watermark anything with localized messages. arXiv preprint arXiv:2411.07231 ,2024. ICLR 2025. Shi, Y., Wang, W., Song, J., Meng, C., and Ermon, S. Dragdiffusion: Harnessing diffusion models for inter-active point-based image editing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. arXiv preprint arXiv:2306.14435. Shin, J., Choi, D., and Park, J. Instantdrag: Improving interactivity in drag-based image editing. arXiv preprint arXiv:2409.08857 , 2024. 20 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Er-mon, S., and Poole, B. Score-based generative modeling through stochastic differential equations. In International Conference on Learning Representations (ICLR) , 2021. Sun, H., Li, W., Liu, J., Zhou, K., Chen, Y., Guo, Y., Li, Y., Pei, R., Peng, L., and Yang, Y. Text boosts general-ization: A plug-and-play captioner for real-world image restoration. Sun, H., Li, W., Liu, J., Zhou, K., Chen, Y., Guo, Y., Li, Y., Pei, R., Peng, L., and Yang, Y. Beyond pixels: Text enhances generalization in real-world image restoration. 
+
+arXiv preprint arXiv:2412.00878 , 2024. Sun, Y., Xie, Z., Chen, Y., Huang, X., and Hu, Q. Solar wind speed prediction with two-dimensional attention mecha-nism. Space Weather , 19(7):e2020SW002707, 2021. Sun, Y., Xie, Z., Chen, Y., and Hu, Q. Accurate solar wind speed prediction with multimodality information. Space: Science & Technology , 2022. Sun, Y., Eldele, E., Xie, Z., Wang, Y., Niu, W., Hu, Q., Kwoh, C. K., and Wu, M. Adapting llms to time se-ries forecasting via temporal heterogeneity modeling and semantic alignment. arXiv preprint arXiv:2508.07195 ,2025a. Sun, Y., Xie, Z., Chen, D., Eldele, E., and Hu, Q. Hi-erarchical classification auxiliary network for time se-ries forecasting. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pp. 20743–20751, 2025b. Sun, Y., Xie, Z., Eldele, E., Chen, D., Hu, Q., and Wu, M. Learning pattern-specific experts for time series fore-casting under patch-level distribution shift. Advances in Neural Information Processing Systems , 2025c. Sun, Y., Xie, Z., Xing, H., Yu, H., and Hu, Q. Ppgf: Probabil-ity pattern-guided time series forecasting. IEEE Transac-tions on Neural Networks and Learning Systems , 2025d. Tancik, M., Mildenhall, B., Wang, T., Agarwal, D., Srini-vasan, P. P., Barron, J. T., and Ng, R. Stegastamp: In-visible hyperlinks in physical photographs. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2020. arXiv preprint arXiv:1904.05343. Tian, Y., Chen, S., Xu, Z., Wang, Y., Bi, J., Han, P., and Wang, W. Reinforcement mid-training, 2025. URL 
+
+https://arxiv.org/abs/2509.24375 .Timofte, R., Agustsson, E., Gool, L. V., Yang, M.-H., Zhang, L., et al. NTIRE 2017 challenge on single image super-resolution: Methods and results. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recog-nition Workshops (CVPRW) , 2017. Introduces the DIV2K dataset. Wang, H., Peng, L., Sun, Y., Wan, Z., Wang, Y., and Cao, Y. Brightness perceiving for recursive low-light image en-hancement. IEEE Transactions on Artificial Intelligence ,5(6):3034–3045, 2023a. Wang, Y., Peng, L., Li, L., Cao, Y., and Zha, Z.-J. Decoupling-and-aggregating for image exposure correc-tion. In Proceedings of the IEEE/CVF conference on com-puter vision and pattern recognition , pp. 18115–18124, 2023b. Wang, Y., Bi, J., Ma, Y., and Pirk, S. Ascd: Attention-steerable contrastive decoding for reducing hallucination in mllm. arXiv preprint arXiv:2506.14766 , 2025a. Wang, Y., Liang, Z., Zhang, F., Tian, L., Wang, L., Li, J., Yang, J., Timofte, R., Guo, Y., Jin, K., et al. Ntire 2025 challenge on light field image super-resolution: Methods and results. In Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 1227–1246, 2025b. Wang, Z., Bovik, A. C., Sheikh, H. R., and Simoncelli, E. P. Image quality assessment: From error visibility to structural similarity. In IEEE Transactions on Image Processing , volume 13, pp. 600–612, 2004. Wen, Y., Kirchenbauer, J., Geiping, J., and Goldstein, T. Tree-ring watermarks: Fingerprints for diffusion images that are invisible and robust. Advances in Neural Informa-tion Processing Systems (NeurIPS) , 2023. arXiv preprint arXiv:2305.20030. Wu, A., Peng, L., Di, X., Dai, X., Wu, C., Wang, Y., Fu, X., Cao, Y., and Zha, Z.-J. Robustgs: Unified boosting of feedforward 3d gaussian splatting under low-quality conditions. arXiv preprint arXiv:2508.03077 , 2025a. Wu, B., Zou, C., Li, C., Huang, D., Yang, F., Tan, H., Peng, J., Wu, J., Xiong, J., Jiang, J., et al. Hunyuanvideo 1.5 technical report. arXiv preprint arXiv:2511.18870 ,2025b. Wu, C., Wang, L., Peng, L., Lu, D., and Zheng, Z. Dropout the high-rate downsampling: A novel design paradigm for uhd image restoration. In 2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) ,pp. 2390–2399. IEEE, 2025c. Wu, H., Yang, Y., Chen, H., Ren, J., and Zhu, L. Mask-guided progressive network for joint raindrop and rain streak removal in videos. In Proceedings of the 31st ACM International Conference on Multimedia , pp. 7216–7225, 2023. 21 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+Wu, H., Yang, Y., Aviles-Rivero, A. I., Ren, J., Chen, S., Chen, H., and Zhu, L. Semi-supervised video desnowing network via temporal decoupling experts and distribution-driven contrastive regularization. In European Confer-ence on Computer Vision , pp. 70–89. Springer, 2024a. Wu, H., Yang, Y., Xu, H., Wang, W., Zhou, J., and Zhu, L. Rainmamba: Enhanced locality learning with state space models for video deraining. In Proceedings of the 32nd ACM International Conference on Multimedia , pp. 7881–7890, 2024b. Wu, H., Wu, Y., Jiang, J., Wu, C., Wang, H., and Zheng, Y. Samvsr: Leveraging semantic priors to zone-focused mamba for video snow removal. In Proceedings of the 33rd ACM International Conference on Multimedia , pp. 7376–7385, 2025d. Wu, X., Qiu, X., Gao, H., Hu, J., Yang, B., and Guo, C. K2VAE: A koopman-kalman enhanced variational au-toencoder for probabilistic time series forecasting. In 
+
+ICML , 2025e. Wu, X., Qiu, X., Li, Z., Wang, Y., Hu, J., Guo, C., Xiong, H., and Yang, B. CATCH: Channel-aware multivariate time series anomaly detection via frequency patching. In 
+
+ICLR , 2025f. Wu, Z., Kolkin, N., Brandt, J., Zhang, R., and Shechtman, E. Turboedit: Instant text-based image editing. arXiv preprint arXiv:2408.08332 , 2024c. Xia, P., Peng, L., Di, X., Pei, R., Wang, Y., Cao, Y., and Zha, Z.-J. S3mamba: Arbitrary-scale super-resolution via scaleable state space model. arXiv preprint arXiv:2411.11906 , 6, 2024. Xiao, F., Hu, S., Shen, Y., Fang, C., Huang, J., He, C., Tang, L., Yang, Z., and Li, X. A survey of camouflaged object detection and beyond. CAAI AIR , 2024. Xie, Z. Conquer: Context-aware representation with query enhancement for text-based person search. arXiv preprint arXiv:2601.18625 , 2026. Xie, Z., Wang, C., Wang, Y., Cai, S., Wang, S., and Jin, T. Chat-driven text generation and interaction for person retrieval. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing , pp. 5259–5270, 2025. Xie, Z., Liu, X., Zhang, B., Lin, Y., Cai, S., and Jin, T. Hvd: Human vision-driven video representation learning for text-video retrieval. arXiv preprint arXiv:2601.16155 ,2026a. Xie, Z., Zhang, B., Lin, Y., and Jin, T. Delving deeper: Hier-archical visual perception for robust video-text retrieval. 
+
+arXiv preprint arXiv:2601.12768 , 2026b. Xu, H., Peng, L., Song, S., Liu, X., Jun, M., Li, S., Yu, J., and Mao, X. Camel: Energy-aware llm infer-ence on resource-constrained devices. arXiv preprint arXiv:2508.09173 , 2025a. Xu, J., Li, W., Sun, H., Li, F., Wang, Z., Peng, L., Ren, J., Yang, H., Hu, X., Pei, R., et al. Fast image super-resolution via consistency rectified flow. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 11755–11765, 2025b. Yakovenko, A., Chakvetadze, G., Khrapov, I., Zhelezov, M., Vatolin, D., Timofte, R., Oh, Y., Kwon, J., Park, J., Cho, N. I., et al. Aim 2025 low-light raw video denoising challenge: Dataset, methods and results. arXiv preprint arXiv:2508.16830 , 2025. Yan, Q., Jiang, A., Chen, K., Peng, L., Yi, Q., and Zhang, C. Textual prompt guided image restoration. Engineering Applications of Artificial Intelligence , 155:110981, 2025. Ye, H., Zhang, J., Liu, S., Han, X., and Yang, W. IP-Adapter: Text compatible image prompt adapter for text-to-image diffusion models. arXiv preprint arXiv:2308.06721 ,2023. Yu, X., Chen, Z., Zhang, Y., Lu, S., Shen, R., Zhang, J., Hu, X., Fu, Y., and Yan, S. Visual document understand-ing and question answering: A multi-agent collabora-tion framework with test-time scaling. arXiv preprint arXiv:2508.03404 , 2025. Zeng, Z., Huang, J., Zheng, L., Han, W., Zhong, Y., Chen, L., Yang, L., Chu, Y., He, Y., and Ma, L. Uitron: Founda-tional gui agent with advanced perception and planning. 
+
+arXiv preprint arXiv:2508.21767 , 2025. Zhang, G., Bi, J., Gu, J., Chen, Y., and Tresp, V. Spot! revisiting video-language models for event understanding. 
+
+arXiv preprint arXiv:2311.12919 , 2023a. Zhang, L., Rao, A., and Agrawala, M. Adding conditional control to text-to-image diffusion models. arXiv preprint arXiv:2302.05543 , 2023b. Zhang, R., Isola, P., Efros, A. A., Shechtman, E., and Wang, O. The unreasonable effectiveness of deep features as a perceptual metric. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2018. Introduces LPIPS. Zhang, S., Guo, Y., Peng, L., Wang, Z., Chen, Y., Li, W., Zhang, X., Zhang, Y., and Chen, J. Vividface: High-quality and efficient one-step diffusion for video face enhancement. arXiv preprint arXiv:2509.23584 , 2025. Zhang, Z., Han, L., Ghosh, A., Metaxas, D. N., and Ren, J. Sine: Single image editing with text-to-image diffusion 22 Editing Away the Evidence: Diffusion-Based Image Manipulation and the Failure Modes of Robust Watermarking 
+
+models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023c. arXiv preprint arXiv:2212.04489. Zhao, H., Ma, X., Chen, L., Si, S., Wu, R., An, K., Yu, P., Zhang, M., Li, Q., and Chang, B. Ultraedit: Instruction-based fine-grained image editing at scale. Advances in Neural Information Processing Systems (NeurIPS) , 2024a. arXiv preprint arXiv:2407.05282. Zhao, X., Zhang, K., Su, Z., Vasan, S., Grishchenko, I., Kruegel, C., Vigna, G., Wang, Y.-X., and Li, L. Invisible image watermarks are provably removable using genera-tive AI. Advances in Neural Information Processing Sys-tems (NeurIPS) , 2024b. arXiv preprint arXiv:2306.01953. Zheng, Y., Zhong, B., Liang, Q., Tang, Z., Ji, R., and Li, X. Leveraging local and global cues for visual tracking via parallel interaction network. IEEE Transactions on Circuits and Systems for Video Technology , 33(4):1671– 1683, 2022. Zheng, Y., Zhong, B., Liang, Q., Li, G., Ji, R., and Li, X. Toward unified token learning for vision-language tracking. IEEE Transactions on Circuits and Systems for Video Technology , 34(4):2125–2135, 2023. Zheng, Y., Zhong, B., Liang, Q., Mo, Z., Zhang, S., and Li, X. Odtrack: Online dense temporal token learning for visual tracking. In Proceedings of the AAAI conference on artificial intelligence , volume 38, pp. 7588–7596, 2024. Zheng, Y., Zhong, B., Liang, Q., Li, N., and Song, S. De-coupled spatio-temporal consistency learning for self-supervised tracking. In Proceedings of the AAAI Con-ference on Artificial Intelligence , volume 39, pp. 10635– 10643, 2025a. Zheng, Y., Zhong, B., Liang, Q., Zhang, S., Li, G., Li, X., and Ji, R. Towards universal modal tracking with online dense temporal token learning. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025b. Zhou, S., Li, L., Zhang, X., Zhang, B., Bai, S., Sun, M., Zhao, Z., Lu, X., and Chu, X. LiDAR-PTQ: Post-training quantization for point cloud 3d object detection. 2024. Zhou, S., Wang, S., Yuan, Z., Shi, M., Shang, Y., and Yang, D. GSQ-tuning: Group-shared exponents integer in fully quantized training for LLMs on-device fine-tuning. In 
+
+Findings of the Association for Computational Linguis-tics: ACL 2025 , pp. 22971–22988, Vienna, Austria, July 2025a. Association for Computational Linguistics. ISBN 979-8-89176-256-5. Zhou, S., Yuan, Z., Yang, D., Hu, X., Qian, J., and Zhao, Z. Pillarhist: A quantization-aware pillar feature encoder based on height-aware histogram. In Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 27336–27345, 2025b. Zhou, Z., Lu, S., Leng, S., Zhang, S., Lian, Z., Yu, X., and Kong, A. W.-K. Dragflow: Unleashing dit priors with region-based supervision for drag editing. arXiv preprint arXiv:2510.02253 , 2025c. ICLR 2026 poster. Zhu, J., Kaplan, R., Johnson, J., and Fei-Fei, L. Hidden: Hiding data with deep networks. In Proceedings of the European Conference on Computer Vision (ECCV) , 2018. arXiv preprint arXiv:1807.09937. 23

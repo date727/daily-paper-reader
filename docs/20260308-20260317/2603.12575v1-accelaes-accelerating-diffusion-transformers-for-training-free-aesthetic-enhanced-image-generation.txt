@@ -1,0 +1,709 @@
+Title: AccelAes: Accelerating Diffusion Transformers for Training-Free Aesthetic-Enhanced Image Generation
+
+URL Source: https://arxiv.org/pdf/2603.12575v1
+
+Published Time: Mon, 16 Mar 2026 00:23:04 GMT
+
+Number of Pages: 32
+
+Markdown Content:
+# AccelAes: Accelerating Diffusion Transformers for Training-Free Aesthetic-Enhanced Image Generation 
+
+Xuanhua Yin, Chuanzhi Xu, Haoxian Zhou, Boyu Wei, and Weidong Cai 
+
+School of Computer Science, The University of Sydney, NSW 2006, Australia 
+
+{xuanhua.yin,chuanzhi.xu,hzho0442,bwei0951,tom.cai}@sydney.edu.au 
+
+Abstract. Diffusion Transformers (DiTs) are a dominant backbone for high-fidelity text-to-image generation due to strong scalability and align-ment at high resolutions. However, quadratic self-attention over dense spatial tokens leads to high inference latency and limits deployment. We observe that denoising is spatially non-uniform with respect to aesthetic descriptors in the prompt. Regions associated with aesthetic tokens re-ceive concentrated cross-attention and show larger temporal variation, while low-affinity regions evolve smoothly with redundant computation. Based on this insight, we propose AccelAes , a training-free framework that accelerates DiTs through aesthetics-aware spatio-temporal reduc-tion while improving perceptual aesthetics. AccelAes builds AesMask, a one-shot aesthetic focus mask derived from prompt semantics and cross-attention signals. When localized computation is feasible, SkipSparse reallocates computation and guidance to masked regions. We further re-duce temporal redundancy using a lightweight step-level prediction cache that periodically replaces full Transformer evaluations. Experiments on representative DiT families show consistent acceleration and improved aesthetics-oriented quality. On Lumina-Next, AccelAes achieves a 2.11 ×
+
+speedup and improves ImageReward by +11.9% over the dense baseline. Code is available at https://github.com/xuanhuayin/AccelAes. 
+
+## 1 Introduction 
+
+Diffusion models have become dominant for high-fidelity text-to-image genera-tion [13,35]. Recent research increasingly adopts Transformer backbones, namely the Diffusion Transformer (DiT) [5, 31, 32, 46], to achieve better scalability and improved visual quality. Compared with earlier U-Net based pipelines [35], DiTs provide higher capacity and stronger alignment at high resolutions [31], enabling the generation of more detailed, realistic, and semantically consistent images. However, the performance comes with a more immediate cost: inference be-comes significantly slower. At each denoising step, a DiT must perform full self-attention over all spatial tokens, and the pairwise interactions among tokens make every forward pass computationally expensive. Moreover, high-resolution image generation typically requires dozens of denoising steps, leading to cu-mulative inference latency across iterations. In practice, model performance is 
+
+> arXiv:2603.12575v1 [cs.CV] 13 Mar 2026
+
+2 X. Yin et al. Baseline AccelAes                  
+
+> Prompt: A magical forest spirit, full body, intricate leaf and flower
+> dress, vivid, stunning, volumetric lighting, highly detailed
+> Prompt: a realistic Maryam Nawaz, Red Dead Redemption
+> Prompt: A breathtaking mountain peak at golden hour, intricate rock
+> texture, volumetric lighting, stunning, sharp, vivid, detailed
+> IR = 0.4079
+> IR = 1.5036
+> IR = 1.5900
+> IR = 1.9687
+> IR = 1.3687
+> IR = 1.0319
+> 12.37s 5.86s (2.11 ×speedup )
+
+Fig. 1: AccelAes improves both efficiency and overall quality. Left: Qualitative comparison under identical prompts, with zoomed-in crops and per-sample ImageRe-ward (IR). Right: Speed–quality summary, and a bottom-right multi-metric radar on Lumina benchmarking AccelAes against the dense baseline and representative training-free acceleration methods, demonstrating consistent gains across metrics. 
+
+often constrained not only by model size but also by repeated computation and runtime overhead during sampling. As attention operations and memory move-ment account for an increasing portion of total execution time, it has become a central challenge for DiTs to reduce redundant computation at inference while maintaining visual quality [10]. Fig. 1 previews this speed–quality tension and shows that AccelAes improves both efficiency and overall quality on representa-tive prompts and metrics. This motivates our focus on training-free acceleration that explicitly accounts for perceptual and aesthetics-oriented criteria. To address this issue, many works aim to accelerate diffusion inference with-out retraining. Some research reduces the total number of denoising steps through improved samplers [6, 9, 21, 25, 47]. Others reduce per-step computation, for ex-ample, through token merging [2,3,12,41,45], structured sparse attention [45], or intermediate feature caching [6,7,9,12,21,25,33,37,44,47]. However, these meth-ods share a common limitation: they apply uniform strategies across the spatial dimension, either merging or pruning all tokens in the same manner, or caching and skipping computation uniformly over the entire image. Such strategies are often vulnerable in practice because image generation is not spatially uniform. Certain regions, such as main subjects, fine textures, and lighting boundaries, have a much greater impact on perceptual quality, while other regions, such as smooth backgrounds, contribute less to the final visual impression [27, 40]. If AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 3
+
+computation is aggressively reduced in perceptually important regions, image quality degrades significantly. If conservative settings are applied everywhere to protect quality, much of the potential speedup is lost. This leads to a natural question: can computation be allocated adaptively across space according to content importance? From another perspective, text-to-image models based on DiTs are no longer solely optimized for strict semantic alignment with the prompt, but are increas-ingly designed to generate images that better reflect human preferences and aesthetic judgments [4, 15, 17, 18, 36]. With advances in alignment methods and human feedback optimization methods such as RLHF [8, 30], modern genera-tive models place greater emphasis on aesthetic attributes, including “intricate”, “volumetric-lighting”, “detailed”, etc. [38, 43]. These descriptors often appear as adjectives or stylistic tokens in prompts and influence image generation via cross-attention mechanisms [29, 35]. In other words, the model is not only concerned with what to generate, but also with how to generate it well. This trend suggests an important insight: different spatial regions contribute unequally to aesthetic quality. Regions containing main subjects with fine tex-tures, lighting transitions, and material details often dominate human perception and aesthetic judgment, while large smooth background areas typically have a smaller influence on aesthetic scores [27, 43]. Moreover, cross-attention explic-itly models the correspondence between text tokens and image patches in mod-ern text-to-image diffusion models [29, 35]. In particular, tokens associated with aesthetic descriptors tend to induce highly concentrated attention patterns over specific spatial regions. This suggests that during denoising, the model implicitly differentiates between aesthetically sensitive regions and less sensitive regions. However, existing DiT acceleration methods rarely exploit this signal. They typically apply uniform token reduction based on numerical similarity or fixed structural rules, overlooking the spatial non-uniformity that is closely tied to hu-man preference. In a generation paradigm that increasingly emphasizes aesthetic quality, such semantically unaware compression is suboptimal. We find that spatial aesthetic non-uniformity and temporal redundancy are coupled. Regions related to aesthetic descriptors vary more across timesteps and are harder to extrapolate, while low-affinity regions evolve smoothly and are more reusable. This implies that the attention structure already indicates which regions require precise computation and which can be skipped. Leveraging both signals enables content-aware acceleration while preserving key aesthetic quality. Based on the above observations, we propose AccelAes (Accelerated Aes-thetics) , a training-free acceleration framework for DiTs. The core idea of Ac-celAes is to leverage aesthetics-driven spatial non-uniformity and temporal pre-diction redundancy during the denoising process, allocating computation pref-erentially to perceptually sensitive regions while compressing redundant com-putation in less critical areas. Specifically, we use internal attention signals to construct AesMask, an aesthetics-aware semantic mask that identifies spatial re-gions associated with aesthetic descriptors, and refine them more carefully when the architecture permits localized updates. Meanwhile, we introduce SkipSparse, 4 X. Yin et al. 
+
+a unified acceleration module that combines spatially-adaptive sparse computa-tion with an output-level step prediction reuse mechanism (StepCache) along the temporal dimension to reduce redundant computation across timesteps. These two mechanisms complement each other, enabling effective inference acceleration while preserving key perceptual quality. Our contributions are summarized as follows: 
+
+– We propose AccelAes , a training-free acceleration framework for Diffusion Transformers, motivated by aesthetics-driven spatial non-uniformity and temporal redundancy during denoising. 
+
+– We introduce an aesthetics-aware acceleration design that couples Aes-Mask and SkipSparse to localize perceptually sensitive regions from in-ternal model signals and reallocate computation and guidance accordingly, while compressing less critical updates. 
+
+– We conduct extensive experiments on three representative DiT backbones, showing that AccelAes substantially reduces inference time while consistently improving aesthetics- and preference-oriented quality, yielding a markedly better speed–quality trade-off. 
+
+## 2 Related Work 
+
+2.1 Acceleration of DiT for Image Generation 
+
+Diffusion-based generators synthesize images via iterative denoising, making sampling computationally intensive and motivating training-free acceleration that improves efficiency without modifying backbone parameters [13, 28, 35]. Prior work mainly follows two directions: reducing sampling steps with im-proved samplers [24, 39], or reducing per-step cost by exploiting temporal and spatial redundancy, e.g., feature caching/reuse [7,9,25,33,47], timestep forecast-ing/skipping [21,37], and token-level compression (pruning/merging) or training-free sparse attention variants [2, 3, 12, 22, 41, 45]. Many methods decide reductions using numerical similarity, heuristics, or generic saliency proxies rather than perceptual objectives, so aggressive com-pression can remove compute from visually important regions and introduce localized artifacts. Region-adaptive methods such as RAS and SDiT allocate non-uniform budgets across spatial tokens [19, 23], but still rely on proxy sig-nals (e.g., attention concentration, heuristic complexity, or semantic grouping) to define region priorities [19, 23]. Meanwhile, modern text-to-image systems in-creasingly optimize for human preference and aesthetic quality beyond semantic correctness [8,18,30], yet such image-level objectives do not directly yield stable region priorities for inference-time budgeting. Moreover, trajectory-level acceler-ation (e.g., caching/forecasting) is typically applied uniformly over space, leaving open where computation should be preserved under limited budgets. AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 5
+
+2.2 Aesthetic and Guidance Signals for Image Generation 
+
+Inference-time guidance offers a practical control interface for text-to-image dif-fusion models: CLIP supports text–image semantic consistency [34], and classifier-free guidance (CFG) strengthens prompt adherence by scaling the conditional– unconditional gap [14]. However, a single global guidance scale can be spatially inconsistent and induce local semantic/structural issues, motivating spatially varying guidance that applies different strengths to semantic regions without additional training [38]; related work further enables continuous modulation of attribute intensity [4]. These approaches keep dense computation and do not address how guidance should interact with inference-time compute bud-geting, whereas we explicitly couple guidance with spatial compute allocation in a training-free acceleration setting. Human preference and aesthetic assessment provides complementary signals for generative models. Preference datasets and reward models such as Pick-a-Pic and ImageReward align objectives with human feedback [16,43], and prefer-ence feedback can be used for post-training improvements such as step-by-step preference optimization [18]. For evaluation, preference and aesthetics are often measured by image-level scoring functions, including CLIP-based aesthetic pre-dictors [36], benchmarks such as HPSv2 [42], and classic datasets like AVA [27]; aesthetic-related rewards have also been used for automatic prompt optimiza-tion [26]. In our work, preference-related models are used for evaluation rather than retraining, but their scalar image-level scores are difficult to translate into region-level priorities or token-level compute budgets. This leaves an interface problem for training-free acceleration: how to turn aesthetic objectives into ex-ecutable spatial budgeting rules. We address this gap by extracting aesthetic-related cues from internal attention patterns conditioned on aesthetic descriptors and using them to guide spatial compute allocation while preserving global con-text. 
+
+## 3 Methodology 
+
+We propose AccelAes , a training-free acceleration framework for Diffusion Trans-formers (DiTs) based on aesthetics-driven spatio-temporal non-uniformity. Given a text prompt, AccelAes first constructs AesMask , an aesthetics-aware se-mantic mask over image tokens from cross-attention signals. It then applies 
+
+SkipSparse , which performs spatially-adaptive sparse computation when lo-calized updates are supported. SkipSparse also includes a universal step-level prediction cache that reuses noise predictions across timesteps. Together, Aes-Mask decides where to spend compute, and SkipSparse decides how to reduce redundant computation in both space and time. 
+
+3.1 Preliminaries: Aesthetically-Driven Non-Uniformity 
+
+We consider diffusion sampling in latent space. Let zt ∈ Rd×N be latent tokens at timestep t, where N is the number of spatial tokens. A DiT parameterized by 6 X. Yin et al. Linear      
+
+> Extrapolation
+> AesMask
+> AVictorian -era scientist
+> in her detailed laboratory,
+> photorealistic ,intricate
+> steampunk equipment
+
+DiT     
+
+> Prompt
+> …
+> Token Embedding
+> CLIP
+> 𝐻 !"# 𝐻 $%
+> SkipSparse Original
+> AccelAes
+> intricate
+> photorealistic
+> cinematic
+> 𝒜
+> Top -rS_cos
+> 𝒥 !"# …
+
+DiT        
+
+> Attn Heatmap
+> 𝐻 !"#
+> Sparse
+> FFN/Attn
+> Low CFG
+> Full
+> FFN/Attn
+> High CFG  VAE
+> Decoder
+> Each ∆Steps
+> (a) AccelAes Framework
+> (b) AesMask (c) SkipSparse
+> 𝐻 $%
+
+Fig. 2: The proposed AccelAes framework. (a) AccelAes builds AesMask from prompt semantics and cross-attention. It uses the mask for spatially adaptive com-putation and region-wise guidance. SkipSparse also includes a step-level cache with linear extrapolation to reduce redundant forwards across timesteps. (b) AesMask uses aesthetic anchors, CLIP similarity, and cross-attention aggregation, then applies per-centile thresholding to obtain a binary mask. (c) SkipSparse updates attention and FFN mainly on aesthetic-focus tokens. It keeps global context with global keys/values and reuses predictions across steps via the cache. 
+
+θ predicts noise (or velocity) as: 
+
+ˆϵt = fθ (zt, c, t ) , (1) where c is the text condition and ˆϵt ∈ Rd×N is the per-token prediction. DiT blocks use self-attention and cross-attention between image tokens and text tokens. Let y = [ y1, . . . , yM ] ∈ Rdc×M be M text token embeddings. For a cross-attention layer ℓ at timestep t, we denote its weights by: 
+
+A(ℓ) 
+
+> t
+
+∈ [0 , 1] N ×M ,
+
+> M
+
+X
+
+> j=1
+
+A(ℓ) 
+
+> t
+
+[i, j ] = 1 ∀i,  (2) where A(ℓ) 
+
+> t
+
+[i, j ] measures how much image token i attends to text token j.We observe a consistent non-uniformity for aesthetics-oriented prompts. At-tention mass concentrates on a subset of spatial tokens linked to aesthetic de-scriptors. These tokens often control textures, highlights, and boundaries that dominate perceptual judgment. Other tokens are less sensitive and change more smoothly across nearby timesteps. AccelAes uses this property to reduce com-putation where it is less critical and to preserve computation where it matters. AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 7
+
+3.2 AesMask: Aesthetics-Aware Semantic Mask Generation 
+
+We build a binary mask over image tokens for aesthetic-focus regions . This mod-ule is AesMask , as shown in Fig. 2 (b). In text-conditioned DiTs, the prompt affects image tokens through cross-attention. We use this internal signal to lo-cate tokens related to aesthetic-relevant prompt semantics, and we mark them for later selective updates. We define a set of aesthetic anchor words: 
+
+A = {a1, . . . , a K }, (3) where each ak is a textual descriptor (e.g., “cinematic”, “intricate”). The anchors provide a compact reference that helps us pick aesthetic-related prompt tokens without external supervision. 
+
+Aesthetic Prompt Tokens. Let e(·) be a frozen text encoder (CLIP text encoder). For each prompt token yj , we compute cosine similarity to each anchor ak:
+
+sj,k = ⟨e(yj ), e (ak)⟩∥e(yj )∥ ∥ e(ak)∥ . (4) We assign each token an aesthetic score: 
+
+αj = max  
+
+> k∈{ 1,...,K }
+
+sj,k , (5) and select the top-r tokens by αj . Their index set is Jaes ⊆ { 1, . . . , M }. These tokens represent the aesthetic-related part of the prompt that we will use when aggregating attention. 
+
+Cross-attention Aggregation. At timestep t, each cross-attention layer ℓ outputs 
+
+A(ℓ) 
+
+> t
+
+∈ RN ×M . We aggregate weights for the selected aesthetic tokens: 
+
+mt[i] = 1
+
+|L| 
+
+X
+
+> ℓ∈L
+
+X
+
+> j∈J aes
+
+A(ℓ) 
+
+> t
+
+[i, j ], (6) where mt ∈ RN is an affinity map over image tokens and L is the set of layers used. A larger mt[i] means token i consistently attends to aesthetic-relevant text tokens. We treat it as an internal proxy for perceptual importance. 
+
+Percentile Thresholding. We binarize mt with a percentile threshold: 
+
+Mt[i] = I(mt[i] ≥ Perc( mt, p )) , (7) where Mt ∈ { 0, 1}N and p ∈ (0 , 100) controls sparsity. We define It = {i |
+
+Mt[i] = 1 }. The percentile form adapts to the scale of mt across prompts, so it avoids tuning an absolute threshold. AesMask is training-free and uses cross-attention and a frozen text encoder. Its output Mt (or It) is passed to SkipSparse. 8 X. Yin et al. 
+
+3.3 Spatially-Adaptive Sparse Computation 
+
+When localized updates are supported, we use Mt to reduce computation. This module is SkipSparse , as shown in Fig. 2 (c). SkipSparse focuses updates on to-kens in It and keeps global context through global keys/values. This is important because it allows focus tokens to read information from the full image. Let Ht ∈ Rd×N be the hidden states entering a Transformer block at timestep 
+
+t. We split tokens into focus and background: 
+
+Ht =
+
+h
+
+Haes  
+
+> t
+
+, Hbg 
+
+> t
+
+i
+
+, (8) where Haes  
+
+> t
+
+contains tokens in It and Hbg  
+
+> t
+
+contains the rest. We scatter updated tokens back to the original order after each block so the block output matches the dense baseline shape. 
+
+Self-attention with Global Keys/Values. We update attention only for focus queries and keep keys/values global: 
+
+Attn  Qaes  
+
+> t
+
+, Kall  
+
+> t
+
+, Vall 
+
+> t
+
+ = Softmax (Qaes  
+
+> t
+
+)⊤ Kall 
+
+> t
+
+√dh
+
+!
+
+Vall  
+
+> t
+
+, (9) where Qaes  
+
+> t
+
+= WQHaes  
+
+> t
+
+, Kall  
+
+> t
+
+= WK Ht, and Vall  
+
+> t
+
+= WV Ht. This reduces the number of queries from N to |I t| and keeps long-range interactions through global keys/values. 
+
+FFN on Aesthetic Tokens. We apply FFN only to focus tokens and reuse a cached background activation: 
+
+˜Haes  
+
+> t
+
+= FFN( Haes  
+
+> t
+
+) , ˜Hbg  
+
+> t
+
+= Cbg  
+
+> t
+
+, (10) where Cbg  
+
+> t
+
+is taken from the most recent full update. This avoids recomputing FFN on background tokens and still allows refinement on aesthetic-focus tokens. 
+
+Spatial CFG. Let ˆϵcond  
+
+> t
+
+and ˆϵuncond  
+
+> t
+
+be conditional and unconditional predictions. We apply a spatially varying guidance scale: 
+
+ˆϵcfg  
+
+> t
+
+[i] = ˆ ϵuncond  
+
+> t
+
+[i] + gt[i]
+
+
+
+ˆϵcond  
+
+> t
+
+[i] − ˆϵuncond  
+
+> t
+
+[i]
+
+
+
+, (11) where gt[i] = gbg + ( gaes − gbg )Mt[i] and gaes ≥ gbg ≥ 1. This places stronger guidance on focus tokens and keeps background guidance milder. 
+
+3.4 Universal Step-Level Prediction Caching 
+
+SkipSparse also includes a universal step-level cache, as shown in Fig. 2 (c). It reuses the final output ˆϵt and works across DiT variants. It targets a simple fact that nearby timesteps often have correlated predictions. AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 9
+
+Table 1: Main results on three DiT backbones. We report runtime and generation-quality metrics for AccelAes and competing methods on Lumina-Next, SD3-Medium, and FLUX.1-dev, showing consistent speedup with improved overall quality. Models Methods Time ↓ Speedup ↑ CLIP ↑ IR ↑ HPS ↑ Aesth ↑ Edge ↑                                                
+
+> Lumina Baseline 12.37 1.00 ×0.2531 0.7518 0.2710 5.9407 0.5829 Lumina AccelAes 5.86 2.11 ×0.2640 0.8410 0.2740 6.1414 0.6285
+> SD3 Baseline 3.52 1.00 ×0.2662 0.8788 0.2895 5.7330 0.9160 SD3 AccelAes 2.34 1.50 ×0.2744 0.9042 0.3014 5.9898 0.9437
+> FLUX Baseline 12.66 1.00 ×0.2753 1.233 0.3200 6.243 0.560 FLUX AccelAes 7.31 1.73 ×0.2772 1.317 0.3214 6.372 0.590
+
+We cache predictions at selected timesteps and reuse them with linear extrap-olation. Let ∆ be the stride between full forwards. Let τ be the latest timestep with a full forward. We store: 
+
+Eτ = ˆ ϵτ , Eτ +∆ = ˆ ϵτ +∆. (12) For an intermediate timestep t ∈ (τ, τ + ∆), we approximate: 
+
+ˆϵt ≈ Eτ + λ(t) ( Eτ − Eτ +∆) , (13) where λ(t) = t−τ∆ . We use a warmup of Tw initial steps with full inference. After warmup, we refresh the cache every ∆ steps by running a full forward and updating Eq. 12. This periodic refresh limits drift and keeps stable. 
+
+## 4 Experiments and Results 
+
+4.1 Experimental Setup 
+
+Models and Baselines. We evaluate AccelAes on three Diffusion Transformer backbones: Lumina-Next-T2I [46], SD3-Medium [11], and FLUX.1-dev [1]. We follow the standard DiT formulation [31] and only modify inference-time compu-tation. For training-free acceleration baselines, we include ∆-DiT [6], FORA [37], Region-Adaptive Sampling (RAS) [23], TeaCache [20], and TaylorSeer [21]. For each backbone, all methods are evaluated under the same backbone-specific sam-pler and guidance configuration, and we adhere to the same implementation-level rules when reproducing baselines. 
+
+Evaluation Protocol. We use a unified protocol with 10,000 prompts from Pick-a-Pic and three fixed seeds per prompt (seeds {1, 2, 3}; 30,000 images per con-figuration) for both main results and ablations. Within each table, all AccelAes variants and baselines share the same prompt subset and seeds to enable paired comparisons. All methods are implemented in a unified PyTorch pipeline without 10 X. Yin et al. 
+
+Table 2: Lumina-Next-T2I: baseline comparisons. Comparison of AccelAes with representative acceleration baselines on Lumina-Next-T2I using the main metric set. Methods Time ↓ Speedup ↑ CLIP ↑ IR ↑ HPS ↑ Aesth ↑ Edge ↑
+
+Lumina-Next-T2I [46] 12.37 1.00 × 0.2531 0.752 0.2710 5.941 0.583 
+
+∆-DiT [6] 8.13 1.52 × 0.2523 0.485 0.2540 5.873 0.522 FORA [37] 12.36 1.00 × 0.2463 0.517 0.2496 5.766 0.564 RAS [23] 8.38 1.47 × 0.2550 0.788 0.2713 5.927 0.581 SDiT [19] 7.30 1.69 × 0.2502 0.6093 0.2538 5.822 0.4289 TeaCache [20] 8.28 1.49 × 0.2512 0.670 0.2640 5.978 0.599 TaylorSeer [21] 6.02 2.05 × 0.2491 0.604 0.2650 5.940 0.668 AccelAes (ours) 5.86 2.11 × 0.2640 0.841 0.2740 6.041 0.629 SD3    
+
+>   
+> " 
+> 
+>  
+> "
+>  
+> 
+> 
+> 
+> 
+>  
+
+FLUX     
+
+>   
+> 
+> 
+>  
+> 
+> 
+> 
+> 
+>  
+
+Fig. 3: Baseline comparisons on SD3 and FLUX. We compare AccelAes with the dense baseline and prior acceleration methods on SD3 and FLUX using the same prompts, seeds, and measurement protocol. AccelAes achieves a better speed quality trade off and improves aesthetics oriented scores while reducing sampling time. 
+
+architecture-specific engines, kernel-level optimizations, or external accelerators, and we follow backbone-default sampling settings. We evaluate all backbones at 1024 × 1024 resolution using 30 steps for Lumina-Next-T2I and 28 steps for SD3-Medium and FLUX.1-dev. Runtime is reported as end-to-end per-image latency from the start of sampling to the final decoded image, including VAE decoding and the two-pass CFG forward when enabled. Unless specified other-wise, AccelAes uses a cache refresh interval of ∆ = 2 with warmup Tw = 5 , while other baselines use their official/default intervals. More detailed implementation settings, including the anchor vocabulary, default AesMask hyperparameters, backbone-specific StepCache settings, and hardware/runtime protocol, are pro-vided in Appendix A.1–A.4. 
+
+Metrics and Measurement. We report runtime and six automatic metrics: Time (seconds per image) and Speedup defined as Time baseline /Time method , CLIP score (CLIP) [34] for text–image alignment, ImageReward (IR) [43] and HPSv2 (HPS) [42] as preference-oriented proxies, LAION Aesthetic Score (Aesth) com-puted with the LAION aesthetic predictor [36], and Edge Density (Edge) as a AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 11 Heatmap 
+
+AesMask Non -Aesthetic 
+
+Token Uniform 
+
+Mask Overlay    
+
+> "An ancient dragon with
+> intricate scales perched on a
+> mountain peak, dramatic
+> lighting, cinematic fantasy art "
+
+Prompt (a) (b) 
+
+(c)                   
+
+>   * ! !
+>   
+> +' ,
+> 3)9P
+> 3)9:
+> 3)P3
+> 3)P4
+> 3)P5
+> 3)P6
+> 3)P7
+> 3)P8
+>      /
+> 3)P55 3)P54
+> 1"
+>   * ! !
+>   
+> +' ,
+> 8)98
+> 8)P3
+> 8)P8
+> 8):3
+> 8):8
+> O)33
+> O)38
+>    /
+> 8):6: 8):58
+> 0"
+>   * ! !
+>   
+> +' ,
+> 3)583
+> 3)588
+> 3)5O3
+> 3)5O8
+>   /
+> 3)588O
+> 3)586:
+> !0"
+
+Fig. 4: AesMask analysis and ablation. We study how AesMask is constructed and how it affects acceleration and quality. We ablate key design choices such as an-chor selection, cross attention aggregation, and mask thresholding, and we report their impact on both runtime and aesthetic metrics. 
+
+lightweight sharpness/detail proxy. Time is averaged over the full evaluation set and includes the complete sampling trajectory, including conditional/unconditional passes for CFG. Unless otherwise specified, AccelAes constructs a one-shot se-mantic mask at mask_step=5 and reuses it for the entire sampling trajectory and classifier-free guidance follows the standard formulation [14]. 
+
+4.2 Main Results 
+
+Overall Results across Backbones. Table 1 shows that AccelAes improves the speed–quality trade-off across three DiT backbones. The key pattern is that ac-celeration does not come from uniformly weakening denoising. Instead, AccelAes reduces compute where the denoising trajectory is redundant and preserves up-dates where aesthetic cues are concentrated. This leads to simultaneous runtime reduction and stronger preference-oriented metrics. On Lumina-Next, AccelAes reaches the highest speedup and also yields a clear improvement on ImageReward together with gains on CLIP, HPS, Aesth, and Edge. On SD3-Medium, AccelAes again improves ImageReward and HPS under a 1.50 × speedup. On FLUX.1-dev, AccelAes maintains a strong balance, which suggests the same mechanism trans-fers beyond a single architecture and sampler. Overall, these results support that aesthetics-driven spatio-temporal non-uniformity is a reliable signal for compute reduction. 
+
+Lumina-Next-T2I comparisons. We provide a strict comparison on the same metric set and protocol in Table 2. At a similar speedup range, several training-free baselines show large drops on ImageReward, which indicates that uniform 12 X. Yin et al. AesMask SkipSparse StepCache                  
+
+> Baseline
+> StepCache
+> Only
+> Spatial
+> Only
+> w/o
+> AesMask
+> AccelAes
+> (Ours)
+> –––
+> ––✓
+> ✓✓–
+> –✓✓
+> ✓✓✓
+> Baseline StepCache
+> Only Spatial
+> Only w/o
+> AesMask AccelAes
+> (Ours)
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> Speedup (×)
+> 1.00×
+> 1.57×
+> 1.43×
+> 2.11× 2.11×
+> Speedup (×)
+> ImageReward ↑
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> ImageReward ↑
+> 0.752 0.743
+> 0.818 0.822
+> 0.841
+
+Fig. 5: SkipSparse ablation. We evaluate variants that enable spatial allocation, step-level reuse, or both, and report speedup and ImageReward with and without AesMask. 
+
+temporal skipping or generic token reduction can be brittle when preference-oriented quality matters. For example, TaylorSeer operates in a comparable speed regime but incurs a substantial ImageReward degradation. ∆-DiT and SDiT further reduce ImageReward despite non-trivial speed gains. In contrast, AccelAes achieves the best ImageReward while also reaching the largest speedup among listed methods. This gap suggests that allocating compute and guidance according to aesthetic token affinity is more robust than applying uniform reuse across all regions and steps. 
+
+SD3 and FLUX Comparisons. Fig. 3 evaluates the same design on SD3 and FLUX and highlights two practical observations. First, the relative ranking be-tween methods can change across backbones, which suggests that aggressive tem-poral reuse is sensitive to the architecture and sampling configuration. Second, AccelAes remains more stable in preference proxies at practical speedups, which is consistent with its design that preserves updates in aesthetics-relevant regions instead of uniformly replacing Transformer evaluations. This supports that the benefit of aesthetics-guided spatial allocation is not restricted to Lumina-Next. Appendix B reports the full quantitative comparisons on SD3 and FLUX under the same evaluation protocol, and Appendix A.3–A.4. provides the correspond-ing backbone-specific settings. 
+
+4.3 Ablation Results 
+
+AesMask Ablation. Fig. 4 compares Uniform masking, a Non-Aesthetic-Token variant, and the proposed AesMask. In Fig. 4 (a), Uniform and Non-Aesthetic-Token masks produce less targeted focus regions, while AesMask yields a com-pact region that aligns with aesthetic descriptors in the prompt. Fig. 4 (b) shows that this alignment translates into a more reliable quality profile on ImageRe-ward, Aesthetic score, and CLIP score. Fig. 4 (c) further indicates that words with clear aesthetic meaning receive higher importance under anchor matching, AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 13 “Portrait of an astronaut with    
+
+> intricate spacesuit details ,
+> photorealistic ,cinematic ”
+
+Prompts SD3 Heatmap Masking Region AccelAes             
+
+> “A futuristic Tokyo street at
+> night with neon lights and
+> intricate reflections on wet
+> pavement, cinematic ”
+> “A majestic lion at golden
+> hour in the savanna,
+> photorealistic ,cinematic
+> lighting, intricate fur detail”
+> IR = 1.3899 IR = 1.4035
+> IR = 1.4768
+> IR = 1.2142
+> IR = 1.4794
+> IR = 1.2267
+
+Fig. 6: Aesthetics-induced spatial non-uniformity and its effect. For represen-tative prompts on SD3, we visualize cross-attention heatmaps, the derived aesthetic-focus mask, the selected regions, and the final AccelAes outputs. The localized real-location of compute and guidance enhances perceptually important details, consistent with improvements in ImageReward (IR) annotated for each example. 
+
+which supports our token selection step. Together, these results suggest that Aes-Mask provides an effective region prior for compute budgeting and region-wise guidance. 
+
+SkipSparse Ablation. Fig. 5 shows distinct roles of the two SkipSparse paths. Step-level reuse achieves a larger speedup (1.57 ×) but slightly reduces ImageRe-ward (0.743 vs. 0.752), which indicates that uniform temporal replacement can be fragile for preference-oriented quality. Spatial allocation improves ImageReward (0.818) with a moderate speedup (1.43 ×), suggesting that focusing updates on critical regions is important. At the same speedup (2.11 ×), removing AesMask lowers ImageReward (0.822 vs. 0.841), showing that AesMask provides a stronger region prior that makes SkipSparse more selective. Together, these results ex-plain why combining the two paths with AesMask yields the best trade-off. 
+
+4.4 Visualizations 
+
+Aesthetic Spatial Non-uniformity. Fig. 6 shows cross-attention maps induced by aesthetic descriptors, the resulting AesMask, selected regions, and SD3 outputs. The attention is spatially concentrated on perceptually decisive structures (e.g., faces and high-frequency details) rather than uniform. Thresholding these re-sponses yields a compact mask that suppresses low-impact background regions. AccelAes uses AesMask to reallocate both computation and CFG toward masked 14 X. Yin et al. AccelAes Baseline Fora Δ − DiT TeaCache TaylorSeer SDiT RAS         
+
+> 1.00 ×1.00 ×1.52 ×1.49 ×2.05 ×1.69 ×1.47 ×2.11 ×
+> Fig. 7: Qualitative comparison across training-free acceleration methods. We compare AccelAes with the dense baseline and representative training-free acceleration baselines under identical prompts. The speedup (relative to the baseline) is shown above each column. AccelAes preserves fine textures and locally salient details more reliably at high speedup, consistent with its superior multi-metric performance in Table 2.
+
+tokens, and the annotated IR gains indicate a consistent preference improvement under identical prompts and sampling settings. 
+
+Qualitative Comparison across Acceleration Methods. Fig. 7 compares AccelAes with representative baselines under identical prompts and reports the corre-sponding speedups. Uniform skipping at higher aggressiveness often blurs fine textures or introduces local artifacts, whereas AccelAes better preserves per-ceptually decisive details while achieving the largest acceleration in the shown setting. This qualitative evidence is consistent with the quantitative results. 
+
+## 5 Conclusion 
+
+We presented AccelAes , a training-free acceleration framework for Diffusion Transformers that leverages aesthetics-driven spatial non-uniformity and tem-poral prediction redundancy in denoising. AccelAes constructs AesMask from internal attention signals to localize perceptually sensitive regions, and applies 
+
+SkipSparse to reallocate computation and guidance toward these tokens while compressing updates elsewhere, while also incorporating an output-level step prediction reuse mechanism to reduce redundant computation across timesteps. Across three representative DiT backbones, AccelAes consistently improves the speed–quality trade-off, achieving substantial speedups while maintaining strong alignment and preference-oriented quality, and ablations confirm the complemen-tarity of spatial adaptivity and temporal reuse. Limitations include architecture AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 15 
+
+dependence of spatial sparsification and potential degradation under overly ag-gressive sparsity/caching or rapidly shifting salient regions; future work may study more adaptive masking/refresh schedules and extend the approach to broader generation settings. 16 X. Yin et al. 
+
+## Appendix A Implementation Details 
+
+A.1 Full Aesthetic Anchor List 
+
+AccelAes constructs AesMask from prompt semantics and cross-attention signals by using CLIP-based semantic matching [34]. The implementation uses a fixed vocabulary of 34 anchor words , grouped into six semantic categories: 
+
+– Style / rendering quality: photorealistic, realistic, cinematic, highly de-tailed, artistic, masterpiece, professional photography, soft bokeh, bokeh, dramatic lighting, fantasy art, studio lighting. 
+
+– Detail / sharpness: detailed, intricate, sharp focus, sharp. 
+
+– Aesthetic judgment: stunning, beautiful, elegant, vivid, vibrant. 
+
+– Photography / composition: depth of field, volumetric lighting, close up, portrait, full body. 
+
+– Subject emphasis: main subject, foreground, focused. 
+
+– Content-level fallback terms: subject, character, object, figure, person. Unless otherwise noted, this 34-anchor vocabulary is kept fixed across all experiments. 
+
+A.2 AesMask Hyperparameter Table 
+
+The default AesMask hyperparameters are summarized in Table 3. Unless oth-erwise stated, all experiments use the same configuration, including CLIP ViT-L/14 [34] for token–anchor similarity, the 34-anchor vocabulary from Sec. A.1, a similarity threshold of 0.60, aggregation over all cross-attention layers, and a default skip ratio of 0.50. The mask is constructed once at step 5 and reused for the remaining denoising steps. 
+
+A.3 Backbone Adaptation and StepCache Settings 
+
+AccelAes is compatible with different DiT-style backbones [31], but the exact ac-celeration path depends on whether the architecture supports spatially localized computation. For Lumina-Next-T2I [46], we use the full AccelAes configuration, includ-ing AesMask-guided sparse spatial computation and StepCache-based temporal reuse. This backbone also serves as the main testbed for the SkipSparse ablations in Sec. C.1. For SD3-Medium , we adopt a conservative spatial configuration. Since SD3-Medium uses MMDiT-style joint processing of image and text tokens, spatially differentiated CFG [14] is less stable in our pilot tuning. We therefore retain the temporal StepCache path without region-wise CFG modulation. AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 17                                                 
+
+> Table 3: Default AesMask hyperparameters. Parameter Default Description CLIP model clip-vit-large-patch14
+> token semantic similarity Anchor set size K34 full vocabulary in Sec. A.1 CLIP similarity threshold 0.60 minimum score for anchor weighting Aggregation layer set Lall cross-attn layers averaged by default
+> skip_ratio 0.50 percentile threshold for re-gion split
+> mask_step 5one-shot mask construction step Region method threshold direct percentile thresholding
+> Table 4: Backbone-specific StepCache settings and standalone speedup statistics. Parameter Lumina SD3 FLUX Refresh interval ∆222Warmup steps Tw555Total denoising steps T30 28 28 Theoretical skip ratio 46.7% 46.4% 46.4% Standalone StepCache speedup 1.57 ×1.50 ×1.73 ×
+
+For FLUX.1-dev [1], the final AccelAes configuration mainly relies on StepCache-style temporal reuse, since the architecture does not support our spatial SkipSparse path in the same form as Lumina-Next-T2I. The backbone-specific StepCache settings are summarized in Table 4. Across all three backbones, we use a refresh interval of ∆ = 2 , while the total number of denoising steps follows the default setting of each sampler [24, 39]. Under this configuration, the theoretical skip ratio is approximately 46% for all backbones, while the realized standalone speedup varies across architectures. 
+
+A.4 Hardware and Evaluation Environment 
+
+All experiments are conducted on a single NVIDIA GeForce RTX 5090 GPU with batch size 1. Runtime is measured as end-to-end per-image latency, including the full sampling trajectory, classifier-free guidance passes when enabled [14], and VAE decoding. Lumina-Next-T2I [46] and FLUX.1-dev [1] use BF16 mixed precision, while SD3-Medium uses FP16. The one-time CLIP loading overhead is below 0.05 s per prompt and is negligible relative to the full generation latency. 18 X. Yin et al.  
+
+> Table 5: Quantitative comparison on SD3-Medium against representative training-free acceleration baselines [6, 20, 21, 37].
+
+Methods Time ↓ Speedup ↑ CLIP ↑ IR ↑ HPS ↑ Aesth ↑ Edge ↑
+
+SD3-Medium 3.52 1.00 × 0.2662 0.879 0.2895 5.733 0.916 TeaCache [20] 2.49 1.41 × 0.2667 0.847 0.2863 5.717 0.881 TaylorSeer [21] 1.74 2.02 × 0.2624 0.729 0.2723 5.561 0.998 
+
+∆-DiT [6] 2.33 1.51 × 0.2634 0.828 0.2804 5.656 0.850 FORA [37] 3.54 0.99 × 0.2663 0.703 0.2643 5.522 0.830 AccelAes (ours) 2.34 1.50 × 0.2744 0.904 0.3014 5.990 0.944  
+
+> Table 6: Quantitative comparison on FLUX.1-dev against representative training-free acceleration baselines [20, 21].
+
+Methods Time ↓ Speedup ↑ CLIP ↑ IR ↑ HPS ↑ Aesth ↑ Edge ↑
+
+FLUX.1-dev [1] 12.66 1.00 × 0.2753 1.233 0.3200 6.243 0.560 TeaCache [20] 5.92 2.14 × 0.2777 1.225 0.3154 6.301 0.529 TaylorSeer [21] 5.96 2.12 × 0.2765 1.304 0.3217 6.309 0.572 AccelAes (ours) 7.31 1.73 × 0.2772 1.317 0.3214 6.372 0.590 
+
+## B Full Quantitative Results 
+
+We next report the full quantitative results under the evaluation protocol de-scribed in Sec. A.4. The compared methods include representative training-free acceleration baselines based on caching, reuse, and forecasting, including ∆-DiT [6], FORA [37], TeaCache [20], and TaylorSeer [21]. 
+
+B.1 Full Results on SD3-Medium 
+
+Table 5 reports the full comparison on SD3-Medium against TeaCache [20], TaylorSeer [21], ∆-DiT [6], and FORA [37]. AccelAes achieves a practical 1.50 ×
+
+speedup while obtaining the best preference-oriented metrics among the accel-erated methods, including the highest ImageReward [43] (0.904), the highest HPS [42] (0.3014), and the highest aesthetic score (5.990). More aggressive tem-poral extrapolation, such as TaylorSeer [21], achieves higher nominal speedup but causes a clear degradation in preference quality. These results suggest that preserving updates in aesthetically salient regions is more reliable than uniformly replacing denoising steps on SD3-Medium. 
+
+B.2 Full Results on FLUX.1-dev 
+
+Table 6 reports the quantitative comparison on FLUX.1-dev [1]. Since FLUX.1-dev does not support our spatially localized SkipSparse path in the same form as AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 19                                             
+
+> Table 7: SkipSparse ablation on Lumina-Next-T2I [46]. Setting Speedup ↑CLIP ↑IR ↑HPS ↑Aesth ↑
+> Baseline 1.00 ×0.2531 0.752 0.2710 5.941 StepCache Only 1.57 ×0.2500 0.743 0.2723 5.949 Spatial Only (attn) 1.42 ×0.2545 0.818 0.2725 5.920 Spatial + FFN 1.43 ×0.2590 0.825 0.2734 5.957
+> AccelAes (Full) 2.11 ×0.2640 0.841 0.2740 6.141
+> Table 8: Comparison of token weighting strategies for AesMask construction. Token weighting strategy IR ↑Aesthetic ↑CLIP ↑
+> Uniform 0.8222 5.9386 0.2556 Non-Aesthetic 0.8207 5.9252 0.2539
+> AesMask (Ours) 0.8410 6.1414 0.2640
+
+Lumina-Next-T2I [46], the final AccelAes configuration on this backbone mainly reflects the benefit of StepCache-style temporal reuse. Under this setting, Acce-lAes reaches 1.73 × speedup and achieves the best ImageReward [43] (1.317), the best aesthetic score (6.372), and the highest Edge score (0.590) among the com-pared methods. TeaCache [20] and TaylorSeer [21] are faster on this backbone, but their overall quality is less balanced across metrics. 
+
+## C Supplementary Ablation Studies 
+
+C.1 Full SkipSparse Ablation 
+
+Table 7 presents the full SkipSparse ablation on Lumina-Next-T2I [46]. Step-Cache alone contributes the larger single-module speedup, improving latency from 1.00 × to 1.57 ×, but it slightly reduces ImageReward [43] relative to the dense baseline (0.743 vs. 0.752). In contrast, the spatial path alone provides a smaller speedup (1.42 ×) but substantially improves ImageReward to 0.818. Adding FFN sparsification on top of spatial attention yields only modest addi-tional gains over the attention-only spatial variant in the current setting, which suggests that the main spatial benefit already comes from selectively updating attention-dominant regions. Combining the spatial path with StepCache yields the strongest overall result: AccelAes reaches 2.11 × speedup while also achieving the best CLIP [34], ImageReward [43], HPS [42], and Aesthetic scores in Table 7. 
+
+C.2 Full Comparison of AesMask Token Weighting Strategies 
+
+Table 8 compares three token-weighting strategies for AesMask construction: uni-form weighting, non-aesthetic-token weighting, and the proposed anchor-aware 20 X. Yin et al.                           
+
+> Table 9: Sensitivity to skip_ratio .
+> skip_ratio Speedup ↑IR ↑CLIP ↑HPS ↑
+> 0.30 ∼2.11 ×0.8415 0.2595 0.2738 0.40 ∼2.11 ×0.8334 0.2542 0.2731 0.50 ∼2.11 ×0.8410 0.2640 0.2740 0.60 ∼2.11 ×0.7990 0.2541 0.2724 0.70 ∼2.11 ×0.7643 0.2532 0.2715
+
+AesMask weighting based on CLIP [34]. The proposed strategy achieves the best performance on all three reported metrics, improving ImageReward [43] to 0.8410, Aesthetic score to 6.1414, and CLIP score to 0.2640. By comparison, uniform weighting and non-aesthetic-token weighting produce weaker preference gains and lower alignment scores. These results support the use of semantically matched aesthetic anchors as a more effective prior for region selection than treating all prompt tokens equally or suppressing aesthetic descriptors. 
+
+C.3 Sensitivity to skip_ratio p
+
+The sensitivity to the spatial skip ratio is summarized quantitatively in Table 9 and illustrated qualitatively in Fig. 12. The overall speedup remains nearly un-changed across the tested settings because the dominant latency reduction still comes from the temporal reuse path, consistent with the caching-based acceler-ation literature [6, 20, 21, 25, 37]. However, generation quality is clearly sensitive to the choice of skip ratio. A smaller ratio such as 0.30 yields the highest Im-ageReward [43] (0.8415), but 0.50 provides a better overall balance across Im-ageReward, CLIP [34], and HPS [42]. As the skip ratio increases beyond 0.50, all quality metrics degrade steadily. The visual examples in Fig. 5 show the same pattern: moderate sparsity preserves detail and structure more reliably, whereas overly aggressive sparsity gradually weakens local fidelity. We therefore use 0.50 as the default setting. 
+
+C.4 Sensitivity to mask_step 
+
+Table 10 and Fig. 11 study the effect of the one-shot mask construction step. Ear-lier masking leads to stronger acceleration, with mask_step=3 reaching 2.27 ×
+
+speedup, but the best ImageReward [43] is obtained at mask_step=5 (0.841). As the mask is delayed further, both speedup and preference-oriented quality gradually decline. The qualitative examples in Fig. 4 are consistent with the quantitative trend in Table 10: constructing the mask too early or too late can reduce local detail quality, whereas mask_step=5 provides the most stable vi-sual trade-off. Based on this evidence, we adopt mask_step=5 as the default setting throughout the main experiments. AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 21                                              
+
+> Table 10: Sensitivity to mask_step .
+> mask_step Speedup ↑IR ↑CLIP ↑HPS ↑
+> 32.27 ×0.832 0.2633 0.2740 52.11 ×0.841 0.2640 0.2740 71.92 ×0.818 0.2637 0.2733 10 1.73 ×0.818 0.2615 0.2728 15 1.42 ×0.783 0.2604 0.2718
+> Table 11: Runtime decomposition on Lumina-Next-T2I [46]. Component Time ↓Speedup ↑Relative saving Baseline 12.37s 1.00 ×—StepCache only 7.87s 1.57 ×36.4% Spatial sparse only 8.72s 1.42 ×29.5% AccelAes (full) 5.86s 2.11 ×52.6% CLIP one-time overhead <0.05s negligible —
+
+C.5 Why Spatial CFG Is Disabled on SD3-Medium 
+
+For SD3-Medium, we disable spatially differentiated CFG [14] in the final config-uration. In our pilot tuning, this design did not provide a consistent improvement at matched latency and was less stable than the uniform CFG setting. A likely reason is that SD3-Medium uses MMDiT-style joint processing of image and text tokens, where text conditioning is already deeply integrated into the denoising blocks. Under this architecture, additional region-wise CFG scaling can introduce unnecessary scale inconsistency across spatial locations, a phenomenon related to recent observations on spatial inconsistency in guidance [38]. We therefore retain the simpler uniform guidance configuration for all reported SD3-Medium results. 
+
+## D Runtime Decomposition 
+
+Table 11 decomposes the runtime contribution of each component on Lumina-Next-T2I [46]. StepCache alone reduces latency from 12.37 s to 7.87 s, corre-sponding to a 36.4% relative saving, while the spatial sparse path alone reduces latency to 8.72 s, corresponding to a 29.5% saving. Combining both components yields the full AccelAes latency of 5.86 s and a total speedup of 2.11 ×, which cor-responds to a 52.6% reduction relative to the dense baseline. The gain is smaller than the arithmetic sum of the individual savings because the two mechanisms partially overlap on the same denoising steps. Nevertheless, Table 11 shows that the combined design remains clearly stronger than either component alone. This trend is consistent with prior findings that different training-free acceleration mechanisms can be complementary rather than redundant [6, 20, 21, 25]. 22 X. Yin et al. 
+
+Table 12: Anchor trigger statistics across prompt sets sampled from Pick-a-Pic [16]. Set Total prompts Triggered Trigger rate Avg. matched anchors Pick-a-Pic v1 (unique) [16] 38,522 17,303 44.9% 3.47 Main 10k evaluation prompts 10,000 6,548 65.48% 6.89 
+
+Table 13: Most frequent anchors on the Pick-a-Pic unique prompt pool [16]. Anchor Count Ratio within triggered prompts photorealistic 7,108 41.1% detailed 4,939 28.5% artistic 4,318 25.0% highly detailed 4,196 24.3% realistic 3,261 18.8% beautiful 2,746 15.9% stunning 2,721 15.7% cinematic 2,316 13.4% portrait 1,982 11.5% fantasy art 1,625 9.4% 
+
+## E Anchor Coverage Analysis 
+
+We analyze how often the anchor-aware weighting mechanism is activated in practice and what kinds of anchors are matched most frequently on prompts drawn from Pick-a-Pic [16]. 
+
+E.1 Trigger Rate Statistics 
+
+Table 12 shows that the anchor-aware weighting mechanism is activated on a substantial fraction of real prompts from Pick-a-Pic [16]: 44.9% on the full Pick-a-Pic v1 unique prompt pool (17,303/38,522) and 65.48% on the 10,000-prompt evaluation subset (6,548/10,000). This indicates that the anchor vocabulary is broadly applicable and becomes more active on the aesthetics-oriented subset used in our experiments. 
+
+E.2 Most Frequent Anchor Hits 
+
+The most frequent matched anchors on the Pick-a-Pic unique prompt pool [16] are listed in Table 13. The dominant terms, including photorealistic , detailed ,
+
+artistic , highly detailed , and realistic , are all closely related to rendering quality or perceptual style. This supports the design of the anchor vocabulary and helps explain why anchor-aware weighting improves AesMask quality in practice. AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 23 
+
+E.3 Fallback Behavior on Non-Triggered Prompts 
+
+When no anchor exceeds the similarity threshold, AccelAes falls back to a cross-attention-only heatmap with uniform token weighting. This is a normal operat-ing mode rather than a failure case, especially for prompts with weak explicit aesthetic cues. In this way, the semantic prior becomes active when relevant descriptors are present while remaining neutral otherwise. 
+
+## F Additional Qualitative Results 
+
+This section provides additional qualitative evidence complementary to the quan-titative results in the main paper. Figs. 8, 9, 10 present extra comparisons on Lumina-Next-T2I [46], SD3-Medium, and FLUX.1-dev [1], respectively. Across these backbones, AccelAes more reliably preserves subject boundaries, local tex-tures, lighting structure, and other perceptually important details than compet-ing baselines under matched prompts and sampling settings. Figs. 11 and 12 illustrate the sensitivity to two key hyperparameters. Fig. 11 shows that very early or delayed mask construction weakens visual fidelity, while 
+
+mask_step =5 provides the most stable trade-off. Fig. 12 shows that moderate sparsity preserves salient structures and local details more reliably than overly aggressive token skipping. These qualitative observations are consistent with the quantitative trends in Tables 9 and 10. 24 X. Yin et al. 
+
+Fig. 8: Additional qualitative comparison on Lumina-Next-T2I [46]. We com-pare AccelAes with the dense baseline and representative training-free acceleration baselines [6, 20, 21, 37] under identical prompts and sampling settings. AccelAes more reliably preserves fine textures, subject boundaries, and local lighting structure. AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 25 
+
+Fig. 9: Additional qualitative comparison on SD3-Medium. Under matched prompts and sampling settings, AccelAes better maintains fine-grained structures, local texture fidelity, and perceptually important details than competing baselines [6, 20, 21, 37]. 26 X. Yin et al. 
+
+Fig. 10: Additional qualitative comparison on FLUX.1-dev [1]. Although the FLUX.1-dev configuration mainly uses the temporal reuse path, AccelAes still preserves perceptually important details more consistently than competing baselines [20, 21] at practical speedups. AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 27 
+
+Fig. 11: Qualitative sensitivity to mask_step . We compare different one-shot mask construction steps on representative prompts. Constructing the mask too early or too late weakens the balance between acceleration and visual fidelity, while the default setting mask_step =5 yields the most stable visual quality across diverse scenes. 28 X. Yin et al. 
+
+Fig. 12: Qualitative sensitivity to skip_ratio . We compare different spatial skip ratios on representative prompts. Moderate sparsity preserves salient structures, local textures, and perceptually important details more reliably, whereas overly aggressive token skipping gradually degrades visual fidelity. The default setting skip_ratio =0.50 provides the best overall trade-off. AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 29 
+
+## References 
+
+1. Black Forest Labs: Flux (2024) 2. Bolya, D., Fu, C.Y., Dai, X., Zhang, P., Feichtenhofer, C., Hoffman, J.: Token merg-ing: Your vit but faster. In: International Conference on Learning Representations (ICLR) (2023) 3. Bolya, D., Hoffman, J.: Token merging for fast stable diffusion. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Work-shops (CVPRW). pp. 4599–4603 (2023) 4. Chen, D., Duan, Z., Li, Z., Chen, C., Chen, D., Li, Y., Chen, Y.: Attrictrl: A generalizable framework for controlling semantic attribute intensity in diffusion models. In: International Conference on Learning Representations (ICLR) (2026) 5. Chen, J., Yu, J., Ge, C., Yao, L., Xie, E., Wu, Y., Wang, Z., Kwok, J., Luo, P., Lu, H., Li, Z.: Pixart-α: Fast training of diffusion transformer for photorealistic text-to-image synthesis. In: International Conference on Learning Representations (ICLR) (2024) 6. Chen, P., Shen, M., Ye, P., Cao, J., Tu, C., Bouganis, C.S., Zhao, Y., Chen, T.: 
+
+δ-dit: A training-free acceleration method tailored for diffusion transformers. arXiv preprint arXiv:2406.01125 (2024) 7. Chen, Z., Li, K., Jia, Y., Ye, L., Ma, Y.: Accelerating diffusion transformer via increment-calibrated caching with channel-aware singular value decomposition. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition (CVPR). pp. 18011–18020 (2025) 8. Christiano, P.F., Leike, J., Brown, T., Martic, M., Legg, S., Amodei, D.: Deep re-inforcement learning from human preferences. In: Advances in Neural Information Processing Systems (NeurIPS) (2017) 9. Chu, H., Wu, W., Feng, G., Zhang, Y.: Omnicache: A trajectory-oriented global perspective on training-free cache reuse for diffusion transformer models. In: Pro-ceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 16302–16312 (2025) 10. Dao, T., Fu, D., Ermon, S., Rudra, A., Ré, C.: Flashattention: Fast and memory-efficient exact attention with io-awareness. In: Advances in Neural Information Processing Systems (NeurIPS). pp. 16344–16359 (2022) 11. Esser, P., Kulal, S., Blattmann, A., Entezari, R., Müller, J., Saini, H., Levi, Y., Lorenz, D., Sauer, A., Boesel, F., Podell, D., Dockhorn, T., English, Z., Rombach, R.: Scaling rectified flow transformers for high-resolution image synthesis. In: Pro-ceedings of the 41st International Conference on Machine Learning (ICML). Pro-ceedings of Machine Learning Research, vol. 235, pp. 12606–12633. PMLR (2024) 12. Guo, B., Tang, S., Zeng, C., Shen, Z.: Mosaicdiff: Training-free structural pruning for diffusion model acceleration reflecting pretraining dynamics. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 1655– 1664 (2025) 13. Ho, J., Jain, A., Abbeel, P.: Denoising diffusion probabilistic models. In: Advances in Neural Information Processing Systems (NeurIPS). pp. 6840–6851 (2020) 14. Ho, J., Salimans, T.: Classifier-free diffusion guidance. arXiv preprint arXiv:2207.12598 (2022) 15. Kang, H., Moon, S.D.: A review of artistic image generation and evaluation: Mod-els, metrics, and applications. KSII Transactions on Internet and Information Sys-tems 20 (1), 23–37 (2026) 30 X. Yin et al. 16. Kirstain, Y., Polyak, A., Singer, U., Matiana, S., Penna, J., Levy, O.: Pick-a-pic: An open dataset of user preferences for text-to-image generation. In: Advances in Neural Information Processing Systems (NeurIPS). pp. 36652–36663 (2023) 17. Li, D., Kamko, A., Akhgari, E., Sabet, A., Xu, L., Doshi, S.: Playground v2.5: Three insights towards enhancing aesthetic quality in text-to-image generation. arXiv preprint arXiv:2402.17245 (2024) 18. Liang, Z., Yuan, Y., Gu, S., Chen, B., Hang, T., Cheng, M., Li, J., Zheng, L.: Aesthetic post-training diffusion models from generic preferences with step-by-step preference optimization. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 13199–13208 (2025) 19. Lin, B., Ye, F., Liu, Y., Guo, Z., Zhang, B., Zheng, W., Xu, Y., Xing, T., Wang, Y., Zhang, C.: Sdit: Semantic region-adaptive for diffusion transformers. arXiv preprint arXiv:2601.12283 (2026) 20. Liu, F., Zhang, S., Wang, X., Wei, Y., Qiu, H., Zhao, Y., Zhang, Y., Ye, Q., Wan, F.: Timestep embedding tells: It’s time to cache for video diffusion model. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 7353–7363 (2025) 21. Liu, J., Zou, C., Lyu, Y., Chen, J., Zhang, L.: From reusing to forecasting: Ac-celerating diffusion models with taylorseers. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 15853–15863 (2025) 22. Liu, X., Li, Z., Gu, Q.: Cachequant: Comprehensively accelerated diffusion models. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 23269–23280 (2025) 23. Liu, Z., Yang, Y., Zhang, C., Zhang, Y., Qiu, L., You, Y., Yang, Y.: Region-adaptive sampling for diffusion transformers. arXiv preprint arXiv:2502.10389 (2025) 24. Lu, C., Zhou, Y., Bao, F., Chen, J., Li, C., Zhu, J.: Dpm-solver: A fast ode solver for diffusion probabilistic model sampling in around 10 steps. In: Advances in Neural Information Processing Systems (NeurIPS). pp. 5775–5787 (2022) 25. Ma, X., Fang, G., Wang, X.: Deepcache: Accelerating diffusion models for free. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 15762–15772 (2024) 26. Mo, W., Zhang, T., Bai, Y., Su, B., Wen, J.R., Yang, Q.: Dynamic prompt opti-mizing for text-to-image generation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 26627–26636 (2024) 27. Murray, N., Marchesotti, L., Perronnin, F.: Ava: A large-scale database for aes-thetic visual analysis. In: 2012 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) (2012) 28. Nichol, A.Q., Dhariwal, P.: Improved denoising diffusion probabilistic models. In: Meila, M., Zhang, T. (eds.) Proceedings of the 38th International Conference on Machine Learning (ICML). Proceedings of Machine Learning Research, vol. 139, pp. 8162–8171. PMLR (2021) 29. Nichol, A.Q., Dhariwal, P., Ramesh, A., Shyam, P., Mishkin, P., McGrew, B., Sutskever, I., Chen, M.: GLIDE: Towards photorealistic image generation and editing with text-guided diffusion models. In: Chaudhuri, K., Jegelka, S., Song, L., Szepesvari, C., Niu, G., Sabato, S. (eds.) Proceedings of the 39th International Conference on Machine Learning (ICML). Proceedings of Machine Learning Re-search, vol. 162, pp. 16784–16804. PMLR (2022) 30. Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., Zhang, C., Agarwal, S., Slama, K., Ray, A., et al.: Training language models to follow instructions with human feedback. In: Advances in Neural Information Processing Systems (NeurIPS). pp. 27730–27744 (2022) AccelAes: Training-Free Aesthetic-Enhanced DiT Acceleration 31 31. Peebles, W., Xie, S.: Scalable diffusion models with transformers. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 4195– 4205 (2023) 32. Qin, Q., Zhuo, L., Xin, Y., Du, R., Li, Z., Fu, B., Lu, Y., Li, X., Liu, D., Zhu, X., et al.: Lumina-image 2.0: A unified and efficient image generative framework. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 20031–20042 (2025) 33. Qiu, J., Liu, L., Wang, S., Lu, J., Chen, K., Hao, Y.: Accelerating diffusion trans-former via gradient-optimized cache. In: Proceedings of the IEEE/CVF Interna-tional Conference on Computer Vision (ICCV). pp. 17608–17617 (2025) 34. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., Krueger, G., Sutskever, I.: Learning transferable visual models from natural language supervision. In: Meila, M., Zhang, T. (eds.) Proceedings of the 38th International Conference on Machine Learning (ICML). Proceedings of Machine Learning Research, vol. 139, pp. 8748–8763. PMLR (2021) 35. Rombach, R., Blattmann, A., Lorenz, D., Esser, P., Ommer, B.: High-resolution image synthesis with latent diffusion models. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 10684– 10695 (2022) 36. Schuhmann, C., Beaumont, R., Vencu, R., Gordon, C., Wightman, R., Cherti, M., Coombes, T., Katta, A., Mullis, C., Wortsman, M., et al.: Laion-5b: An open large-scale dataset for training next generation image-text models. In: Advances in Neural Information Processing Systems (NeurIPS). pp. 25278–25294 (2022) 37. Selvaraju, P., Ding, T., Chen, T., Zharkov, I., Liang, L.: Fora: Fast-forward caching in diffusion transformer acceleration. arXiv preprint arXiv:2407.01425 (2024) 38. Shen, D., Song, G., Xue, Z., Wang, F.Y., Liu, Y.: Rethinking the spatial incon-sistency in classifier-free diffusion guidance. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 9370–9379 (2024) 39. Song, J., Meng, C., Ermon, S.: Denoising diffusion implicit models. In: International Conference on Learning Representations (ICLR) (2021) 40. Talebi, H., Milanfar, P.: Nima: Neural image assessment. IEEE Transactions on Image Processing (2018) 41. Wu, H., Xu, J., Le, H., Samaras, D.: Importance-based token merging for effi-cient image and video generation. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 4983–4995 (2025) 42. Wu, X., Hao, Y., Sun, K., Chen, Y., Zhu, F., Zhao, R., Li, H.: Human preference score v2: A solid benchmark for evaluating human preferences of text-to-image synthesis. arXiv preprint arXiv:2306.09341 (2023) 43. Xu, J., Liu, X., Wu, Y., Tong, Y., Li, Q., Ding, M., Tang, J., Dong, Y.: Imagere-ward: Learning and evaluating human preferences for text-to-image generation. In: Advances in Neural Information Processing Systems (NeurIPS). pp. 15903–15935 (2023) 44. Zhang, H., Gao, T., Shao, J., Wu, Z.: Blockdance: Reuse structurally similar spatio-temporal features to accelerate diffusion transformers. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 12891–12900 (2025) 45. Zhang, J., Xiang, C., Huang, H., Wei, J., Xi, H., Zhu, J., Chen, J.: Spargeattention: Accurate and training-free sparse attention accelerating any model inference. In: Proceedings of the 42nd International Conference on Machine Learning (ICML). Proceedings of Machine Learning Research, vol. 267, pp. 76397–76413 (2025) 32 X. Yin et al. 46. Zhuo, L., Du, R., Xiao, H., Li, Y., Liu, D., Huang, R., Liu, W., Zhu, X., Wang, F.Y., Ma, Z., Luo, X., Wang, Z., Zhang, K., Zhao, L., Liu, S., Yue, X., Ouyang, W., Qiao, Y., Li, H., Gao, P.: Lumina-next: Making lumina-t2x stronger and faster with next-dit. In: Advances in Neural Information Processing Systems (NeurIPS) (2024) 47. Zou, C., Liu, X., Liu, T., Huang, S., Zhang, L.: Accelerating diffusion transformers with token-wise feature caching. In: International Conference on Learning Repre-sentations (ICLR) (2025)
