@@ -1,0 +1,586 @@
+Title: TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers
+
+URL Source: https://arxiv.org/pdf/2603.08928v1
+
+Published Time: Wed, 11 Mar 2026 00:13:42 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers 
+
+Yihua Liu 1 Fanjiang Ye 2 Bowen Lin 3 Rongyu Fang 1 Chengming Zhang 3
+
+# Abstract 
+
+Diffusion Transformer (DiT) faces challenges when generating images with higher resolution compared at training resolution, causing espe-cially structural degradation due to attention dilu-tion. Previous approaches attempt to mitigate this by sharpening attention distributions, but fail to preserve fine-grained semantic details and intro-duce obvious artifacts. In this work, we analyze the characteristics of DiTs and propose TIDE, a training-free text-to-image (T2I) extrapolation method that enables generation with arbitrary res-olution and aspect ratio without additional sam-pling overhead. We identify the core factor for prompt information loss, and introduce a text an-choring mechanism to correct the imbalance be-tween text and image tokens. To further eliminate artifacts, we design a dynamic temperature con-trol mechanism that leverages the pattern of spec-tral progression in the diffusion process. Exten-sive evaluations demonstrate that TIDE delivers high-quality resolution extrapolation capability and integrates seamlessly with existing state-of-the-art methods. 
+
+# 1. Introduction 
+
+Diffusion models (Sohl-Dickstein et al., 2015; Ho et al., 2020; Ho & Salimans, 2022; Ramesh et al., 2022; Rombach et al., 2022) have shown impressive performance in text-to-image (T2I) generations. With its superior scalability, Diffusion Transformer (DiT) (Peebles & Xie, 2023) has replaced UNet as the most popular architecture in recent state-of-the-art pre-trained diffusion models, such as Stable Diffusion 3 (Esser et al., 2024) and FLUX (Labs, 2024). However, generating images with higher resolution than pre-trained resolution still leads to collapse in global structures 
+
+> 1
+
+Independent Researcher 2Rice University 3University of Hous-ton. Correspondence to: Yihua Liu <fwcnigo@gmail.com >,Chengming Zhang <czhang48@uh.edu >.
+
+Preprint. March 11, 2026. 
+
+and local details (Bu et al., 2025). One possible solution is to train or fine-tune models directly at the higher resolu-tion (Hoogeboom et al., 2023; Xie et al., 2023). However, high-resolution image datasets are not as easily accessible as long text datasets. Moreover, DiT’s sequence length has a quadratic relationship with the image token length, which increases demands on computational resources and memory. Another intuitive approach, which is more practical, is to ap-ply super-resolution (SR) methods to low-resolution images (Wang et al., 2024; Yang et al., 2024; Duan et al., 2025). However, SR methods are fundamentally constrained by the low-resolution structural priors. They faithfully follow the low-resolution input and fail to generate novel semantic content or expand the field of view, which are necessary for creating a panoramic image with complex multi-object interactions. Therefore, a training-free extrapolation method is crucial for democratizing high-resolution synthesis. Research on training-free resolution extrapolation for diffu-sion models can be broadly classified into two categories. The first category focuses on designing novel sampling strategies. Techniques proposed by Bar-Tal et al. (2023); Lin et al. (2024) decompose the image into patches and maintain global coherence through region overlap or pixel relocation. Du et al. (2024); Zhang et al. (2024); Haji-Ali et al. (2024); Kim et al. (2025); Bu et al. (2025); Sanjyal (2025) utilized the cascaded sampling technique, where a high-resolution image is progressively generated starting from lower resolutions. While these methods are effec-tive and independent of specific model architectures, their complex sampling procedures introduce significant infer-ence latency, preventing further system-level optimization. The second category aims to modify the model architecture, enabling it to handle larger resolutions directly. Previous works for UNet (He et al., 2023; Lin et al., 2025) focused on expanding the receptive field with dilated convolutional layers. As DiT has replaced UNet as the primary back-bone for diffusion models, research into DiT’s extrapolation capabilities has currently become the most critical direction. Transformer-based architectures inherently face two fun-damental challenges in sequence extrapolation: out-of-distribution (OOD) positional embeddings and attention dilution. Extensive research has been devoted to mitigat-ing these issues in the Large Language Model (LLM) do-1 
+
+> arXiv:2603.08928v1 [cs.CV] 9 Mar 2026 TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers 2048 ×4096
+> 4096 ×2304
+> 4096 ×2304
+> 4096 ×1536
+> 2048 ×2048
+> 2048 ×2048
+> 2048 ×2048
+> 2048 ×2048
+> 4096 ×2048
+> 4096 ×4096
+> 4096 ×2048 2048 ×2048
+> Figure 1. Collage of multi-resolution results generated by TIDE. Prompts are from DrawBench and Aesthetic-4K. Zoom in for details.
+
+main (Su et al., 2024; kaiokendev, 2023; Chen et al., 2023b; bloc97, 2023; Peng et al., 2023; Ding et al., 2024; Nakanishi, 2025). However, the transition from 1D texts to 2D images introduces distinct challenges for DiTs. First, the standard 2D Rotary Positional Embedding (RoPE) (Su et al., 2024; Lu et al., 2024; Zhuo et al., 2024) implies that positional indices scale linearly with resolution, whereas the sequence length grows quadratically. This inconsistency makes atten-tion dilution significantly more critical than positional OOD. Second, in T2I tasks with mainstream Multimodal Diffusion Transformers (MM-DiT) architecture (Esser et al., 2024), the fixed number of text tokens is severely overwhelmed by the quadratic expansion of image tokens, leading to dimin-ished semantic guidance at high resolutions. However, previous approaches for DiTs mainly focused on positional OOD (Lu et al., 2024; Zhuo et al., 2024; Issachar et al., 2025), leaving the attention dilution issue under-explored. Jin et al. (2023) provided a valuable theoret-ical analysis of this phenomenon in DiTs, yet their proposed approach is methodologically analogous to the generic at-tention sharpening used in YaRN (Peng et al., 2023), which has already been widely applied in LLMs. Even with re-cent refinements such as head-specific adjustments (Zhao et al., 2025), these approaches essentially rely on heuristic entropy reduction that fails to exploit the characteristics for DiTs and T2I tasks. Consequently, they suffer from two limitations: First, naively sharpening the distribution recov-ers only a few dominant tokens while suppressing other information. Second, employing a static sharpening strategy neglects the spectral pattern of the diffusion process (Ris-sanen et al., 2022; Hoogeboom et al., 2023; Issachar et al., 2025), leading to severe high-frequency artifacts. To bridge the gap between the complex attention distribution issue of DiTs and the simple sharpening technique, we pro-pose TIDE, a training-free framework for high-resolution T2I generation. We first analyze the aggregate attention scores obtained by text tokens during the sampling process at different resolutions, confirming that the text influence significantly decays as resolution increases. Furthermore, we confirm that simply sharpening the attention distribu-tion cannot completely resolve this issue and may instead introduce severe artifacts. Building on these insights, we provide two core innovations (illustrated in Figure 2). First ,we introduce Text Anchoring to restore the influence of text tokens during the sampling process and improve the quality of global structure. Second , we propose a Dynamic Tem-perature Control scheme based on the pattern of spectral progression in the diffusion process, which effectively elim-inates the high-frequency local artifacts commonly caused by static sharpening strategies. Overall, our approach un-locks the full potential of DiTs’ capabilities for generation at arbitrary resolutions and aspect ratios, ensuring that the model’s architectural flexibility does not come at the cost of image quality degradation. Our main contributions are summarized as follows: • We analyze the issue of attention distribution in high-resolution synthesis with DiTs, which has been over-looked compared with the OOD issue of positional embeddings. We point out that current attention sharp-ening techniques are insufficient for solving this issue. • We propose TIDE, a training-free framework without additional sampling steps, providing a solid foundation for general system-level inference optimizations. • We perform extensive experiments and ablation studies, 2TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers Prompt : “Mountain  lake  reflection,  golden  hour  with  mist,  wide -angle  landscape,  painterly  style,  serene  and 
+
+majestic,  shot  with  wide -angle  lens,  natural  light,  crisp  details  throughout .”
+
+# TIDE (Ours) YaRN      
+
+> (a) Resolution Extrapolation at 4096 ×4096
+> Dominant Diluted
+> Our Attention Scores
+> Image Keys Text Keys
+> Image Queries
+> Image Queries
+> Original Attention Scores
+> Text
+> Anchor
+> -ing
+> +𝜷
+
+(c) Text Anchoring (b) Dynamic Temperature Control  
+
+> Image Keys Text Keys
+
+Figure 2. Overview of our proposed TIDE framework. (a) Visual comparison at 4096 × 4096 resolution. While existing methods (left) suffer from information loss and repetitive artifacts, our approach (right) preserves prompt fidelity and generates realistic details. (b) Dynamic Temperature Control method, which dynamically adjusts the attention temperature across time-steps to eliminate high-frequency artifacts. (c) Text Anchoring mechanism, which counteracts attention dilution by reinforcing the cross-attention scores between image queries and text keys, recovering the influence of text tokens. 
+
+demonstrating the effectiveness of TIDE. • Our framework can be seamlessly integrated with exist-ing positional embeddings interpolation methods and sampling-based strategies. 
+
+# 2. Background 
+
+2.1. Diffusion Transformer for Text-to-Image Synthesis 
+
+Diffusion Transformer (DiT) (Peebles & Xie, 2023) has re-placed the U-Net backbone with a transformer that operates on latent space (Rombach et al., 2022) . Due to its flexible and scalable architecture, DiT has become the foundation of many state-of-the-art image generation models, such as Stable Diffusion 3 (Esser et al., 2024), FLUX.1 (Labs, 2024) and Qwen-Image (Wu et al., 2025). Previous DiT-based text-to-image synthesis methods (Chen et al., 2023a) mainly utilize cross-attention mechanisms to incorporate textual guidance. Formally, let XI ∈ RLI×c
+
+and XT ∈ RLT×c denote the features of the image token sequence and text token sequence, where LI , LT and c are the length of image token sequence, the length of text token sequence and the token dimension respectively. Then we can define the key, query and value matrices as follows: 
+
+QI = XIWQ, KT = XTWK , VT = XTWV (1) 
+
+where W{Q,K,V } ∈ Rc×d are learnable projection matrices, and d is the hidden dimension. Attention is computed as: 
+
+S = QIK⊤ 
+
+> T
+
+, P = softmax ( S
+
+√d ), O = PV T (2) 
+
+However, most current state-of-the-art models use the Multi-modal Diffusion Transformer (MM-DiT) architecture from Stable Diffusion 3, where image tokens and text tokens are concatenated in the sequence length dimension before being processed by transformer blocks. Formally, we can define the input of transformer blocks as follows: 
+
+Q = Concat (QT, QI) = Concat (XTWT
+
+> Q
+
+, XIWI
+
+> Q
+
+) (3) 
+
+K = Concat (KT, KI) = Concat (XTWT 
+
+> K
+
+, XIWI 
+
+> K
+
+) (4) 
+
+V = Concat (VT, VI) = Concat (XTWT 
+
+> V
+
+, XIWI 
+
+> V
+
+) (5) where Concat (·) denotes the concatenation operation along the sequence length dimension, and WI  
+
+> {Q,K,V }
+
+∈ Rc×d
+
+and WT  
+
+> {Q,K,V }
+
+∈ Rc×d denote the projection matrices for image features and text features. Joint attentions in MM-DiT can be computed as follows: 
+
+S = QK ⊤, P = softmax ( S
+
+√d ), O = PV (6) 
+
+3TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers 
+
+2.2. Attention Entropy 
+
+Since each row of the attention score matrix P = [ pij ] ∈
+
+RL×L in Eq. (6) can be treated as a probability mass func-tion of a discrete random variable, Jin et al. (2023) defined the attention entropy with respect to the token at position i
+
+as follows:      
+
+> Hi=−
+> NX
+> j=1
+> pij log( pij )(7)
+
+The entropy of the i-th token is maximized when attention scores are uniformly distributed and minimized when atten-tion concentrates on a single token. Consequently, attention entropy quantifies the uniformity of the attention distribu-tion. As demonstrated by Jin et al. (2023), this entropy scales with the sequence length L:     
+
+> Hi= log L−σ2
+> i
+> 2(8)
+
+where the latter item σ2 
+
+> i
+> 2
+
+is not relevant with the sequence length L.Sequence extrapolation in Transformer-based architectures is fundamentally hindered by two challenges: out-of-distribution (OOD) positional embeddings and attention dilution. To address these concurrently, YaRN (Peng et al., 2023) serves as a representative baseline, integrating a hy-brid strategy that combines positional interpolation with attention distribution control. 
+
+2.3. YaRN and Distribution Sharpening 
+
+Transformer-based models, including both LLMs and DiTs, inherently face two fundamental challenges in sequence extrapolation: out-of-distribution (OOD) positional embed-dings and attention dilution. YaRN (Peng et al., 2023) serves as a representative baseline, integrating a hybrid strategy that combines positional interpolation with attention distribution control. Specifically, YaRN employs an NTK-by-parts in-terpolation scheme to align positional indices within the training domain, while introducing a temperature factor τ
+
+to the softmax operation to counteract attention dilution:     
+
+> P=softmax
+> QK ⊤
+> τ√d
+> 
+> (9)
+
+with extrapolation scaling factor s, the recommended tem-perature τ by YaRN is:    
+
+> r1
+> τ= 0 .1 ln( s) + 1 (10)
+
+The τ value determined in Eq. (10) is always less than 1.0
+
+and decreases as s increases. Consequently, the distribution of attention scores is sharpened, thereby mitigating the issue of attention dilution. 
+
+# 3. Method 
+
+3.1. Analysis of Extrapolation Failure YaRN                    
+
+> 4096 ×4096
+> NTK -by -Parts
+> 4096 ×4096
+> NTK -Aware
+> 4096 ×4096
+> FLUX
+> 4096 ×4096
+> FLUX
+> 1024 ×1024
+> (Reference)
+> Figure 3. Visual comparison of subject vanishing issues at 4K resolution. We compare four extrapolation baselines at
+> 4096 ×4096 with the native resolution 1024 ×1024 .While the model at native resolution produces coherent subjects, baseline methods except YaRN suffer from severe subject vanishing issue, and YaRN’s content richness has also noticeably declined.
+
+Equation (8) suggests that as sequence length N increases, the model suffers from attention dilution, where the distri-bution of attention score becomes overly smoothed. When generating high-resolution (e.g. 4096 × 4096 ) images with DiT, the distribution of attention scores can be overly uni-form which implies that the output token is essentially the average of the value tokens. As illustrated in Figure 3, most extrapolation methods suffer from the issue of subject vanishing, because all tokens blend together after transformer blocks, ultimately resulting in a featureless image only having the average color. Only YaRN (Peng et al., 2023) can mitigate this issue, yet it still cannot recover other information in the prompt as shown in reference images. Merely applying NTK-by-parts methods 4TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers YaRN           
+
+> 4096 ×4096
+> NTK -by -Parts
+> 4096 ×4096
+> NTK -Aware
+> 4096 ×4096
+> FLUX
+> 4096 ×4096
+> FLUX
+> 1024 ×1024
+> (Reference)
+> Output
+> Text Influence
+> Prompt: A bustling street
+> scene with muted colors
+> featuring tall buildings,
+> a canopy over a small
+> cafe, and silhouettes of
+> people mingling on a
+> rainy pavement, with a
+> few birds flying overhead.
+
+Figure 4. Visualization of text token influence decay. We visualize the spatial influence of text prompts at the early sampling stage, revealing that text guidance influence diminishes as the target resolution scales to 4096 × 4096 . Specifically, Direct Extrapolation, NTK-Aware Interpolation and NTK-by-Parts Interpolation exhibit a near-total loss of spatial influence, providing a mechanistic explanation for the subject vanishing issue. YaRN only partially recovers token influence in the central region, resulting in suboptimal generation quality. 
+
+and removing the temperature factor in Eq. (9) fails to solve this issue. This contrast confirms that it is the temperature τ
+
+defined in Eq. (10) that sharpens the distribution of attention score and reduces the attention entropy, therefore mitigates the issue of subject vanishing. Methods proposed by Jin et al. (2023); Chiang & Cholak (2022); Nakanishi (2025) es-sentially lower the temperature as well, which are not based on NTK-by-parts method, demonstrating that adjusting the attention distribution does not rely on specific positional embeddings interpolation methods. Although lowering the temperature globally has noticeable results, this method originally designed for LLMs does not consider the characteristics of text-to-image generation with DiTs, which are text decay in high-resolution generation and the spectral progression of the diffusion process. 
+
+Text Decay in High-Resolution Generation. As discussed in Section 2.1, the image token sequence and text token sequence are usually concatenated to one sequence before computing attention. As image resolution grows, the length of image token sequence LI grows as well, while the length of text token sequence LT remains unchanged. This leads to the attention for the text token being severely diluted. With KT ∈ RLT×d and KI ∈ RLI×d defined in Eq. (4) , the attention score P in Eq. (6) can be rewritten as: 
+
+P = Concat (PT, PI)= Softmax 
+
+ Concat (ST, SI)
+
+√d
+
+ (11) 
+
+where ST = QK ⊤ 
+
+> T
+
+∈ RL×LT and SI = QK ⊤ 
+
+> I
+
+∈ RL×LI .Consider the attention score for i-th text token, we have: 
+
+PTi = eSTi
+
+PLT 
+
+> i=1
+
+eSTi + PLI 
+
+> j=1
+
+eSIj
+
+(12) 
+
+where STj is the j-th column of ST and SIj is the j-th column of SI. Then we accumulate the attention scores for all text tokens as follows: 
+
+X
+
+> i
+
+PTi =
+
+PLT 
+
+> i=1
+
+eSTi
+
+PLT 
+
+> i=1
+
+eSTi + PLI 
+
+> j=1
+
+eSIj
+
+(13) 
+
+Since LI grows as image resolution grows and LT remains constant, we can observe that the attention score to text tokens decreases accordingly. Therefore, the attention as-signed to each text token decreases. Although lowering the temperature of softmax can sharpen the distribution, it only enhances tokens that received more attention initially. In other words, it cannot enhance most of the text tokens, especially those not directly related to the main subject. Heat maps in Figure 4 demonstrate the accumulated atten-tion scores for all text tokens. We compare the generation at training resolution and the generation at a higher resolution with direct extrapolation, NTK-aware interpolation, NTK-by-parts interpolation and YaRN. We can observe that when generating high-resolution images, the first three methods have very dark heatmaps, and their results suffer from the subject vanishing issue. YaRN recovers brightness in the main subject areas of the heatmap, but still loses attention to text tokens in surrounding areas. While its results re-cover the subject, other information in the prompt (such as background and image style) is lost. 
+
+Spectral Progression of the Diffusion Process. Rissanen et al. (2022); Hoogeboom et al. (2023) have shown the spectral progression of the diffusion process, where the 5TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers 
+
+models focus on global structures (low-frequency) in early sampling steps and generate local details (high-frequency) in late steps. This implies that extrapolation methods should also adapt to this pattern. Based on this observation, Zhuo et al. (2024) proposed time-aware scaled RoPE, which uses PI in the early sampling steps for global structure and gradually shifting to NTK-Aware interpolation for local details. Issachar et al. (2025) further analyzed the evolution of frequency modes in the dif-fusion process, and introduced explicit time dependence into the formulate of PI, NTK-Aware Interpolation and YaRN. However, both of them are essentially interpolation methods that consider the current sampling step, and they do not dynamically adjust the distribution of attention scores. 
+
+3.2. Text Anchoring 
+
+To address the issue of text decay, we propose a new ap-proach called Text Anchoring to preserve the influence of text tokens during high-resolution generating. Specifically, we introduce a bias β > 0 added to the orig-inal attention logits to text tokens ST = QK ⊤ 
+
+> T
+
+∈ RL×LT ,yielding the corrected logits S′
+
+> T
+
+:     
+
+> S′
+> T=ST+β(14)
+
+Given the shift invariance of softmax, adding a bias instead of multiplying a factor can better preserve the relative prob-ability distribution among text tokens. Furthermore, mul-tiplicative enhancement requires additional consideration of negative logits to avoid mistakenly weakening attention, which requires implementing a new kernel. In contrast, additive enhancement only requires passing an attention mask. We further consider the value of bias β. Instead of setting it as a constant hyperparameter, we proposed a method adapted to the extrapolation scale. Let the number of pixels in the target images be λ times that of the training image, the sum value for image tokens in Eq. (13) ’s denominator can be presumably approximated as λ times the original value. Therefore, we expect the sum value for text tokens should also become λ times the original value after adding the bias:      
+
+> LTX
+> i=1
+> eSTi+β=λ·
+> LTX
+> i=1
+> eSTi(15)
+
+Then we have:    
+
+> ex+β=λe x(16)
+
+Therefore, we can determine that the bias β is:   
+
+> β= ln( λ)(17)
+
+If we apply the scaling factor s to both height and width, then we should have λ = s2, and bias:   
+
+> β= ln( s2) = 2 ln( s)(18)
+
+After aligning the influence of text tokens and image tokens, we still need to sharpen the attention distribution with low-ering the temperature τ . Thus we have the final attention score:        
+
+> P=Softmax
+> Concat (ST+β, SI)
+> τ√d
+> 
+> (19)
+
+where temperature value τ is same as YaRN’s in Eq. (10). 
+
+3.3. Dynamic Temperature Control 
+
+Although the method in section 3.2 restored most of the information in the prompt, it primarily improved the quality of global structure. The local details instead have significant artifacts including speckles and irregular grids due to the sharpening of the attention score’s distribution. In other words, while the high-frequency details do require lowering the temperature to prevent blurring, the temperature should not be set too low. Since diffusion models focus on low-frequency structure in early steps and generate high-frequency details in late steps, we can dynamically control the temperature τ , allowing it to gradually increase during the denoising process. We normalized the time t to the interval [0 , 1] , which decrease from 1 to 0 during the denoising process, then we have τ (t)
+
+as:          
+
+> τ(t) = τmax −(τmax −τmin )·t(20)
+
+where τmax and τmin are constant hyperparameters and sat-isfy τmax > τ min . In our experiments, we set τmax to 1.0 and 
+
+τmin to the temperature in Eq. (10) used by YaRN. Furthermore, DyPE shows that the low-frequency modes evolve fast and converge quickly, while the high-frequency modes evolve gradually and nearly linearly. Inspired by this spectral evolution result, we further adjust the temperature based on different frequencies f of PE. We introduce an exponent α(f ) to control the convexity of the curve.            
+
+> τ(t, f ) = τmax −(τmax −τmin )·tα(f)(21)
+
+where α(f ) can be defined as:          
+
+> α(f) = αlow + ( αhigh −αlow )·f(22)
+
+6TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers TIDE (Ours)  TIDE (Ours )DY -YaRN  DY -YaRN               
+
+> 4096 ×4096
+> 2048 ×2048
+> Figure 5. Qualitative comparison with baseline method. We compare TIDE against baseline methods. The input prompts correspond to the rows: 2K Prompt 1: “A Moai statue gazes upward against a starry night sky, with a colorful sunset illuminating the horizon. ”; 2K Prompt 2: “New York Skyline with ’Diffusion’ written with fireworks on the sky. ”; 4K Prompt 1: “A futuristic spaceship flies over a lush landscape featuring rocky cliffs and a settlement with domed buildings near a serene body of water surrounded by greenery. ”; 4K Prompt 2: “Narrow cobblestone alley featuring colorful buildings with green and orange facades, potted plants lining the street, and a puddle reflecting the scene. ”.
+
+The αlow and αhigh are constant hyperparameters correspond-ing to the lowest frequency and highest frequency respec-tively, and satisfy αlow > α high . In our experiments, we set 
+
+αlow to 0.6 and αhigh to 0.2.
+
+# 4. Experiments 
+
+4.1. Experimental Setup Settings. We apply TIDE on FLUX.1-dev (Labs, 2024), an advanced open-source model based on DiT architecture with default generation resolution as 1024 × 1024 . We experiment with resolution up to 4096 ×4096 . The sampling steps are set to 28 , and the guidance scale is set to 3.5. For our dynamic temperature control, we apply αlow = 0 .6 and 
+
+αhigh = 0 .2. All experiments are conducted on NVIDIA RTX 6000 Ada GPUs. 
+
+Baselines. We compare our method with three baselines: (1) Direct Extrapolation; (2) YaRN (Peng et al., 2023); (3) Dy-YaRN (Issachar et al., 2025). 
+
+Metrics. We choose Fr ´echet Inception Distance (Heusel et al., 2017) (FID) and Kernel Inception Distance (Bi ´nkowski et al., 2018) (KID), CLIP Score (Radford et al., 2021), ImageReward (Xu et al., 2023) and Aesthetic-Score-Predictor (Schuhmann et al., 2022). Both FID and KID mea-sure the similarity between the ground images and the gen-erated images. CLIP Score represents the prompt-following capability, ImageReward represents human preference align-ment, and Aesthetic Score represents human aesthetic judg-ments. Note that since the count of images is small, KID, which is unbiased, has better reliability than FID. 
+
+4.2. Qualitative Results 
+
+Figure 5 provides qualitative comparisons at different res-olutions with prompts from DrawBench and Aesthetic-4K. With prompt 1 at 2048 × 2048 resolution, our images ex-hibit superior aesthetic quality. The colors of sunsets and the details of statues appear richer, while the composition has enhanced visual appeal. Our method also preserves the full information from the prompt 2 at 2048 × 2048 resolution, especially the word ‘Diffusion’. As resolution increases to 
+
+4096 ×4096 , our method maintains quality without degrada-tion in content richness or detail fidelity. More quantitative results comparisons are provided in Appendix C. 
+
+4.3. Quantitative Results 
+
+To evaluate the quantitative results, we use all 200 text prompts from DrawBench (Saharia et al., 2022) and all 195 image-prompt pairs from the 4K-resolution subset of Aesthetic-4K (Zhang et al., 2025) to generate images. The results are summarized in Table 1. At 2048 × 2048 res-olution, our method achieves the best results across most metrics. Based on the quantitative results from Section 4.2, the baseline methods can still generate image with accept-able quality. As resolution increases to 4096 × 4096 , our method demonstrates a more pronounced advantage. Di-rect extrapolation suffers from severe decline in all metrics, corresponding to the subject vanishing issue illustrated in Figure 3. While YaRN and Dy-YaRN exhibit improve-ments over raw FLUX, they still display considerable gaps compared to our method. These results demonstrate our advantages in ultra-high-resolution text-to-image synthesis. 7TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers    
+
+> Table 1. Quantitative comparison with baselines. We compare our TIDE with FLUX, YaRN, and Dy-YaRN on DrawBench and Aesthetic-4K. All methods are built on FLUX. Best results are bolded .
+
+Resolution Method DrawBench Aesthetic-4K 
+
+CLIP ↑ IR ↑ Aesth ↑ FID ↓ KID ↓ CLIP ↑ IR ↑ Aesth ↑
+
+2048 × 2048 
+
+FLUX 26.63 0.46 5.53 162.59 0.0087 27.87 1.02 6.54 YaRN 26.76 0.66 5.76 141.93 0.0045 28.07 1.14 6.59 Dy-YaRN 26.52 0.72 5.74 161.32 0.0068 28.09 1.10 6.62 
+
+TIDE (Ours) 27.34 0.83 5.77 159.35 0.0066 28.60 1.21 6.68 
+
+4096 × 4096 
+
+FLUX 15.16 -2.19 2.92 341.79 0.1952 13.46 -2.25 2.58 YaRN 23.25 -0.83 4.39 211.48 0.0494 23.86 -0.24 5.75 Dy-YaRN 23.21 -0.84 4.39 211.50 0.0496 23.90 -0.24 5.75 
+
+TIDE (Ours) 26.13 0.18 5.34 158.39 0.0081 27.33 0.75 6.44           
+
+> Table 2. User study results. We conduct a subjective evaluation comparing TIDE and Dy-YaRN on 20 randomly selected prompts. Participants rated images on a scale of 1 to 5 (higher is better). We report the mean score for each aspect.
+> Method TIDE (Ours) Dy-YaRN
+> Text Alignment 4.57 3.60 Global Structure 4.33 3.21 Texture Quality 4.46 2.48
+
+4.4. User Study 
+
+We conduct a User Study with researchers familiar with generative AI models. We randomly selected 20 prompts from Aesthetic-4K to generate images with Dy-YaRN and our TIDE at 4096 × 4096 resolution. For each prompt, participants were required to rate images on a scale from 1 to 5 at three levels: (i) Alignment with the text. (ii) Structural integrity and proportions. (iii) Refined textures and details. As illustrated in Table 2, TIDE achieves much better scores over three aspects. 
+
+4.5. Ablation study 
+
+We conduct the ablation study to validate the effectiveness of our two core components: Text Anchoring (TA) and Dy-namic Temperature Control (DTC). We apply Dy-YaRN (Issachar et al., 2025) on FLUX as our baseline. We ran-domly selected 50 prompts from Aesthetic-4K (Zhang et al., 2025) to guide image generation at 4096 × 4096 resolution across four configurations: (1) Baseline (w/o TA and DTC), (2) TA only, (3) DTC only, and (4) Full Method (w/ TA and DTC). The quantitative results are summarized in Table 3. Re-gardless of whether DTC is enabled, enabling TA has a significant positive effect on metrics. However, Enabling DTC may result in a decline in certain metrics. Despite this, qualitative experiment reveals that the generated images   
+
+> Table 3. Component-wise ablation study. We investigate the impact of Text Anchoring and Dynamic Temperature Control on Asethetic-4K. The baseline model is Dy-YaRN. Best results are
+> bolded .
+
+Configurations CLIP ↑ IR ↑ Aesth ↑
+
+Baseline 23.60 -0.44 5.64 TA Only 26.60 0.66 6.54 
+
+DTC Only 23.28 -0.30 5.65 Full Method 26.76 0.86 6.46 
+
+tend to suffer from severe artifacts without DTC. Further qualitative results and parameter analysis supporting this design choice can be found in Appendix B and Figure 8. 
+
+# 5. Conclusion 
+
+We presented TIDE, a training-free framework that enables pre-trained diffusion transformers to generate images with higher resolution without additional sampling overhead. We identified the issue of prompt information loss and proposed the text anchoring method to improve the global structure. We also introduced the dynamic temperature control mech-anism to eliminate local artifacts. Extensive experiments demonstrated that TIDE significantly improves resolution extrapolation performance and has excellent compatibility. As future work, we will focus on the TIDE framework guided by real-time data such as attention entropy, which involves high-performance kernel design and system-level optimization. We also hope to find similar insights from other generative tasks, such as image-to-image generation and video generation, to improve their extrapolation quality. 
+
+# Impact Statement 
+
+This paper presents work whose goal is to advance the field of machine learning. There are many potential societal 8TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers 
+
+consequences of our work, none of which we feel must be specifically highlighted here. 
+
+# References 
+
+Bar-Tal, O., Yariv, L., Lipman, Y., and Dekel, T. Multi-diffusion: Fusing diffusion paths for controlled image generation. arXiv preprint arXiv:2302.08113 , 2023. Bi ´nkowski, M., Sutherland, D. J., Arbel, M., and Gret-ton, A. Demystifying mmd gans. arXiv preprint arXiv:1801.01401 , 2018. bloc97. NTK-Aware Scaled RoPE allows LLaMA models to have extended (8k+) context size without any fine-tuning and minimal perplexity degradation., 2023. URL 
+
+https://www.reddit.com/r/LocalLLaMA/ comments/14lz7j5/ntkaware_scaled_ rope_allows_llama_models_to_have/ .Bu, J., Ling, P., Zhou, Y., Zhang, P., Wu, T., Dong, X., Zang, Y., Cao, Y., Lin, D., and Wang, J. Hiflow: Training-free high-resolution image generation with flow-aligned guidance. arXiv preprint arXiv:2504.06232 , 2025. Chen, J., Yu, J., Ge, C., Yao, L., Xie, E., Wu, Y., Wang, Z., Kwok, J., Luo, P., Lu, H., et al. Pixart-α: Fast training of diffusion transformer for photorealistic text-to-image synthesis. arXiv preprint arXiv:2310.00426 , 2023a. Chen, S., Wong, S., Chen, L., and Tian, Y. Extending context window of large language models via positional interpolation. arXiv preprint arXiv:2306.15595 , 2023b. Chiang, D. and Cholak, P. Overcoming a theoretical limita-tion of self-attention. arXiv preprint arXiv:2202.12172 ,2022. Ding, Y., Zhang, L. L., Zhang, C., Xu, Y., Shang, N., Xu, J., Yang, F., and Yang, M. Longrope: Extending llm context window beyond 2 million tokens. arXiv preprint arXiv:2402.13753 , 2024. Du, R., Chang, D., Hospedales, T., Song, Y.-Z., and Ma, Z. Demofusion: Democratising high-resolution image generation with no $$$. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pp. 6159–6168, 2024. Duan, Z.-P., Zhang, J., Jin, X., Zhang, Z., Xiong, Z., Zou, D., Ren, J. S., Guo, C., and Li, C. Dit4sr: Taming diffusion transformer for real-world image super-resolution. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 18948–18958, 2025. Esser, P., Kulal, S., Blattmann, A., Entezari, R., M ¨uller, J., Saini, H., Levi, Y., Lorenz, D., Sauer, A., Boesel, F., et al. Scaling rectified flow transformers for high-resolution image synthesis. In Forty-first international conference on machine learning , 2024. Haji-Ali, M., Balakrishnan, G., and Ordonez, V. Elasticd-iffusion: Training-free arbitrary size image generation through global-local content separation. In Proceedings of the IEEE/CVF conference on computer vision and pat-tern recognition , pp. 6603–6612, 2024. He, Y., Yang, S., Chen, H., Cun, X., Xia, M., Zhang, Y., Wang, X., He, R., Chen, Q., and Shan, Y. Scalecrafter: Tuning-free higher-resolution visual generation with dif-fusion models. In The Twelfth International Conference on Learning Representations , 2023. Heusel, M., Ramsauer, H., Unterthiner, T., Nessler, B., and Hochreiter, S. Gans trained by a two time-scale update rule converge to a local nash equilibrium. Advances in neural information processing systems , 30, 2017. Ho, J. and Salimans, T. Classifier-free diffusion guidance. 
+
+arXiv preprint arXiv:2207.12598 , 2022. Ho, J., Jain, A., and Abbeel, P. Denoising diffusion proba-bilistic models. Advances in neural information process-ing systems , 33:6840–6851, 2020. Hoogeboom, E., Heek, J., and Salimans, T. simple diffu-sion: End-to-end diffusion for high resolution images. In International Conference on Machine Learning , pp. 13213–13232. PMLR, 2023. Issachar, N., Yariv, G., Benaim, S., Adi, Y., Lischinski, D., and Fattal, R. Dype: Dynamic position extrapola-tion for ultra high resolution diffusion. arXiv preprint arXiv:2510.20766 , 2025. Jin, Z., Shen, X., Li, B., and Xue, X. Training-free diffusion model adaptation for variable-sized text-to-image synthe-sis. Advances in Neural Information Processing Systems ,36:70847–70860, 2023. kaiokendev. Things I’m learning while training superhot., 2023. URL https://kaiokendev.github.io/ til#extending-context-to-8k .Kim, Y., Hwang, G., Zhang, J., and Park, E. Diffusehigh: Training-free progressive high-resolution image synthesis through structure guidance. In Proceedings of the AAAI conference on artificial intelligence , volume 39, pp. 4338– 4346, 2025. Labs, B. F. Flux. https://github.com/ black-forest-labs/flux , 2024. Lin, M., Lin, Z., Zhan, W., Cao, L., and Ji, R. Cutdiffusion: A simple, fast, cheap, and strong diffusion extrapolation method. arXiv preprint arXiv:2404.15141 , 2024. 9TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers 
+
+Lin, Z., Lin, M., Zhan, W., and Ji, R. Accdiffusion v2: Towards more accurate higher-resolution diffusion ex-trapolation. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. Lu, Z., Wang, Z., Huang, D., Wu, C., Liu, X., Ouyang, W., and Bai, L. Fit: Flexible vision transformer for diffusion model. arXiv preprint arXiv:2402.12376 , 2024. Nakanishi, K. M. Scalable-softmax is superior for attention. 
+
+arXiv preprint arXiv:2501.19399 , 2025. Peebles, W. and Xie, S. Scalable diffusion models with transformers. In Proceedings of the IEEE/CVF interna-tional conference on computer vision , pp. 4195–4205, 2023. Peng, B., Quesnelle, J., Fan, H., and Shippole, E. Yarn: Efficient context window extension of large language models. arXiv preprint arXiv:2309.00071 , 2023. Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al. Learning transferable visual models from natural language supervision. In International conference on machine learning , pp. 8748–8763. PmLR, 2021. Ramesh, A., Dhariwal, P., Nichol, A., Chu, C., and Chen, M. Hierarchical text-conditional image generation with clip latents. arXiv preprint arXiv:2204.06125 , 1(2):3, 2022. Rissanen, S., Heinonen, M., and Solin, A. Generative modelling with inverse heat dissipation. arXiv preprint arXiv:2206.13397 , 2022. Rombach, R., Blattmann, A., Lorenz, D., Esser, P., and Ommer, B. High-resolution image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , pp. 10684–10695, 2022. Saharia, C., Chan, W., Saxena, S., Li, L., Whang, J., Denton, E. L., Ghasemipour, K., Gontijo Lopes, R., Karagol Ayan, B., Salimans, T., et al. Photorealistic text-to-image dif-fusion models with deep language understanding. Ad-vances in neural information processing systems , 35: 36479–36494, 2022. Sanjyal, A. Rectifiedhr: High-resolution diffusion via en-ergy profiling and adaptive guidance scheduling. arXiv preprint arXiv:2507.09441 , 2025. Schuhmann, C., Beaumont, R., Vencu, R., Gordon, C., Wightman, R., Cherti, M., Coombes, T., Katta, A., Mullis, C., Wortsman, M., et al. Laion-5b: An open large-scale dataset for training next generation image-text models. 
+
+Advances in neural information processing systems , 35: 25278–25294, 2022. Sohl-Dickstein, J., Weiss, E., Maheswaranathan, N., and Ganguli, S. Deep unsupervised learning using nonequi-librium thermodynamics. In International conference on machine learning , pp. 2256–2265. pmlr, 2015. Su, J., Ahmed, M., Lu, Y., Pan, S., Bo, W., and Liu, Y. Roformer: Enhanced transformer with rotary position embedding. Neurocomputing , 568:127063, 2024. Wang, J., Yue, Z., Zhou, S., Chan, K. C., and Loy, C. C. Exploiting diffusion prior for real-world image super-resolution. International Journal of Computer Vision ,132(12):5929–5949, 2024. Wu, C., Li, J., Zhou, J., Lin, J., Gao, K., Yan, K., Yin, S.-m., Bai, S., Xu, X., Chen, Y., et al. Qwen-image technical report. arXiv preprint arXiv:2508.02324 , 2025. Xie, E., Yao, L., Shi, H., Liu, Z., Zhou, D., Liu, Z., Li, J., and Li, Z. Difffit: Unlocking transferability of large diffu-sion models via simple parameter-efficient fine-tuning. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 4230–4239, 2023. Xu, J., Liu, X., Wu, Y., Tong, Y., Li, Q., Ding, M., Tang, J., and Dong, Y. Imagereward: Learning and evaluat-ing human preferences for text-to-image generation. Ad-vances in Neural Information Processing Systems , 36: 15903–15935, 2023. Yang, Z., Jiang, H., Hong, W., Teng, J., Zheng, W., Dong, Y., Ding, M., and Tang, J. Inf-dit: Upsampling any-resolution image with memory-efficient diffusion trans-former. In European Conference on Computer Vision , pp. 141–156. Springer, 2024. Zhang, J., Huang, Q., Liu, J., Guo, X., and Huang, D. Diffusion-4k: Ultra-high-resolution image synthesis with latent diffusion models. In Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 23464– 23473, 2025. Zhang, Z., Li, R., and Zhang, L. Frecas: Efficient higher-resolution image generation via frequency-aware cas-caded sampling. arXiv preprint arXiv:2410.18410 , 2024. Zhao, M., Yan, B., Yang, X., Zhu, H., Zhang, J., Liu, S., Li, C., and Zhu, J. Ultraimage: Rethinking resolution extrap-olation in image diffusion transformers. arXiv preprint arXiv:2512.04504 , 2025. Zhuo, L., Du, R., Xiao, H., Li, Y., Liu, D., Huang, R., Liu, W., Zhu, X., Wang, F.-Y., Ma, Z., et al. Lumina-next: Making lumina-t2x stronger and faster with next-dit. 
+
+Advances in Neural Information Processing Systems , 37: 131278–131315, 2024. 10 TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers 
+
+# A. Time-Shifting Schedule Setting 
+
+In models like Stable Diffusion 3 (Esser et al., 2024) and FLUX.1 (Labs, 2024), the discrete time-steps are mapped to a continuous time domain t ∈ [0 , 1] via a shifting function. As the denoising process progresses, t gradually decreases from 1
+
+to 0. A shift parameter, denoted as μ, controls the density of time-steps towards the noise (start) or the data (end). A higher 
+
+μ biases the sampling trajectory to spend more steps in the high-noise region (near t = 1 ). FLUX.1 adopts a dynamic shifting strategy, where μ scales linearly with the number of image tokens LI, defined by anchor points at LI = 256 (μ = 0 .5) and LI = 4096 (μ = 1 .15 ). While this design aims to enhance global structure generation at higher resolutions, we observe that the default linear scaling becomes problematic for extreme high resolutions. For instance, at 4096 × 4096 resolution, where LI = 65536 , the linearly extrapolated μ can reach approximately 11 .5. With a standard 28-step scheduler, this causes the effective t to remain near 1.0 for the first 27 steps, forcing the model to condense the entire denoising process into the final step. This results in severe degradation of generation quality. We note that Issachar et al. (2025) attempted to mitigate this by clamping μ at 1.15 for resolutions beyond 1024 2 in their code. However, this ignores the increased complexity of higher-resolution latents. To address this, we use a logarithmic time-shifting schedule for μ with respect to LI:
+
+μ = k · ln( LI) + b (23) where k and b are determined by default anchor points at LI = 256 (μ = 0 .5) and LI = 4096 (μ = 1 .15 ). This approach maintains a smoother increase in shift values, preventing the issue of default setting while still adapting to resolution changes. To ensure a fair comparison, all experiments in this paper (including baseline evaluations) have used this logarithmic time-shifting schedule. 
+
+# B. Additional Ablation Studies 
+
+In this section, we conduct further ablation studies on hyperparameters of our two core components: bias value for Text Anchoring (TA) and αlow and αhigh for Dynamic Temperature Control (DTC). We use Dy-YaRN (Issachar et al., 2025) on FLUX as reference baseline. The experimental setting is same as Section 4.5 unless otherwise specified. 
+
+B.1. Ablation study on Text Anchoring 1 2 3 4 5       
+
+> 0
+> 1
+> 2
+> 3
+> β= 1 .0
+> β= 2 .0
+> β= 3 .0
+> Adaptive
+> Scale s
+> Bias β
+> Figure 6. Scale-adaptive bias. Our adaptive bias increases logarithmically with the extrapolation scale.
+
+The bias parameter β in Text Anchoring governs the strength of the token influence. We compare fixed bias values (β ∈ { 1.0, 2.0, 3.0}) against our proposed scale-adaptive design in Eq. (18) . Figure 6 demonstrates how bias value changes with extrapolation scale s.11 TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers       
+
+> Table 4. Ablation study on Text Anchoring bias across different resolutions. We evaluate the impact of bias strategies on image generation quality at 2048 2,3072 2, and 4096 2resolutions. Dy-YaRN is adopted as the baseline. The best results for each resolution are
+> bolded , and the second-best results are underlined.
+
+Method Bias Scale 2048 × 2048 3072 × 3072 4096 × 4096 
+
+CLIP ↑ IR ↑ Aesth ↑ CLIP ↑ IR ↑ Aesth ↑ CLIP ↑ IR ↑ Aesth ↑
+
+Dy-YaRN - 29.10 1.12 6.83 26.87 0.69 6.56 23.60 -0.44 5.64 TIDE (Ours) 1.0 29.16 1.15 6.86 27.81 0.94 6.78 26.05 0.54 6.26 2.0 28.87 1.19 6.80 28.08 1.08 6.76 26.91 0.83 6.47 
+
+3.0 28.42 1.07 6.84 28.14 1.03 6.77 27.25 0.71 6.41 
+
+Adaptive 29.12 1.17 6.85 28.28 1.09 6.78 26.76 0.86 6.46 
+
+Table 4 reports the performance across various resolutions. While a fixed bias (e.g., β = 1 .0) may perform marginally better at specific resolution, it lacks generalization capabilities for different resolutions. In contrast, our Adaptive scheme consistently yields optimal or near-optimal performance across the entire resolution spectrum. This confirms that the optimal bias is intrinsically related to the length of the token sequence. 
+
+B.2. Ablation study on Dynamic Temperature Control (a)  (b)    
+
+> Figure 7. Temperature evolution patterns with different α.(a) demonstrates different patterns for component with lowest frequency of positional embeddings. (b) demonstrates different patterns for component with highest frequency of positional embeddings.
+
+The DTC component is parameterized by αlow and αhigh in Eq. (21) and Eq. (22) corresponding to the lowest frequency and highest frequency, respectively. Setting αlow = αhigh = 0 is equivalent to disabling DTC. Figure 7 illustrates how different values of α influence the patterns of temperature evolution. First, we fix αhigh = 0 .2 and vary αlow ∈ { 0.6, 1, 2}. Based on qualitative and quantitative evaluation, we fix αlow = 0 .6
+
+and vary αhigh ∈ { 0.1, 0.2, 0.5, 1.0}. Quantitative results are summarized in Table 5. It is worth noting that no single combination of parameters achieves optimal results across all parameters. As illustrated in Figure 8, severe artifacts can be observed when αlow and αhigh are set to zero, meanwhile excessively high values of αlow 
+
+and αhigh cause image blurring. Based on both quantitative results and qualitative observations, we ultimately set αlow = 0 .6
+
+and αhigh = 0 .2.
+
+# C. Additional Qualitative Results 
+
+We present further qualitative results, comparing our approach to existing baselines. Figure 9 and Figure 10 show the generated results on DrawBench (Saharia et al., 2022) and Aesthetic-4K (Zhang et al., 2025), respectively. 12 TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers 
+
+Table 5. Hyperparameter sensitivity of Dynamic Temperature Control. We evaluate the impact of low-frequency ( αlow ) and high-frequency ( αhigh ) exponents. Dy-YaRN serves as the baseline. The overall best results are bolded .
+
+Method αlow αhigh CLIP ↑ IR ↑ Aesth ↑
+
+Dy-YaRN - - 23.60 -0.44 5.64 TIDE 0.0 0.0 26.60 0.66 6.54 0.6 0.1 27.25 0.84 6.49 0.2 26.76 0.86 6.46 0.5 27.09 0.84 6.52 
+
+1.0 26.03 0.53 6.19 1.0 0.2 27.19 0.84 6.49 1.0 27.03 0.76 6.46 2.0 0.2 26.99 0.78 6.38 1.0 26.97 0.73 6.37 𝛼 low = 0.0, 𝛼 high = 0.0 𝛼 low = 0.6, 𝛼 high = 0.2 𝛼 low = 4.0, 𝛼 high = 1.1
+
+Figure 8. Qualitative comparison at different αlow and αhigh . The image on the left (with αlow = 0 .0 and αhigh = 0 .0) suffers from severe artifacts, while the image on the right shows blurry details. The image in the middle has the best quality. 
+
+We also present additional comparison on panoramic image generation at 4096 × 1536 resolution. As illustrated in Figure 11, compared to YaRN, our method presents accurate human proportions. Benefiting from Text Anchoring component, our approach incorporates more information about the human figures. Figure 12 demonstrates that Dy-YaRN suffers from insufficient information diversity and severe artifacts, while our method effectively improves both global and local quality. 13 TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers TIDE 
+
+4096 × 4096 
+
+(Ours) 
+
+DY -YaRN 
+
+4096 × 4096 
+
+Figure 9. Qualitative comparison for high-resolution text-to-image generation on DrawBench. Our method outperforms baselines across by delivering high visual quality. 
+
+14 TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers TIDE 
+
+4096 × 4096 
+
+(Ours) 
+
+DY -YaRN 
+
+4096 × 4096 
+
+Figure 10. Qualitative comparison for high-resolution text-to-image generation on Aesthetic-4K. Our method outperforms baselines across by delivering high visual quality. 
+
+15 TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers DY -YaRN 
+
+# TIDE (Ours) 
+
+## Prompt : A man  stands  beside  a vibrant  abstract  painting 
+
+## featuring  swirling  colors  of  orange,  blue,  and  green, 
+
+## with  dynamic  shapes  suggesting  a landscape  or  cosmic 
+
+## scene .
+
+Figure 11. Qualitative comparison of panoramic generation at 4096 × 1536 resolution. 
+
+16 TIDE: Text-Informed Dynamic Extrapolation with Step-Aware Temperature Control for Diffusion Transformers DY -YaRN 
+
+# TIDE (Ours) 
+
+## Prompt : A grand  interior  featuring  intricate  stained 
+
+## glass  windows,  an  elaborate  rose  window,  ornate 
+
+## frescoes  depicting  biblical  scenes,  and  elegant 
+
+## chandeliers  illuminating  the  richly  decorated  walls  and 
+
+## arches .     
+
+> Figure 12. Qualitative comparison of panoramic generation at 4096 ×1536 resolution.
+
+17

@@ -1,0 +1,664 @@
+Title: RTD-Guard: A Black-Box Textual Adversarial Detection Framework via Replacement Token Detection
+
+URL Source: https://arxiv.org/pdf/2603.12582v1
+
+Published Time: Mon, 16 Mar 2026 00:23:24 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+## RTD-Guard: A Black-Box Textual Adversarial Detection Framework via Replacement Token Detection 
+
+He Zhu ∗† , Yanshu Li ∗† , Wen Liu ∗† , Haitian Yang ∗∗Institute of Information Engineering, Chinese Academy of Sciences, Beijing, China 
+
+> †
+
+School of Cyber Security, University of Chinese Academy of Sciences, Beijing, China 
+
+Abstract 
+
+Textual adversarial attacks pose a serious se-curity threat to Natural Language Processing (NLP) systems by introducing imperceptible perturbations that mislead deep learning mod-els. While adversarial example detection of-fers a lightweight alternative to robust train-ing, existing methods typically rely on prior knowledge of attacks, white-box access to the victim model, or numerous queries, which severely limits their practical deployment. This paper introduces RTD-Guard, a novel black-box framework for detecting textual adversar-ial examples. Our key insight is that word-substitution perturbations in adversarial attacks closely resemble the “replaced tokens” that a Replaced Token Detection (RTD) discrimina-tor is pre-trained to identify. Leveraging this, RTD-Guard employs an off-the-shelf RTD dis-criminator—without fine-tuning—to localize suspicious tokens, masks them, and detects ad-versarial examples by observing the prediction confidence shift of the victim model before and after intervention. The entire process requires no adversarial data, model tuning, or internal model access, and uses only two black-box queries. Comprehensive experiments on multi-ple benchmark datasets demonstrate that RTD-Guard effectively detects adversarial texts gen-erated by diverse state-of-the-art attack meth-ods. It surpasses existing detection baselines across multiple metrics, offering a highly ef-ficient, practical, and resource-light defense mechanism—particularly suited for real-world deployment in resource-constrained or privacy-sensitive environments. 
+
+1 Introduction 
+
+With the widespread adoption of Pre-trained Lan-guage Models (PLMs) (Devlin et al., 2019; Rad-ford et al., 2019; Lan et al., 2019; Liu et al., 2019)across critical Natural Language Processing (NLP) applications, the robustness of these pow-erful systems has emerged as a primary security concern (Zhao et al., 2025). Specifically, textual ad-versarial attacks—which manipulate model predic-tions through subtle, often human-imperceptible al-terations to the input—reveal a significant fragility in current state-of-the-art architectures (Vaswani et al., 2017). These malicious inputs not only un-dermine the reliability of deployed services but also pose severe risks in safety-critical domains. Adversarial example detection offers a lightweight defense paradigm, identifying malicious inputs be-fore they reach a deployed model, thus avoiding the high cost of robust training. However, the practical deployment of existing detection methods often re-lies on one or more unrealistic assumptions: 1) the need for known adversarial examples for training; 2) white-box access to model gradients or inter-nal features; 3) a large number of queries to the victim model. These requirements fundamentally conflict with the real-world constraints of commer-cial NLP services—where model parameters are proprietary, attack patterns are unknown a priori, and low-latency response is essential. An ideal practical detector should therefore si-multaneously satisfy: strict black-box access (via API only), no prior knowledge of attacks, and min-imal query overhead. Existing methods struggle to maintain high detection performance under this triple constraint. For instance, data-free black-box methods (Radford et al., 2019; Mozes et al., 2021) exhibit limited generalization, while gradient-based or query-intensive methods face bottlenecks in ac-cess rights or efficiency. Pre-trained Language Models serve as reservoirs of linguistic capabilities, which can be repurposed for diverse tasks with minimal adaptation (Brown et al., 2020; Schick and Schütze, 2021; Gao et al., 2021). The novel insight of this work is that the fundamental operation of word substitution in tex-tual adversarial attacks structurally mirrors the ob-jective of the Replaced Token Detection (RTD) pre-training task (Clark et al., 2020). The RTD 1
+
+> arXiv:2603.12582v1 [cs.CL] 13 Mar 2026
+
+task trains a discriminator to identify tokens in a sentence that have been replaced, inherently mak-ing it skilled at detecting contextually unnatural word substitutions—the primary characteristic of adversarial perturbations. Building on this insight, we propose RTD-Guard, a training-free, strictly black-box, and highly efficient adversarial exam-ple detection framework. RTD-Guard leverages a pre-trained RTD discriminator (used as-is, with-out fine-tuning) to localize “suspiciously replaced” tokens in an input text. It then intervenes by mask-ing these tokens and detects adversarial examples by observing the consequent shift in the black-box victim model’s prediction confidence. The entire process requires only two queries to the model and depends on neither adversarial data, model param-eters, nor gradient information. Our main contributions are summarized as fol-lows: • We are the first to repurpose the intrinsic ca-pability of the RTD pre-training task for ad-versarial detection, proposing RTD-Guard. It serves as a plug-and-play guard module, offer-ing a novel solution for defense under strict black-box conditions with zero prior adversar-ial examples. • Through systematic ablation studies, we val-idate that the RTD discriminator is superior to traditional gradient-based attribution meth-ods for locating adversarial perturbations. We reveal that its strength lies in capturing con-textual inconsistency rather than predictive importance, thereby avoiding signal failure caused by adversarial label shifts. • We conduct extensive experiments on multiple text classification datasets against four state-of-the-art word-level attack methods. Results show that RTD-Guard significantly outper-forms existing baselines in detection perfor-mance while maintaining the lowest query overhead and runtime, confirming its effi-ciency and robustness for practical deploy-ment. 
+
+2 Related Work 
+
+The development of adversarial example detection in NLP has followed several distinct trajectories, each characterized by specific resource dependen-cies or assumptions that critically determine its practicality under real-world black-box constraints. To clearly situate our contribution, we categorize existing methods according to these requirements. 
+
+Methods Requiring Adversarial Training Data. A substantial body of work relies on access to labeled adversarial examples to train a dedicated detector. For instance, DISP (Zhou et al., 2019) trains a token-level classifier on adversarial exam-ples generated from clean data, incurring signifi-cant data preparation and computational costs. Sim-ilarly, ADFAR (Bao et al., 2021) employs multi-task learning to augment the victim model with detection capabilities, requiring both clean and ad-versarial data along with white-box fine-tuning. TextShield (Shen et al., 2023) trains an LSTM clas-sifier on handcrafted saliency features extracted from model outputs, again depending on adver-sarial data for supervision. These methods often struggle to generalize to unseen attack strategies, limiting their applicability in dynamic threat envi-ronments. 
+
+Methods Requiring White-box Access. An-other line of work leverages internal model in-formation—such as gradients or intermediate fea-ture representations—which restricts their use to fully transparent model settings. For example, MLE (Lee et al., 2018) and RDE (Yoo et al., 2022) perform density estimation on the victim model’s output features, necessitating white-box access to extract these representations. GradMask (Moon et al., 2022) computes token saliency via gradient-based attribution and detects adversarial examples by masking important tokens and monitoring con-fidence shifts. Although effective, its reliance on model gradients prevents deployment with propri-etary model APIs or in black-box scenarios. 
+
+Methods Relying on Extensive Model Queries. 
+
+Several black-box detection approaches operate without training data or internal access but incur substantial query overhead. WDR (Mosca et al., 2022) trains a classifier on confidence changes re-sulting from the iterative deletion of each word, re-quiring O(L) queries per example, where L is the sequence length. VoteTRANS (Nguyen-Son et al., 2023) employs synonym substitution and hard-label voting, with a query complexity of O(L · T ).Such high query costs render these methods im-practical for high-throughput or latency-sensitive services. 
+
+Data-Free Black-box Methods. A limited num-ber of approaches aim to operate under minimal assumptions. FGWS (Mozes et al., 2021) re-places low-frequency words with their most fre-2quent synonyms using static frequency lists; how-ever, its performance degrades against attacks that do not depend on rare-word substitutions. The PPL method (Radford et al., 2019) uses the perplexity of an external language model (e.g., GPT-2 (Radford et al., 2019)) as an anomaly score, requiring no access to the victim model. Yet, its detection con-sistency is often unstable, particularly when facing semantically-preserving attacks. RTD-Guard distinguishes itself from all the aforementioned categories. It requires no adver-sarial training data, unlike data-dependent detec-tors; no white-box access to model parameters or gradients, unlike feature- or gradient-based meth-ods; and only two black-box queries, unlike query-intensive schemes. Furthermore, rather than rely-ing on static heuristics (e.g., FGWS) or external LMs (e.g., PPL), RTD-Guard directly leverages a pre-trained model’s intrinsic capability to detect unnatural token substitutions—a capability inher-ently aligned with the operational mechanism of word-level adversarial attacks. This unique combi-nation of minimal assumptions, low overhead, and inherent detection alignment positions RTD-Guard as a particularly practical and deployable solution for real-world adversarial defense. 
+
+3 Research Objectives 
+
+The core challenge in adversarial example detec-tion lies in achieving high detection accuracy under strict practical constraints—operating as a black-box, requiring no prior adversarial examples, and maintaining minimal computational overhead. Ex-isting methods often depend on at least one of these impractical resources, limiting their real-world ap-plicability. To overcome this, our research aims to construct a novel, resource-efficient detection framework by repurposing the inherent capabili-ties of pre-trained language models. Our research objectives are as follows: 
+
+RO1 : Design and implement a novel detec-tion framework, RTD-Guard, that operates under strict black-box conditions, requires zero adversar-ial training examples, and achieves constant, low query complexity, thereby fulfilling the key require-ments for real-world deployment. 
+
+RO2 : Establish and formalize the theoretical connection between the Replaced Token Detection (RTD) pre-training objective and adversarial word-substitution attacks, providing a principled foun-dation that explains why an RTD discriminator is inherently effective for perturbation localization. 
+
+RO3 : Empirically validate the superiority of RTD-Guard through comprehensive experiments, demonstrating its state-of-the-art detection perfor-mance and computational efficiency across diverse datasets and attack methods, and systematically analyze its core design through ablation studies. 
+
+4 Background 
+
+4.1 Preliminaries Adversarial examples are carefully crafted inputs designed to deceive machine learning models while appearing normal to humans. In the text domain, these perturbations typically operate at three lev-els: character-level (e.g., typos), word-level (e.g., synonym substitution), and sentence-level (e.g., paraphrasing). Among these, word-level attacks strike an optimal balance between effectiveness and stealth, making them the most prevalent threat to production NLP systems. 
+
+Adversarial defense strategies can be catego-rized into two main paradigms: robust training and adversarial detection. While robust training meth-ods enhance model resilience through techniques like adversarial training, they often require signifi-cant computational resources and may compromise standard accuracy. Adversarial detection offers a complementary approach by operating as an in-dependent module that identifies malicious inputs before they reach the target model. 
+
+Replaced Token Detection task (RTD) first introduced with the ELECTRA architecture, offers a distinct pre-training paradigm. Unlike BERT’s Masked Language Modeling (MLM), which trains a single model to predict original masked tokens, RTD employs a generator-discriminator framework. The generator is trained with a standard MLM loss to replace randomly masked tokens (typically 15% of the sequence) with plausible alternatives: 
+
+LMLM = E − X
+
+> i∈C
+
+log pθG (˜ xi,G = xi | ˜xG)
+
+!
+
+,
+
+where ˜xG is the input with randomly masked tokens at indices C. The output of the generator is then used to construct a corrupted sequence ˜xD:
+
+˜xi,D =
+
+ ˜xi ∼ pθG (˜ xi,G = xi | ˜xG) , i ∈ C 
+
+xi, i / ∈ C 
+
+This corrupted sequence serves as input to the discriminator, which is trained as a binary classi-3fier to perform the RTD task: distinguishing be-tween original tokens and generator-produced re-placements. Its loss is: 
+
+LRTD = E − X
+
+> i
+
+log pθD (1 (˜ xi,D = xi) | ˜xD, i )
+
+!
+
+,
+
+where 1 is the indicator function. The models are trained jointly with a combined loss L =
+
+LMLM + λL RTD , where λ heavily weights the dis-criminator’s objective, thus making the discrimi-nator a powerful, standalone detector of unnatural token substitutions. 
+
+4.2 Problem Statement 
+
+Consider a text classification model f : X → Y 
+
+and an input sequence x = [ x1, x 2, . . . , x n]. An adversary crafts an adversarial example x′ by apply-ing minimal perturbations such that f (x′)̸ = f (x),while x′ remains semantically similar to x.The goal of this work is to design a detector 
+
+D : X → { 0, 1} that identifies whether an input x
+
+is adversarial ( D(x) = 1 ) or clean ( D(x) = 0 ). 
+
+5 The RTD-Guard Framework 
+
+5.1 Threat Model 
+
+We define our defense scenario under a practical black-box threat model for textual adversarial at-tacks. 
+
+Attacker’s Goal & Capabilities. The attacker aims to craft an adversarial example x′ from a clean input x such that the victim classifier f misclassi-fies it ( f (x′)̸ = f (x)), while preserving semantic similarity to x. We assume the attacker can: • Query the victim model f to obtain predic-tions and confidence scores. • Employ state-of-the-art word-level attacks (e.g., TextFooler, PWWS, BAE) that rely on query-based search and synonym substitution. • Has no access to the model’s parameters, ar-chitecture, or training data. 
+
+Defender’s Constraints The defender operates under the following strict and practical constraints: • No white-box model access: The victim model cannot be accessed for its internal pa-rameters or gradient information (unlike Grad-Mask, MLE, or RDE, which rely on gradients or internal features). • No prior adversarial examples: The detector must be trained without any labeled adversar-ial data (unlike DISP, ADFAR, or TextShield, which require adversarial examples for super-vision). • Minimal query overhead: Only a very lim-ited number of queries to the black-box model is permitted (unlike WDR or VoteTRANS, which require O(L) or O(L · T ) queries, where L is the sequence length and T is the number of transformations). Methods such as FGWS and PPL align with these constraints, as they do not require white-box access, adversarial training data, or high query complexity. However, FGWS relies on static heuristic rules (e.g., word frequency substitution), and PPL leverages external language models (e.g., perplexity-based scoring), making their design fun-damentally different from that of RTD-Guard. RTD-Guard strictly adheres to the above con-straints, focusing on adversarial detection without white-box model access, adversarial data, or ex-cessive queries. Its design is tailored to operate efficiently under these realistic deployment condi-tions. 
+
+5.2 Intuition and Motivation: Bridging RTD and Adversarial Perturbations 
+
+The design of RTD-Guard is motivated by three fun-damental properties of textual adversarial examples and pre-trained language models, which together bridge the gap between adversarial defense and a classic pre-training objective. 
+
+Hypothesis 1: Fragility of Adversarial Exam-ples. Successful adversarial examples are inher-ently fragile. Crafting them typically requires an iterative, query-based search for “vulnerable” to-kens and their optimal substitutions. Consequently, they reside in unstable regions of the input space where minor, targeted interventions can neutralize their malicious effect. Furthermore, to preserve semantics, attacks often push examples just beyond the model’s decision boundary. This critical state makes adversarial predictions highly sensitive to perturbations at precisely modified positions. 
+
+Hypothesis 2: Adversarial Perturbations as Coordinated Optimization. Effective word-level attacks are the product of optimization, not ran-dom noise. Due to complex feature interactions in deep models, misleading a classifier usually re-quires coordinated substitutions across multiple 4[MASK]    
+
+> chef
+> [MASK]
+> the
+> meal
+> the
+> chef
+> ate
+> the
+> meal
+> the
+> chef
+> cooked
+> the
+> meal
+> the
+> chef
+> cooked
+> the
+> [MASK]
+> Adversarial
+> attack
+> masking
+> MLM
+> Generator Classifier
+> the
+> chef
+> cooked
+> the
+> meat
+> original
+> original
+> replaced
+> original
+> original
+> Random
+> masking
+> MLM
+> Generator Discriminator
+> success
+> RTD training Loop
+> Adversarial attacking Loop
+> the
+> chef
+> cooked
+> the
+> meal Figure 1: Structural symmetry between adversarial attacks and RTD training. Both processes rely on token substitution as the core operation, but differ in their objectives. Adversarial attackers target critical tokens to mislead models, while RTD generators perform random substitutions to train discriminators.
+
+tokens. Thus, adversarial examples consist of a set of jointly optimized tokens engineered to flip the prediction while maintaining semantic coherence. 
+
+Hypothesis 3: Model Robustness to Inciden-tal Noise. Deep learning models are generally ro-bust to weak, random input variations—a resilience fostered by regularization techniques like dropout. Hence, randomly masking or perturbing tokens in a clean example typically induces only minor fluc-tuations in the model’s output confidence. A pivotal insight follows: adversarial examples are highly sensitive to intervention at their opti-mized tokens, whereas clean examples remain sta-ble. This differential sensitivity underpins our de-tection strategy: by accurately locating and neutral-izing the pivotal adversarial tokens, we can induce a dramatic confidence shift for malicious inputs while leaving benign ones largely unaffected. Traditional detection often mimics the attacker by using Word Importance Ranking (WIR) to find vulnerable tokens. This approach suffers from a fundamental mismatch: while the attacker uses the original true label y to craft the example, the defender must detect based on the adversarially-induced label y′. This label shift severely degrades WIR-based detection. We propose a more direct path: instead of reverse-engineering importance under a shifted la-bel, we detect the artifacts of the substitution oper-ation itself. This leads to our core conceptual link: the Replaced Token Detection (RTD) pre-training task. RTD is explicitly designed to identify contex-tually inconsistent tokens—those that appear to be substitutions—which is precisely the signature left by word-level adversarial attacks. As illustrated in Figure 1, a clear structural sym-metry exists: • The adversarial attacker (e.g., TextFooler) sub-stitutes critical tokens with chosen synonyms to mislead the model. • The RTD generator substitutes random tokens with plausible alternatives to train the discrim-inator. Both processes share the core operation of to-ken substitution. Consequently, a discriminator excelling at RTD becomes inherently attuned to detecting “out-of-place” tokens—the hallmark of adversarial perturbations. Our central thesis is that an RTD discrimina-tor, by virtue of its pre-training, acquires a gen-eral, zero-shot capability to identify unnatural to-ken substitutions. This capability transfers directly to adversarial perturbation detection, providing a model-agnostic and accurate localization mecha-nism. This insight obviates the need for adversarial training data, white-box access, or error-prone WIR estimation under label shift, establishing a princi-pled and practical foundation for RTD-Guard. 
+
+5.3 The RTD-Guard Framework 
+
+Building on the insight that a pre-trained RTD discriminator can identify adversarially replaced tokens, we formalize RTD-Guard—a four-stage 5detection pipeline for black-box settings. Given a victim classifier f and an input sequence x =[x1, x 2, . . . , x n],RTD-Guard outputs a binary de-tection decision as follows. 
+
+Step 1: Perturbation Localization. We employ a pre-trained RTD-based discriminator DRTD to compute a replacement probability pi ∈ [0 , 1] for each token xi:
+
+pi = DRTD (x, i ).
+
+which reflects the token’s contextual inconsis-tency—a direct signal of potential adversarial sub-stitution. The discriminator is used as-is, without any task-specific fine-tuning. 
+
+Step 2: Intervention via Masking. We select the top k tokens with the highest replacement proba-bilities. Let I = TopK ({pi}ni=1 , k ) denote their indices. An intervened sequence xm is constructed by replacing each token at position i ∈ I with a 
+
+[M ASK ] token: 
+
+xmi =
+
+(
+
+[M ASK ], if i ∈ Ixi, otherwise .
+
+Masking disrupts the adversarial influence carried by these suspicious tokens. 
+
+Step 3: Confidence Shift Measurement. The black-box victim model f is queried twice: once with the original input x and once with xm. Let the predicted class for the original input be c =arg max f (x). The detection score Sx is computed as the change in confidence for class c:
+
+Sx = Dis  f (x)c, f (xm)c
+
+,
+
+where Dis is a simple difference function. We use the squared difference Dis (a, b ) = ( a − b)2 in our implementation, which amplifies larger shifts. This score captures the model’s sensitivity to the masked tokens: adversarial examples typically exhibit a more pronounced confidence shift. 
+
+Step 4: Detection Decision. The final decision is made by comparing Sx to a threshold τ (empiri-cally determined on a validation set): 
+
+D(x) = 
+
+(
+
+1 (adversarial ), if Sx > τ 
+
+0 (clean ), otherwise .
+
+RTD-Guard acts as a lightweight, plug-and-play shield that requires no modification to the deployed NLP system. It satisfies the strict defender con-straints outlined in Section 5.1: (1) zero-shot and 
+
+Algorithm 1 RTD-Guard 
+
+Require: Input sequence x, victim model f , RTD discriminator DRTD , budget k, threshold τ
+
+Ensure: Detection label D(x) ∈ { 0, 1} 
+
+> 1:
+
+Compute pi ← DRTD (x, i ) for all tokens i 
+
+> 2:
+
+I ← Top-K ({pi}, k ) 
+
+> 3:
+
+Initialize xm ← x 
+
+> 4:
+
+for each i ∈ I do  
+
+> 5:
+
+Replace xmi ← [M ASK ] 
+
+> 6:
+
+end for  
+
+> 7:
+
+Query f (x) and f (xm) 
+
+> 8:
+
+c ← arg max f (x) 
+
+> 9:
+
+Sx ← Dis (f (x)c, f (xm)c) 
+
+> 10:
+
+if Sx > τ then  
+
+> 11:
+
+return 1 
+
+> 12:
+
+else  
+
+> 13:
+
+return 0 
+
+> 14:
+
+end if 
+
+training-free—no adversarial data or fine-tuning; (2) strictly black-box—only prediction API access, no gradients or parameters; (3) computationally lean—exactly two model queries and one discrim-inator forward pass per example, ensuring low la-tency and scalability in production. 
+
+6 Experimental Setup 
+
+To ensure a fair and direct comparison with existing baseline methods, our experiments are conducted on the standardized textual adversar-ial benchmark provided by RDE (Yoo et al., 2022). This benchmark is constructed using the TEXT ATTACK framework (Morris et al., 2020b), applying four state -of - the - art word -level attack methods— BAE (Garg and Ramakrishnan, 2020), 
+
+PWWS (Ren et al., 2019), TextFooler (Jin et al., 2020), and TF -adj (Morris et al., 2020a)—on three widely - used text - classification datasets: 
+
+IMDB (Maas et al., 2011) , AG - News (Zhang et al., 2015) , and Yelp (Zhang et al., 2015). All at-tacks are performed against a fine - tuned BERT model, ensuring that the evaluation reflects a re-alistic and challenging threat model consistent with prior work. 
+
+6.1 Datasets and Victim Models 
+
+We evaluate on three public benchmarks span-ning different domains and text lengths: AG -News 
+
+(4 -class news categorization), IMDB (binary movie review sentiment), and Yelp (binary restaurant - review sentiment). Victim models are 6Table 1: Statistics of evaluation datasets. “Test Examples” reports the number of original clean examples and the corresponding adversarial examples generated per attack.                       
+
+> Dataset Domain Task Classes Median Test Examples Number Length (Orig. / Gen.)
+> IMDB(Maas et al., 2011) Movie Reviews Sentiment Classification 2161 25K / 10K AG-News(Zhang et al., 2015) News Topic Topic Classification 444 7.6K / 7.6K Yelp(Zhang et al., 2015) Restaurant Reviews Sentiment Classification 2152 38K / 5K
+
+BERT -based classifiers fine - tuned on the respec-tive training splits; we use the versions provided by TEXT ATTACK to align with the attack generation pipeline. Table 1 summarizes key statistics of each dataset. 
+
+6.2 Adversarial Attacks 
+
+To evaluate RTD-Guard against the most prevalent and threatening form of textual adversarial attack, we focus on word-level perturbations. This choice is deliberate: character-level attacks (Ebrahimi et al., 2018; Li et al., 2019; Vijayaraghavan and Roy, 2019) (e.g., typos) are often easily filtered by spell-checkers, while sentence-level reconstruc-tions (Behjati et al., 2019; Song et al., 2021) suffer from low success rates and poor semantic similarity. In contrast, word-level attacks optimally balance stealth, success rate, and semantic preservation, representing the primary practical threat to NLP systems. Our evaluation employs four state - of - the - art word - level attack methods, all implemented in the TEXT ATTACK framework: • TextFooler (Jin et al., 2020) generates adver-sarial examples by replacing important words with carefully selected synonyms. • PWWS (Ren et al., 2019) weights synonym substitutions by combining word saliency and a synonym-swap probability. • BAE (Garg and Ramakrishnan, 2020) lever-ages a masked language model to generate and insert contextually coherent replacement tokens. • TF-adj (Morris et al., 2020a)refines TextFooler with additional fluency and grammar constraints to produce more natural adversarial examples. 
+
+6.3 Baseline Detectors 
+
+We compare RTD-Guard against the following rep-resentative and strong baselines in adversarial text detection: • PPL (Radford et al., 2019): Utilizes the per-plexity score from GPT-2 as an anomaly mea-sure for detection, relying solely on an exter-nal language model. • MLE (Lee et al., 2018): A white-box detector that performs Gaussian density estimation on the victim model’s output features. • FGWS (Mozes et al., 2021): A frequency-based method that replaces low-frequency words with their most common synonyms to neutralize perturbations. • RDE (Yoo et al., 2022): Estimates the probability density of hidden representations in a white-box setting to identify out-of-distribution adversarial examples. • GradMask (Moon et al., 2022): A white-box approach that masks tokens with high gradient-based saliency and monitors confi-dence change. • WDR (Mosca et al., 2022): A query-intensive black-box method that trains a classifier on word-level confidence shifts induced by token deletion. These baselines collectively cover external - LM scoring, static heuristics, white - box feature analy-sis, and query - based black -box strategies, enabling a comprehensive assessment of RTD-Guard under varied detection philosophies. Note that while we include Vote-TRANS (Nguyen-Son et al., 2023) in our efficiency analysis to demonstrate its compu-tational characteristics, we exclude it from the main performance comparison. Its high query complexity ( O(L · T )) renders it computationally prohibitive for the large-scale evaluation across multiple datasets and attack methods conducted in this study. 76.4 Evaluation Metrics 
+
+We evaluate detection performance using three widely adopted metrics: the area under the receiver operating characteristic curve ( AUC ), which re-flects overall separability between adversarial and clean examples; the F1-Score , which balances pre-cision and recall; and the true positive rate at 10% false positive rate (TPR10), which measures detec-tion sensitivity under a low false-alarm constraint. For all metrics, higher values indicate better detec-tion capability. 
+
+6.5 Implementation Details 
+
+We instantiate RTD-Guard using the pre-trained ELECTRA-large(Clark et al., 2020) 1 discriminator as the RTD module without any fine-tuning. The top-k masking budget is set to k = 5 . The detec-tion score is computed as the squared difference in prediction confidence, i.e., Dis( a, b ) = ( a − b)2.Unless otherwise specified, we set τ = 0 .09 , which corresponds to a confidence shift of approximately 
+
+0.3. All runtime measurements are conducted on a workstation with an NVIDIA RTX 3090 GPU, and reported timings are averaged over 2,444 examples from the AG–News/TextFooler subset. 
+
+7 Experimental Results 
+
+7.1 Main Results: Detection Performance 
+
+As shown in Table 2, RTD-Guard consistently achieves superior or competitive performance across all three datasets and four attack methods. In 11 out of 12 dataset–attack combinations, it at-tains the highest scores in TPR10, F1-Score, and AUC, demonstrating robust and reliable detection capability. Analysis of the baselines reveals distinct limita-tions. While PPL operates with minimal assump-tions (no adversarial data or model access), its per-formance is highly unstable, deteriorating sharply against more semantically-constrained attacks such as BAE and TF-adj. White-box density estima-tors MLE and RDE exhibit sensitivity to certain attack patterns, as seen in their performance degra-dation under PWWS. The frequency-based method 
+
+FGWS struggles notably against BAE-style inser-tions, with AUC dropping to approximately 70.9%. The stronger baselines, WDR and GradMask 2,               
+
+> 1Model available at https://huggingface.co/google/ electra-large-discriminator .
+> 2For GradMask, k= 2 yields the best results on TF -adj;
+> k= 1 is used for all other settings. Inference RTD-Guard MLE RDE FGWS PPL GradMask WDR
+> Methods
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> 350
+> 400
+> Total Runtime (seconds)
+> 8.9s
+> 35.3s 40.6s
+> 63.9s
+> 78.3s
+> 123.1s
+> 168.3s
+> 384.1s
+> Inference Time
+
+Figure 2: Total runtime comparison of different detec-tion methods on the Ag-News/TextFooler split. RTD-Guard is the most efficient. 
+
+maintain stable detection rates (AUC ≥95% in most scenarios). However, their practicality is lim-ited: WDR incurs a linear query cost O(L), mak-ing it infeasible for real-time deployment, while GradMask requires white-box gradient access. Notably, RTD-Guard exhibits none of these weaknesses. It remains robust against PWWS, ef-fective on constrained attacks (BAE, TF-adj), and capable of handling insertion-based perturbations. This consistent performance stems from its attack-agnostic design, which does not rely on assump-tions about the attack strategy or dataset distribu-tion. In summary, the results confirm that RTD-Guard provides a highly effective, practical, and resource-efficient defense against diverse word-level adver-sarial attacks. 
+
+7.2 Computational Efficiency 
+
+Deployability in real-world scenarios critically de-pends on computational overhead. To assess effi-ciency, we measure the total execution time of each detection method on the AG -News/TextFooler sub-set (2,444 examples). Results are summarized in Figure 2. 
+
+RTD - Guard achieves the lowest total runtime (35.3s), only marginally above the baseline in-ference time of the victim model alone (8.9s for 2,444 examples). This efficiency arises from its lightweight design: one forward pass through a frozen RTD discriminator plus exactly two black - box queries to the victim model—yielding constant O(1) query complexity. In contrast, query-intensive methods incur sub-stantial overhead. WDR requires O(L) queries per example (where L is sequence length), resulting in 8Table 2: Comparative Experimental Results of Text Adversarial example Detection. FGWS and PPL are highlighted in green to denote that they share the same practical constraints as RTD -Guard: strict black -box access, no adversarial training data, and low query complexity. 
+
+TextFooler PWWS BAE TF-adj Methods TPR10 F1 AUC TPR10 F1 AUC TPR10 F1 AUC TPR10 F1 AUC 
+
+Ag-News (|Y| = 4 , Acc=0.925) PPL 69.5 77.5 88.6 66.2 75.1 86.9 23.0 34.7 66.3 31.4 44.4 65.9 MLE 78.3 83.2 93.5 71.6 78.9 91.8 68.3 76.8 91.2 73.5 80.2 90.8 FGWS 82.4 85.7 84.2 91.0 90.7 91.0 65.0 73.8 71.6 64.1 74.5 72.9 RDE 95.8 93.3 97.1 89.7 89.8 95.6 89.6 89.9 95.3 92.2 91.3 95.4 WDR 96.5 93.8 97.2 94.2 92.6 96.9 91.4 91.1 95.8 94.1 94.1 96.3 GradMask 95.4 93.1 96.4 90.9 91.5 95.6 90.6 91.1 94.5 99.0 94.0 93.7 RTD-Guard 97.5 94.9 98.4 98.1 94.6 98.3 98.1 94.8 97.8 100 95.9 97.5 IMDB (|Y| = 2 , Acc=0.990) PPL 43.9 57.0 75.1 33.3 46.5 69.5 23.7 35.5 65.0 24.6 36.8 68.5 MLE 86.5 88.1 94.4 75.9 81.7 92.3 82.1 85.5 93.6 91.9 91.1 95.8 FGWS 84.6 87.1 87.3 88.2 89.1 90.8 62.1 72.3 70.9 72.6 80.6 78.4 RDE 96.6 93.5 96.6 88.2 89.0 94.5 93.1 91.7 95.6 98.7 95.1 98.0 
+
+WDR 97.6 94.4 95.9 92.5 91.4 95.3 95.9 93.1 95.7 98.2 95.9 96.8 GradMask 95.7 93.4 96.0 91.3 91.7 95.6 92.3 92.0 95.2 96.2 93.8 95.9 RTD-Guard 98.5 94.8 98.3 98.1 93.0 98.0 98.0 95.3 98.1 96.3 94.2 96.5 
+
+Yelp (|Y| = 2 , Acc=0.983) PPL 39.8 53.1 76.8 37.6 51.0 74.8 17.8 27.8 66.5 13.9 22.5 62.7 MLE 33.8 47.1 65.1 41.2 54.5 66.3 41.2 54.5 66.3 27.8 40.4 66.0 FGWS 84.7 87.3 87.6 88.9 89.5 91.0 62.4 72.5 70.3 79.7 85.5 82.3 RDE 95.8 93.1 96.3 83.8 86.5 94.4 90.4 90.3 95.3 92.1 91.4 94.9 WDR 98.2 95.6 97.5 94.5 92.7 96.7 96.6 94.8 97.2 100 96.2 96.6 GradMask 98.8 95.7 97.9 94.8 92.8 97.3 96.7 94.2 97.4 100 95.8 98.2 
+
+RTD-Guard 99.1 95.8 98.5 97.6 95.2 98.6 98.9 96.0 98.3 100 97.1 98.9 
+
+the longest runtime (384.1 seconds). VoteTRANS 
+
+also suffers from high query cost ( O(L · T )), mak-ing it similarly impractical for latency-sensitive applications. While GradMask requires only two model accesses, its need to compute gradients in a white-box setting introduces significant computa-tional burden (168.3 seconds). Other lightweight baselines show varied effi-ciency. PPL relies on a large external LM (GPT-2) to compute perplexity, leading to moderate latency (123.1 seconds). MLE and RDE , as white-box feature-density methods, avoid repeated queries but still require internal feature extraction, resulting in runtimes of 40.6 and 63.9 seconds, respectively. 
+
+FGWS performs static frequency-based substitu-tion, which is efficient (78.3 seconds) but suffers from performance limitations as shown earlier. In summary, RTD-Guard uniquely combines state-of-the-art detection performance with mini-mal computational overhead, offering a highly prac-tical solution for real-time deployment in black-box settings. 3
+
+7.3 Qualitative Analysis of Intervention Effects 
+
+Table 5 provides a qualitative analysis of RTD-Guard’s processing of adversarial inputs, illustrat-ing its core operational behavior through represen-tative examples. Three key patterns emerge from our analysis. First, the RTD discriminator demonstrates a con-sistent ability to localize the core adversarial per-turbations. Across diverse examples, the [MASK] tokens in the RTD example are primarily the sub-stituted words in the Adversarial example. This indicates that the pre-trained RTD objective suc-cessfully captures the contextual unnaturalness in-troduced by adversarial word-swaps, enabling pre-cise targeting of the malicious modifications. Second, the masking intervention effectively re-
+
+> 3All timing experiments were conducted on a workstation with a 3.8GHz 16-core AMD Ryzen 7 CPU, NVIDIA RTX 3090 GPU, and 64GB RAM running Windows 10.
+
+9Table 3: Performance comparison of different intervention strategies on AG-News.                                                                   
+
+> TextFooler PWWS BAE TF-adj Method TPR10 F1 AUC TPR10 F1 AUC TPR10 F1 AUC TPR10 F1 AUC
+> Ag-News (|Y|= 4 , Acc=0.925) RTD-UNK 97.8 94.5 98.0 96.8 93.7 97.7 95.7 94.3 97.3 100 95.3 96.3 RTD-DEL 97.6 94.5 97.6 96.2 93.8 97.4 97.1 94.8 96.5 96.3 94.8 96.5 RTD-MLM 97.5 94.8 98.0 97.4 94.0 97.9 95.2 93.5 96.7 100 96.4 97.2 RTD-Guard 97.5 94.9 98.4 98.1 94.6 98.3 98.1 94.8 97.8 100 95.9 97.5
+
+verses the adversarial effect. As shown in the final column of Table 5, masking the suspicious tokens restores the model’s confidence in the original (cor-rect) class to a level nearly matching that of the clean example. For instance, in the sports - related example, confidence rebounds from 0.63 (Sci/Tech) to 0.98 (Sports). This sharp confidence shift upon masking RTD - identified tokens directly serves as the detection signal and empirically validates our hypothesis that adversarial examples are fragile and can be neutralized by perturbing their critical tokens. Third, RTD-Guard can localize dense perturba-tions involving multiple consecutive tokens (e.g., “fraud squad chief” → “hoax battalion leiter”) as well as sparse, scattered perturbations across the input. This capability arises from the RTD dis-criminator’s ability to independently evaluate the contextual consistency of each token. We note that the lowercasing in the “RTD exam-ple” column results from the RTD discriminator’s tokenizer, which lowercases inputs during prepro-cessing. This normalization is confined to the detec-tor and does not affect the victim model’s classifi-cation, as the original casing is preserved when the intervened sequence is passed to the victim model. In summary, these qualitative observations cor-roborate the quantitative results, demonstrating that RTD-Guard’s core mechanism—locating contex-tually inconsistent tokens via a pre-trained RTD discriminator and neutralizing them via mask-ing—reliably disrupts adversarial perturbations, offering a robust and interpretable detection ap-proach. 
+
+8 Ablation Studies and Analysis 
+
+We conduct ablation studies to analyze the impact of core design choices in RTD-Guard, focusing on the following research questions (RQs): • RQ1: How do different intervention strategies affect detection performance? • RQ2: How does token localization based on RTD compare to gradient-based attribution for adversarial detection? • RQ3: How does the scale of the RTD model affect detection performance? 
+
+8.1 RQ1: Effect of Intervention Strategy 
+
+Intervening on tokens identified as potentially ad-versarial is central to RTD-Guard. While our de-fault method replaces them with a [MASK] token, other strategies can be applied. We compare four al-ternatives: replacing suspicious tokens with (1) an unknown token [UNK] , (2) deleting them entirely (DEL), and (3) using a Masked Language Model (MLM) to predict a contextually appropriate re-placement. For MLM-Fill, we employ an RTD generator to predict the most contextually plausible token for each [MASK] .Results on AG - News (Table 3) show that detec-tion performance remains consistently high across all intervention variants—RTD - Guard (masking), RTD -UNK, RTD - DEL, and RTD -MLM—with only minor fluctuations in TPR10, F1, and AUC scores. This finding directly supports our core hypothesis: the key to effective detection lies in the accurate localization of adversarial to-kens, not the specific operation used to neutral-ize them. Once the pivotal tokens are correctly identified, any intervention that disrupts their in-fluence—whether masking, deletion, or replace-ment—induces a pronounced confidence shift in the victim model. Hence, the simplest and most efficient strategy, masking with [MASK] , is both sufficient and optimal for practical deployment. Al-though RTD - MLM yields a more natural -looking intervened sequence, it does not improve detec-tion, confirming that the primary advantage of our framework stems from its precise localization of adversarial substitutions. 10 0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Detection Scores
+> 0
+> 500
+> 1000
+> 1500
+> 2000
+> Original samples
+> Adversarial samples
+
+(a) RDE 0.0 0.2 0.4 0.6 0.8 1.0   
+
+> Detection Scores
+> 0
+> 500
+> 1000
+> 1500
+> 2000 Original samples
+> Adversarial samples
+
+(b) GradMask 0.0 0.2 0.4 0.6 0.8 1.0   
+
+> Detection Scores
+> 0
+> 500
+> 1000
+> 1500
+> 2000 Original samples
+> Adversarial samples
+
+(c) RTD-Guard 
+
+Figure 3: Comparison of detection score distributions on the IMDB/TextFooler subset. 
+
+8.2 RQ2: Divergence Between Gradient and RTD-based Token Localization 
+
+A core strength of RTD-Guard lies in its abil-ity to achieve state-of-the-art token localization using a pre-trained RTD discriminator, without relying on the victim model’s internal gradients. While gradient-based attribution remains one of the most compelling token-level signals—providing example-specific insights directly tied to the model’s internal optimization process—this sig-nal is only accessible in white-box settings. To demonstrate the power of RTD-Guard and explore the fundamental nature of adversarial examples, we conduct a direct comparison with gradient-based methods that leverage privileged access to model gradients, as well as feature-based baselines. We compare the detection score distributions of RTD-Guard, the gradient-based method GradMask, and the feature-density-based method RDE. As shown in Figure 3 (using IMDB/TextFooler), RTD-Guard produces scores with markedly less overlap and a sharper separation boundary between adver-sarial and clean examples. In contrast, both Grad-Mask and RDE exhibit substantially greater over-lap between the two classes, indicating weaker dis-criminability despite their access to internal model information. We further examine how detection performance responds to the masking budget k. Sophisticated attacks often perturb multiple tokens; a robust defense should therefore neutralize several suspi-cious positions without harming clean accuracy. As k increases, we observe a sharp divergence: GradMask suffers a notable drop in overall F1-score—primarily due to collapsing clean accu-racy—while RTD-Guard maintains stable or even improved performance. This contrast raises a key question: Why does raising k weaken gradient-based localization but strengthen RTD-based local-ization? The root cause lies in what we term signal entan-glement. Gradient-based attribution selects tokens that are important for the current prediction. In adversarial examples, these indeed correspond to the attack triggers; however, in clean examples, the same measure highlights semantic anchors—words that carry core meaning (e.g., sentiment adjectives). When k grows, GradMask inevitably masks such anchors in clean inputs, mutilating sentence seman-tics and triggering a surge in false positives. In short, gradients cannot disentangle adversarial in-fluence from genuine semantic importance. RTD-Guard operates on a different principle: it ranks tokens by their contextual inconsistency, a property largely orthogonal to semantic salience. Adversarial edits introduce syntactic-semantic ir-regularities that consistently rise to the top of the RTD ranking; meanwhile, the “least natural” to-kens in clean sentences are typically proper nouns, rare entities, or syntactic connectors—not the se-mantic core. Increasing k thus allows RTD-Guard to progressively strip away adversarial noise with-out eroding semantic content, effectively perform-ing surgical de-noising rather than semantic degra-dation. 
+
+8.3 RQ3: Impact of RTD Model Scale on Detection Performance 
+
+We further examine how the scale of the RTD dis-criminator affects detection capability. Although RTD pre-training has been adopted in various ar-chitectures (e.g., CoCo - LM (Meng et al., 2021), XLM -E (Chi et al., 2022), CodeBERT (Feng et al., 2020)), publicly available RTD-based models re-main predominantly from the ELECTRA family (Clark et al., 2020). We therefore evaluate three 11 1 2 3 4 5 6 7 8 9 10 
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(a) Ag-News/TextFooler 1 2 3 4 5 6 7 8 9 10  
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(b) Ag-News/PWWS 1 2 3 4 5 6 7 8 9 10  
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(c) Ag-News/BAE 1 2 3 4 5 6 7 8 9 10  
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(d) Ag-News/TF-adj 1 2 3 4 5 6 7 8 9 10 
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(e) Yelp/TextFooler 1 2 3 4 5 6 7 8 9 10  
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(f) Yelp/PWWS 1 2 3 4 5 6 7 8 9 10  
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(g) Yelp/BAE 1 2 3 4 5 6 7 8 9 10  
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(h) Yelp/TF-adj 1 2 3 4 5 6 7 8 9 10 
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(i) IMDB/TextFooler 1 2 3 4 5 6 7 8 9 10  
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(j) IMDB/PWWS 1 2 3 4 5 6 7 8 9 10  
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(k) IMDB/BAE 1 2 3 4 5 6 7 8 9 10  
+
+> Mask K Tokens
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> F1 Score
+> Gradient
+> RTD-Guard
+
+(l) IMDB/TF-adj 
+
+Figure 4: Top-k masking performance comparison experiment across datasets and attack methods. 
+
+standard ELECTRA variants: Small (14M parame-ters), Base (110M), and Large (335M). As shown in Table 4, while the 14M Small model already achieves successful detection, larger models deliver progressively stronger performance across all attacks and datasets. Inference efficiency also scales with model size. On the AG - News/TextFooler split, total processing times are 28.8s (Small), 33.1s (Base), and 35.3s (Large). After subtracting the fixed overhead of two victim - model queries (2×8.9s), the net detec-tion times are 11.0s, 15.3s, and 17.5s, respectively. These results indicate a clear trade -off between ac-curacy and latency, allowing practitioners to select an appropriate RTD model size based on their spe-cific deployment constraints. 
+
+9 Implications 
+
+Theoretical Implications. Our work establishes a principled connection between adversarial text detection and a repurposed pre-training objective, offering a new lens through which to analyze and defend against word-level attacks. We demonstrate that adversarial word substitutions—far from be-ing random noise—produce consistent linguistic artifacts characterized by contextual unnaturalness. These artifacts are detectable independently of the victim model’s architecture or training data, which explains RTD - Guard’s strong generalization across diverse attacks and models. Furthermore, we clar-ify why gradient -based detection often falters: gra-dients reflect a token’s importance to the model’s current prediction, a signal that becomes unstable under the label shift induced by a successful attack. In contrast, RTD -Guard relies on a model - agnostic measure of contextual coherence, shifting the theo-retical focus from modeling the victim’s decision boundary to directly characterizing the adversar-ial perturbation—a more stable and transferable foundation for detection. 
+
+Practical Implications. These theoretical in-sights translate directly into deployable advantages. First, by detecting intrinsic linguistic irregularities, RTD - Guard achieves robust performance without requiring knowledge of the attack algorithm or ac-cess to the victim model’s internals. This makes it a versatile, future - proof module suitable for commer-cial APIs, edge devices, and other settings where models are proprietary and threats are unknown 12 Table 4: Result of RTD model scale ablation experiment                                                                                                                                     
+
+> TextFooler PWWS BAE TF-adj Methods TPR10 F1 AUC TPR10 F1 AUC TPR10 F1 AUC TPR10 F1 AUC
+> Ag-News (|Y|= 4 , Acc=0.925) RTD-Small 96.1 93.4 97.7 95.4 93.3 97.5 90.9 92.9 95.2 93.9 94.2 95.1 RTD-Base 97.5 94.2 98.1 97.0 93.9 98.1 97.1 94.4 97.1 99.8 94.7 96.4 RTD-Large 97.5 94.9 98.4 98.1 94.6 98.3 98.1 94.8 97.8 100 95.9 97.5 IMDB (|Y|= 2 , Acc=0.990) RTD-Small 97.5 94.7 97.8 92.8 91.8 97.0 94.4 93.0 96.4 95.8 93.8 96.7 RTD-Base 98.2 95.1 98.3 95.4 93.4 97.9 98.6 95.1 98.4 97.4 94.1 95.7 RTD-Large 98.5 94.8 98.3 98.1 93.0 98.0 98.0 95.3 98.1 96.3 94.2 96.5 Yelp (|Y|= 2 , Acc=0.983) RTD-Small 98.5 95.6 98.4 96.3 94.2 98.2 97.3 94.3 96.9 100 97.7 97.4 RTD-Base 99.3 95.7 98.7 97.9 95.2 98.9 98.6 95.2 97.7 100 97.1 98.9 RTD-Large 99.1 95.8 98.5 97.6 95.2 98.6 98.9 96.0 98.3 100 97.1 98.9
+
+a priori. Second, the framework is highly effi-cient by design: it requires exactly two black - box queries and a single forward pass through a frozen discriminator, resulting in constant -time overhead and low latency—critical for high - throughput ser-vices. Third, RTD - Guard is both modular and in-terpretable. Its detection signal (confidence shift) and intervened examples provide actionable in-sights, easing integration and fostering operational trust. Finally, by showing that general - purpose pre - training embeds latent security capabilities, this work points toward a broader paradigm: leverag-ing foundational linguistic competencies—beyond task - specific fine - tuning—to build more secure and resilient NLP systems. 
+
+10 Conclusion 
+
+We presented RTD-Guard, a black-box adversarial text detector that repurposes the Replaced Token Detection (RTD) objective into an efficient training-free defense. The core idea is simple yet effective: an RTD discriminator highlights contextually in-consistent tokens, and the detector then measures how the target model’s confidence changes when those suspicious tokens are masked. This design yields a practical detection pipeline that does not rely on adversarial training corpora, does not as-sume white-box access, and can be implemented with modest query budgets—properties that are of-ten essential for deployment in real-world systems. RTD-Guard offers a practical “plug-and-play” shield suitable for real-world deployment, espe-cially in settings with strict black-box and resource constraints. Its design decouples defense from model architecture, ensuring scalability and low latency while preserving model transparency. Nev-ertheless, RTD-Guard also has an important lim-itation: it relies on an RTD model trained for a specific language to provide token-level inconsis-tency signals. As a result, the current detector does not yet generalize reliably across languages, and it may fail to effectively detect adversarial examples when applied to multilingual or cross-lingual inputs without language-matched RTD discriminators. Future work can extend RTD-Guard along sev-eral directions with a particular focus on security challenges for large language models (LLMs): one promising avenue is to generalize the principle of detecting unnatural linguistic patterns via self-supervised inconsistency signals to prompt injec-tion and jailbreak scenarios (Zou et al., 2023; Liu et al., 2024; Lv et al., 2025), investigating how to identify hidden instructions, role hijacking, and privilege-escalation intents throughout instruction-following and tool-use pipelines and how to im-plement deployable, input-level risk warning and blocking mechanisms under black-box constraints; another important direction is hallucination detec-tion, where RTD-based contextual consistency sig-nals—coupled with response differences induced by counterfactual masking or replacement—may help surface factual inconsistencies, unsupported claims, or content with unverifiable provenance in model outputs, enabling lightweight hallucination detection and reliability estimation for generative systems. 13 References 
+
+Rongzhou Bao, Jiayi Wang, and Hai Zhao. 2021. De-fending pre-trained language models from adversarial word substitution without performance sacrifice. In 
+
+Findings of the association for computational linguis-tics: ACL-IJCNLP 2021 , pages 3248–3258. Melika Behjati, Seyed-Mohsen Moosavi-Dezfooli, Mahdieh Soleymani Baghshah, and Pascal Frossard. 2019. Universal adversarial attacks on text classi-fiers. In ICASSP 2019-2019 IEEE International Con-ference on Acoustics, Speech and Signal Processing (ICASSP) , pages 7345–7349. IEEE. Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, and 1 others. 2020. Language models are few-shot learners. Advances in neural information processing systems , 33:1877–1901. Zewen Chi, Shaohan Huang, Li Dong, Shuming Ma, Bo Zheng, Saksham Singhal, Payal Bajaj, Xia Song, Xian-Ling Mao, He-Yan Huang, and 1 others. 2022. Xlm-e: Cross-lingual language model pre-training via electra. In Proceedings of the 60th Annual Meet-ing of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 6170–6182. Kevin Clark, Minh-Thang Luong, Quoc V. Le, and Christopher D. Manning. 2020. ELECTRA: Pre-training text encoders as discriminators rather than generators. In ICLR .Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2019. Bert: Pre-training of deep bidirectional transformers for language understand-ing. In Proceedings of the 2019 conference of the North American chapter of the association for com-putational linguistics: human language technologies, volume 1 (long and short papers) , pages 4171–4186. Javid Ebrahimi, Anyi Rao, Daniel Lowd, and Dejing Dou. 2018. HotFlip: White-Box Adversarial Exam-ples for Text Classification. In Proceedings of the 56th Annual Meeting of the Association for Compu-tational Linguistics (Volume 2: Short Papers) , pages 31–36, Melbourne, Australia. Association for Com-putational Linguistics. Zhangyin Feng, Daya Guo, Duyu Tang, Nan Duan, Xi-aocheng Feng, Ming Gong, Linjun Shou, Bing Qin, Ting Liu, Daxin Jiang, and 1 others. 2020. Codebert: A pre-trained model for programming and natural languages. In Findings of the association for compu-tational linguistics: EMNLP 2020 , pages 1536–1547. Tianyu Gao, Adam Fisch, and Danqi Chen. 2021. Making pre-trained language models better few-shot learners. In Proceedings of the 59th annual meeting of the association for computational linguistics and the 11th international joint conference on natural language processing (volume 1: long papers) , pages 3816–3830. Siddhant Garg and Goutham Ramakrishnan. 2020. BAE: BERT-based Adversarial Examples for Text Classification. In Proceedings of the 2020 Confer-ence on Empirical Methods in Natural Language Processing (EMNLP) , pages 6174–6181, Online. As-sociation for Computational Linguistics. Di Jin, Zhijing Jin, Joey Tianyi Zhou, and Peter Szolovits. 2020. Is bert really robust? a strong base-line for natural language attack on text classification and entailment. In Proceedings of the AAAI con-ference on artificial intelligence , volume 34, pages 8018–8025. Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, and Radu Sori-cut. 2019. ALBERT: A lite BERT for self-supervised learning of language representations. 
+
+CoRR , arXiv:1909.11942. Kimin Lee, Kibok Lee, Honglak Lee, and Jinwoo Shin. 2018. A simple unified framework for detecting out-of-distribution samples and adversarial attacks. Ad-vances in neural information processing systems , 31. J Li, S Ji, T Du, B Li, and T Wang. 2019. Textbugger: Generating adversarial text against real-world appli-cations. In 26th Annual Network and Distributed System Security Symposium .Xiaogeng Liu, Peiran Li, Edward Suh, Yevgeniy Vorobeychik, Zhuoqing Mao, Somesh Jha, Patrick McDaniel, Huan Sun, Bo Li, and Chaowei Xiao. 2024. Autodan-turbo: A lifelong agent for strat-egy self-exploration to jailbreak llms. arXiv preprint arXiv:2410.05295 .Xiaogeng Liu, Nan Xu, Muhao Chen, and Chaowei Xiao. Autodan: Generating stealthy jailbreak prompts on aligned large language models. In The Twelfth International Conference on Learning Repre-sentations .Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Man-dar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, and Veselin Stoyanov. 2019. Roberta: A robustly optimized bert pretraining ap-proach. arXiv preprint arXiv:1907.11692 .Kangtao Lv, Wenyan Fan, Huangsen Cao, Kainan Tu, Yihuai Xu, Zhimeng Zhang, Yang Li, Xin Ding, and Yongwei Wang. 2025. Hyper adversarial tun-ing for boosting adversarial robustness of pretrained large vision transformers. Pattern Recognition , page 112158. Andrew Maas, Raymond E Daly, Peter T Pham, Dan Huang, Andrew Y Ng, and Christopher Potts. 2011. Learning word vectors for sentiment analysis. In 
+
+Proceedings of the 49th Annual Meeting of the Asso-ciation for Computational Linguistics: Human Lan-guage Technologies , pages 142–150. Yu Meng, Chenyan Xiong, Payal Bajaj, Paul Bennett, Jiawei Han, Xia Song, and 1 others. 2021. Coco-lm: Correcting and contrasting text sequences for 
+
+14 language model pretraining. Advances in Neural Information Processing Systems , 34:23102–23114. Han Cheol Moon, Shafiq Joty, and Xu Chi. 2022. Grad-mask: Gradient-guided token masking for textual adversarial example detection. In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 3603–3613. John Morris, Eli Lifland, Jack Lanchantin, Yangfeng Ji, and Yanjun Qi. 2020a. Reevaluating adversarial examples in natural language. In Findings of the Association for Computational Linguistics: EMNLP 2020 , pages 3829–3839. John Morris, Eli Lifland, Jin Yong Yoo, Jake Grigsby, Di Jin, and Yanjun Qi. 2020b. Textattack: A frame-work for adversarial attacks, data augmentation, and adversarial training in nlp. In Proceedings of the 2020 Conference on Empirical Methods in Natu-ral Language Processing: System Demonstrations ,pages 119–126. Edoardo Mosca, Shreyash Agarwal, Javier Rando Ramírez, and Georg Groh. 2022. “that is a suspi-cious reaction!”: Interpreting logits variation to de-tect nlp adversarial attacks. In Proceedings of the 60th Annual Meeting of the Association for Compu-tational Linguistics (Volume 1: Long Papers) , pages 7806–7816. Maximilian Mozes, Pontus Stenetorp, Bennett Klein-berg, and Lewis Griffin. 2021. Frequency-guided word substitutions for detecting textual adversarial examples. In Proceedings of the 16th conference of the European chapter of the association for computa-tional linguistics: Main volume , pages 171–186. Hoang-Quoc Nguyen-Son, Seira Hidano, Kazuhide Fukushima, Shinsaku Kiyomoto, and Isao Echizen. 2023. Votetrans: Detecting adversarial text without training by voting on hard labels of transformations. In Findings of the Association for Computational Linguistics: ACL 2023 , pages 5090–5104. Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, and 1 others. 2019. Language models are unsupervised multitask learn-ers. OpenAI blog , 1(8):9. Shuhuai Ren, Yihe Deng, Kun He, and Wanxiang Che. 2019. Generating natural language adversarial ex-amples through probability weighted word saliency. In Proceedings of the 57th annual meeting of the as-sociation for computational linguistics , pages 1085– 1097. Timo Schick and Hinrich Schütze. 2021. Exploiting cloze-questions for few-shot text classification and natural language inference. In Proceedings of the 16th conference of the European chapter of the asso-ciation for computational linguistics: main volume ,pages 255–269. Lingfeng Shen, Ze Zhang, Haiyun Jiang, and Ying Chen. 2023. Textshield: Beyond successfully detecting adversarial sentences in text classification. Liwei Song, Xinwei Yu, Hsuan-Tung Peng, and Karthik Narasimhan. 2021. Universal adversarial attacks with natural triggers for text classification. In Pro-ceedings of the 2021 Conference of the North Amer-ican Chapter of the Association for Computational Linguistics: Human Language Technologies , pages 3724–3733. Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. Advances in neural information processing systems , 30. Prashanth Vijayaraghavan and Deb Roy. 2019. Generat-ing black-box adversarial examples for text classifiers using a deep reinforced model. In Joint European Conference on Machine Learning and Knowledge Discovery in Databases , pages 711–726. Springer. KiYoon Yoo, Jangho Kim, Jiho Jang, and Nojun Kwak. 2022. Detection of adversarial examples in text clas-sification: Benchmark and baseline via robust density estimation. In Findings of the Association for Com-putational Linguistics: ACL 2022 , pages 3656–3672. Xiang Zhang, Junbo Zhao, and Yann LeCun. 2015. Character-level convolutional networks for text clas-sification. In Proc. of NeurIPS .Yunce Zhao, Wei Huang, Wei Liu, and Xin Yao. 2025. Negatively correlated ensemble against transfer ad-versarial attacks. Pattern Recognition , 161:111155. Yichao Zhou, Jyun-Yu Jiang, Kai-Wei Chang, and Wei Wang. 2019. Learning to discriminate perturbations for blocking adversarial attacks in text classification. In Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing (EMNLP-IJCNLP) , pages 4904–4913. Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J Zico Kolter, and Matt Fredrikson. 2023. Univer-sal and transferable adversarial attacks on aligned language models. arXiv preprint arXiv:2307.15043 .
+
+15 Table 5: Examples of RTD-Guard method for generating perturbation examples 
+
+Example Class Example 
+
+Original Example (Sci/Tech-0.97) E-mail scam targets police chief Wiltshire Police warns about "phishing" after its fraud squad chief was targeted. Adversarial Example (World-0.54) E-mail scam targets police chief Wiltshire Police warns about "phishing" after its hoax battalion leiter was targeted. 
+
+RTD Example 
+
+(Sci/Tech-0.96) e - mail scam targets police [MASK] wiltshire police warns about " phishing " after its [MASK] [MASK] [MASK]ter was targeted. Original Example (World-0.99) Schrder adopts Russian orphan Three-year-old Victoria, from St Petersburg, has been living at the Schrders #39; family home in Hanover in northern Germany for several weeks. Adversarial Example (Sci/Tech-0.72) Schrder enact Russian orphan Three-year-old Clockwork , from St Petersburg, has been living at the Schrders #39; family home in Hanover in northern Germany for several weeks. 
+
+RTD Example 
+
+(World-0.99) schrder en [MASK] russian orphan three - year - old [MASK][MASK], from st petersburg, has been living at the schrders [MASK] 39 [MASK] family home in hanover in north-ern germany for several weeks. Original Example (Sports-0.99) Today in Athens Leontien Zijlaard-van Moorsel of the Nether-lands wipes a tear after winning the gold medal in the women #39;s road cycling individual time trial at the Vouliagmeni Olympic Centre in Athens on Wednesday. Adversarial Example (Sci/Tech-0.63) Today in Athens Leontien Zijlaard-van Moorsel of the Dutch 
+
+wipes a tear after won the gold decorating in the females #39;s 
+
+routing bicycles capita time experiments at the Vouliagmeni Olimpia Clinics in Athens on Domingos .
+
+RTD Example 
+
+(Sports-0.98) today in athens leontien zijlaard - van moorsel of the dutch wipes a tear after won the gold decorating in the [MASK] # 39 ; s routing bicycles [MASK] time [MASK] at the vouliagmeni olimpia [MASK] in athens on [MASK]s.
