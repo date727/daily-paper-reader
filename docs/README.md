@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-03-20
-- 运行时间：2026-03-20 19:38:30 UTC
+- 最新运行日期：2026-03-21
+- 运行时间：2026-03-21 19:24:14 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 2026年3月20日，完成了19篇论文的阅读与整理，涵盖精读和速读两种方式。  
-2) 最值得关注的是低光照图像增强与AI对抗攻击领域的高质量研究成果。  
-3) 建议对AI安全和图像处理感兴趣的读者优先精读相关论文，以深入了解前沿技术。
-- 详情：[/202603/20/README](/202603/20/README)
+1) 今日精读与速读共完成19篇论文，涵盖视觉语言模型、欺诈检测及机器人防御等领域。  
+2) 最值得关注的是视觉语言模型的鲁棒性研究与欺诈检测系统FraudFox的创新应用。  
+3) 建议对AI安全和图像生成技术感兴趣的读者优先阅读精读论文，以获取更深入的理解。
+- 详情：[/202603/21/README](/202603/21/README)
 
 ### 精读区论文标签
-1. [A Physically-Grounded Attack and Adaptive Defense Framework for Real-World Low-Light Image Enhancement](/202603/20/2603.14304v1-a-physically-grounded-attack-and-adaptive-defense-framework-for-real-world-low-light-image-enhancement)  
+1. [What Makes VLMs Robust? Towards Reconciling Robustness and Accuracy in Vision-Language Models](/202603/21/2603.12799v1-what-makes-vlms-robust-towards-reconciling-robustness-and-accuracy-in-vision-language-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：基于物理的对抗攻击与防御框架
-2. [AI Evasion and Impersonation Attacks on Facial Re-Identification with Activation Map Explanations](/202603/20/2603.15396v1-ai-evasion-and-impersonation-attacks-on-facial-re-identification-with-activation-map-explanations)  
+   evidence：研究对抗攻击对图像生成模型的影响
+2. [SRL-MAD: Structured Residual Latents for One-Class Morphing Attack Detection](/202603/21/2603.15050v1-srl-mad-structured-residual-latents-for-one-class-morphing-attack-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对图像生成模型的影响
-3. [RESQ: A Unified Framework for REliability- and Security Enhancement of Quantized Deep Neural Networks](/202603/20/2603.15413v1-resq-a-unified-framework-for-reliability--and-security-enhancement-of-quantized-deep-neural-networks)  
+   evidence：与对抗扰动对生成模型的影响相关
+3. [IdentityGuard: Context-Aware Restriction and Provenance for Personalized Synthesis](/202603/21/2603.15679v1-identityguard-context-aware-restriction-and-provenance-for-personalized-synthesis)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：提升对抗攻击下的模型鲁棒性
-4. [BadLLM-TG: A Backdoor Defender powered by LLM Trigger Generator](/202603/20/2603.15692v1-badllm-tg-a-backdoor-defender-powered-by-llm-trigger-generator)  
+   evidence：个性化图像生成安全防护
+4. [Unlearning for One-Step Generative Models via Unbalanced Optimal Transport](/202603/21/2603.16489v1-unlearning-for-one-step-generative-models-via-unbalanced-optimal-transport)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：使用对抗扰动进行图像生成模型的保护
-5. [Rel-Zero: Harnessing Patch-Pair Invariance for Robust Zero-Watermarking Against AI Editing](/202603/20/2603.17531v1-rel-zero-harnessing-patch-pair-invariance-for-robust-zero-watermarking-against-ai-editing)  
+   evidence：与对抗扰动对生成模型的影响相关
+5. [Adversarial attacks against Modern Vision-Language Models](/202603/21/2603.16960v1-adversarial-attacks-against-modern-vision-language-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-6. [DSS-GAN: Directional State Space GAN with Mamba backbone for Class-Conditional Image Synthesis](/202603/20/2603.17637v1-dss-gan-directional-state-space-gan-with-mamba-backbone-for-class-conditional-image-synthesis)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：生成对抗网络与图像合成相关
-7. [EquivAnIA: A Spectral Method for Rotation-Equivariant Anisotropic Image Analysis](/202603/20/2603.11294v1-equivania-a-spectral-method-for-rotation-equivariant-anisotropic-image-analysis)  
+   evidence：对抗攻击的图像防御策略
+6. [Complementary Text-Guided Attention for Zero-Shot Adversarial Robustness](/202603/21/2603.18598v1-complementary-text-guided-attention-for-zero-shot-adversarial-robustness)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：生成式对抗扰动鲁棒性
+7. [Composing Driving Worlds through Disentangled Control for Adversarial Scenario Generation](/202603/21/2603.12864v1-composing-driving-worlds-through-disentangled-control-for-adversarial-scenario-generation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
+   evidence：对抗攻击下的场景生成
 
 ### 速读区论文标签
-1. [AttriGuard: Defeating Indirect Prompt Injection in LLM Agents via Causal Attribution of Tool Invocations](/202603/20/2603.10749v1-attriguard-defeating-indirect-prompt-injection-in-llm-agents-via-causal-attribution-of-tool-invocations)  
+1. [From Passive Monitoring to Active Defence: Resilient Control of Manipulators Under Cyberattacks](/202603/21/2603.13003v1-from-passive-monitoring-to-active-defence-resilient-control-of-manipulators-under-cyberattacks)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-2. [MAD: Memory Allocation meets Software Diversity](/202603/20/2603.10840v1-mad-memory-allocation-meets-software-diversity)  
+   evidence：研究图像对抗攻击与防御
+2. [FraudFox: Adaptable Fraud Detection in the Real World](/202603/21/2603.13014v1-fraudfox-adaptable-fraud-detection-in-the-real-world)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的防御方法
-3. [Towards Trustworthy Selective Generation: Reliability-Guided Diffusion for Ultra-Low-Field to High-Field MRI Synthesis](/202603/20/2603.11325v1-towards-trustworthy-selective-generation-reliability-guided-diffusion-for-ultra-low-field-to-high-field-mri-synthesis)  
+   evidence：与对抗扰动下的图像模型保护相关
+3. [High-Fidelity Text-to-Image Generation from Pre-Trained Vision-Language Models via Distribution-Conditioned Diffusion Decoding](/202603/21/2603.13389v1-high-fidelity-text-to-image-generation-from-pre-trained-vision-language-models-via-distribution-conditioned-diffusion-decoding)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：基于扩散模型的高保真图像生成
+4. [COT-FM: Cluster-wise Optimal Transport Flow Matching](/202603/21/2603.13395v1-cot-fm-cluster-wise-optimal-transport-flow-matching)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：图像生成模型鲁棒性提升
-4. [BackdoorIDS: Zero-shot Backdoor Detection for Pretrained Vision Encoder](/202603/20/2603.11664v2-backdoorids-zero-shot-backdoor-detection-for-pretrained-vision-encoder)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的防御策略
-5. [D-SLAMSpoof: An Environment-Agnostic LiDAR Spoofing Attack using Dynamic Point Cloud Injection](/202603/20/2603.11365v1-d-slamspoof-an-environment-agnostic-lidar-spoofing-attack-using-dynamic-point-cloud-injection)  
+   evidence：对抗攻击下的图像生成方法改进
+5. [coDrawAgents: A Multi-Agent Dialogue Framework for Compositional Image Generation](/202603/21/2603.12829v1-codrawagents-a-multi-agent-dialogue-framework-for-compositional-image-generation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：图像对抗攻击防御技术
-6. [Online Learning of Strategic Defense against Ecological Adversaries under Partial Observability with Semi-Bandit Feedback](/202603/20/2603.11726v1-online-learning-of-strategic-defense-against-ecological-adversaries-under-partial-observability-with-semi-bandit-feedback)  
+   evidence：研究生成式图像对抗鲁棒性
+6. [Mitigating Memorization in Text-to-Image Diffusion via Region-Aware Prompt Augmentation and Multimodal Copy Detection](/202603/21/2603.13070v1-mitigating-memorization-in-text-to-image-diffusion-via-region-aware-prompt-augmentation-and-multimodal-copy-detection)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：研究对抗防御策略
-7. [Efficient Generative Modeling with Unitary Matrix Product States Using Riemannian Optimization](/202603/20/2603.12026v1-efficient-generative-modeling-with-unitary-matrix-product-states-using-riemannian-optimization)  
+   evidence：文本到图像扩散模型的防复制方法
+7. [Diffusion-Based Feature Denoising and Using NNMF for Robust Brain Tumor Classification](/202603/21/2603.13182v1-diffusion-based-feature-denoising-and-using-nnmf-for-robust-brain-tumor-classification)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-8. [Finite Difference Flow Optimization for RL Post-Training of Text-to-Image Models](/202603/20/2603.12893v1-finite-difference-flow-optimization-for-rl-post-training-of-text-to-image-models)  
+   evidence：扩散模型的特征去噪与鲁棒分类
+8. [An Ideal Random Number Generator Based on Quantum Fluctuations and Rotating Wheel for Secure Image Encryption](/202603/21/2603.13472v1-an-ideal-random-number-generator-based-on-quantum-fluctuations-and-rotating-wheel-for-secure-image-encryption)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：使用强化学习优化图像生成模型
-9. [OrthoEraser: Coupled-Neuron Orthogonal Projection for Concept Erasure](/202603/20/2603.11493v1-orthoeraser-coupled-neuron-orthogonal-projection-for-concept-erasure)  
+   evidence：基于量子波动和旋转轮的随机数生成器用于图像加密
+9. [Empowering Semantic-Sensitive Underwater Image Enhancement with VLM](/202603/21/2603.12773v1-empowering-semantic-sensitive-underwater-image-enhancement-with-vlm)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-10. [Gen-Fab: A Variation-Aware Generative Model for Predicting Fabrication Variations in Nanophotonic Devices](/202603/20/2603.11505v1-gen-fab-a-variation-aware-generative-model-for-predicting-fabrication-variations-in-nanophotonic-devices)  
+   evidence：对抗扰动下的图像增强方法
+10. [The RIGID Framework: Research-Integrated, Generative AI-Mediated Instructional Design](/202603/21/2603.12781v1-the-rigid-framework-research-integrated-generative-ai-mediated-instructional-design)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像生成模型
-11. [Toward Complex-Valued Neural Networks for Waveform Generation](/202603/20/2603.11589v1-toward-complex-valued-neural-networks-for-waveform-generation)  
+   evidence：探讨对抗攻击的图像防御策略
+11. [Rethinking VLMs for Image Forgery Detection and Localization](/202603/21/2603.12930v1-rethinking-vlms-for-image-forgery-detection-and-localization)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：涉及对抗扰动生成方法
-12. [Continual Learning with Vision-Language Models via Semantic-Geometry Preservation](/202603/20/2603.12055v1-continual-learning-with-vision-language-models-via-semantic-geometry-preservation)  
+   evidence：图像伪造检测与定位
+12. [Test-Time Attention Purification for Backdoored Large Vision Language Models](/202603/21/2603.12989v1-test-time-attention-purification-for-backdoored-large-vision-language-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
+   evidence：对抗攻击对图像模型影响
 
 
 ### ⚡ 这个站点能做什么
