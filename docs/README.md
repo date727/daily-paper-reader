@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-03-21
-- 运行时间：2026-03-21 19:24:14 UTC
+- 最新运行日期：2026-03-22
+- 运行时间：2026-03-22 19:25:47 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读与速读共完成19篇论文，涵盖视觉语言模型、欺诈检测及机器人防御等领域。  
-2) 最值得关注的是视觉语言模型的鲁棒性研究与欺诈检测系统FraudFox的创新应用。  
-3) 建议对AI安全和图像生成技术感兴趣的读者优先阅读精读论文，以获取更深入的理解。
-- 详情：[/202603/21/README](/202603/21/README)
+1) 2026年3月22日，日报成功收录19篇AI领域最新论文。  
+2) 精读论文聚焦扩散模型优化与噪声调度，速读内容涵盖模型安全、工业异常检测和图像超分辨率。  
+3) 建议对扩散模型感兴趣或关注模型安全的读者优先阅读精读和速读中的高分论文。
+- 详情：[/202603/22/README](/202603/22/README)
 
 ### 精读区论文标签
-1. [What Makes VLMs Robust? Towards Reconciling Robustness and Accuracy in Vision-Language Models](/202603/21/2603.12799v1-what-makes-vlms-robust-towards-reconciling-robustness-and-accuracy-in-vision-language-models)  
+1. [Q-Drift: Quantization-Aware Drift Correction for Diffusion Model Sampling](/202603/22/2603.18095v1-q-drift-quantization-aware-drift-correction-for-diffusion-model-sampling)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗攻击对图像生成模型的影响
-2. [SRL-MAD: Structured Residual Latents for One-Class Morphing Attack Detection](/202603/21/2603.15050v1-srl-mad-structured-residual-latents-for-one-class-morphing-attack-detection)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：与对抗扰动对生成模型的影响相关
-3. [IdentityGuard: Context-Aware Restriction and Provenance for Personalized Synthesis](/202603/21/2603.15679v1-identityguard-context-aware-restriction-and-provenance-for-personalized-synthesis)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：个性化图像生成安全防护
-4. [Unlearning for One-Step Generative Models via Unbalanced Optimal Transport](/202603/21/2603.16489v1-unlearning-for-one-step-generative-models-via-unbalanced-optimal-transport)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：与对抗扰动对生成模型的影响相关
-5. [Adversarial attacks against Modern Vision-Language Models](/202603/21/2603.16960v1-adversarial-attacks-against-modern-vision-language-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-6. [Complementary Text-Guided Attention for Zero-Shot Adversarial Robustness](/202603/21/2603.18598v1-complementary-text-guided-attention-for-zero-shot-adversarial-robustness)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式对抗扰动鲁棒性
-7. [Composing Driving Worlds through Disentangled Control for Adversarial Scenario Generation](/202603/21/2603.12864v1-composing-driving-worlds-through-disentangled-control-for-adversarial-scenario-generation)  
+   evidence：扩散模型量化误差校正
+2. [Spectrally-Guided Diffusion Noise Schedules](/202603/22/2603.19222v1-spectrally-guided-diffusion-noise-schedules)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：扩散模型用于图像生成
+3. [Agent Privilege Separation in OpenClaw: A Structural Defense Against Prompt Injection](/202603/22/2603.13424v1-agent-privilege-separation-in-openclaw-a-structural-defense-against-prompt-injection)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的场景生成
+   evidence：防御技术
+4. [LADR: Locality-Aware Dynamic Rescue for Efficient Text-to-Image Generation with Diffusion Large Language Models](/202603/22/2603.13450v1-ladr-locality-aware-dynamic-rescue-for-efficient-text-to-image-generation-with-diffusion-large-language-models)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+5. [Steering Generative Models for Accessibility: EasyRead Image Generation](/202603/22/2603.13695v1-steering-generative-models-for-accessibility-easyread-image-generation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络用于图像生成
+6. [Discriminative Flow Matching Via Local Generative Predictors](/202603/22/2603.13928v1-discriminative-flow-matching-via-local-generative-predictors)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动下的鲁棒性提升
+7. [UniSAFE: A Comprehensive Benchmark for Safety Evaluation of Unified Multimodal Models](/202603/22/2603.17476v1-unisafe-a-comprehensive-benchmark-for-safety-evaluation-of-unified-multimodal-models)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：研究生成式图像安全防护
 
 ### 速读区论文标签
-1. [From Passive Monitoring to Active Defence: Resilient Control of Manipulators Under Cyberattacks](/202603/21/2603.13003v1-from-passive-monitoring-to-active-defence-resilient-control-of-manipulators-under-cyberattacks)  
+1. [Purifying Generative LLMs from Backdoors without Prior Knowledge or Clean Reference](/202603/22/2603.13461v1-purifying-generative-llms-from-backdoors-without-prior-knowledge-or-clean-reference)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：研究图像对抗攻击与防御
-2. [FraudFox: Adaptable Fraud Detection in the Real World](/202603/21/2603.13014v1-fraudfox-adaptable-fraud-detection-in-the-real-world)  
+   evidence：对抗攻击防御方法
+2. [MIRAGE: Model-agnostic Industrial Realistic Anomaly Generation and Evaluation for Visual Anomaly Detection](/202603/22/2603.13507v1-mirage-model-agnostic-industrial-realistic-anomaly-generation-and-evaluation-for-visual-anomaly-detection)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：与对抗扰动下的图像模型保护相关
-3. [High-Fidelity Text-to-Image Generation from Pre-Trained Vision-Language Models via Distribution-Conditioned Diffusion Decoding](/202603/21/2603.13389v1-high-fidelity-text-to-image-generation-from-pre-trained-vision-language-models-via-distribution-conditioned-diffusion-decoding)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：基于扩散模型的高保真图像生成
-4. [COT-FM: Cluster-wise Optimal Transport Flow Matching](/202603/21/2603.13395v1-cot-fm-cluster-wise-optimal-transport-flow-matching)  
+   evidence：对抗攻击的图像防御策略
+3. [Revisiting the Perception-Distortion Trade-off with Spatial-Semantic Guided Super-Resolution](/202603/22/2603.14112v1-revisiting-the-perception-distortion-trade-off-with-spatial-semantic-guided-super-resolution)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像生成方法改进
-5. [coDrawAgents: A Multi-Agent Dialogue Framework for Compositional Image Generation](/202603/21/2603.12829v1-codrawagents-a-multi-agent-dialogue-framework-for-compositional-image-generation)  
+   evidence：对抗扰动与图像生成模型鲁棒性
+4. [Experimental Evaluation of Security Attacks on Self-Driving Car Platforms](/202603/22/2603.14124v1-experimental-evaluation-of-security-attacks-on-self-driving-car-platforms)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击对自动驾驶系统感知的影响
+5. [Bodhi VLM: Privacy-Alignment Modeling for Hierarchical Visual Representations in Vision Backbones and VLM Encoders via Bottom-Up and Top-Down Feature Search](/202603/22/2603.13728v1-bodhi-vlm-privacy-alignment-modeling-for-hierarchical-visual-representations-in-vision-backbones-and-vlm-encoders-via-bottom-up-and-top-down-feature-search)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：研究生成式图像对抗鲁棒性
-6. [Mitigating Memorization in Text-to-Image Diffusion via Region-Aware Prompt Augmentation and Multimodal Copy Detection](/202603/21/2603.13070v1-mitigating-memorization-in-text-to-image-diffusion-via-region-aware-prompt-augmentation-and-multimodal-copy-detection)  
+   evidence：隐私对齐建模
+6. [Sat-JEPA-Diff: Bridging Self-Supervised Learning and Generative Diffusion for Remote Sensing](/202603/22/2603.13943v1-sat-jepa-diff-bridging-self-supervised-learning-and-generative-diffusion-for-remote-sensing)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：文本到图像扩散模型的防复制方法
-7. [Diffusion-Based Feature Denoising and Using NNMF for Robust Brain Tumor Classification](/202603/21/2603.13182v1-diffusion-based-feature-denoising-and-using-nnmf-for-robust-brain-tumor-classification)  
+   evidence：生成式图像与扩散模型结合
+7. [M2IR: Proactive All-in-One Image Restoration via Mamba-style Modulation and Mixture-of-Experts](/202603/22/2603.14816v1-m2ir-proactive-all-in-one-image-restoration-via-mamba-style-modulation-and-mixture-of-experts)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：扩散模型的特征去噪与鲁棒分类
-8. [An Ideal Random Number Generator Based on Quantum Fluctuations and Rotating Wheel for Secure Image Encryption](/202603/21/2603.13472v1-an-ideal-random-number-generator-based-on-quantum-fluctuations-and-rotating-wheel-for-secure-image-encryption)  
+   evidence：对抗攻击下的图像修复方法
+8. [Directional Embedding Smoothing for Robust Vision Language Models](/202603/22/2603.15259v1-directional-embedding-smoothing-for-robust-vision-language-models)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：基于量子波动和旋转轮的随机数生成器用于图像加密
-9. [Empowering Semantic-Sensitive Underwater Image Enhancement with VLM](/202603/21/2603.12773v1-empowering-semantic-sensitive-underwater-image-enhancement-with-vlm)  
+   evidence：研究对抗扰动下的鲁棒性
+9. [SAIF: A Stability-Aware Inference Framework for Medical Image Segmentation with Segment Anything Model](/202603/22/2603.13533v1-saif-a-stability-aware-inference-framework-for-medical-image-segmentation-with-segment-anything-model)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像增强方法
-10. [The RIGID Framework: Research-Integrated, Generative AI-Mediated Instructional Design](/202603/21/2603.12781v1-the-rigid-framework-research-integrated-generative-ai-mediated-instructional-design)  
+   evidence：生成式图像对抗扰动
+10. [NumColor: Precise Numeric Color Control in Text-to-Image Generation](/202603/22/2603.13547v1-numcolor-precise-numeric-color-control-in-text-to-image-generation)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：探讨对抗攻击的图像防御策略
-11. [Rethinking VLMs for Image Forgery Detection and Localization](/202603/21/2603.12930v1-rethinking-vlms-for-image-forgery-detection-and-localization)  
+   evidence：生成式图像对抗扰动控制
+11. [Privacy-Preserving Machine Learning for IoT: A Cross-Paradigm Survey and Future Roadmap](/202603/22/2603.13570v1-privacy-preserving-machine-learning-for-iot-a-cross-paradigm-survey-and-future-roadmap)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像伪造检测与定位
-12. [Test-Time Attention Purification for Backdoored Large Vision Language Models](/202603/21/2603.12989v1-test-time-attention-purification-for-backdoored-large-vision-language-models)  
+   evidence：隐私保护与对抗扰动
+12. [Privacy-Preserving Machine Learning for IoT: A Cross-Paradigm Survey and Future Roadmap](/202603/22/2603.13570v2-privacy-preserving-machine-learning-for-iot-a-cross-paradigm-survey-and-future-roadmap)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击对图像模型影响
+   evidence：隐私保护中的扰动建模
 
 
 ### ⚡ 这个站点能做什么

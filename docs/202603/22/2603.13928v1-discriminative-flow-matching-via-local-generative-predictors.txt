@@ -1,0 +1,956 @@
+Title: Discriminative Flow Matching Via Local Generative Predictors
+
+URL Source: https://arxiv.org/pdf/2603.13928v1
+
+Published Time: Tue, 17 Mar 2026 01:08:49 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# DISCRIMINATIVE FLOW MATCHING VIA LOCAL GENERATIVE 
+
+# PREDICTORS 
+
+A P REPRINT 
+
+Om Govind Jha 
+
+Indian Institute of Science Education and Research Bhopal, India 
+
+om22@iiserb.ac.in 
+
+Manoj Bamniya 
+
+Indian Institute of Technology Guwahati, India 
+
+manojbamniya832@gmail.com 
+
+Ayon Borthakur 
+
+Indian Institute of Technology Guwahati, India 
+
+ayon.borthakur@iitg.ac.in 
+
+March 17, 2026 
+
+## ABSTRACT 
+
+Traditional discriminative computer vision relies predominantly on static projections, mapping input features to outputs in a single computational step. Although efficient, this paradigm lacks the iterative refinement and robustness inherent in biological vision and modern generative modelling. In this paper, we propose Discriminative Flow Matching, a framework that reformulates classification and object detection as a conditional transport process. By learning a vector field that continuously transports samples from a simple noise distribution toward a task-aligned target manifold - such as class embeddings or bounding box coordinates - we are at the interface between generative and discriminative learning. Our method attaches multiple independent flow predictors to a shared backbone. These predictors are trained using local flow matching objectives, where gradients are computed independently for each block. We formulate this approach for standard image classification and extend it to the complex task of object detection, where targets are high-dimensional and spatially distributed. This architecture provides the flexibility to update blocks either sequentially to minimise activation memory or in parallel to suit different hardware constraints. By aggregating the predictions from these independent flow predictors, our framework enables robust, generative-inspired inference across diverse architectures, including CNNs and vision transformers. 
+
+Keywords Transformer · Flow Matching · Image Classification · Object Detection · Representation Learning 
+
+## 1 Introduction 
+
+For the past few years, the dominant paradigm in discriminative computer vision has been static projection . Architectures such as ResNets [[He et al. [2016]] and vision transformers (ViTs) [[Dosovitskiy et al. [2021]] function as fixed mappings that project input features directly onto a set of logits or coordinates in a single computational step. While highly optimised, this static approach stands in contrast to biological vision and modern generative modelling, both of which rely on dynamic, iterative refinement to resolve ambiguity and generate high-fidelity structures. The success of Denoising Diffusion Probabilistic Models (DDPMs) [Ho et al. [2020] has sparked interest in bringing these "dynamic" capabilities to discriminative tasks. Recent works like DiffusionDet [[Chen et al. [2023]] have demonstrated that object detection can be formulated as a denoising process, where random boxes are progressively refined into precise detections. More recently, Flow Matching [Lipman et al. [2023]] has emerged as an alternative to diffusion, offering simulation-free training and straighter transport trajectories. However, adapting these continuous-
+
+> arXiv:2603.13928v1 [cs.CV] 14 Mar 2026
+
+Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+time processes to discriminative tasks introduces computational bottlenecks. Training a deep network to approximate a global vector field typically requires backpropagating through ODE solvers[[Shah [2018]] or massive unrolled graphs, causing memory usage to scale linearly with depth and making optimisation notoriously unstable. To mitigate the costs of global backpropagation (BP), the Local Learning alternatives have been explored, such as the Forward-Forward (FF) algorithm [Hinton [2022]]. While FF and its variants ( e.g. , CFF [Aghagolzadeh and Ezoji [2025]], SFF [Zhu et al. [2025]]) effectively decouple layer training, they have struggled to scale beyond global image classification. Their reliance on scalar “goodness” objectives makes extending them to dense prediction tasks challenging [Zhao et al. [2019]], as they struggle to preserve the high-dimensional spatial information required for precise localisation. A closely related approach, NoProp [Li et al. [2025]], takes a more principled step by eliminating both forward and backward propagation entirely: each block independently learns to denoise a noisy version of the target label embedding, drawing directly on diffusion and flow-matching theory. While NoProp represents a compelling advance in credit-assignment-free learning and demonstrates competitive accuracy on image classification benchmarks, it is designed around fixed, pre-noised label targets broadcast uniformly to every block. This architectural choice, while effective for classification, does not naturally extend to structured output spaces where targets are high-dimensional and spatially distributed, precisely the setting our work addresses. Our approach follows the spirit of NoProp by using block-local flow matching objectives without requiring full end-to-end backpropagation through the diffusion steps. In this paper, we propose Discriminative Flow Matching , a framework that leverages the representational strength of continuous flows to build robust, generative-inspired classifiers and detectors. Flow Matching learns a vector field that continuously transports samples from a source distribution toward a target, offering a smooth, tractable alternative to diffusion-based generation. Instead of treating the network with a single static projection head, we conceptualise inference as a consensus-driven transport process. We use an ensemble of independent flow predictors, where multiple parallel heads learn distinct local vector fields to transport a noisy latent state toward a task-aligned target manifold - whether a class embedding or a set of bounding box coordinates. By aggregating these independent generative trajectories, our method achieves highly robust single-step inference, effectively bridging the gap between generative continuous-time dynamics and fast, accurate discrimination. Our contributions are as follows: 1. We extend conditional flow matching to discriminative vision tasks, showing that both image classification and object detection can be formulated as transporting Gaussian noise to task-aligned target manifolds, such as class embeddings and sets of bounding box coordinates. 2. We introduce a Generative Flow Ensemble that departs from standard static projection. Instead of training multiple independent models as in traditional ensembles, we attach multiple vector-field predictors to a shared backbone. Aggregating their predictions provides a robust consensus for task inference while avoiding the memory and computational cost of training multiple full networks. 3. We demonstrate experimentally that this framework scales to both image classification and object detec-tion across CNN and Vision Transformer (ViT) architectures, with models trained both from scratch and using pretrained backbones, achieving competitive accuracy while providing a generative interpretation of discriminative inference. 4. We provide an empirical analysis of generative inference dynamics across architectures. Our results show that aggregating predictions from multiple flow predictors enable robust single-step ensemble inference, while multi-step ODE integration can become unstable when predictors are not specialised for specific time intervals, leading to trajectory drift, particularly in convolutional architectures [Chen et al. [2018], Lipman et al. [2023]]. 
+
+## 2 Related Work 
+
+2.0.1 Flow Matching and Neural ODEs. 
+
+Flow Matching [Lipman et al. [2023]] was introduced as a scalable method for training Continuous Normalising Flows (CNFs) [Chen et al. [2018]] by regressing a vector field directly onto a conditional probability path. While it is primarily dominant in generative tasks ( e.g. , image synthesis), its utility for discrimination remains underexplored. Closely related to our work is NoProp [Li et al. [2025]], from which we draw inspiration. NoProp demonstrates that classification can be achieved without global forward or backward propagation by having independent network blocks learn to denoise targets using localised flow matching objectives. While we share the core motivation of utilising decoupled generative objectives to circumvent global optimisation bottlenecks, we distinguish our work in two key dimensions. First, we extend the formulation beyond global classifica-tion to the more complex task of Object Detection , which requires transporting noise to permutation-invariant sets of 2Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+bounding box coordinates rather than static class vectors. Secondly, while NoProp largely decouples learning from traditional hierarchical feature extraction, we propose a Generative Flow Ensemble. By attaching independent flow predictors to a shared, hierarchical backbone ( e.g. , ViT or ResNet), we leverage rich global features to achieve highly robust, single-step ensemble inference, offering a practical bridge between generative continuous-time dynamics and standard discriminative architectures. 
+
+2.0.2 Dynamic and Generative Recognition. 
+
+The paradigm of treating perception as a dynamic process is rapidly evolving. DiffusionDet [Chen et al. [2023]] pioneered the use of generative diffusion for object detection, treating bounding boxes as signals to be denoised. While effective, the stochastic nature of diffusion often leads to slow inference. DeFloMat [Anonymous] recently adapted Flow Matching to this domain to accelerate sampling. However, these methods rely on heavy end-to-end backpropagation through the entire backbone and decoder. This global dependency imposes strict limits on model depth and batch size. Our work uses the Optimal Transport paths of Flow Matching [Lipman et al. [2023]], but avoids the global gradient lock. By training flow dynamics in decoupled blocks, we retain the benefits of iterative refinement without the prohibitive memory cost. 
+
+2.0.3 Efficient Learning. 
+
+Standard Backpropagation (BP) imposes strict memory and scaling limits due to the need to store intermediate activations across the entire network graph. To circumvent this, Forward-Forward (FF) [Hinton [2022]] proposed replacing the backward pass with a second forward pass of "negative data", optimising a local goodness function layer-by-layer. While these efficient learning methods are promising, and further strengthened by contrastive formulations such as 
+
+CFF [Aghagolzadeh and Ezoji [2025]] and SFF [Zhu et al. [2025]], these local methods are primarily designed for classification settings. Extending them to dense prediction tasks introduces additional challenges: scalar objective functions compress the rich, high-dimensional error signals required for precise spatial localisation, and layer-wise updates may not always produce the globally coherent representations that structured outputs demand. Flow Matching offers a complementary alternative for such settings. Instead of optimising a scalar goodness score, it learns a continuous vector field that transports latent representations toward structured targets. This provides a dense, directional supervision signal that is naturally suited to the spatial and structural complexity of dense prediction. Rather than discarding hierarchical backpropagation entirely, our Discriminative Flow Matching maintains a shared backbone for robust feature extraction but decouples the generative prediction stage. By regressing a high-dimensional vector field, we provide the dense, directional supervision needed for complex tasks such as object detection. Fur-thermore, by isolating gradient computation to independent flow heads, we achieve robust multi-trajectory generative inference without the massive memory overhead associated with standard global ensembles or unrolled continuous-time ODEs. 
+
+## 3 Methods 
+
+In this section, we present our block-wise local training paradigm based on flow matching for object detection and image classification. 
+
+3.1 Problem Formulation 3.1.1 Flow Matching in Embedding Space 
+
+Our approach learns to transport samples from a simple noise distribution to a structured target embedding through a learned vector field. We formulate this as a continuous-time flow matching problem. 
+
+Initial State. We begin with samples from a standard Gaussian distribution: 
+
+z0 ∼ N (0 , I ) (1) 
+
+Target State. The target state z1 is a learnable, deterministic embedding conditioned on the ground truth label or detection: • For Classification: z1 = Wembed [y], where Wembed ∈ RC×d is a learnable class embedding matrix for C
+
+classes and embedding dimension d.3Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+• For Object Detection: z1 is a set of M target queries, where each query j is constructed as: 
+
+z1j = Wclass [cj ] + Wbox bj (2) where Wclass ∈ R(C+1) ×d includes a background class, and Wbox ∈ Rd×4 projects bounding box coordinates 
+
+bj ∈ [0 , 1] 4.
+
+Probability Path. We define a linear interpolation path between noise and target[Lipman et al. [2023], Peyré and Cuturi [2019]]: 
+
+zt = (1 − t)z0 + tz 1, t ∈ [0 , 1] (3) 
+
+Target Vector Field. The derivative of this path defines the direction the network must learn: 
+
+vt = ddt zt = z1 − z0 (4) 
+
+3.2 Block-wise Local Training Architecture 3.2.1 Multi-Block Decomposition 
+
+Instead of constructing a single deep sequential network, we decompose the model into T parallel vector-field predictors 
+
+{vθ1 , v θ2 , . . . , v θT }. Each predictor vθk is a neural module with parameters θk that shares the same architecture across blocks and receives identical inputs, namely the current latent state zt, image features f (x) extracted from the shared backbone, and the time variable t. Each block predicts the same target vector field z1 − z0 and is optimised using its own local loss. Although these predictors are trained independently and without a fixed temporal assignment, they can be applied sequentially or aggregated at inference time to approximate the underlying transport dynamics. 
+
+3.2.2 Vector Field Prediction 
+
+Each block predicts the vector field using the following architecture. 
+
+Feature Extraction. Image features are extracted using a shared backbone: 
+
+f (x) = Backbone (x) (5) Unlike local learning approaches such as Stochastic Forward-Forward [Zhu et al. [2025]] and NoProp [Li et al. [2025]], which rely on layer-wise training with fixed or non-jointly optimised intermediate representations, our method continuously updates a shared backbone. To ensure memory efficiency, we adopt a sequential gradient accumulation strategy widely utilised in Multi-Task Learning (MTL) optimisation [Vandenhende et al. [2021], Yu et al. [2020]]. By backpropagating through the parallel flow heads sequentially and accumulating their gradients into the shared backbone, the network learns a robust consensus representation while strictly bounding the peak activation memory to the backbone plus a single head at any given time. For image classification, we evaluate both a custom multi-stage Convolutional Neural Network (CNN) and a Vision Transformer (ViT-Tiny variant) that outputs f (x) ∈ Rd, while for object detection, we use a pre-trained ResNet-50 with features projected to dimension d. The configuration details are provided in the supplementary file. 
+
+Time Embedding. The scalar time variable t ∈ [0 , 1] is embedded into a dense vector space using a two-layer Multi-Layer Perceptron (MLP): 
+
+et = TimeEmbed (t) ∈ Rd (6) This temporal conditioning is a crucial mechanism for the continuous generative process [Ho et al. [2020], Lipman et al. [2023]]. Because the underlying vector field evolves continuously from the source noise distribution at t = 0 to the target data manifold at t = 1 , the time embedding informs the network of the current integration step and allows the shared weights within the flow blocks to dynamically adjust their velocity predictions depending on the position of the latent state along the trajectory [Lipman et al. [2023]]. 
+
+Vector Field Architecture. For classification, the time embedding is first added to the latent state to provide temporal conditioning. The conditioned state is then concatenated with the image features and processed by a Multi-Layer Perceptron (MLP) to predict the vector field: 
+
+h = Concat (f (x), z t + et) (7) 
+
+vθk (zt, f (x), t ) = MLP k(h) ∈ Rd (8) For object detection, the blocks instead use transformer layers with self-attention and cross-attention mechanisms to process query embeddings conditioned on image features and time. We describe the local training objectives in the supplementary. 4Discriminative Flow Matching via Local Generative Predictors A P REPRINT Task-Specific Targets & Heads Discriminative Flow Matching Feature Extraction       
+
+> Input
+> Image
+> ViT Backbone (CFF)
+> Transformer Blocks
+> CNN Backbone (SFF)
+> Conv & Pooling
+> Features
+> (X)
+> Noise Prior (z ₀)
+> ~ N(0, I)
+> Time (t)
+> ~ U(0, 1)
+> Time Embedding
+> Noisy Latent (z_t)
+> z_t = (1-t)z ₀+ tz ₁
+> Vector Field Predictors
+> (Parallel Blocks/Heads)
+> v_θ(z_t, X, t)
+> Flow Matching Loss
+> || v_θ - (z ₁- z ₀) ||²
+> Ground Truth
+> (y) or (y, b)
+> Target Manifold Formulation (z ₁)
+> Classification:
+> z₁= ClassEmb(y)
+> Detection:
+> z₁= ClassEmb(y) + BoxEmb(b)
+> Target Smoothing
+> z₁= z ₁+ σ_min * N(0,I)
+> Inference Strategy
+> (Ensemble / Single and
+> Multi-Step ODE)
+> Estimate z ₁
+> Linear Classifier
+> (Task Head)
+> Box & Class MLPs
+> (Task Head)
+> Task Loss
+> (Cross Entropy / L1 / GIoU)
+> Internal Structure of Vector Field Predictor
+> z_t + Time Emb
+> Features (X)
+> Classification (ViT)
+> Concat → MLP
+> Classification (CNN)
+> Concat → Linear → ResBlocks
+> Object Detection
+> Cross-Attn → Self-Attn → FFN
+> Predicted Vector
+> (v_θ)
+
+Figure 1: Overview of the proposed Discriminative Flow Matching framework 
+
+3.3 Training Procedure 
+
+Our training procedure processes each block sequentially, and later we also compare it with a parallel training approach. For each epoch, we iterate over all T blocks and process the entire dataset for each block. Fig. 1 depicts this Flow Matching Framework. Algorithm 1 presents the complete training procedure. 
+
+Key Property - Gradient Locality: The crucial distinction from standard backpropagation is that the gradient computation for block k is independent: 
+
+∇θk L(k)
+
+total does not depend on θj for j̸ = k (9) The computational graph only includes: Backbone → Block k → Loss. This enables efficient memory usage by storing activations for only one block at a time, rather than maintaining the full computation graph across all T blocks. For details, refer to the memory efficiency analysis section in the supplementary. 
+
+3.4 Inference Strategies for Learned Flow Dynamics 
+
+We evaluate the learned representations using four inference strategies: Linear Probe, Single-Step, Ensemble, and Multi-Step (ODE) inference. The linear probe evaluates the quality of backbone representations by training a classifier on frozen features [Alain and Bengio [2016]]. Single-step inference estimates the target using one Euler update 
+
+ˆz1 = z0 + vθ (z0, 0) . Ensemble inference aggregates predictions from multiple flow heads, while multi-step inference solves the corresponding ODE using an Euler solver. Further implementation details are provided in the supplementary. 5Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+Algorithm 1: Block-wise Local Training for Flow Matching 
+
+Input: Dataset D, number of blocks T , epochs E
+
+Input: Initialized backbone f (·), blocks {vθk }Tk=1 , embeddings 
+
+Output: Updated block parameters {θk }, backbone, and embeddings 
+
+for epoch e = 1 to E do for block k = 1 to T do for mini-batch (x, y ) ∈ D do 
+
+/* Sample latent states */ 
+
+z1 ← CreateTargetEmbedding (y);
+
+z0 ∼ N (0 , I );
+
+t ∼ U [0 , 1] ;
+
+zt ← (1 − t)z0 + tz 1;
+
+/* Forward pass */ 
+
+f (x) ← Backbone (x);
+
+ˆvt ← vθk (zt, f (x), t );
+
+/* Flow matching loss */ 
+
+L(k)flow ← ∥ ˆvt − (z1 − z0)∥22;
+
+/* Auxiliary task supervision (training only) */ 
+
+˜z1 ← zt + (1 − t)ˆ vt;
+
+L(k)task ← TaskLoss (˜ z1, y );
+
+/* Total loss */ 
+
+L(k)total ← L (k)flow + λL(k)task ;
+
+/* Backward pass (local to block k) */ 
+
+Compute ∇θk L(k)total and ∇backbone L(k)total ;Update θk , backbone, and embeddings; 
+
+/* No gradients are propagated to other blocks θj , j̸ = k */ 
+
+## 4 Propositions 
+
+We now provide a theoretical analysis of the proposed flow-matching framework, addressing convergence, ensemble behaviour, and stability in the practical setting of our implementation, where the backbone is shared and jointly updated across all blocks. Please refer to the supplementary file for a detailed analysis of the propositions. 
+
+4.1 Convergence Analysis Proposition 1 (Local Consistency of Euler Integration). Let vθ (z, t ) denote the learned vector field obtained via flow matching, and v∗(z, t ) the ground-truth vector field induced by the linear interpolation path between the initial noise z0
+
+and the target embedding z∗ 
+
+> 1
+
+. Assume that vθ is L-Lipschitz in z and satisfies the local flow-matching error bound 
+
+Ez0,z 1,t 
+
+∥vθ (zt, t ) − v∗(zt, t )∥22
+
+ ≤ ϵ. (10) Then, for a sufficiently small Euler step size ∆t, the discrete Euler update 
+
+zi+1 = zi + ∆ t v θ (zi, t i) (11) satisfies the following local consistency bound: 
+
+E∥zi+1 − z∗ 
+
+> 1
+
+∥22
+
+ ≤ E∥zi − z∗ 
+
+> 1
+
+∥22
+
+ + O(∆ t ϵ ) + O(∆ t2). (12) 
+
+4.2 Trajectory Refinement Analysis Proposition 2 (Progressive Trajectory Refinement). Let the continuous-time vector field v∗(z, t ) be approximated by a sequence of T learned vector fields {vθk }Tk=1 , each applied over a disjoint time interval [tk, t k+1 ] with step size 
+
+∆t = 1 /T . Assume that each block vθk satisfies a local approximation error 
+
+E∥vθk (z, t ) − v∗(z, t )∥22
+
+ ≤ ϵk, ∀t ∈ [tk, t k+1 ].
+
+Then the accumulated integration error after K ≤ T steps satisfies 
+
+E∥zK − z∗ 
+
+> K
+
+∥22
+
+ ≤
+
+> K
+
+X
+
+> k=1
+
+O(∆ t ϵ k) + O(K∆t2),
+
+6Discriminative Flow Matching via Local Generative Predictors A P REPRINT 0 10 20 30 40 50      
+
+> Epoch
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> Validation mAP
+> Standard BP: Validation mAP Progress
+> Standard BP mAP
+> 010 20 30 40 50
+> Epoch
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> 4.5
+> Detection Loss
+> Standard BP: Training Loss Progress
+> Standard BP Loss
+
+(a) Standard Backpropagation Training 0 10 20 30 40 50       
+
+> Epoch
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> Validation mAP
+> Flow Matching: Validation mAP
+> Flow Matching mAP
+> 010 20 30 40 50
+> Epoch
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> Detection Loss
+> Flow Matching: Training Loss
+> Flow Matching Loss
+
+(b) Flow Matching Training 
+
+Figure 2: Training progress comparison on PASCAL VOC using ResNet-50. Both validation mAP and training loss are shown over 50 epochs. where z∗ 
+
+> K
+
+denotes the ideal continuous-time trajectory evaluated at time tK . In particular, if the local errors ϵk decrease across blocks, the discrete trajectory exhibits monotonic refinement toward the task-aligned manifold. 
+
+4.3 Training Stability Guarantees Proposition 3 (Bounded Gradient Variance with a Shared Backbone). Let ϕ denote the parameters of a backbone network shared across T flow-matching blocks {θk}Tk=1 , and suppose all parameters are trained jointly. Assume that for each block k, the total loss is given by 
+
+L(k) = L(k)flow + λ L(k)task .
+
+Then the variance of the gradient with respect to the block parameters θk satisfies 
+
+Var 
+
+h
+
+∇θk L(k)i
+
+≤ σ2flow + λ2σ2task + β2 Var[ ∇ϕLshared ] , (13) where σ2flow and σ2task denote the intrinsic gradient variances of the flow-matching and task losses, respectively, and β
+
+captures the sensitivity of block gradients to backbone updates. Under these conditions, the gradient variance of each block remains bounded and does not grow with the number of blocks T .
+
+4.4 Memory Complexity Analysis Proposition 4 (Constant Activation Memory). Under blockwise local training, the peak activation memory of our method is O(B · d) and is independent of the number of blocks T , where B denotes the batch size, and d denotes the latent dimension. 
+
+## 5 Experiments 
+
+In this section, we present the experiments to evaluate our proposed method. We analyse performance on object detection and image classification tasks, as well as memory consumption during training. 
+
+5.1 Object Detection 
+
+We evaluate performance on the PASCAL VOC dataset using a ResNet-50 backbone. Table 1 summarises the key performance metrics for these experiments. Fig. 2 compares the training progress of a standard backpropagation model against a model trained using Flow Matching. The plots show that both methods achieve a similar Mean Average Precision (mAP) of around 30 mAP, though the convergence behaviour of the training loss differs. To simulate a more constrained training environment, we repeat the experiment with a batch size of 1. Training is less stable under these conditions for both methods, which is expected. The plot for this is given in the supplementary. 
+
+5.2 Memory Consumption Analysis 
+
+We measured the memory consumed by our method versus standard Backprop as a function of the number of decoder layers in the model. As illustrated in Fig. 3 and in Table 2, our method consumes less memory, and this advantage increases as the model depth increases beyond the backbone. Both models in Fig. 3 use the same ResNet-50 backbone with Batch Normalisation. The reduced memory footprint arises from training each block using a locally defined 7Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+Table 1: Performance summary for object detection tasks. Performance is peak validation mAP over 50 epochs (unless noted). 
+
+Method Dataset Performance (mAP) Memory (MB) Layers after Backbone 
+
+Backpropagation (BS=8) PASCAL VOC 31 1274.84 4 (Decoder) Flow Matching (BS=8) PASCAL VOC 30 1261.14 4 (Decoder) Backpropagation (BS=1) PASCAL VOC 23 579.23 4 (Decoder) Flow Matching (BS=1) PASCAL VOC 24 510.84 4 (Decoder) 4 8 12 16 20 24 
+
+Number of Decoder Layers (T) 
+
+> 1.00
+> 1.02
+> 1.04
+> 1.06
+> 1.08
+> Peak VRAM Multiplier
+> (Relative to T=4)
+
+Peak Memory Scaling Ratio 
+
+> Standard BP (AdamW)
+> Standard BP (SGD)
+> Flow Matching (AdamW)
+> Flow Matching (SGD)
+
+Figure 3: Memory consumed (in MB) versus the number of decoders for FM and Backprop methods on Pascal Object Detection Tasks for batch size 8 objective and constructing smaller computation graphs per update. While end-to-end backpropagation can also be made memory-efficient through techniques such as checkpointing or staged training, in our formulation, the memory reduction follows directly from the decomposed optimisation strategy rather than any additional modifications as required in standard backpropagation. 
+
+5.3 ViT Fine-Tuning Task 
+
+We compare the fine-tuning performance of a standard Vision Transformer (ViT) with our Flow Matching method and backpropagation across CIFAR-10, CIFAR-100, and ImageNet-R. Table 2 reports the peak Top-1 accuracy after 10 epochs, together with GPU memory usage and architectural configuration. Fig. 4 describes the fine-tuning profiles using standard backpropagation and Flow Matching. On CIFAR-100, Flow Matching achieves 84.47% accuracy, which is very close to the standard fine-tuning accuracy of 86.24%. Although the standard approach performs slightly better, Flow Matching reduces memory consumption, indicating a modest efficiency gain with a small performance trade-off. On CIFAR-10, Flow Matching achieves 98.19% accuracy compared to 96.74% for standard fine-tuning, while also requiring less memory. This suggests that Flow Matching can be both more efficient and more effective on simpler datasets. On the high-resolution and complex ImageNet-R dataset, Flow Matching achieves 73.4% (vs. 75.9% for fine-tuning). Similar to CIFAR-100, the standard approach achieves slightly higher accuracy, while Flow Matching uses less memory. Across all experiments, both methods use the same backbone and identical post-backbone architecture (four ViT head layers), ensuring that performance differences arise from the optimisation strategy rather than architectural changes. Overall, the results show that Flow Matching can match or exceed standard fine-tuning on simpler datasets such as 8Discriminative Flow Matching via Local Generative Predictors A P REPRINT 0 2 4 6 8 10           
+
+> Epoch
+> 0.845
+> 0.850
+> 0.855
+> 0.860
+> 0.865
+> 0.870
+> 0.875
+> Accuracy
+> Standard BP: Val Accuracy
+> Standard BP
+> 0246810
+> Epoch
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> Loss
+> Standard BP: Training Loss
+> Standard BP
+> 0246810
+> Epoch
+> 0.76
+> 0.78
+> 0.80
+> 0.82
+> 0.84
+> Accuracy
+> Flow Matching: Val Accuracy
+> Flow Matching
+
+Figure 4: Fine-tuning progress comparison on CIFAR-100 using a ViT model. Standard Backpropagation (left and center) is compared against Flow Matching (right) over 10 epochs. Table 2: Fine-Tuning performance summary for classification tasks. Performance is peak Top-1 Accuracy after 10 epochs (unless noted). 
+
+Method Dataset Performance (Acc@1) Memory (MB) Layers after Backbone 
+
+Standard Fine-Tune CIFAR-100 0.8624 5292.55 4 (ViT Head) Flow Matching CIFAR-100 0.8447 5082.63 4 (ViT Head) Standard Fine-Tune CIFAR-10 0.9674 5291.49 4 (ViT Head) Flow Matching CIFAR-10 0.9819 5081.67 4 (ViT Head) Standard Fine-Tune ImageNet-R 0.759 9170.04 4 (ViT Head) Flow Matching Imagenet-R 0.724 8959.83 4 (ViT Head) 
+
+CIFAR-10 while consistently reducing memory usage, although it may incur a small accuracy gap on more complex datasets. In addition to fine-tuning, we report results from scratch training in the supplementary. 
+
+5.4 Analysis of Inference Dynamics 
+
+We conducted an experiment to understand the effects of architecture (CNN vs. ViT) and training modality (Parallel vs. Sequential) on Flow Matching performance. Our experiments on CIFAR-10 and CIFAR-100 reveal distinct inductive biases that dictate the optimal training strategy for each architecture. The results of the experiment are in Table 3. 
+
+Feature Quality. Sequential training improves feature quality for CNN backbones, as reflected by higher linear probe accuracy (85.13% vs. 82.52% on CIFAR-100). For Vision Transformers, however, this trend is not consistent: Parallel ViT achieves higher probe accuracy on CIFAR-100 (88.71% vs. 79.84%), suggesting that representation learning dynamics depend on architectural inductive bias. 
+
+Representation–Inference Mismatch. Strong representations do not necessarily translate into strong generative inference. For example, the Sequential CNN on CIFAR-100 achieves the best feature quality (85.13%) but exhibits extremely poor generative performance (14.65% single-step accuracy), indicating that representation quality alone does not guaranty a consistent vector field. 
+
+Inference Stability. Across architectures, ensemble aggregation generally provides the most stable generative inference, consistent with classical ensemble learning theory [Dietterich [2000]]. Multi-step ODE integration, while sometimes beneficial, can suffer from trajectory drift when the learned vector field is inconsistent, particularly in convolutional models [Chen et al. [2018], Lipman et al. [2023]]. 
+
+5.5 Analysis of Representation 
+
+Understanding the geometry of the learned representation space helps reveal how different optimisation strategies influence model behaviour. To study these effects, we compare Flow Matching, Backpropagation (BP), and Forward-Forward variants (CFF and SFF) under matched CNN and Vision Transformer (ViT) architectures. This controlled comparison isolates the impact of the training objective while addressing architectural inductive biases. We evaluate representations using two complementary metrics. 1. Intrinsic Dimension (ID) is estimated via PCA at a 90% variance 9Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+Table 3: Inference types and performance of ViT and CNN. 
+
+Dataset Model (Arch + Mode) Feature Quality Generative Inference Accuracy (%) Linear Probe Single-Step Ensemble Multi-Step CIFAR-10 
+
+CNN (Parallel) 80.01% 77.26% 77.54% 78.56% CNN (Sequential) 82.73% 69.61% 75.52% 70.28% ViT (Parallel) 64.21% 60.10% 60.46% 59.80% ViT (Sequential) 82.02% 80.10% 80.05% 80.10% 
+
+CIFAR-100 
+
+CNN (Parallel) 82.52% 57.86% 59.20% 34.76% CNN (Sequential) 85.13% 14.65% 15.45% 34.09% ViT (Parallel) 88.71% 78.99% 80.67% 67.77% ViT (Sequential) 79.84% 75.37% 75.50% 74.25% 1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0         
+
+> Layer / Time Step
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Intrinsic Dimension (90% Var)
+> SFF (CNN)
+> BP (CNN)
+> Flow (CNN)
+> Flow (ViT)
+> BP (ViT)
+> CFF (ViT)
+> 1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0
+> Layer / Time Step
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Feature Spread (Cos Dist)
+
+Figure 5: Representation Quality Benchmark comparing Stochastic Forward-Forward (FF), Backpropagation (BP), and Flow Matching (Flow) across CNN and ViT architectures. threshold, where balanced ID reflects efficient capacity use without severe collapse or uncontrolled growth in the representation [Alain and Bengio [2016], Raghu et al. [2017]]. 2. Feature Spread is measured as the average pairwise cosine distance between samples, with higher spread indicating more diverse and mathematically distinct features [Li et al. [2018]]. Fig. 5 shows the results. 
+
+Analysis: 
+
+• Controlled Manifold Expansion: The Intrinsic Dimension plot reveals how CNN architectures utilise their expanding channel capacities. Standard BP exhibits representation bloat: as channels increase, BP aggressively spreads features, leading to a sharp increase in intrinsic dimensionality ( > 100 ). In contrast, Stochastic Forward-Forward (SFF) compresses the manifold by minimising effective dimensionality. However, Flow (CNN), behaves as a geometric regularizer. By constraining representations to follow a continuous generative vector field, the intrinsic manifold expands smoothly and in a controlled manner, capturing features without severe bottlenecks or uncontrolled growth. • Feature Spread and Inductive Bias: Feature Spread highlights architectural inductive biases. All CNN methods (BP, FF, and Flow) exhibit relatively low cosine distances, reflecting the tendency of local con-volutional receptive fields to produce overlapping features [Zeiler and Fergus [2014]]. In contrast, Vision Transformers (ViTs) naturally produce highly distinct and orthogonal token representations [Dosovitskiy et al. [2021], Touvron et al. [2021]]. Within ViT models, Flow (ViT) maintains highly distinct representations while remaining competitive with standard BP (ViT). CNNs and ViTs differ substantially in their layer-wise dimensional dynamics: CNNs expand channel capacity while reducing spatial resolution, whereas ViTs maintain a constant token dimension. Evaluating Intrinsic Dimension and Feature Spread in pooled channel spaces therefore enables fair comparison without dimensional mismatch. Across these 10 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+aligned evaluations, Flow Matching consistently acts as a geometric regularizer, producing controlled and structurally coherent manifolds across both backbones. 
+
+## 6 Conclusion 
+
+In this work, we introduced Discriminative Flow Matching , a framework that reformulates discriminative vision tasks as a conditional transport process from noise to task-aligned target manifolds. By attaching multiple independent flow predictors to a shared backbone and training them using local flow-matching objectives, our approach bridges generative continuous-time dynamics with standard discriminative architectures. Experiments on image classification and object detection show that the framework scales across both CNN and Vision Transformer backbones while maintaining competitive performance and reducing training memory through block-wise optimization. Beyond performance evaluation, we analyzed the dynamics of generative inference and the structure of the learned representations. Our results highlight the role of architectural inductive biases on feature quality and generative strength. We also observe that strong feature representations do not always imply consistent vector fields and that ensemble aggregation provides the most stable inference behavior. In general, Discriminative Flow Matching offers a practical bridge between generative transport dynamics and efficient discriminative learning. 11 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+## References 
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. Proceedings of the IEEE conference on computer vision and pattern recognition , pages 770–778, 2016. Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An image is worth 16x16 words: Transformers for image recognition at scale. International Conference on Learning Representations , 2021. Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in Neural Information Processing Systems , 33:6840–6851, 2020. Shoufa Chen, Peize Sun, Yibing Song, and Ping Luo. Diffusiondet: Diffusion model for object detection. Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 3631–3640, 2023. Yaron Lipman, Ricky T.Q. Chen, Haggai Ben-Hamu, Maximilian Nickel, and Yaron Le. Flow matching for generative modeling. arXiv preprint arXiv:2210.02747 , 2023. Tejal Shah. Back propagation algorithm to solve ordinary differential equations. In International Journal for Research in Applied Science and Engineering Technology , 2018. Geoffrey Hinton. The forward-forward algorithm: Some preliminary investigations. arXiv preprint arXiv:2212.13345 ,2022. Hossein Aghagolzadeh and Mehdi Ezoji. Contrastive forward-forward: A training algorithm of vision transformer. 
+
+Neural Networks , 192:107867, 2025. Zhichao Zhu, Yang Qi, Hengyuan Ma, Wenlian Lu, and Jianfeng Feng. Stochastic forward-forward learning through representational dimensionality compression. arXiv preprint arXiv:2505.16649 , 2025. Zhong-Qiu Zhao, Peng Zheng, Shou-tao Xu, and Xindong Wu. Object detection with deep learning: A review. In IEEE transactions on neural networks and learning systems , 2019. Qinyu Li, Yee Whye Teh, and Razvan Pascanu. Noprop: Training neural networks without full back-propagation or full forward-propagation. arXiv preprint arXiv:2503.24322 , 2025. Ricky T.Q. Chen, Yulia Rubanova, Jesse Bettencourt, and David Duvenaud. Neural ordinary differential equations. In 
+
+Advances in Neural Information Processing Systems (NeurIPS) , 2018. Anonymous. Deflomat: Detection with flow matching. Anonymous submission, 2025. Gabriel Peyré and Marco Cuturi. Computational Optimal Transport . Foundations and Trends in Machine Learning, 2019. Simon Vandenhende, Shervin Minaee, Yi Li, Fahad Shahbaz Khan, Vladlen Koltun, and Luc Van Gool. Multi-task learning for dense prediction tasks: A survey. IEEE transactions on pattern analysis and machine intelligence , 44(7): 3614–3633, 2021. Tianhe Yu, Saurabh Kumar, Abhishek Gupta, Sergey Levine, Karol Hausman, and Chelsea Finn. Gradient surgery for multi-task learning. In Advances in Neural Information Processing Systems , volume 33, pages 5824–5836, 2020. Guillaume Alain and Yoshua Bengio. Understanding intermediate layers using linear classifier probes. arXiv preprint arXiv:1610.01644 , 2016. Thomas G Dietterich. Ensemble methods in machine learning. International Workshop on Multiple Classifier Systems ,2000. Maithra Raghu, Justin Gilmer, Jason Yosinski, and Jascha Sohl-Dickstein. Svcca: Singular vector canonical correlation analysis for deep learning dynamics and interpretability. 2017. Chunyuan Li, Heerad Farkhoor, Rosanne Liu, and Jason Yosinski. Measuring the intrinsic dimension of objective landscapes. 2018. Matthew D Zeiler and Rob Fergus. Visualizing and understanding convolutional networks. 2014. Hugo Touvron, Matthieu Cord, Matthijs Douze, et al. Training data-efficient image transformers & distillation through attention. 2021. David E Rumelhart, Geoffrey E Hinton, and Ronald J Williams. Learning representations by back-propagating errors. 
+
+Nature , 323(6088):533–536, 1986. Tianqi Chen, Bing Xu, Chiyuan Zhang, and Carlos Guestrin. Training deep nets with sublinear memory cost. arXiv preprint arXiv:1604.06174 , 2016. 12 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In International Conference on Learning Representations (ICLR) , 2021. URL https://openreview.net/forum?id=PxTIG12RRHS .Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusion-based generative models. arXiv preprint arXiv:2206.00364 , 2022. Will Grathwohl, Ricky T.Q. Chen, Jesse Bettencourt, and David Duvenaud. Ffjord: Free-form continuous dynamics for scalable reversible generative models. In International Conference on Learning Representations (ICLR) , 2019. Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey Zagoruyko. End-to-end object detection with transformers. In European Conference on Computer Vision (ECCV) , 2020. Balaji Lakshminarayanan, Alexander Pritzel, and Charles Blundell. Simple and scalable predictive uncertainty estimation using deep ensembles. Advances in Neural Information Processing Systems , 2017. Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. arXiv preprint arXiv:2207.12598 , 2022. Jake Snell, Kevin Swersky, and Richard Zemel. Prototypical networks for few-shot learning. In Advances in Neural Information Processing Systems (NeurIPS) , 2017. Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster r-cnn: Towards real-time object detection with region proposal networks. In Advances in Neural Information Processing Systems (NeurIPS) , 2015. Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, and Ross Girshick. Momentum contrast for unsupervised visual representation learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2020. R. Devon Hjelm, Alex Fedorov, Samuel Lavoie-Marchildon, Piotr Bojanowski, Pascal Vincent, and Yoshua Bengio. Learning deep representations by mutual information estimation and maximization. International Conference on Learning Representations (ICLR) , 2019. Jean-Bastien Grill, Florian Strub, Florent Altché, et al. Bootstrap your own latent: A new approach to self-supervised learning. In Advances in Neural Information Processing Systems (NeurIPS) , 2020. 13 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+# Supplementary Material 
+
+## Discriminative Flow Matching via Local Generative Predictors A Extended Methods 
+
+A.1 Local Training Objective A.1.1 Flow Matching Loss 
+
+Each block k is trained independently using a Mean Squared Error loss: 
+
+L(k) 
+
+> flow
+
+= Et,z 0,z 1
+
+∥vθk (zt, f (x), t ) − (z1 − z0)∥22
+
+ (14) 
+
+A.1.2 Task-Specific Anchor Loss 
+
+To ensure the predicted flow is useful for the downstream task, we add an anchor loss. First, we estimate the final state using optimal transport: 
+
+˜z1 = zt + (1 − t)vθk (zt, f (x), t ) (15) This estimate is used only for computing task-specific supervision during training and does not correspond to the inference procedure, which relies on numerical integration of the learned vector field. 
+
+For Classification: 
+
+ℓfinal = W T 
+
+> cls
+
+˜z1 (16) 
+
+L(k) 
+
+> anchor
+
+= − log exp( ℓfinal [y]) 
+
+PCc=1 exp( ℓfinal [c]) (17) 
+
+For Object Detection: We decode class logits and bounding boxes from ˜z1 and compute a detection loss using Hungarian matching, L1 loss, and Generalized IoU (GIoU): 
+
+L(k) 
+
+> det
+
+=
+
+> M
+
+X
+
+> i=1
+
+h
+
+Lcls (ci, ˆyˆσ(i)) + 1{ci̸ =∅} Lbox (bi, ˆbˆσ(i))
+
+i
+
+(18) 
+
+A.1.3 Combined Loss 
+
+The total loss for each block combines both components: 
+
+L(k) 
+
+> total
+
+= L(k) 
+
+> flow
+
++ λL(k) 
+
+> anchor/det
+
+(19) where λ = 1 .0 in our experiments. 
+
+A.2 Memory Efficiency Analysis A.2.1 Comparison with Standard Backpropagation Standard Sequential Architecture. In a typical deep network with T sequential layers, calculating the gradient requires applying the chain rule to backpropagate the error signal through all layers: 
+
+∂L
+
+∂θ 1
+
+= ∂L
+
+∂ ˆy · ∂ ˆy∂h T
+
+· ∂h T
+
+∂h T −1
+
+· · · ∂h 2
+
+∂h 1
+
+· ∂h 1
+
+∂θ 1
+
+(20) As established in literature [Rumelhart et al. [1986], Chen et al. [2016]], this end-to-end gradient computation suffers from several bottlenecks: • Activation Caching: It requires storing all intermediate forward activations {h1, . . . , h T } in memory to compute the local gradients during the backward pass [Rumelhart et al. [1986]]. • Sequential Locking: The gradients must be computed strictly sequentially from the top layer down to the bottom, which inherently impedes parallel computation. • Linear Memory Scaling: Consequently, the peak activation memory cost scales linearly with network depth, resulting in a memory footprint of O(T · B · d), where B is the batch size and d is the feature dimension [Chen et al. [2016]]. 14 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+Activation Memory To overcome these limitations, our architecture isolates the computational graph for each block: 
+
+x Backbone 
+
+−−−−−→ f (x) → vθk (zt, f (x), t ) Loss 
+
+−−→ L (k)
+
+> total
+
+By resetting the graph after each local update, we eliminate the sequential dependencies inherent to deep backpropaga-tion. The network only needs to store the forward activations for a single block at any given time, strictly capping the activation memory cost at O(B · d).This decoupling fundamentally alters the dynamics of memory scaling. While the total memory footprint still exhibits a slight linear growth—driven solely by the storage of physical parameters and optimiser states (e.g., momentum) for the 
+
+T independent blocks—the memory required for activations remains completely constant ( O(1) ) with respect to depth. By decoupling activation memory from the number of blocks T , our method allows for significantly deeper generative trajectories without exhausting hardware resources. 
+
+A.3 Inference Strategies for Learned Flow Dynamics 
+
+Our method learns a continuous-time vector field that defines a transport process from a noise distribution to a task-aligned embedding. Training enforces local correctness of this vector field at arbitrary points in time, while inference approximates the resulting continuous dynamics using a discrete numerical solver. 
+
+A.3.1 Training-Time Vector Field Estimation 
+
+During training, each block is supervised to predict the instantaneous vector field of a predefined probability path. Given a noise sample z0 ∼ N (0 , I ) and a target embedding z1, we sample a time t ∼ U [0 , 1] and construct the intermediate state: 
+
+zt = (1 − t)z0 + tz 1. (21) The corresponding ground-truth vector field is given by the time derivative of this path: 
+
+v∗(zt, t ) = dz t
+
+dt = z1 − z0. (22) Each block vθk is trained independently to regress this direction using a flow matching loss: 
+
+L(k)flow = Ez0,z 1,t 
+
+h
+
+∥vθk (zt, f (x), t ) − (z1 − z0)∥22
+
+i
+
+. (23) This objective enforces local correctness of the learned vector field at arbitrary points along the trajectory, rather than the direct prediction of the final state. 
+
+A.3.2 Block-wise Vector Field at Inference 
+
+At inference time, the target embedding z1 is unknown. We therefore interpret the trained flow blocks as approximations to an underlying continuous-time vector field that transports an initial noise sample toward a task-aligned embedding, following the formulation of conditional flow matching [Lipman et al. [2023]]. Depending on the inference strategy, the learned blocks can be used either independently , sequentially , or in ensemble .This flexibility mirrors prior work in diffusion and flow-based generative models, where different numerical solvers and sampling strategies trade accuracy for computational efficiency [Song et al. [2021], Karras et al. [2022]]. When multi-step inference is employed, we interpret the collection of T trained blocks as a piecewise-defined approxi-mation of a continuous-time vector field over the interval t ∈ [0 , 1] . The interval is partitioned into T equal sub-intervals, and block k is responsible for predicting the vector field over  k−1 
+
+> T
+
+, kT
+
+. The resulting vector field is defined as: 
+
+vθ (zt, f (x), t ) = vθk (zt, f (x), t ), where k = ⌊T · t⌋ + 1 . (24) This block-wise formulation avoids global backpropagation through time while retaining the expressive power of continuous flows is conceptually aligned with locally trained or decoupled learning paradigms [Hinton [2022], Li et al. [2025]. 15 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+A.3.3 Inference via Euler Integration Multi-step ODE Inference. To recover the final embedding, we numerically approximate the induced ordinary differential equation using Explicit Euler integration, a standard choice in neural ODEs and diffusion-inspired models [Chen et al. [2018]]. Starting from an initial noise sample z0 ∼ N (0 , I ), the latent state is updated as: 
+
+zk+1 = zk + ∆ t · vθk (zk, f (x), t k), ∆t = 1
+
+T , (25) where tk = k · ∆t and k = 0 , 1, . . . , T − 1.This inference strategy follows the numerical integration procedures commonly used in continuous normalising flows and score-based generative models [Grathwohl et al. [2019], Song et al. [2021]]. In our framework, multi-step inference is primarily used for object detection, where iterative refinement of bounding boxes is beneficial [Carion et al. [2020]]. 
+
+Single-step Euler Inference. In addition to multi-step integration, we employ a simplified single-step inference strategy. Recent work has shown that well-trained generative vector fields often permit accurate prediction using a single Euler step [Lipman et al. [2023]]. A single block k is queried at t = 0 , and the final embedding is estimated as: 
+
+ˆz1 = z0 + vθk (z0, f (x), 0) . (26) This strategy enables extremely fast inference and is particularly effective for classification tasks, where the target manifold is low-dimensional and globally structured. 
+
+Ensemble Inference (Consensus Transport). To further improve robustness, we adopt an ensemble inference strategy inspired by classical ensembling in discriminative models [Lakshminarayanan et al. [2017]] and recent generative ensemble techniques [Ho and Salimans [2022]]. All T blocks independently predict a transport direction from the same initial noise sample: 
+
+ˆz(k)1 = z0 + vθk (z0, f (x), 0) , k = 1 , . . . , T. (27) The final embedding is obtained by averaging these estimates: 
+
+¯z1 = 1
+
+T
+
+> T
+
+X
+
+> k=1
+
+ˆz(k)1 . (28) Unlike traditional ensembles that require training multiple independent networks, our approach shares a common backbone and aggregates only the generative transport predictions, yielding a strong regularisation effect at minimal additional cost. 
+
+A.3.4 Final Prediction For Classification. The final latent embedding z (obtained via single-step, multi-step, or ensemble inference) is projected to class logits: 
+
+ℓ = W ⊤
+
+> cls
+
+z, (29) and the predicted label is: 
+
+ˆy = arg max  
+
+> c∈{ 1,...,C }
+
+ℓ[c]. (30) This corresponds to nearest-neighbour classification in the learned class embedding space, a common choice in metric learning and generative classification models [Snell et al. [2017]]. 
+
+For Object Detection. For object detection, the final query embeddings are decoded into class logits and bounding boxes using linear prediction heads. Final detections are obtained by applying non-maximum suppression to the predicted bounding boxes, following standard practice in detection pipelines [Ren et al. [2015], Carion et al. [2020]]. 
+
+A.3.5 Auxiliary Linear Probe for Representation Stabilisation 
+
+In addition to the generative flow matching objective, we employ an auxiliary linear probe on the shared backbone features during training. Given image features f (x) extracted by the backbone, a linear classifier Wprobe is trained to predict the ground-truth label: 
+
+ℓprobe = W ⊤
+
+> probe
+
+f (x). (31) 16 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 0 1 2 3 4     
+
+> Integration Step
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Top-1 Accuracy
+> 0.01
+> 0.80
+> 0.83 0.84 0.84
+> CIFAR-100: Progressive Refinement
+> 1234
+> Integration Step
+> 0.000
+> 0.025
+> 0.050
+> 0.075
+> 0.100
+> 0.125
+> 0.150
+> mAP
+> 0.006
+> 0.073
+> 0.145
+> 0.155
+> PASCAL VOC: Progressive Refinement
+
+Figure 6: Progressive task refinement under Euler integration (Proposition 1 & 2 validation). Left: CIFAR-100 classification accuracy evaluated after each integration step. Accuracy improves monotonically and closely matches the behaviour observed during final inference. Right: PASCAL VOC detection mAP evaluated after each integration step using intermediate decoding of the latent state. Although the absolute mAP values are lower than those obtained under the full detection evaluation pipeline, performance increases consistently across integration steps, indicating progressively more task-aligned latent representations. The corresponding cross-entropy loss is defined as: 
+
+Lprobe = − log exp( ℓprobe [y]) 
+
+PCc=1 exp( ℓprobe [c]) . (32) The probe operates on detached backbone features, such that gradients from Lprobe do not propagate into the flow matching blocks. This auxiliary objective is used solely during training and is discarded at inference time. The motivation for this probe is twofold. First, it stabilises representation learning in the backbone by preventing degenerate solutions when training is driven primarily by local or decoupled generative objectives. Second, it encourages the learned features to remain linearly separable, a property known to correlate strongly with downstream classification performance [Alain and Bengio [2016], He et al. [2020]]. Similar linear evaluation and online probing strategies have been widely used to assess and stabilise representations in self-supervised and locally trained networks [Hjelm et al. [2019], Grill et al. [2020]]. 
+
+## B Extended Propositions 
+
+B.1 Convergence Analysis Proposition 1 (Local Consistency of Euler Integration). Let vθ (z, t ) denote the learned vector field obtained via flow matching, and v∗(z, t ) the ground-truth vector field induced by the linear interpolation path between the initial noise z0
+
+and the target embedding z∗ 
+
+> 1
+
+. Assume that vθ is L-Lipschitz in z and satisfies the local flow-matching error bound 
+
+Ez0,z 1,t 
+
+∥vθ (zt, t ) − v∗(zt, t )∥22
+
+ ≤ ϵ. (33) Then, for a sufficiently small Euler step size ∆t, the discrete Euler update 
+
+zi+1 = zi + ∆ t v θ (zi, t i) (34) satisfies the following local consistency bound: 
+
+E∥zi+1 − z∗ 
+
+> 1
+
+∥22
+
+ ≤ E∥zi − z∗ 
+
+> 1
+
+∥22
+
+ + O(∆ t ϵ ) + O(∆ t2). (35) 17 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+Interpretation. Proposition 1 does not assert global convergence to the target embedding nor direct minimization of the terminal error ∥zT −z∗ 
+
+> 1
+
+∥22. Instead, it establishes that each Euler integration step is a locally consistent approximation of the ideal transport dynamics, with deviations controlled by the flow-matching error ϵ and higher-order discretization effects. As the learned vector field approaches the ground-truth flow ( ϵ → 0), the numerical error introduced by discretisation remains stable and non-divergent. 
+
+Empirical validation. To empirically validate this local consistency property, we perform a diagnostic evaluation in which intermediate latent states are decoded after each integration step, rather than only at the final inference output. Figure 6 illustrates the resulting progressive refinement behaviour on CIFAR-100 and PASCAL VOC. On CIFAR-100, we observe a monotonic increase in classification accuracy across integration steps that closely matches the behaviour of standard inference. This alignment is expected, as classification depends directly on the final latent representation and does not involve additional structured decoding stages. On PASCAL VOC, intermediate decoding yields lower absolute mAP values than full inference, since object detection performance depends on global query assignment, bounding-box regression, and post-processing effects such as non-maximum suppression, which are only fully realised at the final integration step. Nevertheless, the detection mAP increases consistently across integration steps, indicating that the latent trajectories become progressively more task-aligned. Together, these results confirm that the learned vector field induces stable, non-divergent trajectory refinement under discretised Euler integration, in agreement with the local consistency guarantee established by Proposition 1. 
+
+B.2 Trajectory Refinement Analysis Proposition 2 (Progressive Trajectory Refinement). Let the continuous-time vector field v∗(z, t ) be approximated by a sequence of T learned vector fields {vθk }Tk=1 , each applied over a disjoint time interval [tk, t k+1 ] with step size 
+
+∆t = 1 /T . Assume that each block vθk satisfies a local approximation error 
+
+E∥vθk (z, t ) − v∗(z, t )∥22
+
+ ≤ ϵk, ∀t ∈ [tk, t k+1 ].
+
+Then the accumulated integration error after K ≤ T steps satisfies 
+
+E∥zK − z∗ 
+
+> K
+
+∥22
+
+ ≤
+
+> K
+
+X
+
+> k=1
+
+O(∆ t ϵ k) + O(K∆t2),
+
+where z∗ 
+
+> K
+
+denotes the ideal continuous-time trajectory evaluated at time tK . In particular, if the local errors ϵk decrease across blocks, the discrete trajectory exhibits monotonic refinement toward the task-aligned manifold. 
+
+Empirical Validation. To empirically validate Proposition 2, we refer back to Figure 6. As shown, the intermediate representations zK generated by our model exhibit monotonic improvement in task performance as the trajectory evolves. This confirms that sequential blocks progressively refine the latent representation toward the target manifold, in direct agreement with the accumulated error bounds of Proposition 2. 
+
+B.3 Training Stability Guarantees Proof. By linearity of differentiation, 
+
+∇θk L(k) = ∇θk L(k)flow + λ ∇θk L(k)task + β ∇ϕLshared .
+
+Applying the law of total variance yields             
+
+> Var
+> h
+> ∇θkL(k)i
+> = Var
+> h
+> ∇θkL(k)flow
+> i
+> +λ2Var
+> h
+> ∇θkL(k)task
+> i
+> + 2 λCov
+> 
+> ∇θkL(k)flow ,∇θkL(k)task
+> 
+> +β2Var[ ∇ϕLshared ].(36)
+
+Bounding the covariance term via the Cauchy–Schwarz inequality yields the stated upper bound. Finally, since each block’s forward and backward graphs are constructed and freed independently during training, neither activation storage nor gradient variance accumulates with depth T , ensuring stable optimization under shared-backbone training. In particular, in our implementation for Pascal (which we used for this experiment), the shared backbone is initialised from ImageNet-pretrained weights and fine-tuned using AdamW with a learning rate of 5 × 10 −4 and Layer Normalisation (without Batch Normalisation in decoder blocks). 18 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+Empirical Validation. We empirically validate Proposition 3 by measuring the variance of parameter gradients at each block during training, using identical inputs and pretrained ResNet-50 backbones. For flow matching, gradients are computed independently for each block using the local flow-matching objective, while for standard backpropagation, gradients are obtained from a single end-to-end loss. Because Flow Matching computes gradients locally, the gradient variance is fundamentally decoupled from the total network depth T , preventing the exponential decay inherent to the chain rule. 1 2 3 4 5 6  
+
+> Block Depth
+> 10 6
+> 10 5
+> Gradient Variance
+> Proposition 3: Gradient Variance (Loaded Weights, T=6)
+> Flow Matching (Ours)
+> Standard Backprop
+
+Figure 7: Gradient Stability Analysis. Empirical comparison of gradient variance across blocks ( T = 6 ) for Flow Matching and Standard Backpropagation. Blue (Ours): Flow Matching maintains constant gradient variance across all depths, validating Proposition 3. Orange (Standard): Standard backpropagation exhibits significantly lower variance in earlier blocks (vanishing gradients), indicating instability in training deep transformer stacks. Figure 7 shows that gradient variance under flow matching remains stable across depth, whereas standard backprop-agation exhibits increasing variance decay for deeper layers. Although absolute gradient magnitudes differ, the key observation is the absence of depth-induced variance attenuation under flow matching. These results confirm that decoupled block-wise training yields a stable gradient statistics, even when a backbone is shared. The advantage of Flow Matching becomes more pronounced as network depth increases. In the standard backpropagation baseline (orange), the gradient variance at the first block ( k = 1 ) decays exponentially with depth T . Our experiments showed that increasing T from 4 to 6 reduced the first-layer gradient signal by nearly 10 ×, illustrating the classic vanishing gradient problem that limits deep Transformer training. In contrast, our Flow Matching approach (blue) exhibits approximately constant variance across depths. The first layer in the T = 6 model retains ∼ 94% of the variance found in the final layer, compared to only ∼ 1% retention for the standard baseline. This empirically validates Proposition 3 and proves that our method can scale to deeper architectures without optimisation instability. The gradient variance is evaluated exclusively on decoder and flow-matching blocks, which utilise only Layer Normalisation. Consequently, the observed gradient stability is attributable to decoupled gradient paths rather than normalisation effects. 
+
+B.4 Memory Complexity Analysis Proposition 4 (Constant Activation Memory). Under blockwise local training, the peak activation memory of our method is O(B · d) and is independent of the number of blocks T , where B denotes the batch size, and d denotes the latent dimension. 
+
+Standard Backpropagation. In conventional deep decoders trained end-to-end, activations from all T blocks must be retained until the final backward pass: 
+
+MBP (T ) = O(B · dbackbone ) + O(T · B · d). (37) 19 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+Our Method. In contrast, our training procedure optimises each block independently. At any iteration, only the activations of the current block are stored: 
+
+Mours (T ) = O(B · dbackbone ) + O(B · d). (38) During training of block k, we: (i) compute backbone features, (ii) build the computation graph for block k only, (iii) perform a local backward pass, and (iv) immediately discard the graph. As a result, activation memory does not accumulate with depth. 
+
+Asymptotic Advantage. Substituting the memory expressions yields 
+
+Mours (T )
+
+MBP (T ) = O(Bd backbone ) + O(Bd )
+
+O(Bd backbone ) + O(T Bd ) . (39) Since the backbone term is constant with respect to T , the denominator grows linearly while the numerator remains bounded. Consequently, 
+
+lim  
+
+> T→∞
+
+Mours (T )
+
+MBP (T ) = 0 , (40) establishing that our method achieves asymptotically vanishing relative activation memory compared to standard end-to-end backpropagation. 
+
+## C Extended Experiments 
+
+C.1 Training from Scratch: CNN and ViT 
+
+To investigate the method’s capability to learn representations from scratch without pre-trained weights, we trained both a Convolutional Neural Network (CNN) and a Vision Transformer (ViT) using blockwise local Flow Matching. For CNN experiments, Flow Matching is implemented using blockwise local vector field predictors conditioned on convolutional features, rather than a globally parameterised continuous-time flow as used in the ViT setting. For the CNN experiments, we utilised an architecture consisting of three convolutional blocks. For the ViT experiments, we used a ViT-Tiny backbone. The results are summarised in Tables 4 and 5. The reported accuracy is top 1 per cent for MNIST and CIFAR-10, top 5 per cent for CIFAR-100, and top 10 per cent for Tiny-Imagenet. We emphasise that, Method Arch cifar10 cifar100 T_imagenet BP ViT 81.49 78.12 74.01 FF ViT 76.21 72.15 62.11 CFF+M ViT 80.42 80.39 73.23 Symba ViT 69.13 68.78 59.46 FF.Collab ViT 70.66 71.79 62.15 Ours ViT 80.10 80.67 55.44 Table 4: Comparison of ViT architectures on different datasets. Method Arch mnist cifar10 cifar100 BP CNN 99.33 82.5 61.28 FF CNN 98.73 59 —SFF CNN 99.31 76.96 53.29 S.Hebb CNN 99.35 80.31 56 NoProp CNN 99.29 80.54 47.8 Our CNN 98.88 78.56 59.20 Table 5: Comparison of CNN architectures on different datasets. while our block-wise local Flow Matching objective is consistently applied across both architectures, the geometric spaces of the conditioning features differ: CNN models condition the independent vector field predictors on spatially preserved local feature maps, whereas ViT models condition them on pooled, global latent embeddings. Comparisons, therefore, reflect the behaviour of representational dynamics under different architectural inductive biases rather than strict structural equivalence. 20 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+## D Implementation Details 
+
+D.1 Object Detection on PASCAL VOC 
+
+For object detection, we evaluate our method on the PASCAL VOC 2007 dataset. Images are resized to 256 × 256 and normalised using standard ImageNet statistics. 
+
+Architecture: Both the Flow Matching and Standard Backpropagation models utilise a ResNet-50 backbone pre-trained on ImageNet. The backbone features are projected into an embedding dimension of d = 128 . The transformer-based blocks (for both vector field prediction and standard decoding) use 4 attention heads. We deploy M = 20 
+
+object queries to detect up to 20 classes. For our memory studies, we vary the number of blocks/integration steps 
+
+T ∈ { 4, 8, 16 , 20 , 24 }.
+
+Training Configuration: Models are trained for 50 epochs with a batch size of 16. We use the AdamW optimiser with a weight decay of 10 −4. The base learning rate for the flow matching blocks is set to 10 −4, while the pre-trained backbone is fine-tuned with a lower learning rate of 10 −5. We apply a step learning rate decay, reducing the learning rates by a factor of 0.1 at epoch 20. Gradients are clipped to a maximum norm of 1.0. 
+
+Loss Formulation: Bounding box assignments are determined via bipartite Hungarian matching. The matching costs and training loss weights are strictly aligned: λcls = 1 .0 for cross-entropy classification, λbbox = 5 .0 for L1 bounding box regression, and λgiou = 2 .0 for Generalised IoU loss. The background class ("no object") is scaled by a factor of 0.1. For our method, the Flow Matching MSE loss is weighted by 0.1 relative to the detection losses. 
+
+Inference: During inference, the Flow Matching model generates proposals via Euler integration over T steps (dt = 1 /T ). Predictions are filtered using a confidence threshold of 0.05 before evaluating the mean Average Precision (mAP) at an IoU threshold of 0.5. 
+
+D.2 Image Classification 
+
+To comprehensively assess our framework, we evaluate image classification performance across CIFAR-10, CIFAR-100, TinyImageNet, and ImageNet-R. 
+
+Architectures (Training from Scratch): We train Vision Transformers (ViTs) and Convolutional Neural Networks (CNNs) from scratch without pre-trained weights, carefully matching capacities to established baselines. • ViT (CIFAR): Operating on 32 × 32 images ( 4 × 4 patches). CIFAR-100 utilizes a ViT[192 6 6] configuration (d = 192 , depth 6, 6 heads) with T = 6 flow blocks. CIFAR-10 utilizes ViT[128 4 5] ( d = 128 , depth 5, 4 heads) with T = 5 flow blocks. Global pooling is omitted to preserve the spatial token sequence. • ViT (TinyImageNet): Operating on 64 × 64 images ( 8 × 8 patches). We use a ViT[240 6 7] configuration with 
+
+T = 7 flow blocks. To improve early optimisation stability, the standard linear patch projection is replaced with an 8 × 8 convolutional stem. The flow predictors utilise GELU activations and accept concatenated inputs of the latent state, time embedding, and spatial memory [zt, t emb , f (x)] .• CNN (CIFAR-10 and CIFAR-100): The backbone consists of three sequential convolutional blocks (96, 384, and 1536 channels). We evaluate two distinct Flow Matching topologies: Parallel Consensus (where independent predictors attach to the shared final representation) and Sequential (where predictors attach block-by-block). The flow predictors operate on a latent dimension of d = 512 . While most CNN configurations utilise deep residual MLPs (hidden dimension 1024), we replace these with lighter, single-hidden-layer MLPs (with Dropout) for the CIFAR-100 Sequential setting to mitigate overfitting. In our ViT parallel consensus experiments, flow predictors are upgraded to deeper residual MLPs (hidden dimension 1024 with LayerNorm and Dropout) to increase local capacity. 
+
+Architectures (Pre-trained Fine-Tuning): For experiments on CIFAR-10, CIFAR-100, and ImageNet-R, we utilize a ViT-B/16 backbone pre-trained on ImageNet-1K ( d = 768 ). The original classification head is removed, and T = 4 
+
+independent local flow predictors are attached to the unpooled output sequence. 
+
+Training Configurations: We apply distinct optimisation strategies depending on the initialisation paradigm. Gradients are clipped to a maximum norm of 1.0. • From Scratch: Models are optimised using AdamW with a base learning rate of 5 × 10 −4 (applied equally to the backbone and flow heads) and weight decay of 10 −4. The schedule uses a 5-epoch linear warmup followed by cosine annealing. Epochs and batch sizes scale by dataset difficulty: CIFAR-100 ViT (300 epochs, BS 512), 21 Discriminative Flow Matching via Local Generative Predictors A P REPRINT 
+
+CIFAR-10 ViT (50 epochs, BS 128), CNNs (200 epochs, BS 128, EMA decay 0.995), and TinyImageNet (1500 epochs, BS 256). • Fine-Tuning: We apply differential learning rates to maintain pre-trained backbone stability while training the generative flow heads. The objective jointly optimises the optimal transport Flow Matching MSE loss alongside a standard cross-entropy loss evaluated on the t = 1 estimate. CIFAR-10 and CIFAR-100 are trained for 20 and 10 epochs, respectively (BS 32, Backbone LR 1 × 10 −6, Head LR 1 × 10 −4). ImageNet-R is trained for 50 epochs (BS 64, Backbone LR 1 × 10 −6, Head LR 1 × 10 −3). 
+
+Baseline Configurations (Standard Backpropagation): To ensure fair methodological comparisons, standard back-propagation baselines (denoted as BP) are evaluated using controlled environments that isolate our local objective from architectural capacity. • Fine-Tuning Baselines: For CIFAR-10, CIFAR-100, and ImageNet-R, the BP baselines use the identical ViT-B/16 backbone. To exactly match the parameter capacity and depth of our T = 4 flow blocks, the baseline classification head is replaced with a deep stack of 4 standard Transformer Encoder Layers. These baselines are trained with identical hyperparameters (batch sizes, epochs, data augmentations, and differential learning rates) to those of our corresponding fine-tuning models. • From-Scratch Baselines: The from-scratch ViT and CNN baselines mirror the structural complexities of their respective Flow Matching counterparts but are trained end-to-end for 60 epochs (Batch Size 128). They utilise AdamW with Cosine Annealing, a weight decay of 0.01 , and learning rates of 5 × 10 −4 (ViT) and 1 × 10 −3
+
+(CNN). 
+
+Data Augmentation & Evaluation: To mitigate overfitting on harder tasks from scratch, CIFAR-100 (ViT and CNN), CIFAR-10 (CNN), and TinyImageNet apply AutoAugment. CIFAR-100 and TinyImageNet additionally apply Random Erasing ( p = 0 .25 ), with TinyImageNet also including Random Rotation ( 20 ◦). CIFAR-10 (ViT) utilises standard random cropping and horizontal flipping. For from-scratch representation learning, final classification accuracy is also evaluated via a linear probe trained on the frozen backbone features, alongside generative ensemble inference and multi-step ODE solvers. 
+
+D.3 Hardware and Software Environment Hardware Configuration: 
+
+• GPU: NVIDIA RTX 4500 Ada Generation (24GB VRAM) • CPU: Intel Core i9-14900K • RAM: 125GB DDR4 
+
+Software Stack: 
+
+• PyTorch 2.5.1 with CUDA 12.1 • Python 3.10.18 • torchvision 0.20.1 • NumPy 2.0.1 • SciPy 1.15.3 • Matplotlib 3.10.5 22
