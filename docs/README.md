@@ -6,79 +6,94 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-03-24
-- 运行时间：2026-03-24 20:02:40 UTC
+- 最新运行日期：2026-03-25
+- 运行时间：2026-03-25 19:52:33 UTC
 - 运行状态：成功
-- 本次总论文数：19
-- 精读区：7
+- 本次总论文数：24
+- 精读区：12
 - 速读区：12
 
 ### 今日简报（AI）
-1) 2026年3月24日，共精读7篇、速读12篇论文，涵盖生成模型与安全防御等方向。  
-2) 最值得关注的是关于循环一致性布局预测与几何感知监督生成模型的研究，以及提升生成式机器人策略和评估黑盒漏洞的新方法。  
-3) 建议对生成模型和AI安全感兴趣的读者优先阅读精读论文，以深入了解前沿技术进展。
-- 详情：[/202603/24/README](/202603/24/README)
+1) 2026年3月25日，成功精读与速读了24篇论文，涵盖多个前沿领域。  
+2) 最值得关注的是关于麦凯-维萨沃方程的弱对抗神经推前方法和语义一维分词器在图像生成中的应用。  
+3) 建议对图像生成和医学影像分割感兴趣的读者深入阅读相关精读论文。
+- 详情：[/202603/25/README](/202603/25/README)
 
 ### 精读区论文标签
-1. [CyCLeGen: Cycle-Consistent Layout Prediction and Image Generation in Vision Foundation Models](/202603/24/2603.14957v1-cyclegen-cycle-consistent-layout-prediction-and-image-generation-in-vision-foundation-models)  
+1. [Weak Adversarial Neural Pushforward Method for the McKean-Vlasov / Mean-Field Fokker-Planck Equation](/202603/25/2603.16186v1-weak-adversarial-neural-pushforward-method-for-the-mckean-vlasov--mean-field-fokker-planck-equation)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动生成方法
+2. [Semantic One-Dimensional Tokenizer for Image Reconstruction and Generation](/202603/25/2603.16373v1-semantic-one-dimensional-tokenizer-for-image-reconstruction-and-generation)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：语义一维图像编码器
+3. [ACPV-Net: All-Class Polygonal Vectorization for Seamless Vector Map Generation from Aerial Imagery](/202603/25/2603.16616v1-acpv-net-all-class-polygonal-vectorization-for-seamless-vector-map-generation-from-aerial-imagery)  
    标签：评分：9.0/10、query:image-generation
-   evidence：生成对抗网络用于图像理解和生成
-2. [SNCE: Geometry-Aware Supervision for Scalable Discrete Image Generation](/202603/24/2603.15150v1-snce-geometry-aware-supervision-for-scalable-discrete-image-generation)  
+   evidence：图像生成质量评估
+4. [EvoGuard: An Extensible Agentic RL-based Framework for Practical and Evolving AI-Generated Image Detection](/202603/25/2603.17343v1-evoguard-an-extensible-agentic-rl-based-framework-for-practical-and-evolving-ai-generated-image-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-3. [Adversarial attacks against Modern Vision-Language Models](/202603/24/2603.16960v2-adversarial-attacks-against-modern-vision-language-models)  
+   evidence：对抗攻击检测框架
+5. [Grounded Multimodal Retrieval-Augmented Drafting of Radiology Impressions Using Case-Based Similarity Search](/202603/25/2603.17765v1-grounded-multimodal-retrieval-augmented-drafting-of-radiology-impressions-using-case-based-similarity-search)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：图像生成质量评估
+6. [Epistemic Generative Adversarial Networks](/202603/25/2603.18348v1-epistemic-generative-adversarial-networks)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击对图像生成模型的影响
-4. [Efficient Zero-Shot AI-Generated Image Detection](/202603/24/2603.21619v1-efficient-zero-shot-ai-generated-image-detection)  
+   evidence：对抗扰动用于图像生成模型的鲁棒性研究
+7. [Translating MRI to PET through Conditional Diffusion Models with Enhanced Pathology Awareness](/202603/25/2603.18896v1-translating-mri-to-pet-through-conditional-diffusion-models-with-enhanced-pathology-awareness)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：MRI到PET的扩散模型转换
+8. [Taming Sampling Perturbations with Variance Expansion Loss for Latent Diffusion Models](/202603/25/2603.21085v1-taming-sampling-perturbations-with-variance-expansion-loss-for-latent-diffusion-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动用于生成图像检测
-5. [Adversarial Camouflage](/202603/24/2603.21867v1-adversarial-camouflage)  
+   evidence：对抗扰动下的图像生成鲁棒性
+9. [CounterScene: Counterfactual Causal Reasoning in Generative World Models for Safety-Critical Closed-Loop Evaluation](/202603/25/2603.21104v1-counterscene-counterfactual-causal-reasoning-in-generative-world-models-for-safety-critical-closed-loop-evaluation)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动用于图像伪装
-6. [FeatDistill: A Feature Distillation Enhanced Multi-Expert Ensemble Framework for Robust AI-generated Image Detection](/202603/24/2603.21939v1-featdistill-a-feature-distillation-enhanced-multi-expert-ensemble-framework-for-robust-ai-generated-image-detection)  
+   evidence：生成场景与对抗扰动相关
+10. [DiT-Flow: Speech Enhancement Robust to Multiple Distortions based on Flow Matching in Latent Space and Diffusion Transformers](/202603/25/2603.21608v1-dit-flow-speech-enhancement-robust-to-multiple-distortions-based-on-flow-matching-in-latent-space-and-diffusion-transformers)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动检测
-7. [Meta-TTRL: A Metacognitive Framework for Self-Improving Test-Time Reinforcement Learning in Unified Multimodal Models](/202603/24/2603.15724v1-meta-ttrl-a-metacognitive-framework-for-self-improving-test-time-reinforcement-learning-in-unified-multimodal-models)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御策略
+   evidence：对抗扰动下的图像生成鲁棒性
+11. [TrajLoom: Dense Future Trajectory Generation from Video](/202603/25/2603.22606v1-trajloom-dense-future-trajectory-generation-from-video)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动下的图像生成鲁棒性
+12. [SAiW: Source-Attributable Invisible Watermarking for Proactive Deepfake Defense](/202603/25/2603.23178v1-saiw-source-attributable-invisible-watermarking-for-proactive-deepfake-defense)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：深度伪造防御水印技术
 
 ### 速读区论文标签
-1. [You've Got a Golden Ticket: Improving Generative Robot Policies With A Single Noise Vector](/202603/24/2603.15757v1-youve-got-a-golden-ticket-improving-generative-robot-policies-with-a-single-noise-vector)  
+1. [OneWorld: Taming Scene Generation with 3D Unified Representation Autoencoder](/202603/25/2603.16099v1-oneworld-taming-scene-generation-with-3d-unified-representation-autoencoder)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：生成策略与噪声向量
-2. [Evaluating Black-Box Vulnerabilities with Wasserstein-Constrained Data Perturbations](/202603/24/2603.15867v1-evaluating-black-box-vulnerabilities-with-wasserstein-constrained-data-perturbations)  
+   evidence：基于对抗扰动的生成式图像保护
+2. [Robust Physics-Guided Diffusion for Full-Waveform Inversion](/202603/25/2603.16393v1-robust-physics-guided-diffusion-for-full-waveform-inversion)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：使用Wasserstein约束评估黑盒模型脆弱性
-3. [Rotated Robustness: A Training-Free Defense against Bit-Flip Attacks on Large Language Models](/202603/24/2603.16382v1-rotated-robustness-a-training-free-defense-against-bit-flip-attacks-on-large-language-models)  
+   evidence：引入物理引导扩散模型提升鲁棒性
+3. [Pixel-level Counterfactual Contrastive Learning for Medical Image Segmentation](/202603/25/2603.17110v1-pixel-level-counterfactual-contrastive-learning-for-medical-image-segmentation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的防御方法
-4. [DermaFlux: Synthetic Skin Lesion Generation with Rectified Flows for Enhanced Image Classification](/202603/24/2603.16392v1-dermaflux-synthetic-skin-lesion-generation-with-rectified-flows-for-enhanced-image-classification)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-5. [AnyPhoto: Multi-Person Identity Preserving Image Generation with ID Adaptive Modulation on Location Canvas](/202603/24/2603.14770v1-anyphoto-multi-person-identity-preserving-image-generation-with-id-adaptive-modulation-on-location-canvas)  
+   evidence：对抗扰动对图像生成模型的影响
+4. [Joint Degradation-Aware Arbitrary-Scale Super-Resolution for Variable-Rate Extreme Image Compression](/202603/25/2603.17408v1-joint-degradation-aware-arbitrary-scale-super-resolution-for-variable-rate-extreme-image-compression)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动对生成模型的影响
+5. [LICA: Layered Image Composition Annotations for Graphic Design Research](/202603/25/2603.16098v1-lica-layered-image-composition-annotations-for-graphic-design-research)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：图像合成方法与技术
+6. [SCE-LITE-HQ: Smooth visual counterfactual explanations with generative foundation models](/202603/25/2603.17048v1-sce-lite-hq-smooth-visual-counterfactual-explanations-with-generative-foundation-models)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像身份保持技术
-6. [RSGen: Enhancing Layout-Driven Remote Sensing Image Generation with Diverse Edge Guidance](/202603/24/2603.15484v1-rsgen-enhancing-layout-driven-remote-sensing-image-generation-with-diverse-edge-guidance)  
+   evidence：生成式图像对抗鲁棒性
+7. [Seasoning Generative Models for a Generalization Aftertaste](/202603/25/2603.18817v1-seasoning-generative-models-for-a-generalization-aftertaste)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：遥感图像生成的边缘引导方法
-7. [Do Not Leave a Gap: Hallucination-Free Object Concealment in Vision-Language Models](/202603/24/2603.15940v1-do-not-leave-a-gap-hallucination-free-object-concealment-in-vision-language-models)  
+   evidence：通过判别器指导提升生成模型泛化能力
+8. [Adaptive Auxiliary Prompt Blending for Target-Faithful Diffusion Generation](/202603/25/2603.19158v1-adaptive-auxiliary-prompt-blending-for-target-faithful-diffusion-generation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击对视觉语言模型的影响
-8. [Robust Generative Audio Quality Assessment: Disentangling Quality from Spurious Correlations](/202603/24/2603.16201v1-robust-generative-audio-quality-assessment-disentangling-quality-from-spurious-correlations)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的鲁棒性评估
-9. [Medical Image Spatial Grounding with Semantic Sampling](/202603/24/2603.14579v1-medical-image-spatial-grounding-with-semantic-sampling)  
+   evidence：生成式图像对抗鲁棒性
+9. [EvoIQA - Explaining Image Distortions with Evolved White-Box Logic](/202603/25/2603.15887v1-evoiqa---explaining-image-distortions-with-evolved-white-box-logic)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
-10. [PHAC: Promptable Human Amodal Completion](/202603/24/2603.14741v1-phac-promptable-human-amodal-completion)  
-   标签：评分：6.0/10、query:image-generation
-   evidence：条件图像生成的可控性问题
-11. [Informative Perturbation Selection for Uncertainty-Aware Post-hoc Explanations](/202603/24/2603.14894v1-informative-perturbation-selection-for-uncertainty-aware-post-hoc-explanations)  
+   evidence：对抗扰动下的图像质量评估
+10. [FlatLands: Generative Floormap Completion From a Single Egocentric View](/202603/25/2603.16016v1-flatlands-generative-floormap-completion-from-a-single-egocentric-view)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：扰动选择用于后验解释
-12. [Informative Perturbation Selection for Uncertainty-Aware Post-hoc Explanations](/202603/24/2603.14894v2-informative-perturbation-selection-for-uncertainty-aware-post-hoc-explanations)  
+   evidence：对抗扰动生成技术
+11. [Rethinking UMM Visual Generation: Masked Modeling for Efficient Image-Only Pre-training](/202603/25/2603.16139v1-rethinking-umm-visual-generation-masked-modeling-for-efficient-image-only-pre-training)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动用于图像模型解释
+   evidence：图像生成与对抗攻击防御
+12. [Face2Scene: Using Facial Degradation as an Oracle for Diffusion-Based Scene Restoration](/202603/25/2603.16570v1-face2scene-using-facial-degradation-as-an-oracle-for-diffusion-based-scene-restoration)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：面部退化用于场景修复
 
 
 ### ⚡ 这个站点能做什么
