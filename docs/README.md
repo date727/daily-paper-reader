@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-03-31
-- 运行时间：2026-03-31 19:58:13 UTC
+- 最新运行日期：2026-04-01
+- 运行时间：2026-04-01 20:08:23 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读与速读共完成19篇论文，涵盖图像保护、水印技术及安全生成等方向。  
-2) 最值得关注的是图像保护方法和扩散模型水印技术的高分成果，以及文本到图像生成的安全干预研究。  
-3) 建议对图像生成安全性和水印技术感兴趣的读者优先阅读精读列表中的论文。
-- 详情：[/202603/31/README](/202603/31/README)
+1) 今日精读7篇高分论文，速读12篇前沿研究，聚焦生成模型与多模态技术突破  
+2) 高分论文揭示生成模型对齐与人机交互合成的新方法，速读内容涉及数字孪生对抗攻击及3D可控视频生成  
+3) 建议关注生成模型在工业场景的适配性及多模态数据融合的实际应用案例
+- 详情：[/202604/01/README](/202604/01/README)
 
 ### 精读区论文标签
-1. [IP-Bench: Benchmark for Image Protection Methods in Image-to-Video Generation Scenarios](/202603/31/2603.26154v1-ip-bench-benchmark-for-image-protection-methods-in-image-to-video-generation-scenarios)  
+1. [Generative Event Pretraining with Foundation Model Alignment](/202604/01/2603.23032v1-generative-event-pretraining-with-foundation-model-alignment)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+2. [ViHOI: Human-Object Interaction Synthesis with Visual Priors](/202604/01/2603.24383v1-vihoi-human-object-interaction-synthesis-with-visual-priors)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：图像保护方法的基准测试
-2. [Gaussian Shannon: High-Precision Diffusion Model Watermarking Based on Communication](/202603/31/2603.26167v1-gaussian-shannon-high-precision-diffusion-model-watermarking-based-on-communication)  
+   evidence：利用对抗扰动提升图像生成模型鲁棒性
+3. [Unrestrained Simplex Denoising for Discrete Data. A Non-Markovian Approach Applied to Graph Generation](/202604/01/2603.28572v1-unrestrained-simplex-denoising-for-discrete-data-a-non-markovian-approach-applied-to-graph-generation)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：扩散模型在图像生成中的研究
+4. [CIPHER: Counterfeit Image Pattern High-level Examination via Representation](/202604/01/2603.29356v1-cipher-counterfeit-image-pattern-high-level-examination-via-representation)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：扩散模型水印技术
-3. [A Provable Energy-Guided Test-Time Defense Boosting Adversarial Robustness of Large Vision-Language Models](/202603/31/2603.26984v1-a-provable-energy-guided-test-time-defense-boosting-adversarial-robustness-of-large-vision-language-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：提出提升大视觉语言模型对抗鲁棒性的方法
-4. [Test-Time Instance-Specific Parameter Composition: A New Paradigm for Adaptive Generative Modeling](/202603/31/2603.27665v1-test-time-instance-specific-parameter-composition-a-new-paradigm-for-adaptive-generative-modeling)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：生成模型的自适应参数组合
-5. [Diversity Matters: Dataset Diversification and Dual-Branch Network for Generalized AI-Generated Image Detection](/202603/31/2603.27800v1-diversity-matters-dataset-diversification-and-dual-branch-network-for-generalized-ai-generated-image-detection)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击与图像生成相关
-6. [EdgeDiT: Hardware-Aware Diffusion Transformers for Efficient On-Device Image Generation](/202603/31/2603.28405v1-edgedit-hardware-aware-diffusion-transformers-for-efficient-on-device-image-generation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：边缘设备上的高效扩散模型
-7. [XSPA: Crafting Imperceptible X-Shaped Sparse Adversarial Perturbations for Transferable Attacks on VLMs](/202603/31/2603.28568v1-xspa-crafting-imperceptible-x-shaped-sparse-adversarial-perturbations-for-transferable-attacks-on-vlms)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：X形稀疏对抗扰动生成方法
+   evidence：对抗攻击检测框架
+5. [ProGRank: Probe-Gradient Reranking to Defend Dense-Retriever RAG from Corpus Poisoning](/202604/01/2603.22934v1-progrank-probe-gradient-reranking-to-defend-dense-retriever-rag-from-corpus-poisoning)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动防御机制
+6. [AMIF: Authorizable Medical Image Fusion Model with Built-in Authentication](/202604/01/2603.24296v1-amif-authorizable-medical-image-fusion-model-with-built-in-authentication)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：医疗图像融合模型的认证机制
+7. [Understanding Semantic Perturbations on In-Processing Generative Image Watermarks](/202604/01/2603.27513v1-understanding-semantic-perturbations-on-in-processing-generative-image-watermarks)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：语义扰动下的水印测试
 
 ### 速读区论文标签
-1. [Structured Visual Narratives Undermine Safety Alignment in Multimodal Large Language Models](/202603/31/2603.21697v1-structured-visual-narratives-undermine-safety-alignment-in-multimodal-large-language-models)  
+1. [Adversarial Vulnerabilities in Neural Operator Digital Twins: Gradient-Free Attacks on Nuclear Thermal-Hydraulic Surrogates](/202604/01/2603.22525v1-adversarial-vulnerabilities-in-neural-operator-digital-twins-gradient-free-attacks-on-nuclear-thermal-hydraulic-surrogates)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御相关
-2. [Thermal Topology Collapse: Universal Physical Patch Attacks on Infrared Vision Systems](/202603/31/2603.21876v2-thermal-topology-collapse-universal-physical-patch-attacks-on-infrared-vision-systems)  
+   evidence：对抗攻击与图像生成相关
+2. [GO-Renderer: Generative Object Rendering with 3D-aware Controllable Video Diffusion Models](/202604/01/2603.23246v1-go-renderer-generative-object-rendering-with-3d-aware-controllable-video-diffusion-models)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：使用3D感知可控视频扩散模型进行图像生成
+3. [Multi-Modal Image Fusion via Intervention-Stable Feature Learning](/202604/01/2603.23272v1-multi-modal-image-fusion-via-intervention-stable-feature-learning)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击下的图像防御策略
+4. [PoiCGAN: A Targeted Poisoning Based on Feature-Label Joint Perturbation in Federated Learning](/202604/01/2603.23574v1-poicgan-a-targeted-poisoning-based-on-feature-label-joint-perturbation-in-federated-learning)  
    标签：评分：8.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-3. [DTVI: Dual-Stage Textual and Visual Intervention for Safe Text-to-Image Generation](/202603/31/2603.22041v2-dtvi-dual-stage-textual-and-visual-intervention-for-safe-text-to-image-generation)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御方法
-4. [MCLR: Improving Conditional Modeling in Visual Generative Models via Inter-Class Likelihood-Ratio Maximization and Establishing the Equivalence between Classifier-Free Guidance and Alignment Objectives](/202603/31/2603.22364v1-mclr-improving-conditional-modeling-in-visual-generative-models-via-inter-class-likelihood-ratio-maximization-and-establishing-the-equivalence-between-classifier-free-guidance-and-alignment-objectives)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：扩散模型的条件建模改进
-5. [Towards Automated Community Notes Generation with Large Vision Language Models for Combating Contextual Deception](/202603/31/2603.22453v1-towards-automated-community-notes-generation-with-large-vision-language-models-for-combating-contextual-deception)  
+5. [Few-Shot Generative Model Adaption via Identity Injection and Preservation](/202604/01/2603.22965v1-few-shot-generative-model-adaption-via-identity-injection-and-preservation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-6. [Tiny Inference-Time Scaling with Latent Verifiers](/202603/31/2603.22492v1-tiny-inference-time-scaling-with-latent-verifiers)  
+   evidence：生成模型身份保持技术
+6. [WorldMesh: Generating Navigable Multi-Room 3D Scenes via Mesh-Conditioned Image Diffusion](/202604/01/2603.22972v1-worldmesh-generating-navigable-multi-room-3d-scenes-via-mesh-conditioned-image-diffusion)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：基于网格的图像生成方法
+7. [HUydra: Full-Range Lung CT Synthesis via Multiple HU Interval Generative Modelling](/202604/01/2603.23041v1-huydra-full-range-lung-ct-synthesis-via-multiple-hu-interval-generative-modelling)  
    标签：评分：7.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-7. [Predictive Photometric Uncertainty in Gaussian Splatting for Novel View Synthesis](/202603/31/2603.22786v1-predictive-photometric-uncertainty-in-gaussian-splatting-for-novel-view-synthesis)  
+8. [Policy-based Tuning of Autoregressive Image Models with Instance- and Distribution-Level Rewards](/202604/01/2603.23086v1-policy-based-tuning-of-autoregressive-image-models-with-instance--and-distribution-level-rewards)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响相关
-8. [HAM: A Training-Free Style Transfer Approach via Heterogeneous Attention Modulation for Diffusion Models](/202603/31/2603.24043v1-ham-a-training-free-style-transfer-approach-via-heterogeneous-attention-modulation-for-diffusion-models)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-9. [AdaEdit: Adaptive Temporal and Channel Modulation for Flow-Based Image Editing](/202603/31/2603.21615v1-adaedit-adaptive-temporal-and-channel-modulation-for-flow-based-image-editing)  
+   evidence：对抗攻击下图像生成模型优化
+9. [Chain-of-Authorization: Internalizing Authorization into Large Language Models via Reasoning Trajectories](/202604/01/2603.22869v1-chain-of-authorization-internalizing-authorization-into-large-language-models-via-reasoning-trajectories)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-10. [CellFluxRL: Biologically-Constrained Virtual Cell Modeling via Reinforcement Learning](/202603/31/2603.21743v1-cellfluxrl-biologically-constrained-virtual-cell-modeling-via-reinforcement-learning)  
+   evidence：对抗攻击与防御技术相关
+10. [Designing to Forget: Deep Semi-parametric Models for Unlearning](/202604/01/2603.22870v1-designing-to-forget-deep-semi-parametric-models-for-unlearning)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动相关
-11. [ADaFuSE: Adaptive Diffusion-generated Image and Text Fusion for Interactive Text-to-Image Retrieval](/202603/31/2603.21886v1-adafuse-adaptive-diffusion-generated-image-and-text-fusion-for-interactive-text-to-image-retrieval)  
+   evidence：生成模型的鲁棒性提升
+11. [WorldMesh: Generating Navigable Multi-Room 3D Scenes via Mesh-Conditioned Image Diffusion](/202604/01/2603.22972v2-worldmesh-generating-navigable-multi-room-3d-scenes-via-mesh-conditioned-image-diffusion)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：使用扩散模型进行图像和文本融合
-12. [DUO-VSR: Dual-Stream Distillation for One-Step Video Super-Resolution](/202603/31/2603.22271v1-duo-vsr-dual-stream-distillation-for-one-step-video-super-resolution)  
+   evidence：基于网格的图像扩散生成
+12. [DAK-UCB: Diversity-Aware Prompt Routing for LLMs and Generative Models](/202604/01/2603.23140v1-dak-ucb-diversity-aware-prompt-routing-for-llms-and-generative-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：视频超分辨率与对抗监督
+   evidence：生成模型与对抗扰动
 
 
 ### ⚡ 这个站点能做什么
