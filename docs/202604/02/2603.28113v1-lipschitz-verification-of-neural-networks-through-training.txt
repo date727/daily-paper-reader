@@ -1,0 +1,1593 @@
+Title: Lipschitz verification of neural networks through training
+
+URL Source: https://arxiv.org/pdf/2603.28113v1
+
+Published Time: Tue, 31 Mar 2026 01:43:25 GMT
+
+Number of Pages: 33
+
+Markdown Content:
+# Lipschitz verification of neural networks through training 
+
+Simon Kuang 1 Yuezhu Xu 2 S. Sivaranjani 2 Xinfan Lin 1
+
+# Abstract 
+
+The global Lipschitz constant of a neural net-work governs both adversarial robustness and gen-eralization. Conventional approaches to “certi-fied training” typically follow a train-then-verify paradigm: they train a network and then attempt to bound its Lipschitz constant. Because the ef-ficient “trivial bound” (the product of the layer-wise Lipschitz constants) is exponentially loose for arbitrary networks, these approaches must rely on computationally expensive techniques such as semidefinite programming, mixed-integer pro-gramming, or branch-and-bound. We propose a different paradigm: rather than designing com-plex verifiers for arbitrary networks, we design networks to be verifiable by the fast trivial bound. We show that directly penalizing the trivial bound during training forces it to become tight, thereby effectively regularizing the true Lipschitz con-stant. To achieve this, we identify three structural obstructions to a tight trivial bound (dead neu-rons, bias terms, and ill-conditioned weights) and introduce architectural mitigations, including a novel notion of norm-saturating polyactivations and bias-free sinusoidal layers. Our approach avoids the runtime complexity of advanced verifi-cation while achieving strong results: we train ro-bust networks on MNIST with Lipschitz bounds that are small (orders of magnitude lower than comparable works) and tight (within 10% of the ground truth). The experimental results validate the theoretical guarantees, support the proposed mechanisms, and extend empirically to diverse activations and non-Euclidean norms. 
+
+> 1
+
+Department of Mechanical and Aerospace Engineering, Uni-versity of California, Davis 2Edwardson School of Industrial En-gineering, Purdue University. Correspondence to: Simon Kuang 
+
+<slku@ucdavis.edu >.
+
+Preprint. March 31, 2026. 
+
+# 1. Introduction 
+
+Some neural networks that minimize a loss function on training data are found to underperform on unseen inputs; others perform well on the whole population, but can be eas-ily fooled by imperceptibly small adversarial perturbations. A network may elevate a small variation (sampling error, infinitesimal distribution shift) above true features in the data. A recent hypothesis (Szegedy et al., 2014) supported by learning theory (Bartlett et al., 2017; Neyshabur et al., 2015b; Golowich et al., 2018; Neyshabur et al., 2018) ex-plains both failure modes in terms of the Lipschitz constant. The Lipschitz constant, defined as the maximum change in output per unit change in input, is a nonnegative scalar that quantifies the network’s power to amplify and discrimi-nate relevant features in the training population—a desirable trait—and its tendency to behave erratically on unseen or out-of-distribution inputs—an undesirable trait. It follows that the global Lipschitz constant ought to be simultane-ously as large as necessary and as small as possible. This tradeoff has traditionally been captured in mathematical programming by the support vector machine and lasso (for linear models), and by regularized kernel methods (for low-dimensional nonlinear models). The former objective of this tradeoff (as large as necessary) is easily captured by a loss function. The latter objective has proven more elusive. It stands to reason that before claiming that a network’s Lipschitz constant is small, we first need to find out its value. But the exact Lipschitz constant of a neural network is NP-hard to compute in general (Virmaux & Scaman, 2018), and algorithms are only known for piece-wise linear activations such as ReLU (Jordan & Dimakis, 2020; Bhowmick et al., 2021). Consequently, we must rely on upper bounds. A range of methods for upper-bounding the Lipschitz constant ex-ploit information such as the monotonicity of the activation function or the compact ranges of hidden layers. These tech-niques include semidefinite programming (SDP) (Fazlyab et al., 2019; Xu & Sivaranjani, 2024; 2025), polynomial optimization (Chen et al., 2020), interval arithmetic (Zhang et al., 2018; 2019), and operations research methods (Ente-sari et al., 2023; Shi et al., 2025). These occupy a spectrum of tradeoffs between conservatism and runtime complexity. 1
+
+> arXiv:2603.28113v1 [cs.LG] 30 Mar 2026 Lipschitz verification of neural networks through training
+
+At one extreme, one can quickly bound the Lipschitz con-stant of the network by multiplying the Lipschitz constants of the layers (Virmaux & Scaman, 2018, Prop. 1); we de-note this the trivial bound (after Xu & Sivaranjani 2024). Apriori , the trivial bound appears to increase exponentially with network depth and is therefore liable to extreme conser-vatism (Szegedy et al., 2014; Weng et al., 2018; Leino et al., 2021). Experimental evidence for this thesis ranges from drastic— 10 2 (Zhang et al., 2018, Figure 3)—to galactic—in excess of 10 20 (Fazlyab et al., 2019, Figure 2b). There are several schools of thought on how to balance “as large as necessary” and “as small as possible.” Some works impose a hard Lipschitz constraint in training, either as a projection operator in the training loop (Xu & Sivaranjani, 2023; Revay et al., 2024; Gouk et al., 2021; Junnarkar et al., 2024) or by a parameterization whose range lies within the Lipschitz cylinder (Wang & Manchester, 2023). Other works promote Lipschitz continuity indirectly by adding a Lipschitz penalty to the loss function (Pauli et al., 2021; Bungert et al., 2021; Huang et al., 2021). All of these methods are computationally expensive and impose extra parameters, hyperparameters, mathematical programs, or subroutines because they access the Lipschitz constant via sophisticated techniques such as semidefinite programming. They assume that these techniques are necessary because the trivial bound is too loose for verification and therefore too restrictive for training. (We respond in detail to different versions of this argument in Appendix A.) Our work challenges this popular assumption. We admit that the trivial bound is unacceptably loose for a general neural network. But as we show in Section 3.2, so is the SDP bound. Because “verifying robustness for arbitrary neural networks is hard,” Raghunathan et al. (2018) call for training “neural networks that are amenable to verification, in the same way that it is possible to write programs that can be formally verified.” Surprisingly, the trivial bound is fit for this purpose. As we show by theory in Section 3.3 and example in Section 5, the trivial bound becomes tight when it is penalized in training. Lipschitz regularization then regulates the true Lipschitz constant of the network. Instead of designing the verification subtask for an arbitrary neural network, our approach is to design the network architecture and loss function in order to be verifiable by the trivial Lipschitz bound. 
+
+Related work (robustness) A small global Lipschitz con-stant guarantees that within a ball of radius inversely propor-tional to the Lipschitz constant, the classifier is indifferent to perturbations. Some other regularizers (Hoffman et al. 2019; Nenov et al. 2024; Yoshida & Miyato 2017, among others) impose a similar inductive bias towards smoothness, but do not come with a guarantee. Local Lipschitz bounds (Jordan & Dimakis, 2020; Bhowmick et al., 2021; Xu & Sivaranjani, 2025) and other forms of robustness certificates (Raghunathan et al., 2018; Wong & Kolter, 2018; Lee et al., 2020) offer guarantees on a “pointwise,” per-instance basis by introspection of the network’s weights, given knowledge of the input and attack parameters. Rather, global Lipschitz bounds are “uniform” and apply to all inputs and all attacks, and impose a constant cost at inference time. 
+
+Contributions We attribute the looseness of the triv-ial bound to three causes: dead neurons, biases, and ill-conditioned weight matrices. We then mitigate them at the level of architecture and loss function (rather than over-come them in downstream analysis) with polyactivations, a novel vector-valued activation architecture designed to saturate norm bounds; sinusoidal activation layers that do not need biases to be universal approximators; and direct penalization of the trivial Lipschitz bound. We verify these mitigations and their theoretical backing experimentally on a range of networks and datasets (Iris, Section 5.1; MNIST, Section 5.2). Empirically, we find orders-of-magnitude im-provements to the trivial bound that bring it to within a factor of 1–2 of the true Lipschitz constant. We also find support for the theoretical mechanisms behind these im-provements, such as an argument by matrix factorization that Lipschitz regularization leads to well-conditioned ma-trices. We show that these empirical results translate to acti-vation functions ranging from specialized to conventional, and to non-Euclidean norms. We demonstrate the performance of this approach by train-ing a neural network with cross-entropy loss to 98% on MNIST and certifying that its Lipschitz constant lies be-tween 5.5 and 6. This is a remarkable achievement because: 1. It is relatively rare in the vast literature on Lipschitz analysis to ground-truth against lower bounds. 1
+
+2. Our network’s Lipschitz upper bound is significantly smaller than other estimates for networks with com-parable performance, whose Lipschitz upper bounds range from 50 to 500 (Fazlyab et al., 2019, Fig. 2a). 3. The training consists of minimizing a loss function (namely, a data loss plus the trivial Lipschitz bound) using a black-box first-order optimizer. 4. The verification method is likewise elementary: it con-sists of multiplying induced norms of weight matrices to obtain an upper bound, and locally searching for a secant vector that attains the Lipschitz constant to obtain a lower bound. 
+
+> 1Wang & Manchester (2023) also compares to empirical lower bounds on a 1D toy problem. Jordan & Dimakis (2020); Bhowmick et al. (2021); Sbihi et al. (2024) compute lower bounds in super-polynomial time.
+
+2Lipschitz verification of neural networks through training 
+
+# 2. Preliminaries 
+
+The vector of ones is 1. The ℓp norm of x ∈ Rd is defined by 
+
+∥x∥p =
+
+
+
+> d
+
+X
+
+> i=1
+
+|xi|p
+
+
+
+> 1/p
+
+, p ∈ [1 , ∞); 
+
+∥x∥∞ = max  
+
+> i∈[d]
+
+|xi|, p = ∞.
+
+The induced operator p-norm of a matrix A ∈ Rd×d is defined by 
+
+∥A∥p = max  
+
+> ∥x∥p=1
+
+∥Ax ∥p .
+
+The Lipschitz constant of an absolutely continuous function 
+
+f : Rn → Rm in the p-norm is 
+
+∥f ∥Lip ,p = sup 
+
+> x∈Rn
+
+∇f (x) p .
+
+We may omit the subscript when p = 2 .A traditional feed-forward neural network of depth L is defined recursively by x0 = x and 
+
+xℓ = σℓ 
+
+W ℓxℓ−1 + bℓ
+
+, ℓ = 1 , . . . , L, (1) where σℓ acts elementwise and W ℓ and bℓ are the weights and biases of layer ℓ. We write f (x) = xL. Because in-duced matrix norms are submultiplicative, the trivial bound 
+
+on the Lipschitz constant of a feed-forward network is 
+
+∥f ∥Lip ,p ≤
+
+> L
+
+Y
+
+> ℓ=1
+
+σℓ
+
+> Lip ,p
+
+W ℓ
+
+> p
+
+.
+
+For z ∈ Rn, define Sin( z) = diag(sin( z)) and Cos( z) = diag(cos( z)) .If A is a matrix, Diag( A) is the diagonal matrix with the same diagonal entries as A and zeros elsewhere. The condition number of a (rectangular) matrix is the ratio of its largest singular value to its smallest nonzero singular value. 
+
+# 3. Mitigating weaknesses of the trivial bound 
+
+This section presents a stylized narrative of three phenomena underlying the looseness of the trivial Lipschitz bound. For each phenomenon, we construct a toy model that inflates the trivial Lipschitz bound and propose an architecture- and/or loss-level mitigation motivated by theoretical analysis. The purpose is to advocate for a single gold-standard architecture for shallow networks—cosine/sine activations trained with a straightforward penalty on the trivial Lipschitz bound— and to raise questions for empirical investigation on deeper networks. 
+
+3.1. Dead neurons 
+
+Popular activation functions such as ReLU and hyperbolic tangent have regions with little variation. A ReLU preacti-vation h may be biased into its negative region across the entire training set; thus, a unit such as ReLU(1000 h) may become positive at test time (e.g., under distribution shift). In such a case, the unit’s Lipschitz constant is 1000, even though this steep slope may be irrelevant (or harmful) to out-of-sample performance. Dead neurons can also result from deeper structures such as the mapping x 7 → z given by 
+
+z = ReLU( −1000 y),y = ReLU(1000 x).
+
+In this case, the trivial bound equals 1 million, but the true Lipschitz constant is 0, because the argument of the second layer’s ReLU is nonpositive for every x. In general, com-puting tight neuron ranges is computationally intractable (Weng et al., 2018; Shi et al., 2022; Jordan & Dimakis, 2020; Chen et al., 2020; Virmaux & Scaman, 2018). We mitigate this issue by using polyactivations that saturate the Lipschitz constraint without vanishing slopes. 3.1.1. P OLYACTIVATIONS 
+
+Merely adding a residual bypass to a dead neuron is not 
+
+sufficient from the perspective of the Lipschitz bound, since layer bounds (1 + ∥W ∥p) would lead to a trivial bound that grows exponentially in depth (Gouk et al., 2021). Some existing work on Lipschitz training replaces neuron-level nonlinearities with whole-layer nonlinearities such as GroupSort, whose Jacobian is orthogonal everywhere on its domain (Anil et al., 2019). 2 Our approach is closer to CReLU, which maps each input coordinate through multiple activations, ensuring that not all channels vanish simultane-ously (Shang et al., 2016). 
+
+Definition 3.1 (Polyactivation) . A polyactivation function of order K is a tuple of functions {σk : R → R}Kk=1 that acts on vectors by ⃗σ : Rd → RdK ,x 7 → (σ1(x), σ 2(x), . . . , σ K (x)) .
+
+Polyactivations fan out by a factor of K and are contracted by a wide weight matrix. 3 The Jacobian of a polyactivation 
+
+> 2We note in passing that the neuron-level absolute value activa-tion function also possesses this property.
+> 3As the contribution of any neuron to the next layer’s neurons is a weighted sum of basis functions, this architecture can be recognized as a Kolmogorov-Arnold expansion (Liu et al., 2025).
+
+3Lipschitz verification of neural networks through training 
+
+layer is 
+
+∂∂x⃗ σ(x) = 
+
+
+
+diag σ′
+
+> 1
+
+(x)diag σ′
+
+> 2
+
+(x)
+
+...
+
+diag σ′ 
+
+> K
+
+(x)
+
+ ∈ RdK ×d.
+
+Next we formalize a notion under which a polyactivation function is “maximally” Lipschitz in the p-norm. 
+
+Definition 3.2 (Saturated polyactivation) . A polyactivation function {σk}Kk=1 is Lipschitz-saturated in the p-norm if ⃗σ
+
+has local Lipschitz constant 1 in every neighborhood of Rd,or equivalently, for almost every x ∈ R,
+
+> K
+
+X
+
+> k=1
+
+σ′
+
+> k
+
+(x) p = 1 , if p ∈ [1 , ∞); 
+
+∀k ∈ [K], σ′
+
+> k
+
+(x) = 1 , if p = ∞.
+
+A saturated polyactivation is evidently strictly more expres-sive than a single activation function, as it can represent a richer class of functions while maintaining the same Lip-schitz constraint. The idea of saturated polyactivations is to maximize the overall representational power while main-taining control over the Lipschitz bound. 
+
+Example 1. The absolute value activation function x 7 → | x|
+
+is a first-order polyactivation that saturates the p-norm Lipschitz constant for all p ∈ [1 , ∞].
+
+Example 2. The ReLU activation x 7 → max(0 , x ) is not sat-urated because its derivative is either 0 or 1. However, the CReLU (Shang et al., 2016) x 7 → (max(0 , x ), max(0 , −x)) 
+
+is a second-order polyactivation that saturates the Lips-chitz bound for p ∈ [1 , ∞). A variation that saturates the 
+
+∞-norm Lipschitz constant is x 7 → (x, |x|).
+
+Example 3. The hyperbolic tangent activation function can be augmented to saturate the 1-norm Lipschitz constant by the second-order polyactivation 
+
+x 7 → (x, x − tanh( x)) 
+
+To saturate the 2-norm Lipschitz constant, one could opt for the third-order polyactivation 
+
+x 7 → (tanh( x), sech( x), log cosh( x)) .
+
+Example 4. The sine activation function can be augmented to saturate the 2-norm Lipschitz constant by the second-order polyactivation x 7 → (cos x, sin x).
+
+3.2. Biases 
+
+Equation (1) is not the only way to write the composition 
+
+activation σℓ ◦ shift bℓ ◦ linear W ℓ
+
+◦ activation σℓ−1 ◦ shift bℓ−1 ◦ linear W ℓ−1 ◦ . . . 
+
+where activation denotes the elementwise activation, shift 
+
+denotes translation by the bias, and linear denotes matrix multiplication by the weights. Taking circular permutations, we see that there are three ways to associate these opera-tions: 
+
+activation ◦ shift ◦ linear , (ASL) 
+
+shift ◦ linear ◦ activation , and (SLA) 
+
+linear ◦ activation ◦ shift . (LAS) 
+
+Theorem 3.3. The trivial Lipschitz bound in the p-norm is tight for ASL units with generic W ∈ Rd×d and b ∈ Rd,and for SLA and LAS units with arbitrary W ∈ Rd×d and 
+
+b ∈ Rd.
+
+However, if we consider the quadruple composition 
+
+linear ◦ activation ◦ shift ◦ linear , (LASL) then the trivial Lipschitz bound in the p-norm can be seen to be arbitrarily loose for LASL units x 7 → W 1σ(W 0x + b),as we see from three different explicit constructions. The case of LASL is interesting because it is the prototypical multilayer perceptron used in the classical proof of universal approximation by approximate identities. 
+
+Theorem 3.4. For both the ReLU and tanh activation func-tions, there exist LASL units R → Rd → R on which the trivial 2-Lipschitz bound is Ω( d), but the true 2-Lipschitz constant ranges from O(1) to Ω( d) by varying only the biases. 
+
+Theorem 3.5. For the sin activation function, there exist LASL units R → R2d → R on which the trivial Lipschitz bound is Ω( d), but the true Lipschitz constant is 0. Remark 3.6 . These constructions show that not only the trivial bound, but also any Lipschitz bound which ignores the biases cannot help but impute to the biases their worst-case values, and is therefore liable to up to Ω( d) conservatism per layer on ReLU and tanh networks, and infinite conservatism on sinusoidal networks. (Fazlyab et al., 2019; Virmaux & Scaman, 2018; Xu & Sivaranjani, 2024). We mitigate this issue by using a specific polyactivation structure that allows biases to be analytically absorbed into the weight matrices, thereby preventing the cancellation that loosens the bound. 3.2.1. R ECTANGULAR SINUSOIDAL LAYERS 
+
+In §3.2, we saw that the trivial bound can be loose because biases in an LASL unit can induce cancellation. What can be done? Removing the shift parameter from LA SL units would eliminate some slack in the trivial bound, but at the expense of universal approximation. The criterion for mitigating this weakness is a dimension-independent guarantee that the bound can be sharp for LASL 4Lipschitz verification of neural networks through training 
+
+units. We contribute such a guarantee in the 2-norm using the (cos , sin) polyactivation. Let a LASL unit Rr → Rn →
+
+Rm be defined by 
+
+x 7 → A cos( W x + b) + B sin( W x + b),
+
+where A, B ∈ Rm×n, W ∈ Rn×r , and b ∈ Rn.The key observation is that we can set b = 0 by absorbing the bias into the weight matrices via trigonometric iden-tities (recall that Sin( z) = diag(sin( z)) and Cos( z) = diag(cos( z)) ): 
+
+A 7 → A Cos( b) − B Sin( b)
+
+B 7 → A Sin( b) + B Cos( b)
+
+This immediately rules out the adversarial biasing in Theo-rem 3.5, which relied on the identity sin x + sin( x + π) = 0 .Now the LASL unit becomes 
+
+x 7 → A cos( W x ) + B sin( W x ), (2) and its trivial Lipschitz bound in the 2-norm is 
+
+ A B
+
+> 2
+
+∥W ∥2 . (3) 
+
+3.3. Ill-conditioned weight matrices 
+
+A network with ill-conditioned weight matrices can be less Lipschitz than it appears. This occurs when a neural network contains ill-conditioned subnetworks that cancel out. Owing to the universal approximation property of neural networks, it suffices to make the point using two toy examples: the ReLU and linear activation functions. The ReLU activation function is 1-homogeneous: for all 
+
+α ∈ R×, ReLU( αx ) = α ReLU( x). This means that if Λ is an invertible diagonal matrix, then any two consecutive lay-ers can be reparameterized (W 0, W 1) 7 → (Λ −1W 0, W 1Λ) ,while the composite function 
+
+W 1 ReLU( W 0x + b0) + b1
+
+= W 1Λ ReLU(Λ −1W 0x + Λ −1b0) + b1
+
+remains unchanged; this fact has been applied in an-other context to improve the training of ReLU networks (Neyshabur et al., 2015a; 2016). Given generic weight ma-trices W 0, W 1, reparameterization by 
+
+Λ = diag( λ, 1, 1, 1, . . . ), λ → ∞ 
+
+results in a trivial Lipschitz bound of Θ( λ) times the original Lipschitz constant. (The weight matrices’ condition number is also Θ( λ).) This form of ill-conditioning also evades analysis methods such as LipSDP-Layer (Fazlyab et al., 2019), which do not know the homogeneity of ReLU. We record this observation as: 
+
+Theorem 3.7. Given any ReLU network, there exists a closed-form, mathematically equivalent network whose triv-ial 2-norm Lipschitz bound is arbitrarily large. 
+
+It is easy to devise examples which make the trivial 2-norm Lipschitz bound look bad. That does not mean it is always bad. Next, let us consider the problem of learning an invertible linear function as a deep neural network with linear activa-tion function σ(x) = x. This is a partly linearized (Nam et al., 2025) model of an overparameterized deep network. Without loss of generality, the objective is to learn the iden-tity function using the mapping 
+
+x 7 → WLWL−1 · · · W1x (4) where the parameters W1, W 2, . . . , W L are square matrices. 
+
+Theorem 3.8. Consider a deep network (4) with lin-ear activations and parameter matrices constrained by 
+
+WLWL−1 · · · W1 = I. Let K = ∥W1∥2 ∥W2∥2 · · · ∥ WL∥2
+
+be the trivial Lipschitz bound. Then the following are equiv-alent: 1. K = 1 , i.e. there is no conservatism in the trivial bound. 2. W1, W 2, . . . , W L minimize K subject to 
+
+WLWL−1 · · · W1 = I.3. The condition number of each parameter matrix is 1. 
+
+In this toy example, minimizing the trivial Lipschitz bound over unconstrained degrees of freedom on a level set of the loss function recovers the ground truth Lipschitz constant. 3.3.1. L IPSCHITZ PENALTY 
+
+Plausibly, this principle generalizes to nonlinear σ and would suggest that well-conditioned neural parameteriza-tions on which the trivial bound is tight can be reached by continuous optimization, which is hard in theory and easy in practice. Therefore, we propose to train networks onto the Pareto fron-tier of low loss and low trivial Lipschitz bound, by choosing polyactivations that saturate the p-norm and solving a penal-ized optimization problem such as 
+
+minimize  
+
+> {Wℓ}Lℓ=1
+
+ℓ(W 1, . . . , W L) + λ
+
+> L
+
+Y
+
+> ℓ=1
+
+W ℓ
+
+> p
+
+,
+
+where ℓ is a data loss function such as negative log-likelihood over the training set and λ > 0 is a tuning param-eter. 5Lipschitz verification of neural networks through training 
+
+# 4. Theoretical and practical lower bounds 
+
+The literature on Lipschitz constant verification of neural networks uses “tightness” to refer to metrics such as the ratio of the global Lipschitz constant to the trivial bound (Fazlyab et al., 2019; Xu & Sivaranjani, 2024). But in the plain mathematical sense, a tight upper bound must be close to the ground truth. Because it is intractable to compute the true Lipschitz constant, we instead compute lower bounds and use the inequality 
+
+1 ≤ tightness = Lipschitz upper bound Lipschitz ground truth 
+
+≤ Lipschitz upper bound Lipschitz lower bound to show that our Lipschitz upper bounds, in spite of their simplicity, are effective approximations of the ground truth. When considering only a LASL unit equipped with 
+
+(cos , sin) and absolute value activations, we can derive lower bounds by proving that the Jacobian of the network is large “on average.” (Theorem B.1 advances a similar claim for the absolute value activation.) 
+
+Theorem 4.1 (Lower bound on sinusoidal networks) . Let 
+
+f (x) be an LASL unit from Rn → Rn → Rm given by Equation (2) ,
+
+f (x) = A cos( W x ) + B sin( W x ).
+
+Then, if W has full rank, the following Lipschitz lower bound holds: 
+
+∥f ∥2Lip ,2
+
+≥ 12 λmax 
+
+A Diag ( W W ⊺) A⊺ + B Diag ( W W ⊺) B⊺ ,
+
+and the trivial Lipschitz bound 
+
+K =  A B
+
+> 2
+
+∥W ∥2
+
+is off by less than a factor of √2 κ(W ):
+
+1
+
+√2 κ(W ) K ≤ ∥ f ∥Lip ,2 ≤ K, 
+
+where κ(W ) = pλmax (W W ⊺)/λ min (W W ⊺) is the con-dition number. 
+
+The proof appeals to the probabilistic method to find an input with a typical Jacobian norm. A key cancellation step uses the fact that because these activations have slopes ranging from -1 to 1; a similar method would not work for ReLU or tanh (0 to 1). In deeper networks, it is harder to get a lower bound on the Jacobian. However, we can still use the probabilistic method over an ensemble of random networks to calculate the exact second moment of the Jacobian. This is weaker in that it is an average-case bound and only applies to the random initialization (which is quickly departed in training), but it is strong in that it holds with equality, pointwise in x.The random-phase initialization of (A, B ) ∈ Rd×d′
+
+at scale α is defined as 
+
+ A B =   ¯A ¯B Cos( θ) − Sin( θ)Sin( θ) Cos( θ)
+
+
+
+, (5) where ¯A, ¯B ∈ Rd×d′
+
+are i.i.d. Gaussian with variance α/d ′,and θ is uniformly distributed on the torus (R/2πZ)d.
+
+Informal Theorem (Theorem B.2) . Let f be a (cos , sin) 
+
+neural network of depth L and arbitrary width, initialized with random phases at scale α.
+
+E  Df (x)Df (x)⊺ = αLI
+
+for every input x.
+
+The idea of this proof is that the random phases 4 decorrelate the weights across layers, leading to a diagonal covariance structure. As a by-product, we have also established an exact stable initialization for sinusoidal networks (Sitzmann et al., 2020). The choice α = 1 stabilizes the average slope of the net-work; the choice α = 2 −1/2 corresponding to the Kaiming initialization stabilizes the worst case (He et al., 2015). This discrepancy reflects that at initialization, the trivial Lipschitz constant is loose by a factor of √2 per layer; it is the role of training to close this gap. 
+
+4.1. An empirical bound 
+
+In experiments, we obtain an empirical lower bound bL by locally maximizing the secant slope 
+
+∥f ∥Lip ,2 ≤ bL ≈ max 
+
+> x,y
+
+f (x) − f (y) 2
+
+∥x − y∥2 + ϵ ,
+
+using ϵ = 10 −8 and reporting the best of twenty runs of L-BFGS, initialized with x and y sampled from the training data. It is fitting that the network’s highest local variation should be attained on a line segment between training points, where the data loss function opposes the downward pressure on the Jacobian imposed by Lipschitz regularization. 
+
+# 5. Experimental results 
+
+We carry out numerical experiments at varying scales to address the following questions, which are left unresolved by our theoretical analysis. 
+
+> 4The random phases, which anti-correlate the fourth moments of the weights while leaving the second moments unchanged, do not have noticeable consequences for practical training.
+
+6Lipschitz verification of neural networks through training  
+
+> Table 5.1. Iris experiment: final predictive performance after 20,000 steps.
+
+λ Train Loss Test Loss Train Acc. Test Acc. 
+
+0 1.0 × 10 −4 0.4661 1.000 0.933 10 −2 0.0542 0.0932 0.983 0.967 
+
+Question 1 (Feasibility) . What is the effect of Lipschitz regularization on the trivial bound? 
+
+Question 2 (Tightness) . What is the effect of Lipschitz reg-ularization on the true Lipschitz constant? 
+
+Question 3 (Performance) . What is the effect of Lipschitz regularization on the model’s goodness of fit, both in-sample and out-of-sample? 
+
+Question 4 (Robustness) . How confidently does global Lip-schitz regularization certify robust learning? 
+
+5.1. Iris dataset: upper and lower 2-norm Lipschitz bounds on a shallow network 
+
+This section trains and evaluates a small multilayer percep-tron (detailed in Section C.1) with (cos , sin) polyactivation on the Iris dataset in order to validate Theorem 4.1. We opti-mize the penalized objective NLL + λK for λ ∈ { 0, 10 −2}.To assess tightness, we compare K to (i) the guaranteed lower bound 
+
+K
+
+√2 κ(W ) ≤ ∥ f ∥Lip ,2 ≤ K, 
+
+and (ii) the empirical lower bound bL.
+
+Results While λ = 0 results in an exploding K, adding the Lipschitz penalty reduces K by more than an order of magnitude (Table 5.2, Question 1). Regularization also makes the trivial bound essentially tight in practice (Ta-ble 5.2, Question 2). Moreover, the Lipschitz upper bound (K = 5 .84 ) of the regularized network is much smaller than the Lipschitz lower bound of the unregularized network (bL = 105 .74 ), indicating that the Lipschitz penalty reduces the network’s true Lipschitz constant. While λ = 0 yields near-perfect interpolation and classical overfitting, adding the Lipschitz penalty improves test loss and slightly improves test accuracy (Table 5.1, answering Question 3). Visually, on two-dimensional slices of the domain, the regu-larized network (Figure C.3) exhibits smoother boundaries than the unregularized network (Figure C.2). 
+
+5.2. MNIST dataset: Lipschitz bounds 
+
+This section trains and evaluates a larger network (detailed in Section C.3) on the MNIST dataset in order to validate the        
+
+> Table 5.2. Iris experiment: 2-norm Lipschitz upper bound K
+> versus lower bounds. Here K/ (√2κ(W)) is the guaranteed lower bound from Theorem 4.1, while bLis an empirical lower bound from local optimization of the Lipschitz ratio over input pairs.
+
+λ K (upper) K/ (√2κ(W )) bL K/ bL
+
+0 179 .21 25 .04 105 .74 1.69 10 −2 5.84 0.82 5.84 1.00 0.2 0.4 0.6 0.8 1.0  
+
+> singular values (normalized to max)
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> 16
+> density
+> = 0
+> = 0.01
+> Figure 5.1. MNIST experiment: normalized singular values of the weight matrices (with and without penalty).
+
+claim that the linearized Theorem 3.8 extends to nonlinear networks. 
+
+Results As with the Iris experiment, we find that λ = 0 
+
+results in an exploding Lipschitz upper bound, while adding a Lipschitz penalty leads to a reduction by one to two orders of magnitude (Table 5.3, Figure C.5, Question 1). We again run a local Lipschitz attack using L-BFGS to find a lower bound bL on the global Lipschitz constant, and conclude (Table 5.3, Question 2): 1. Lipschitz regularization reduces the true Lipschitz con-stant of the resulting network by at least ∼ 10 ×, by comparing bL of the unregularized network to K of the regularized network, and 2. The trivial Lipschitz upper bound K of the regular-ized network is conservative by no more than 10%, by comparing it to bL of the same regularized network. While the regularized network has a higher in-sample loss, it has comparable test error: 1.70% for λ = 0 versus 1.41% 
+
+7Lipschitz verification of neural networks through training    
+
+> Table 5.3. MNIST experiment: 2-norm Lipschitz upper bound K
+> versus empirical lower bound bL.
+
+λ K (upper) bL (lower) K/ bL
+
+0 187 .32 ± 21 .45 58 .99 ± 3.79 3.18 10 −2 5.69 ± 0.03 5.18 ± 0.03 1.10 
+
+for λ = 10 −2 (Figure C.4, Question 3). To quantify the effect on robustness (Question 4), we levy an ℓ2 PGD attack on the MNIST test set using 40 pro-jected gradient steps (step size ϵ/ 10 ) for budgets ϵ ∈{2−1, 2−2, 2−3, 2−4, 2−5}. The resulting adversarial error rates are reported in Table C.1 and plotted in Figure C.4. The Lipschitz-regularized model substantially reduces adversar-ial error at larger perturbation budgets (e.g., at ϵ = 2 −1
+
+the error drops from 13 .04% to 4.90% ). It also has tighter robustness certificates (obtained by comparing classification margin to perturbation budget times Lipschitz bound). We also find empirical evidence for the mechanism modeled by Theorem 3.8. We plot the empirical distribution of all singular values of weight matrices, normalized by the max-imum singular value of the same matrix, and find that the Lipschitz-regularized networks concentrate their singular value spectra near the maximum singular value (Figure 5.1). This supports the claim that penalizing the maximum singu-lar value allows the optimizer to train the lower spectrum, to which the operator norm is indifferent. 
+
+Discussion: tightness In much of the literature on global Lipschitz verification of trained networks, a Lipschitz upper bound obtained by advanced methods is considered tight if it compares favorably to the trivial upper bound K (Fazlyab et al., 2019; Xu & Sivaranjani, 2024). Unfortunately, this comparison is not ground-truthed against the true Lipschitz constant of the network. By contrast, our tightness ratio 
+
+K/ bL upper-bounds the true conservatism of the trivial up-per bound K. Our regularized MNIST network, like that of Xu & Sivaranjani (2025), achieves < 2% test error when training with cross-entropy, but with a global Lipschitz up-per bound of 5.69 (Table 5.3). This is commensurate with Xu & Sivaranjani (2025)’s local Lipschitz certificates at a radius of 2−8, and an order of magnitude smaller than Xu & Sivaranjani (2025)’s local Lipschitz certificates at a radius of 2−1.
+
+Discussion: robustness We enter the quantitative “arms race” of robust learning (Raghunathan et al., 2018), with order-of-magnitude improvements in the Lipschitz constant. The robustness of our Lipschitz-regularized network against PGD attacks is comparable ( ±1% at each attack radius) to that of Xu & Sivaranjani (2025)’s MNIST network trained using a sophisticated local Jacobian penalty heuristic (Hoff-man et al., 2019). The difference is that our method is a one-line algorithm with a single tuning parameter λ.
+
+Comparisons with other methods Comparisons between our approach and other activation functions (Section D.1) and penalties (Section D.3), and extensions to other Lip-schitz norms (Section D.2) are made in the appendix. In summary, we find that in deeper networks where Theo-rem 4.1 does not apply, the expressivity and tightness of our method result primarily from optimizing the trivial bound, with a smaller or ambivalent contribution from the choice of activation function. The absolute value activation often has the tightest bounds and best fit; ReLU the loosest bounds and worst fit. Across different settings, the mechanism of action seems to be that weight matrices are pushed to the corners of induced norm balls: well-conditioned matrices in the 2-norm, equal-row-norm matrices in the ∞-norm, and equal-column-norm matrices in the 1-norm. We also make an apples-to-apples comparison to direct pa-rameterization, concluding that enforcing a hard Lipschitz constraint via a semidefinite program on a ReLU network is 
+
+more restrictive than enforcing the same constraint via the trivial bound on an abs network (Section D.4). 
+
+# 6. Conclusion 
+
+We have shown that the trivial Lipschitz bound—the prod-uct of layerwise Lipschitz constants—can be made tight by design, rather than loose by default. We exploit over-parameterization as an ally in this endeavor, as it provides the flexibility to optimize the trivial bound while maintain-ing expressivity. Our methodology does not require any new data structures, algorithms, or subroutines: it can be implemented as a single penalty term with a single hyperpa-rameter. By aligning the training objective with the verification method, we can obtain networks that are expressive, robust, and certifiable. 8Lipschitz verification of neural networks through training 
+
+# Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+# Reproducibility Statement 
+
+The results can be reproduced by running the Jupyter note-books included in lipschitz.zip .
+
+# References 
+
+Anil, C., Lucas, J., and Grosse, R. Sorting Out Lipschitz Function Approximation. In Chaudhuri, K. and Salakhut-dinov, R. (eds.), Proceedings of the 36th International Conference on Machine Learning , volume 97 of Proceed-ings of Machine Learning Research , pp. 291–301. PMLR, June 2019. Bartlett, P. L., Foster, D. J., and Telgarsky, M. Spectrally-normalized margin bounds for neural networks. In Pro-ceedings of the 31st International Conference on Neu-ral Information Processing Systems , NIPS’17, pp. 6241– 6250, Red Hook, NY, USA, 2017. Curran Associates Inc. ISBN 978-1-5108-6096-4. event-place: Long Beach, California, USA. Bhowmick, A., D’Souza, M., and Raghavan, G. S. Lip-BaB: Computing Exact Lipschitz Constant of ReLU Networks. In Farka ˇs, I., Masulli, P., Otte, S., and Wermter, S. (eds.), Artificial Neural Networks and Ma-chine Learning – ICANN 2021 , pp. 151–162, Cham, 2021. Springer International Publishing. ISBN 978-3-030-86380-7. doi:10.1007/978-3-030-86380-7 13. Bungert, L., Raab, R., Roith, T., Schwinn, L., and Ten-brinck, D. CLIP: Cheap Lipschitz training of neural net-works. In International Conference on Scale Space and Variational Methods in Computer Vision , pp. 307–319. Springer, 2021. B ´ethune, L. Deep learning with Lipschitz constraints .Theses, Universit ´e de Toulouse, February 2024. Issue: 2024TLSES014. Chen, T., Lasserre, J. B., Magron, V., and Pauwels, E. Semi-algebraic Optimization for Lipschitz Constants of ReLU Networks. In Larochelle, H., Ranzato, M., Hadsell, R., Balcan, M. F., and Lin, H. (eds.), Advances in Neural Information Processing Systems , volume 33, pp. 19189– 19200. Curran Associates, Inc., 2020. Cisse, M., Bojanowski, P., Grave, E., Dauphin, Y., and Usunier, N. Parseval Networks: Improving Robustness to Adversarial Examples. In Precup, D. and Teh, Y. W. (eds.), Proceedings of the 34th International Conference on Machine Learning , volume 70 of Proceedings of Ma-chine Learning Research , pp. 854–863. PMLR, 2017. Dubach, R., Abdallah, M. S., and Poggio, T. Multiplicative Regularization Generalizes Better Than Additive Regular-ization. Article, Center for Brains, Minds and Machines (CBMM), July 2025. Accepted: 2025-07-02T20:03:52Z. Entesari, T., Sharifi, S., and Fazlyab, M. ReachLipBnB: A branch-and-bound method for reachability analysis of neural autonomous systems using Lipschitz bounds. In 2023 IEEE International Conference on Robotics and Automation (ICRA) , pp. 1003–1010, May 2023. doi:10.1109/ICRA48891.2023.10160732. Fazlyab, M., Robey, A., Hassani, H., Morari, M., and Pap-pas, G. Efficient and Accurate Estimation of Lipschitz Constants for Deep Neural Networks. In Advances in Neural Information Processing Systems , volume 32. Cur-ran Associates, Inc., 2019. Golowich, N., Rakhlin, A., and Shamir, O. Size-Independent Sample Complexity of Neural Networks. In Bubeck, S., Perchet, V., and Rigollet, P. (eds.), Pro-ceedings of the 31st Conference On Learning Theory , vol-ume 75 of Proceedings of Machine Learning Research ,pp. 297–299. PMLR, 2018. Gouk, H., Frank, E., Pfahringer, B., and Cree, M. J. Reg-ularisation of neural networks by enforcing Lipschitz continuity. Machine Learning , 110(2):393–416, February 2021. ISSN 0885-6125, 1573-0565. doi:10.1007/s10994-020-05929-w. He, K., Zhang, X., Ren, S., and Sun, J. Delving Deep into Rectifiers: Surpassing Human-Level Performance on ImageNet Classification. In 2015 IEEE International Conference on Computer Vision (ICCV) , pp. 1026–1034, December 2015. doi:10.1109/ICCV.2015.123. ISSN: 2380-7504. Hoffman, J., Roberts, D. A., and Yaida, S. Robust Learning with Jacobian Regularization, August 2019. arXiv:1908.02729 [stat]. Huang, Y., Zhang, H., Shi, Y., Kolter, J. Z., and Anandku-mar, A. Training certifiably robust neural networks with efficient local lipschitz bounds. In Advances in Neural Information Processing Systems , volume 34, pp. 22745– 22757, 2021. Jordan, M. and Dimakis, A. G. Exactly Computing the Local Lipschitz Constant of ReLU Networks. In Larochelle, H., Ranzato, M., Hadsell, R., Balcan, M. F., and Lin, H. (eds.), Advances in Neural Information Processing Systems , volume 33, pp. 7344–7353. Curran Associates, Inc., 2020. 9Lipschitz verification of neural networks through training 
+
+Junnarkar, N., Arcak, M., and Seiler, P. Synthesizing Neu-ral Network Controllers with Closed-Loop Dissipativity Guarantees, April 2024. arXiv:2404.07373 [cs, eess]. Lai, B.-H., Huang, P.-H., Kung, B.-H., and Chen, S.-T. En-hancing Certified Robustness via Block Reflector Orthog-onal Layers and Logit Annealing Loss. In Forty-second International Conference on Machine Learning , 2025. Lee, S., Lee, J., and Park, S. Lipschitz-certifiable training with a tight outer bound. In Advances in Neural Informa-tion Processing Systems , volume 33, pp. 16891–16902, 2020. Leino, K., Wang, Z., and Fredrikson, M. Globally-robust neural networks. In International Conference on Machine Learning , pp. 6212–6222. PMLR, 2021. Liu, Z., Wang, Y., Vaidya, S., Ruehle, F., Halverson, J., Soljacic, M., Hou, T. Y., and Tegmark, M. KAN: Kol-mogorov–Arnold Networks. In The Thirteenth Interna-tional Conference on Learning Representations , 2025. Miyato, T., Kataoka, T., Koyama, M., and Yoshida, Y. Spec-tral Normalization for Generative Adversarial Networks. In International Conference on Learning Representations ,2018. Nam, Y., Lee, S. H., Domin ´e, C. C. J., Park, Y., London, C., Choi, W., G¨ oring, N. A., and Lee, S. Position: Solve Layerwise Linear Models First to Understand Neural Dynamical Phenomena (Neural Collapse, Emergence, Lazy/Rich Regime, and Grokking). June 2025. Nenov, R., Haider, D., and Balazs, P. (Almost) Smooth Sail-ing: Towards Numerical Stability of Neural Networks Through Differentiable Regularization of the Condition Number. In 2nd Differentiable Almost Everything Work-shop at the 41st International Conference on Machine Learning , 2024. Neyshabur, B., Salakhutdinov, R. R., and Srebro, N. Path-SGD: Path-Normalized Optimization in Deep Neural Net-works. In Advances in Neural Information Processing Systems , volume 28. Curran Associates, Inc., 2015a. Neyshabur, B., Tomioka, R., and Srebro, N. Norm-based capacity control in neural networks. In Conference on learning theory , pp. 1376–1401. PMLR, 2015b. Neyshabur, B., Tomioka, R., Salakhutdinov, R., and Sre-bro, N. Data-Dependent Path Normalization in Neural Networks, 2016. eprint: 1511.06747. Neyshabur, B., Bhojanapalli, S., and Srebro, N. A PAC-Bayesian Approach to Spectrally-Normalized Margin Bounds for Neural Networks. In International Confer-ence on Learning Representations , 2018. Orabona, F. and Tommasi, T. Training Deep Networks with-out Learning Rates Through Coin Betting. In Advances in Neural Information Processing Systems , volume 30. Curran Associates, Inc., 2017. Pauli, P., Koch, A., Berberich, J., Kohler, P., and Allg ¨ower, F. Training robust neural networks using Lipschitz bounds. 
+
+IEEE Control Systems Letters , 6:121–126, 2021. Pub-lisher: IEEE. Raghunathan, A., Steinhardt, J., and Liang, P. Certified Defenses against Adversarial Examples. February 2018. Revay, M., Wang, R., and Manchester, I. R. Recurrent Equilibrium Networks: Flexible Dynamic Models With Guaranteed Stability and Robustness. IEEE Transac-tions on Automatic Control , 69(5):2855–2870, May 2024. ISSN 1558-2523. doi:10.1109/TAC.2023.3294101. Sbihi, M., Jan, S., and Couellan, N. MIQCQP reformu-lation of the ReLU neural networks Lipschitz constant estimation problem, February 2024. arXiv:2402.01199 [math]. Shang, W., Sohn, K., Almeida, D., and Lee, H. Under-standing and improving convolutional neural networks via concatenated rectified linear units. In international conference on machine learning , pp. 2217–2225. PMLR, 2016. Shi, Z., Wang, Y., Zhang, H., Kolter, J. Z., and Hsieh, C.-J. Efficiently computing local lipschitz constants of neural networks via bound propagation. Advances in Neural Information Processing Systems , 35:2350–2364, 2022. Shi, Z., Jin, Q., Kolter, Z., Jana, S., Hsieh, C.-J., and Zhang, H. Neural Network Verification with Branch-and-Bound for General Nonlinearities, February 2025. arXiv:2405.21063 [cs]. Singla, S., Singla, S., and Feizi, S. Improved deterministic l2 robustness on CIFAR-10 and CIFAR-100. In Interna-tional Conference on Learning Representations , 2022. Sitzmann, V., Martel, J., Bergman, A., Lindell, D., and Wet-zstein, G. Implicit Neural Representations with Periodic Activation Functions. In Advances in Neural Information Processing Systems , volume 33, pp. 7462–7473. Curran Associates, Inc., 2020. Szegedy, C., Zaremba, W., Sutskever, I., Bruna, J., Erhan, D., Goodfellow, I., and Fergus, R. Intriguing properties of neural networks, February 2014. arXiv:1312.6199 [cs]. Virmaux, A. and Scaman, K. Lipschitz Regularity of Deep Neural Networks: Analysis and Efficient Estimation. In Bengio, S., Wallach, H., Larochelle, H., Grauman, K., Cesa-Bianchi, N., and Garnett, R. (eds.), Advances in 
+
+10 Lipschitz verification of neural networks through training 
+
+Neural Information Processing Systems , volume 31. Cur-ran Associates, Inc., 2018. Wainwright, M. J. High-Dimensional Statistics: A Non-Asymptotic Viewpoint . Cambridge Series in Statisti-cal and Probabilistic Mathematics. Cambridge Univer-sity Press, Cambridge, 2019. ISBN 978-1-108-49802-9. doi:10.1017/9781108627771. Wang, R. and Manchester, I. Direct parameterization of lipschitz-bounded deep networks. In International Con-ference on Machine Learning , pp. 36093–36110. PMLR, 2023. Weng, L., Zhang, H., Chen, H., Song, Z., Hsieh, C.-J., Daniel, L., Boning, D., and Dhillon, I. Towards fast computation of certified robustness for relu networks. In International Conference on Machine Learning , pp. 5276–5285. PMLR, 2018. Wong, E. and Kolter, Z. Provable defenses against adversar-ial examples via the convex outer adversarial polytope. In 
+
+International conference on machine learning , pp. 5286– 5295. PMLR, 2018. Xu, Y. and Sivaranjani, S. Learning Dissipative Neural Dynamical Systems. IEEE Control Sys-tems Letters , 7:3531–3536, 2023. ISSN 2475-1456. doi:10.1109/LCSYS.2023.3337851. Xu, Y. and Sivaranjani, S. ECLipsE: Efficient Composi-tional Lipschitz Constant Estimation for Deep Neural Networks. In Globerson, A., Mackey, L., Belgrave, D., Fan, A., Paquet, U., Tomczak, J., and Zhang, C. (eds.), 
+
+Advances in Neural Information Processing Systems , vol-ume 37, pp. 10414–10441. Curran Associates, Inc., 2024. Xu, Y. and Sivaranjani, S. ECLipsE-Gen-Local: Efficient Compositional Local Lipschitz Estimates for Deep Neural Networks, October 2025. arXiv:2510.05261 [cs]. Yoshida, Y. and Miyato, T. Spectral Norm Regularization for Improving the Generalizability of Deep Learning, May 2017. arXiv:1705.10941 [stat]. Zhang, H., Weng, T.-W., Chen, P.-Y., Hsieh, C.-J., and Daniel, L. Efficient neural network robustness certifica-tion with general activation functions. Advances in neural information processing systems , 31, 2018. Zhang, H., Zhang, P., and Hsieh, C.-J. RecurJac: An Effi-cient Recursive Algorithm for Bounding Jacobian Matrix of Neural Networks and Its Applications. Proceedings of the AAAI Conference on Artificial Intelligence , 33(01): 5757–5764, July 2019. ISSN 2374-3468, 2159-5399. doi:10.1609/aaai.v33i01.33015757. 11 Lipschitz verification of neural networks through training 
+
+# Contents 
+
+1 Introduction 12 Preliminaries 33 Mitigating weaknesses of the trivial bound 3
+
+3.1 Dead neurons . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33.1.1 Polyactivations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33.2 Biases . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43.2.1 Rectangular sinusoidal layers . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43.3 Ill-conditioned weight matrices . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 53.3.1 Lipschitz penalty . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+
+4 Theoretical and practical lower bounds 6
+
+4.1 An empirical bound . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+
+5 Experimental results 6
+
+5.1 Iris dataset: upper and lower 2-norm Lipschitz bounds on a shallow network . . . . . . . . . . . . . . . . 75.2 MNIST dataset: Lipschitz bounds . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+
+6 Conclusion 8A Objections to the trivial bound considered 14 B Supplement to Section 3 15 C Supplement to Section 5 20 
+
+C.1 Iris: methodology . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 C.2 Iris: results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 C.3 MNIST: methodology . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 C.4 MNIST: results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 
+
+D Additional experiments on MNIST 24 
+
+D.1 Other (poly-)activations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24 D.2 Regularization in p = 1 and p = ∞ . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 D.3 Other penalties . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29 D.4 Comparison to a direct parameterization . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32 
+
+# List of Figures 
+
+5.1 MNIST experiment: normalized singular values of the weight matrices (with and without penalty). . . . . 712 Lipschitz verification of neural networks through training 
+
+C.1 Iris experiment: training curves for λ = 0 (left) and λ = 10 −2 (right). Shaded area indicates the gap between theoretical upper and lower bounds on the Lipschitz constant. . . . . . . . . . . . . . . . . . . . 20 C.2 Iris experiment: decision boundaries in 2D principal component planes for λ = 0 . (Training data) . . . . 21 C.3 Iris experiment: decision boundaries in 2D principal component planes for λ = 10 −2. (Training data) . . 22 C.4 MNIST experiment: PGD attack success rate (with and without penalty). . . . . . . . . . . . . . . . . . 23 C.5 MNIST experiment: training curves (with and without penalty). . . . . . . . . . . . . . . . . . . . . . . 24 D.1 MNIST experiment: normalized row norms of weight matrices for p = ∞ norm (with and without penalty). 27 D.2 MNIST experiment: normalized column norms of weight matrices for p = 1 norm (with and without penalty). 27 D.3 MNIST experiment: normalized singular values of the weight matrices for alternative regularization methods. 29 D.4 MNIST experiment: PGD attack error rates for alternative regularization methods. . . . . . . . . . . . . . 30 D.5 MNIST experiment: training curves for alternative regularization methods. . . . . . . . . . . . . . . . . . 31 D.6 MNIST experiment: PGD attack error rates for direct parameterization comparison. . . . . . . . . . . . . 32 D.7 MNIST experiment: training curves for direct parameterization comparison. . . . . . . . . . . . . . . . . 33 
+
+# List of Tables 
+
+5.1 Iris experiment: final predictive performance after 20,000 steps. . . . . . . . . . . . . . . . . . . . . . . 75.2 Iris experiment: 2-norm Lipschitz upper bound K versus lower bounds. Here K/ (√2κ(W )) is the guaranteed lower bound from Theorem 4.1, while bL is an empirical lower bound from local optimization of the Lipschitz ratio over input pairs. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 75.3 MNIST experiment: 2-norm Lipschitz upper bound K versus empirical lower bound bL. . . . . . . . . . . 8C.1 MNIST experiment: PGD attack error rates (%) at various perturbation radii ϵ. . . . . . . . . . . . . . . . 23 D.1 MNIST experiment: PGD attack error rates (%) for various activations with Lipschitz regularization (λ = 10 −2). emp = empirical, cert = certified. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 D.2 MNIST experiment: Lipschitz bounds and predictive performance for various activations with Lipschitz regularization ( λ = 10 −2). . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 D.3 MNIST experiment: Lipschitz bounds for p = ∞ norm with various activations. . . . . . . . . . . . . . . 26 D.4 MNIST experiment: Predictive performance for p = ∞ norm with various activations. . . . . . . . . . . 26 D.5 MNIST experiment: Lipschitz bounds for p = 1 norm with various activations. . . . . . . . . . . . . . . 26 D.6 MNIST experiment: Predictive performance for p = 1 norm with various activations. . . . . . . . . . . . 28 D.7 MNIST experiment: PGD attack error rates (%) for p = ∞ norm with various activations. emp = empirical, cert = certified. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28 D.8 MNIST experiment: PGD attack error rates (%) for p = 1 norm with various activations. emp = empirical, cert = certified. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28 D.9 MNIST experiment: PGD attack error rates (%) for alternative regularization methods. . . . . . . . . . . 30 D.10 MNIST experiment: Comparison of alternative regularization methods. . . . . . . . . . . . . . . . . . . 30 D.11 MNIST experiment: Predictive performance for direct parameterization comparison. . . . . . . . . . . . 33 D.12 MNIST experiment: PGD attack error rates (%) for direct parameterization comparison. . . . . . . . . . 33 13 Lipschitz verification of neural networks through training 
+
+# A. Objections to the trivial bound considered 
+
+Aiming at the broader objective of Lipschitz and robust training and verification, and having argued for the uncommon 5 path of least resistance—penalizing the product of induced matrix norms—over more sophisticated methods, we are therefore behooved to address its discontents in kind. 
+
+Trivial bound too loose Some argue that the trivial Lipschitz bound should not be penalized directly: because the trivial Lipschitz bound is known to be loose in deeper networks, penalizing it is an overly restrictive regularization. For this reason, it is better to enforce a semidefinite constraint (a tighter Lipschitz bound) on the matrix weights (Raghunathan et al., 2018; Wang & Manchester, 2023; Xu & Sivaranjani, 2023; Revay et al., 2024; Junnarkar et al., 2024). We reply that, as the example in §3.3 shows for the toy problem of learning a linear function, the looseness of the trivial Lipschitz bound can be optimized away. Our experiments support a similar claim for nonlinear networks, and Figure 5.1 shows that the same mechanism is at play. Qualitatively, the induced norm is a slacker penalty than Tikhonov regularization such as weight decay, which penalizes the Frobenius norm. For p = 2 , the induced norm penalty is only active on the largest singular value of each weight matrix and has a rank-1 gradient, while the Frobenius norm penalty is active on all singular values (leading to a full-rank gradient). Just like ∞-norm regularization tends to lead to anti-sparse vectors in convex problems, the spectral norm penalty leads to well-conditioned weight matrices because optimizing the lower singular spaces is “free.” 
+
+Lipschitz-constrained parameterization The trivial Lipschitz bound is less conservative when weight matrices are well-conditioned. Therefore, it is better to constrain the weight matrices to be well-conditioned and Lipschitz by parameterization, either by projected gradient descent onto layerwise Lipschitz balls (Gouk et al., 2021) or by direct parameterization of the Lipschitz cylinder (Cisse et al., 2017; Singla et al., 2022; Wang & Manchester, 2023; Lai et al., 2025; B´ ethune, 2024). We reply that parameterizations such as the exponential map onto the Stiefel manifold are computationally expensive and strongly curved, leading to challenges in training. This is a motivation for Wang & Manchester (2023), which uses a matrix factorization to parameterize weight matrices that satisfy a semidefinite constraint for the ReLU activation. However, the ReLU activation is intrinsically Lipschitz-inefficient (Section 3.1), and the technology of semidefinite programming is more complicated than multiplicative trivial bounds. Moreover, despite the connection via Lagrange multipliers, a Lipschitz constraint may prove more statistically fragile than Lipschitz regularization. This conjecture is supported by an analogy to the Lasso, which is more robust to its hyperparameter in penalty form than in its constrained or basis pursuit forms (Wainwright, 2019, Chapter 7). Alternatively, well-conditioned weight matrices may be achieved by penalizing the sum of the quantities 12 ∥W ∥22 − 12n ∥W ∥2
+
+> F
+
+for each weight matrix W (Nenov et al., 2024). We reply that well-conditioning is necessary but not sufficient for a tight trivial Lipschitz bound. The 12 ∥W ∥2 
+
+> F
+
+term in the ill-conditioning loss is strictly more complicated and not directly related to the ultimate goal of minimizing the Lipschitz constant. 
+
+Numerical considerations Some have reported that it is hard to train networks with a Lipschitz penalty, because “the product of norms can be very large” (Gouk et al., 2021). It is therefore better to penalize the average of the induced matrix norms, which is additionally convex (Yoshida & Miyato, 2017). We answer, first, that floating-point precision has more than enough headroom to handle the product of induced norms. Modern optimizers such as the “Ada-” family and Cocob (Orabona & Tommasi, 2017) with gradient-norm adaptation can handle the initially large gradient of the product of induced norms and its decay by several orders of magnitude over later optimization steps. We answer, second, that penalizing the average of induced norms is not directly related to the ultimate goal of minimizing the Lipschitz constant. Concavity is the point: to minimize a product of nonnegative numbers, one focuses on the smallest term. By the AM-GM inequality, the product of induced norms is a less onerous penalty than the sum of the induced norms. 
+
+Computational complexity Minimizing the product of induced matrix norms is computationally intractable in the case of 
+
+p = 2 , because the spectral norms and their gradients are expensive to compute, necessitating the use of e.g. power iteration 
+
+> 5The closest idea is Dubach et al. (2025), which penalizes the product of Frobenius norms.
+
+14 Lipschitz verification of neural networks through training 
+
+(Yoshida & Miyato, 2017; Miyato et al., 2018). We find that computing the eigenvector corresponding to the largest eigenvalue of W W ⊺ is fast enough to run inside a minibatch loop. If training time is a priority, we may instead target the Lipschitz constant in p = 1 or, as in Raghunathan et al. (2018), p = ∞, using a p-saturating polyactivation proposed in §3.1.1. This would sacrifice the bias-robust property of cos/sin activation (which saturate the 2-norm), but comes with the advantage that the p ∈ { 1, ∞} induced norms are fast to compute and differentiate. 
+
+# B. Supplement to Section 3 
+
+Proof of Theorem 3.3 (ASL). The Jacobian of the ASL unit x 7 → σ(W x + b) is 
+
+x 7 → diag  σ′(W x + b) W. 
+
+Suppose that σ achieves its steepest slope at z0. For generic W and b, there exists a preimage x0 such that W x 0 + b = z01.At x = x0, diag  σ′(W x + b) becomes the scalar matrix σ′(z0)I, and the Jacobian equals σ′(z0)W . The trivial Lipschitz bound is tight by the homogeneity of induced matrix norm. 
+
+Proof of Theorem 3.3 (SLA). The Jacobian of the SLA unit x 7 → W σ (x) + b is 
+
+x 7 → W diag( σ′(x)) ,
+
+which achieves the trivial Lipschitz bound in the p-norm at x = z01.
+
+Proof of Theorem 3.3 (LAS). The Jacobian of the LAS unit x 7 → W σ (x + b) is 
+
+x 7 → W diag  σ′(x + b) ,
+
+which achieves the trivial Lipschitz bound in the p-norm at x = z01 − b.
+
+Proof of Theorem 3.4 (ReLU). Consider the neural network R → R defined by 
+
+x 7 →
+
+> d
+
+X
+
+> i=1
+
+(−1) i ReLU( x + bi) = W 1 ReLU( W 0x + b)
+
+where 
+
+W 1 = ( −1, 1, −1, . . . )⊺
+
+W 0 = (1 , 1, 1, . . . )
+
+b = (1 , 2, 3, . . . )
+
+The true Lipschitz constant is 1, but the trivial 2-Lipschitz bound is 
+
+W 1
+
+> 2
+
+| {z }
+
+> =√d
+
+W 0
+
+> 2
+
+| {z }
+
+> =√d
+
+= d. 
+
+On the other hand, if the bias is changed to 
+
+b′ = (1 , −1, 1, −1, . . . ),
+
+then the true Lipschitz constant is Ω( d).
+
+Proof of Theorem 3.4 (tanh). The idea is to toggle between overlapping and non-overlapping regions of the hyperbolic tangent function. Consider the neural network R → R defined by 
+
+x 7 →
+
+> d
+
+X
+
+> i=1
+
+tanh( x + bi) = 1⊺ tanh( 1x + b).
+
+15 Lipschitz verification of neural networks through training 
+
+The trivial 2-Lipschitz bound is Ω( d) and is achieved by b = 0 . But if the biases are changed to 
+
+b′ = (1 , 2, 3, . . . ),
+
+then the true Lipschitz constant is 
+
+sup 
+
+> xd
+
+X
+
+> i=1
+
+sech 2(x + i) = O(1) .
+
+Proof of Theorem 3.5. Consider the LASL unit fb : R → R defined by 
+
+fb(x) = 1⊺ sin( 1x + b) = 
+
+> 2d
+
+X
+
+> i=1
+
+sin( x + bi),
+
+where 1 ∈ R2d is the vector of ones and b ∈ R2d is a bias vector. The trivial 2-Lipschitz bound equals 
+
+∥1⊺∥2 ∥1∥2 = ∥1∥22 = 2 d = Ω( d),
+
+since | sin ′(·)| ≤ 1.On one hand, if we take b = 0 , the true Lipschitz constant is 2d, and the trivial bound is tight. On the other hand, if we take bi = iπ for all i, then each sine term cancels out with its neighbor, resulting in a constant function with Lipschitz constant 0. 
+
+Proof of Theorem 3.8. 1 ⇐⇒ 2 follows from the fact that K = 1 is achievable, and K cannot be less than 1: 
+
+1 = ∥I∥ = ∥WLWL−1 · · · W1∥≤ ∥ WL∥ ∥ WL−1∥ · · · ∥ W1∥ = K. 
+
+2 =⇒ 3 by the calculation 
+
+1 = K ≥ ∥ WL∥ ∥ WL−1 · · · W1∥
+
+= ∥WL∥ W −1 
+
+> L
+
+= κ(WL)
+
+and induction on L.3 =⇒ 1 by the fact that each Wi, i ∈ { 1, . . . , L }, is a scalar multiple of an orthogonal matrix, and the product of orthogonal matrices is orthogonal. 
+
+Proof of Theorem 4.1. The Jacobian of f is 
+
+Df (x) =  −A B  Sin( W x )Cos( W x )
+
+
+
+W. 
+
+We use the probabilistic method to argue for the existence of an x⋆ ∈ Rr such that Df (x⋆) 2 is large. Assign a probability measure to X such that Y = W X has the uniform distribution on the torus [−π, π ]n. Define 
+
+Σ∗ = E Df (X)Df (X)⊺ =  −A B Q
+
+−A⊺
+
+B⊺
+
+
+
+,
+
+where 
+
+Q =
+
+ Sin( Y )W W ⊺ Sin( Y ) Sin( Y )W W ⊺ Cos( Y )Cos( Y )W W ⊺ Sin( Y ) Cos( Y )W W ⊺ Cos( Y )
+
+
+
+.
+
+16 Lipschitz verification of neural networks through training 
+
+Taking expectations, we get 
+
+E Q = 12
+
+Diag ( W W ⊺) 00 Diag ( W W ⊺)
+
+
+
+(6) which implies that 
+
+E Df (X)Df (X)⊺ ≥ 12
+
+ A Diag ( W W ⊺) A⊺ + B Diag ( W W ⊺) B⊺ .
+
+Because λmax is convex, 
+
+E λmax 
+
+ Df (X)Df (X)⊺ ≥ 12 λmax 
+
+ A Diag ( W W ⊺) A⊺ + B Diag ( W W ⊺) B⊺ .
+
+Therefore there exists an x⋆ such that 
+
+Df (x⋆) 22 ≥ 12 λmax 
+
+ A Diag ( W W ⊺) A⊺ + B Diag ( W W ⊺) B⊺ .
+
+To get a closed form, use the fact that 
+
+Diag ( W W ⊺) ≥ λmin (W W ⊺)I. 
+
+Theorem B.1 (Lower bound on absolute value networks) . Let f (x) be an LASL unit from Rn → Rn → Rm given by Equation (2) ,
+
+f (x) = A abs( W x ).
+
+Then, if W has full rank, the following Lipschitz lower bound holds: 
+
+∥f ∥2Lip ,2 ≥ 12 λmax 
+
+ A Diag ( W W ⊺) A⊺ ,
+
+and the trivial Lipschitz bound 
+
+K = ∥A∥2 ∥W ∥2
+
+is off by less than a factor of κ(W ):
+
+1
+
+κ(W ) K ≤ ∥ f ∥Lip ,2 ≤ K, 
+
+where κ(W ) = pλmax (W W ⊺)/λ min (W W ⊺) is the condition number. Proof of Theorem B.1. The Jacobian of f is 
+
+Df (x) = A diag  sgn( W x ) W, 
+
+where sgn is the sign function. We use the probabilistic method to argue for the existence of an x⋆ ∈ Rr such that 
+
+Df (x⋆) 2 is large. Assign a probability measure to X such that S = sgn( W X ) has the Rademacher distribution, i.e., each component is independently ±1 with equal probability. Define 
+
+Σ∗ = E Df (X)Df (X)⊺
+
+= A E  Diag( S)W W ⊺ Diag( S) A⊺.
+
+Taking expectations, we get 
+
+E  Diag( S)W W ⊺ Diag( S) = Diag ( W W ⊺) ,
+
+17 Lipschitz verification of neural networks through training 
+
+which implies that 
+
+E Df (X)Df (X)⊺ = A Diag ( W W ⊺) A⊺.
+
+Because λmax is convex, 
+
+E λmax 
+
+ Df (X)Df (X)⊺ ≥ λmax 
+
+ A Diag ( W W ⊺) A⊺ .
+
+Therefore there exists an x⋆ such that 
+
+Df (x⋆) 22 ≥ λmax 
+
+ A Diag ( W W ⊺) A⊺ .
+
+Theorem B.2. Let f : Rd0 → RdL be a depth-L network defined by 
+
+f (x) = zL,zℓ = Aℓ cos( zℓ−1) + Bℓ sin( zℓ−1), ℓ = 1 , . . . , L, z0 = x. 
+
+Fix a scale α > 0. Initialize each pair (Aℓ, B ℓ) from the random-phase initialization Equation (5) at scale α. Then for every x ∈ Rd0 ,
+
+E  Df (x)Df (x)⊺ = αLI. 
+
+Proof. By trigonometric identities, this network is equivalent to 
+
+f (x) = zL,zℓ = ¯Aℓ cos( zℓ−1 + θℓ) + ¯Bℓ sin( zℓ−1 + θℓ),z0 = x. 
+
+Taking derivatives with respect to x, we get 
+
+Dxf (x) = DxzL,Dxzℓ =
+
+
+
+− ¯Aℓ ¯Bℓ
+
+ Sin( zℓ−1 + θℓ)Cos( zℓ−1 + θℓ)
+
+!
+
+Dxzℓ−1,Dxz0 = I. 
+
+Write Qℓ = Dxzℓ  Dxzℓ⊺. Then we are interested in E QL, where 
+
+Qℓ =
+
+
+
+− ¯Aℓ ¯Bℓ
+
+ Sin( zℓ−1 + θℓ)Cos( zℓ−1 + θℓ)
+
+!
+
+Qℓ−1 Sin( zℓ−1 + θℓ)Cos( zℓ−1 + θℓ)
+
+!⊺ 
+
+− ¯Aℓ ¯Bℓ
+
+⊺
+
+and Q0 = I. Using the fact that zℓ−1 + θℓ is independent and uniformly distributed on the unit circle R/2πZ irrespective of the (unknown) distribution of zℓ−1, we take the expectation of the inner three matrices to get 
+
+E
+
+
+
+Qℓ | Aℓ, B ℓ
+
+= 12
+
+
+
+− ¯Aℓ ¯Bℓ
+
+
+
+E Qℓ−1 −( ¯Aℓ)⊺
+
+( ¯Bℓ)⊺
+
+!
+
+.
+
+Now we will prove by induction on ℓ that E Qℓ = αℓI. The case ℓ = 0 is clear. Assume the claim holds for ℓ − 1. We know 
+
+a fortiori that E Qℓ−1 is a scalar matrix and commutes with matrix multiplication, leading to 
+
+E
+
+
+
+Qℓ | Aℓ, B ℓ
+
+= αℓ−1 12
+
+
+
+− ¯Aℓ ¯Bℓ
+
+ −( ¯Aℓ)⊺
+
+( ¯Bℓ)⊺
+
+!
+
+= αℓ−1 12
+
+ ¯Aℓ( ¯Aℓ)⊺ + ¯Bℓ( ¯Bℓ)⊺
+
+18 Lipschitz verification of neural networks through training 
+
+Using the Law of Total Expectation and the fact that 
+
+E ¯Aℓ( ¯Aℓ)⊺ = E ¯Bℓ( ¯Bℓ)⊺ = αI, 
+
+we get 
+
+E Qℓ = αℓI. 
+
+19 Lipschitz verification of neural networks through training 
+
+# C. Supplement to Section 5 
+
+We implement neural networks using Equinox and train them using the Cocob optimizer, provided in Optax. The datasets are Iris, provided by SciKit-learn, and MNIST, provided by HuggingFace datasets. 
+
+C.1. Iris: methodology 
+
+We train a small classifier on the Iris dataset (4 features, 3 classes) with standardized inputs and a stratified 80/20 train/test split (120/30). The model is a 2-layer MLP with one hidden layer of width 4 and the (cos , sin) polyactivation (implemented as SinCosTwo ). Up to an additive bias (which does not affect Lipschitz constants), the network can be written in the LASL form of Equation (2), f (x) = A cos( W x ) + B sin( W x ), so that the standard product-of-layer 2-norm bound equals the trivial LASL bound in Theorem 4.1, 
+
+K =  A B
+
+> 2
+
+∥W ∥2 .
+
+Optimization consisted of full-batch Cocob for 20,000 steps. 
+
+C.2. Iris: results 10 4   
+
+> 10 3
+> 10 2
+> 10 1
+> 10 0
+> NLL
+
+= 0 
+
+> test loss
+> train loss
+
+= 0.01                 
+
+> test loss
+> train loss
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Accuracy
+> test accuracy
+> train accuracy
+> test accuracy
+> train accuracy
+> 02500 5000 7500 10000 12500 15000 17500 20000
+> Epoch
+> 10 0
+> 10 1
+> 10 2
+> Lipschitz
+> Lipschitz bound
+> 02500 5000 7500 10000 12500 15000 17500 20000
+> Epoch
+> Lipschitz bound
+
+Figure C.1. Iris experiment: training curves for λ = 0 (left) and λ = 10 −2 (right). Shaded area indicates the gap between theoretical upper and lower bounds on the Lipschitz constant. 
+
+20 Lipschitz verification of neural networks through training 0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+> PC1 (72.0%)
+
+4
+
+2
+
+0
+
+2
+
+4
+
+> PC2 (23.8%)
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+> PC3 (3.8%)
+
+4 2 0 2 4
+
+> PC1 (72.0%)
+
+2
+
+1
+
+0
+
+1
+
+2
+
+> PC4 (0.5%)
+
+4 2 0 2 4
+
+> PC2 (23.8%)
+
+2 0 2
+
+> PC3 (3.8%)
+
+2 1 0 1 2
+
+> PC4 (0.5%)
+
+Decision Boundaries ( =0) setosa 
+
+> versicolor
+> virginica
+
+Figure C.2. Iris experiment: decision boundaries in 2D principal component planes for λ = 0 . (Training data) 
+
+21 Lipschitz verification of neural networks through training 0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+> PC1 (72.0%)
+
+4
+
+2
+
+0
+
+2
+
+4
+
+> PC2 (23.8%)
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+> PC3 (3.8%)
+
+4 2 0 2 4
+
+> PC1 (72.0%)
+
+2
+
+1
+
+0
+
+1
+
+2
+
+> PC4 (0.5%)
+
+4 2 0 2 4
+
+> PC2 (23.8%)
+
+2 0 2
+
+> PC3 (3.8%)
+
+2 1 0 1 2
+
+> PC4 (0.5%)
+
+Decision Boundaries ( =0.01) setosa 
+
+> versicolor
+> virginica
+
+Figure C.3. Iris experiment: decision boundaries in 2D principal component planes for λ = 10 −2. (Training data) 
+
+22 Lipschitz verification of neural networks through training 
+
+C.3. MNIST: methodology 
+
+We train a classifier on MNIST to assess our 2-norm Lipschitz training proposal on a larger model. The network takes normalized 28 × 28 images flattened into R784 and uses two hidden layers of width 128 with the 2-norm saturated polyactivation (cos , sin) . For each choice of regularization weight λ ∈ { 0, 10 −2}, we minimize the cross-entropy loss augmented with a penalty on the global 2-norm Lipschitz upper bound K, computed as the product of per-layer spectral-norm bounds. We use a uniform-phase stable initialization (Thm. B.2, α = 2 −1/2) for the weights and train for 80 epochs with batch size 60 using the parameter-free Cocob optimizer. We report standard deviation over the ensemble of random initializations. 
+
+C.4. MNIST: results 12345 
+
+> log 2( )
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> Error (%)
+> PGD Attack Error vs Perturbation Budget
+> = 0
+> = 0.01
+
+Figure C.4. MNIST experiment: PGD attack success rate (with and without penalty). 
+
+Table C.1. MNIST experiment: PGD attack error rates (%) at various perturbation radii ϵ.
+
+λ Clean ϵ = 2 −1 ϵ = 2 −2 ϵ = 2 −3 ϵ = 2 −4 ϵ = 2 −5
+
+0 empirical 1.70 ± 0.10 13 .04 ± 0.65 4.75 ± 0.26 2.83 ± 0.12 2.19 ± 0.09 1.94 ± 0.10 
+
+certified 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 89 .99 ± 9.61 14 .47 ± 4.01 10 −2 empirical 1.41 ± 0.02 4.90 ± 0.14 2.64 ± 0.11 1.93 ± 0.07 1.66 ± 0.05 1.52 ± 0.03 
+
+certified 31 .60 ± 0.66 7.66 ± 0.23 3.34 ± 0.12 2.15 ± 0.09 1.76 ± 0.06 
+
+23 Lipschitz verification of neural networks through training 10 4   
+
+> 10 3
+> 10 2
+> 10 1
+> NLL
+
+= 0 
+
+> train NLL
+> test NLL
+
+= 0.01         
+
+> train NLL
+> test NLL
+> 0.96
+> 0.97
+> 0.98
+> 0.99
+> 1.00
+> Accuracy
+> test accuracy
+> train accuracy
+> test accuracy
+> train accuracy
+> 020 40 60 80
+> epoch
+> 10 1
+> 10 2
+> Lipschitz
+> upper bound
+> 020 40 60 80
+> epoch
+> upper bound
+
+Figure C.5. MNIST experiment: training curves (with and without penalty). 
+
+# D. Additional experiments on MNIST 
+
+D.1. Other (poly-)activations 
+
+Is a tightly trained Lipschitz constant compelling enough to displace popular activations such as ReLU and tanh? The advantages of (cos, sin) polyactivation are: • It is closed under input translations, so each hidden layer is a universal approximant. • It doubles the number of parameters per layer, allowing more degrees of freedom to economize the trivial Lipschitz bound without impacting performance. • It saturates the 2-norm, maximally utilizing “Lipschitz capacity” (Anil et al., 2019). What does Lipschitz regularization have to offer when these properties are relaxed? 
+
+Methodology We repeat the MNIST experiment Section 5.2 with a third order tanh polyactivation (Example 3), CReLU, abs, and ReLU (which is not saturated) to illustrate the relative effect of each property. 
+
+Results From the PGD success rates (Table D.1) and the Lipschitz bounds and predictive performance (Table D.2), we find that ReLU has the highest Lipschitz upper and lower bounds, which correlates with the highest PGD success rates. This supports our claim that ReLU is not suited for the trivial Lipschitz bound. 24 Lipschitz verification of neural networks through training   
+
+> Table D.1. MNIST experiment: PGD attack error rates (%) for various activations with Lipschitz regularization ( λ= 10 −2). emp = empirical, cert = certified.
+
+Polyactivation ϵ = 2 −1 ϵ = 2 −2 ϵ = 2 −3 ϵ = 2 −4 ϵ = 2 −5
+
+(cos , sin) emp 4.90 ± 0.18 2.54 ± 0.09 1.91 ± 0.04 1.64 ± 0.05 1.50 ± 0.05 
+
+cert 31 .31 ± 0.59 7.58 ± 0.31 3.22 ± 0.09 2.14 ± 0.06 1.73 ± 0.05 (tanh , sech , log cosh) emp 4.44 ± 0.12 2.38 ± 0.02 1.73 ± 0.11 1.49 ± 0.08 1.37 ± 0.07 
+
+cert 22 .98 ± 0.32 6.15 ± 0.15 2.88 ± 0.03 1.91 ± 0.11 1.55 ± 0.07 
+
+CReLU emp 5.44 ± 0.06 2.79 ± 0.07 2.07 ± 0.08 1.79 ± 0.04 1.64 ± 0.04 
+
+cert 28 .18 ± 0.40 7.37 ± 0.06 3.28 ± 0.12 2.24 ± 0.08 1.86 ± 0.04 
+
+absolute value emp 7.15 ± 0.14 3.39 ± 0.11 2.37 ± 0.04 2.00 ± 0.04 1.83 ± 0.05 
+
+cert 21 .81 ± 0.32 6.60 ± 0.15 3.26 ± 0.15 2.32 ± 0.05 1.98 ± 0.04 
+
+ReLU emp 7.96 ± 0.09 3.82 ± 0.07 2.53 ± 0.06 2.12 ± 0.09 1.93 ± 0.06 
+
+cert 46 .05 ± 0.56 11 .21 ± 0.11 4.63 ± 0.09 2.86 ± 0.10 2.21 ± 0.06   
+
+> Table D.2. MNIST experiment: Lipschitz bounds and predictive performance for various activations with Lipschitz regularization (λ= 10 −2).
+
+Polyactivation K (upper) bL (lower) K/ bL Train NLL Test NLL Test Acc. 
+
+(cos , sin) 5.66 ± 0.03 5.15 ± 0.05 1.10 0.0208 ± 0.0003 0.0489 ± 0.0008 98 .60 ± 0.04% (tanh , sech , log cosh) 5.24 ± 0.01 4.78 ± 0.04 1.10 0.0180 ± 0.0002 0.0443 ± 0.0006 98 .73 ± 0.05% 
+
+CReLU 5.49 ± 0.02 4.60 ± 0.06 1.19 0.0203 ± 0.0001 0.0501 ± 0.0004 98 .51 ± 0.04% 
+
+absolute value 5.00 ± 0.03 4.91 ± 0.02 1.02 0.0173 ± 0.0003 0.0546 ± 0.0018 98 .34 ± 0.08% 
+
+ReLU 6.37 ± 0.02 5.88 ± 0.02 1.08 0.0284 ± 0.0002 0.0625 ± 0.0006 98 .25 ± 0.07% 
+
+D.2. Regularization in p = 1 and p = ∞
+
+While greater attention has been paid to the operator 2-norm, the basic idea of this paper—directly penalizing the product of induced norms, with a p-saturating polyactivation function—is immediately applicable to the induced 1-norm (maximum absolute column sum) and p = ∞ (maximum absolute row sum). Moreover, these induced norms are appealing by virtue of the fact that they scale linearly with the number of parameters. For an m × n matrix, computing the induced 1-norm or 
+
+∞-norm requires O(mn ) operations, whereas computing the induced 2-norm requires O(min( m, n ) · mn ) operations via SVD. In our experiments the 1- and ∞-norm Lipschitz-penalized loss gradients are 4-5x faster to compute than the 2-norm Lipschitz-penalized loss gradient. 
+
+Methodology We repeat Section 5.2 using the cross-entropy loss with various 1- and ∞-norm saturated polyactivations, while penalizing the scaled trivial bounds 
+
+λ
+
+√num outputs 
+
+> L
+
+Y
+
+> ℓ=1
+
+∥Wℓ∥1
+
+and 
+
+λ
+
+√num inputs 
+
+> L
+
+Y
+
+> ℓ=1
+
+∥Wℓ∥∞
+
+respectively. 
+
+Results We observe that by the end of training, ∞-norm (Table D.3) and 1-norm (Table D.5) Lipschitz regularization reduce the trivial bound by about two orders of magnitude, and improve generalization performance (Table D.4, Table D.6). Analogously to Figure 5.1, under ∞-norm regularization, 1-norms of rows are compressed towards the maximum within the same weight matrix (Figure D.1), and under 1-norm regularization, 1-norms of columns are compressed towards the 25 Lipschitz verification of neural networks through training 
+
+maximum within the same weight matrix (Figure D.2). This is another illustration of how slackness is optimized away as weight matrices gravitate towards the corners of induced norm balls.      
+
+> Table D.3. MNIST experiment: Lipschitz bounds for p=∞norm with various activations.
+
+λ Polyactivation K (upper) bL (lower) K/ bL
+
+0 (x, |x|) 35987 .51 ± 5478 .94 300 .86 ± 41 .59 119 .62 10 −2 (x, |x|) 150 .44 ± 1.38 45 .61 ± 2.74 3.30 0 |x| 20648 .94 ± 2064 .01 248 .33 ± 27 .08 83 .15 10 −2 |x| 152 .42 ± 0.24 44 .97 ± 3.95 3.39      
+
+> Table D.4. MNIST experiment: Predictive performance for p=∞norm with various activations.
+
+λ Polyactivation Train NLL Test NLL Train Acc. Test Acc. 
+
+0 (x, |x|) 0.0001 ± 0.0000 0.0875 ± 0.0028 100 .00 ± 0.00% 98 .26 ± 0.08% 10 −2 (x, |x|) 0.0298 ± 0.0010 0.0627 ± 0.0013 99 .59 ± 0.05% 98 .11 ± 0.08% 0 |x| 0.0001 ± 0.0000 0.0914 ± 0.0057 100 .00 ± 0.00% 98 .29 ± 0.05% 10 −2 |x| 0.0314 ± 0.0006 0.0608 ± 0.0019 99 .50 ± 0.04% 98 .22 ± 0.09%     
+
+> Table D.5. MNIST experiment: Lipschitz bounds for p= 1 norm with various activations.
+
+λ Activation K (upper) bL (lower) K/ bL
+
+0 |x| 1405 .08 ± 157 .65 21 .50 ± 4.50 65 .36 10 −2 |x| 8.35 ± 0.05 3.76 ± 0.31 2.22 0 (tanh , x − tanh) 3809 .90 ± 1011 .06 25 .30 ± 1.66 150 .61 10 −2 (tanh , x − tanh) 8.02 ± 0.07 3.67 ± 0.30 2.18 
+
+26 Lipschitz verification of neural networks through training 0.5 0.6 0.7 0.8 0.9 1.0 
+
+row 1-norms (normalized to max) 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+50 
+
+60 
+
+70 
+
+> density
+
+p= (Id, Abs), =0 
+
+p= (Id, Abs), =0.01 
+
+p= (Abs), =0 
+
+p= (Abs), =0.01 
+
+Figure D.1. MNIST experiment: normalized row norms of weight matrices for p = ∞ norm (with and without penalty). 0.0 0.2 0.4 0.6 0.8 1.0 
+
+column 1-norms (normalized to max) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+> density
+
+p=1 (Abs), =0 
+
+p=1 (Abs), =0.01 
+
+p=1 (Tanh, Id-Tanh), =0 
+
+p=1 (Tanh, Id-Tanh), =0.01 
+
+Figure D.2. MNIST experiment: normalized column norms of weight matrices for p = 1 norm (with and without penalty). 
+
+27 Lipschitz verification of neural networks through training     
+
+> Table D.6. MNIST experiment: Predictive performance for p= 1 norm with various activations.
+
+λ Activation Train NLL Test NLL Train Acc. Test Acc. 
+
+0 |x| 0.0001 ± 0.0000 0.0943 ± 0.0060 100 .00 ± 0.00% 98 .25 ± 0.10% 10 −2 |x| 0.0088 ± 0.0003 0.0532 ± 0.0011 99 .98 ± 0.01% 98 .26 ± 0.08% 0 (tanh , x − tanh) 0.0000 ± 0.0000 0.0876 ± 0.0023 100 .00 ± 0.00% 98 .30 ± 0.05% 10 −2 (tanh , x − tanh) 0.0093 ± 0.0000 0.0524 ± 0.0023 99 .97 ± 0.00% 98 .27 ± 0.07%      
+
+> Table D.7. MNIST experiment: PGD attack error rates (%) for p=∞norm with various activations. emp = empirical, cert = certified.
+
+λ Polyactivation ϵ = 2 −1 ϵ = 2 −2 ϵ = 2 −3 ϵ = 2 −4 ϵ = 2 −5
+
+0 (x, |x|) emp 99 .32 ± 0.26 78 .35 ± 1.14 26 .26 ± 0.78 7.32 ± 0.19 3.57 ± 0.13 
+
+cert 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 10 −2 emp 95 .31 ± 0.67 43 .38 ± 1.68 10 .60 ± 0.33 4.63 ± 0.23 2.96 ± 0.13 
+
+cert 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 99 .97 ± 0.01 80 .88 ± 1.10 0 |x| emp 98 .88 ± 0.35 73 .12 ± 2.18 22 .61 ± 1.35 6.61 ± 0.25 3.43 ± 0.13 
+
+cert 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 10 −2 emp 93 .60 ± 0.98 39 .00 ± 0.45 9.65 ± 0.28 4.45 ± 0.21 2.82 ± 0.11 
+
+cert 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 99 .98 ± 0.01 83 .14 ± 1.09     
+
+> Table D.8. MNIST experiment: PGD attack error rates (%) for p= 1 norm with various activations. emp = empirical, cert = certified.
+
+λ Activation ϵ = 2 −1 ϵ = 2 −2 ϵ = 2 −3 ϵ = 2 −4 ϵ = 2 −5
+
+0 |x| emp 2.03 ± 0.07 1.88 ± 0.12 1.81 ± 0.11 1.79 ± 0.12 1.77 ± 0.11 
+
+cert 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 10 −2 emp 2.00 ± 0.13 1.88 ± 0.10 1.81 ± 0.08 1.78 ± 0.08 1.77 ± 0.08 
+
+cert 42 .91 ± 0.96 10 .02 ± 0.18 4.31 ± 0.06 2.78 ± 0.05 2.20 ± 0.09 0 x, x − tanh x emp 2.02 ± 0.06 1.85 ± 0.06 1.77 ± 0.06 1.74 ± 0.05 1.72 ± 0.05 
+
+cert 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 100 .00 ± 0.00 10 −2 emp 1.95 ± 0.06 1.83 ± 0.07 1.79 ± 0.08 1.76 ± 0.08 1.75 ± 0.07 
+
+cert 37 .83 ± 1.20 9.03 ± 0.30 4.04 ± 0.20 2.65 ± 0.08 2.12 ± 0.06 
+
+28 Lipschitz verification of neural networks through training 
+
+D.3. Other penalties Methodology We reproduce the experiment of §5.2 using Frobenius norm regularization, a conditioning-promoting modification to the the Frobenius norm ( N24 , Nenov et al. 2024), and an additive (rather than multiplicative) 2-norm regularization ( Y17 , Yoshida & Miyato 2017). Both Frobenius and N24 were tuned to assign a weight of 10 −4 to the Frobenius term. Y17 was tuned with a weight of 10 −2.
+
+Results Y17’s adversarial robustness and Lipschitz tightness are within a factor of two of our method, a difference that is within hyperparameter variation (Table D.9, Table D.10). This comparison can be explained by the observation that at the optimum, Y17’s additive penalty and our multiplicative penalty have similar gradients. Our relative contribution is that a multiplicative penalty has a Lipschitz bound interpretation, and we have argued it points toward the most pragmatic way to train Lipschitz neural networks. Frobenius and N24 boast a trivial bound of 30–40 and a tightness of roughly 2 (Table D.10). Compared to the unregularized network, they yield a smaller and tighter trivial bound, roughly half the PGD failure rate at ϵ = 2 −1 (Table C.1), and an empirical Lipschitz lower bound that is about one-fourth as large (Table 5.3). However, their Lipschitz upper bound remains substantially looser than Y17 and our method, and this poor tightness is reflected in over-conservative PGD certificates (Table D.9). This shows that while Frobenius-type regularization has the effect of regularizing the network and may reduce the network’s true Lipschitz constant, this improvement is not conveyed in the trivial Lipschitz upper bound. Moreover, N24 does not deliver on its promise of regularizing the singular value spectrum of the network’s weight matrices, inducing only a modest rightward shift of the normalized singular value distribution (Figure D.3). 0.2 0.4 0.6 0.8 1.0  
+
+> singular values (normalized to max)
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> density
+> Frobenius
+> N24
+> Y17
+> Figure D.3. MNIST experiment: normalized singular values of the weight matrices for alternative regularization methods.
+
+29 Lipschitz verification of neural networks through training 12345 
+
+> log 2( )
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> Error (%)
+> PGD Attack Error vs Perturbation Budget (by Penalty Type)
+> Frobenius
+> N24
+> Y17
+
+Figure D.4. MNIST experiment: PGD attack error rates for alternative regularization methods. 
+
+Table D.9. MNIST experiment: PGD attack error rates (%) for alternative regularization methods. 
+
+Penalty ϵ = 2 −1 ϵ = 2 −2 ϵ = 2 −3 ϵ = 2 −4 ϵ = 2 −5
+
+Frobenius emp 7.49 ± 0.19 3.44 ± 0.09 2.35 ± 0.04 1.91 ± 0.05 1.75 ± 0.04 
+
+cert 100 .00 ± 0.00 99 .47 ± 0.23 30 .95 ± 1.96 7.32 ± 0.26 3.42 ± 0.12 
+
+N24 emp 7.52 ± 0.32 3.41 ± 0.14 2.30 ± 0.05 1.92 ± 0.05 1.75 ± 0.05 
+
+cert 100 .00 ± 0.00 99 .22 ± 0.52 30 .43 ± 2.89 7.27 ± 0.48 3.38 ± 0.15 
+
+Y17 emp 6.63 ± 0.22 3.15 ± 0.13 2.13 ± 0.09 1.78 ± 0.09 1.64 ± 0.09 
+
+cert 86 .91 ± 1.62 17 .23 ± 0.56 5.43 ± 0.17 2.81 ± 0.11 2.02 ± 0.10 
+
+Table D.10. MNIST experiment: Comparison of alternative regularization methods. 
+
+Method K (upper) bL (lower) K/ bL Train NLL Test NLL Test Acc. Frobenius 35 .97 ± 0.88 18 .10 ± 1.15 1.99 0.0039 ± 0.0002 0.0495 ± 0.0021 98 .42 ± 0.06% 
+
+N24 35 .53 ± 1.15 18 .19 ± 0.92 1.95 0.0042 ± 0.0003 0.0496 ± 0.0012 98 .41 ± 0.05% 
+
+Y17 11 .19 ± 0.15 9.21 ± 0.18 1.22 0.0085 ± 0.0002 0.0451 ± 0.0020 98 .51 ± 0.07% 
+
+30 Lipschitz verification of neural networks through training 10 2
+
+10 1
+
+> NLL
+
+Frobenius 
+
+> train NLL
+> test NLL
+
+N24 
+
+> train NLL
+> test NLL
+
+Y17 
+
+> train NLL
+> test NLL
+
+0.96 
+
+0.98 
+
+1.00 
+
+> Accuracy
+> test accuracy
+> train accuracy
+> test accuracy
+> train accuracy
+> test accuracy
+> train accuracy
+
+0 5 10 15 
+
+epoch 
+
+2 × 10 1
+
+3 × 10 1
+
+4 × 10 1
+
+> Lipschitz
+> upper bound
+
+0 5 10 15 
+
+epoch 
+
+> upper bound
+
+0 5 10 15 
+
+epoch 
+
+> upper bound
+
+Figure D.5. MNIST experiment: training curves for alternative regularization methods. 
+
+31 Lipschitz verification of neural networks through training 
+
+D.4. Comparison to a direct parameterization Methodology Some works maintain a a priori Lipschitz constraint while training the network. Granted this objective, is it better to parameterize the Lipschitz cylinder by satisfying a semidefinite program that certifies a ReLU network, by satisfying a trivial bound on a norm-saturating (we choose absolute value as a comparison to ReLU) network? In order to make a fair comparison, we fix a Lipschitz bound of 0.1 ahead of time and compare the inference performance of W23 , which takes the SDP route (Wang & Manchester, 2023), with Our parameterization of absolute value networks under the trivial bound, which can be seen as a layer-by-layer decoupling of the SDP constraint. We achieve the same Lipschitz upper bound through a rational parameterization of the induced 2-norm ball of radius 1 (Wang & Manchester, 2023, Proposition 3.3). The set of matrices W satisfying 
+
+∥W ∥2 ≤ 1
+
+is parameterized using matrices X, Y by 
+
+W = 4 ( I + Z)−1 (I − Z) ( I + Z)−⊤ Y ⊤,Z = X − X⊤ + Y ⊤Y. 
+
+Results Our parameterization achieves better predictive performance than the SDP-based approach, boasting lower training (0.03 vs. 0.12) and test (0.06 vs. 0.13) loss, and higher training (99.64% vs. 98.38%) and test (98.46% vs. 97.78%) accuracy (Table D.11, visualized in Figure D.7). Our parameterization matches W23’s PGD error rate at the highest radius ϵ = 2 −1 and beats it at lower radii (Table D.12, Figure D.6). We attribute this contrast not to a meaningful difference in robustness, but to the fact that ϵ ↓ 0 reflects a better fit. This example shows, all else being equal, that the semidefinite constraint is more restrictive than the trivial constraint. 12345  
+
+> log 2( )
+> 2
+> 3
+> 4
+> 5
+> Error (%)
+> PGD Attack Error vs Perturbation Budget (20 repetitions)
+> W23
+> Ours
+> Figure D.6. MNIST experiment: PGD attack error rates for direct parameterization comparison.
+
+32 Lipschitz verification of neural networks through training 10 1
+
+> NLL
+> W23
+> Ours
+
+## 0 10 20 30 40 50 60 70 80 
+
+## 0.94 
+
+## 0.96 
+
+## 0.98 
+
+## 1.00 
+
+> Accuracy
+> W23 test
+> W23 train
+> Ours test
+> Ours train
+
+Figure D.7. MNIST experiment: training curves for direct parameterization comparison. 
+
+Table D.11. MNIST experiment: Predictive performance for direct parameterization comparison. 
+
+Model Train NLL Test NLL Train Acc. Test Acc. W23 0.1210 ± 0.0011 0.1320 ± 0.0014 98 .38 ± 0.05% 97 .78 ± 0.07% 
+
+Ours 0.0326 ± 0.0013 0.0581 ± 0.0015 99 .64 ± 0.03% 98 .46 ± 0.05% 
+
+Table D.12. MNIST experiment: PGD attack error rates (%) for direct parameterization comparison. 
+
+Model ϵ = 2 −1 ϵ = 2 −2 ϵ = 2 −3 ϵ = 2 −4 ϵ = 2 −5
+
+W23 5.57 ± 0.13 3.57 ± 0.09 2.80 ± 0.08 2.48 ± 0.07 2.35 ± 0.07 
+
+Ours 5.48 ± 0.18 2.97 ± 0.15 2.13 ± 0.08 1.81 ± 0.07 1.67 ± 0.05 
+
+33
