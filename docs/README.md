@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-04-05
-- 运行时间：2026-04-05 19:40:31 UTC
+- 最新运行日期：2026-04-06
+- 运行时间：2026-04-06 20:03:46 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读7篇AI安全前沿论文，速读12篇聚焦模型攻击与防御技术  
-2) 高分论文揭示AI生成图像检测新方法及政府AI聊天机器人深度防御框架，速读内容则关注视觉-语言模型的注意力诱导攻击技术  
-3) 建议关注AI内容真实性验证与多模态模型安全漏洞防护的实际应用案例
-- 详情：[/202604/05/README](/202604/05/README)
+1) 精读7篇、速读12篇：聚焦视觉-语言模型与多模态生成技术突破  
+2) 高分论文集中于领域不变提示学习与多模态代理图像生成能力，数学生成相关研究亦引发关注  
+3) 建议优先阅读《Domain-Invariant Prompt Learning》与《Unify-Agent》精读论文，若对数学生成感兴趣可探索《MathGen》速读内容
+- 详情：[/202604/06/README](/202604/06/README)
 
 ### 精读区论文标签
-1. [Generalizable Detection of AI Generated Images with Large Models and Fuzzy Decision Tree](/202604/05/2603.28508v1-generalizable-detection-of-ai-generated-images-with-large-models-and-fuzzy-decision-tree)  
+1. [Domain-Invariant Prompt Learning for Vision-Language Models](/202604/06/2603.28555v1-domain-invariant-prompt-learning-for-vision-language-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：AI生成图像检测方法
-2. [CivicShield: A Cross-Domain Defense-in-Depth Framework for Securing Government-Facing AI Chatbots Against Multi-Turn Adversarial Attacks](/202604/05/2603.29062v1-civicshield-a-cross-domain-defense-in-depth-framework-for-securing-government-facing-ai-chatbots-against-multi-turn-adversarial-attacks)  
+   evidence：基于对抗扰动的生成式图像保护
+2. [Unify-Agent: A Unified Multimodal Agent for World-Grounded Image Synthesis](/202604/06/2603.29620v2-unify-agent-a-unified-multimodal-agent-for-world-grounded-image-synthesis)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：多模态图像合成框架
+3. [Multi-Feature Fusion Approach for Generative AI Images Detection](/202604/06/2603.29788v1-multi-feature-fusion-approach-for-generative-ai-images-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的深度防御框架
-3. [AGFT: Alignment-Guided Fine-Tuning for Zero-Shot Adversarial Robustness of Vision-Language Models](/202604/05/2603.29410v1-agft-alignment-guided-fine-tuning-for-zero-shot-adversarial-robustness-of-vision-language-models)  
+   evidence：多特征融合检测生成式图像对抗扰动
+4. [Fluently Lying: Adversarial Robustness Can Be Substrate-Dependent](/202604/06/2604.00605v1-fluently-lying-adversarial-robustness-can-be-substrate-dependent)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-4. [MacTok: Robust Continuous Tokenization for Image Generation](/202604/05/2603.29634v1-mactok-robust-continuous-tokenization-for-image-generation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像生成保护
-5. [Diffusion-Based Feature Denoising with NNMF for Robust handwritten digit multi-class classification](/202604/05/2603.29917v1-diffusion-based-feature-denoising-with-nnmf-for-robust-handwritten-digit-multi-class-classification)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的特征去噪
-6. [Unsafe by Reciprocity: How Generation-Understanding Coupling Undermines Safety in Unified Multimodal Models](/202604/05/2603.27332v1-unsafe-by-reciprocity-how-generation-understanding-coupling-undermines-safety-in-unified-multimodal-models)  
+   evidence：研究对抗攻击对图像生成模型的影响
+5. [Diff-VS: Efficient Audio-Aware Diffusion U-Net for Vocals Separation](/202604/06/2604.01120v1-diff-vs-efficient-audio-aware-diffusion-u-net-for-vocals-separation)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：扩散模型用于图像生成任务
+6. [IGLOSS: Image Generation for Lidar Open-vocabulary Semantic Segmentation](/202604/06/2604.01361v1-igloss-image-generation-for-lidar-open-vocabulary-semantic-segmentation)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：图像生成用于激光雷达语义分割
+7. [Sci-Mind: Cognitively-Inspired Adversarial Debate for Autonomous Mathematical Modeling](/202604/06/2603.27584v2-sci-mind-cognitively-inspired-adversarial-debate-for-autonomous-mathematical-modeling)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：生成模型与对抗攻击相关
-7. [CLPIPS: A Personalized Metric for AI-Generated Image Similarity](/202604/05/2604.01234v1-clpips-a-personalized-metric-for-ai-generated-image-similarity)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：图像相似性评估方法
+   evidence：对抗攻击与防御方法
 
 ### 速读区论文标签
-1. [Let Triggers Control: Frequency-Aware Dropout for Effective Token Control](/202604/05/2603.27199v1-let-triggers-control-frequency-aware-dropout-for-effective-token-control)  
+1. [A Robust Low-Rank Prior Model for Structured Cartoon-Texture Image Decomposition with Heavy-Tailed Noise](/202604/06/2603.27579v1-a-robust-low-rank-prior-model-for-structured-cartoon-texture-image-decomposition-with-heavy-tailed-noise)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：提出鲁棒低秩先验模型处理对抗噪声
+2. [OPRO: Orthogonal Panel-Relative Operators for Panel-Aware In-Context Image Generation](/202604/06/2603.27637v1-opro-orthogonal-panel-relative-operators-for-panel-aware-in-context-image-generation)  
    标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-2. [When Surfaces Lie: Exploiting Wrinkle-Induced Attention Shift to Attack Vision-Language Models](/202604/05/2603.27759v1-when-surfaces-lie-exploiting-wrinkle-induced-attention-shift-to-attack-vision-language-models)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对图像模型的影响
-3. [When Surfaces Lie: Exploiting Wrinkle-Induced Attention Shift to Attack Vision-Language Models](/202604/05/2603.27759v2-when-surfaces-lie-exploiting-wrinkle-induced-attention-shift-to-attack-vision-language-models)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动攻击方法
-4. [Towards Context-Aware Image Anonymization with Multi-Agent Reasoning](/202604/05/2603.27817v1-towards-context-aware-image-anonymization-with-multi-agent-reasoning)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-5. [The Geometry of Robustness: Optimizing Loss Landscape Curvature and Feature Manifold Alignment for Robust Finetuning of Vision-Language Models](/202604/05/2603.27139v1-the-geometry-of-robustness-optimizing-loss-landscape-curvature-and-feature-manifold-alignment-for-robust-finetuning-of-vision-language-models)  
+   evidence：图像生成适应方法
+3. [MathGen: Revealing the Illusion of Mathematical Competence through Text-to-Image Generation](/202604/06/2603.27959v1-mathgen-revealing-the-illusion-of-mathematical-competence-through-text-to-image-generation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+4. [AIBench: Evaluating Visual-Logical Consistency in Academic Illustration Generation](/202604/06/2603.28068v1-aibench-evaluating-visual-logical-consistency-in-academic-illustration-generation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：学术图像生成评估
+5. [Kill-Chain Canaries: Stage-Level Tracking of Prompt Injection Across Attack Surfaces and Model Safety Tiers](/202604/06/2603.28013v1-kill-chain-canaries-stage-level-tracking-of-prompt-injection-across-attack-surfaces-and-model-safety-tiers)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击与模型防御机制
+6. [COvolve: Adversarial Co-Evolution of Large-Language-Model-Generated Policies and Environments via Two-Player Zero-Sum Game](/202604/06/2603.28386v1-covolve-adversarial-co-evolution-of-large-language-model-generated-policies-and-environments-via-two-player-zero-sum-game)  
    标签：评分：7.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-6. [You Only Erase Once: Erasing Anything without Bringing Unexpected Content](/202604/05/2603.27599v1-you-only-erase-once-erasing-anything-without-bringing-unexpected-content)  
+7. [TGIF2: Extended Text-Guided Inpainting Forgery Dataset & Benchmark](/202604/06/2603.28613v1-tgif2-extended-text-guided-inpainting-forgery-dataset--benchmark)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-7. [Gated Condition Injection without Multimodal Attention: Towards Controllable Linear-Attention Transformers](/202604/05/2603.27666v1-gated-condition-injection-without-multimodal-attention-towards-controllable-linear-attention-transformers)  
+   evidence：图像修复伪造数据集
+8. [On-the-fly Repulsion in the Contextual Space for Rich Diversity in Diffusion Transformers](/202604/06/2603.28762v1-on-the-fly-repulsion-in-the-contextual-space-for-rich-diversity-in-diffusion-transformers)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-8. [Rethinking Structure Preservation in Text-Guided Image Editing with Visual Autoregressive Models](/202604/05/2603.28367v1-rethinking-structure-preservation-in-text-guided-image-editing-with-visual-autoregressive-models)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-9. [Towards Intrinsic-Aware Monocular 3D Object Detection](/202604/05/2603.27059v1-towards-intrinsic-aware-monocular-3d-object-detection)  
+   evidence：生成式图像对抗鲁棒性
+9. [A Systematic Taxonomy of Security Vulnerabilities in the OpenClaw AI Agent Framework](/202604/06/2603.27517v1-a-systematic-taxonomy-of-security-vulnerabilities-in-the-openclaw-ai-agent-framework)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对单目3D目标检测的影响
-10. [NeedleDB: A Generative-AI Based System for Accurate and Efficient Image Retrieval using Complex Natural Language Queries](/202604/05/2603.27464v1-needledb-a-generative-ai-based-system-for-accurate-and-efficient-image-retrieval-using-complex-natural-language-queries)  
+   evidence：对抗攻击的图像防御策略
+10. [Hidden Ads: Behavior Triggered Semantic Backdoors for Advertisement Injection in Vision Language Models](/202604/06/2603.27522v1-hidden-ads-behavior-triggered-semantic-backdoors-for-advertisement-injection-in-vision-language-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击与图像检索相关
-11. [Sci-Mind: Cognitively-Inspired Adversarial Debate for Autonomous Mathematical Modeling](/202604/05/2603.27584v1-sci-mind-cognitively-inspired-adversarial-debate-for-autonomous-mathematical-modeling)  
+   evidence：对抗扰动对生成模型的影响
+11. [Inference-time Trajectory Optimization for Manga Image Editing](/202604/06/2603.27790v1-inference-time-trajectory-optimization-for-manga-image-editing)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击与数学建模
-12. [Huber-based Robust System Identification with Near-Optimal Guarantees Across Independent and Adversarial Regimes](/202604/05/2603.27586v1-huber-based-robust-system-identification-with-near-optimal-guarantees-across-independent-and-adversarial-regimes)  
+   evidence：对抗攻击的图像防御策略
+12. [VistaGEN: Consistent Driving Video Generation with Fine-Grained Control Using Multiview Visual-Language Reasoning](/202604/06/2603.28353v1-vistagen-consistent-driving-video-generation-with-fine-grained-control-using-multiview-visual-language-reasoning)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：使用Huber估计器处理对抗攻击
+   evidence：视频生成与控制技术
 
 
 ### ⚡ 这个站点能做什么
