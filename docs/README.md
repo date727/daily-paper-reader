@@ -6,91 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-04-08
-- 运行时间：2026-04-08 20:22:36 UTC
+- 最新运行日期：2026-04-09
+- 运行时间：2026-04-09 20:18:28 UTC
 - 运行状态：成功
-- 本次总论文数：23
-- 精读区：11
+- 本次总论文数：19
+- 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读11篇、速读12篇论文，聚焦AI安全与图像生成前沿技术  
-2) 高分论文集中探讨对抗提示注入攻击、情感扩散分类器及法医识别增强等方向  
-3) 建议关注对抗攻击防御与情感识别技术，或探索图像生成在法医鉴定与摄影领域的潜在应用
-- 详情：[/202604/08/README](/202604/08/README)
+今日精读7篇、速读12篇论文，聚焦前沿AI与神经网络技术突破  
+高分成果集中于可控模态对齐、神经网络对抗攻击及地质AI应用  
+建议优先阅读模态对齐与 PTSD 激发攻击相关精读论文，或探索视频生成技术速读内容
+- 详情：[/202604/09/README](/202604/09/README)
 
 ### 精读区论文标签
-1. [Adversarial Prompt Injection Attack on Multimodal Large Language Models](/202604/08/2603.29418v1-adversarial-prompt-injection-attack-on-multimodal-large-language-models)  
+1. [The Geometry of Compromise: Unlocking Generative Capabilities via Controllable Modality Alignment](/202604/09/2604.00279v1-the-geometry-of-compromise-unlocking-generative-capabilities-via-controllable-modality-alignment)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-2. [Emotion Diffusion Classifier with Adaptive Margin Discrepancy Training for Facial Expression Recognition](/202604/08/2603.29578v1-emotion-diffusion-classifier-with-adaptive-margin-discrepancy-training-for-facial-expression-recognition)  
+   evidence：模态对齐与生成模型
+2. [Spike-PTSD: A Bio-Plausible Adversarial Example Attack on Spiking Neural Networks via PTSD-Inspired Spike Scaling](/202604/09/2604.01750v1-spike-ptsd-a-bio-plausible-adversarial-example-attack-on-spiking-neural-networks-via-ptsd-inspired-spike-scaling)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性提升
-3. [Neural Reconstruction of LiDAR Point Clouds under Jamming Attacks via Full-Waveform Representation and Simultaneous Laser Sensing](/202604/08/2604.00371v1-neural-reconstruction-of-lidar-point-clouds-under-jamming-attacks-via-full-waveform-representation-and-simultaneous-laser-sensing)  
+   evidence：图像对抗扰动生成技术
+3. [AEGIS: Adversarial Entropy-Guided Immune System -- Thermodynamic State Space Models for Zero-Day Network Evasion Detection](/202604/09/2604.02149v1-aegis-adversarial-entropy-guided-immune-system----thermodynamic-state-space-models-for-zero-day-network-evasion-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗攻击防御技术
-4. [Adversarial Attenuation Patch Attack for SAR Object Detection](/202604/08/2604.00887v1-adversarial-attenuation-patch-attack-for-sar-object-detection)  
+   evidence：对抗攻击的防御方法
+4. [ResGuard: Enhancing Robustness Against Known Original Attacks in Deep Watermarking](/202604/09/2604.03693v1-resguard-enhancing-robustness-against-known-original-attacks-in-deep-watermarking)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：提出对抗扰动生成方法
-5. [Why Instruction-Based Unlearning Fails in Diffusion Models?](/202604/08/2604.01514v1-why-instruction-based-unlearning-fails-in-diffusion-models)  
+   evidence：对抗攻击的图像防御策略
+5. [Lightweight True In-Pixel Encryption with FeFET Enabled Pixel Design for Secure Imaging](/202604/09/2604.05147v1-lightweight-true-in-pixel-encryption-with-fefet-enabled-pixel-design-for-secure-imaging)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-6. [Moiré Video Authentication: A Physical Signature Against AI Video Generation](/202604/08/2604.01654v1-moir-video-authentication-a-physical-signature-against-ai-video-generation)  
+   evidence：图像加密方法
+6. [Harnessing Hyperbolic Geometry for Harmful Prompt Detection and Sanitization](/202604/09/2604.06285v1-harnessing-hyperbolic-geometry-for-harmful-prompt-detection-and-sanitization)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：视频认证与对抗攻击
-7. [Revealing Physical-World Semantic Vulnerabilities: Universal Adversarial Patches for Infrared Vision-Language Models](/202604/08/2604.03117v1-revealing-physical-world-semantic-vulnerabilities-universal-adversarial-patches-for-infrared-vision-language-models)  
+   evidence：超几何图像防护
+7. [VLMShield: Efficient and Robust Defense of Vision-Language Models against Malicious Prompts](/202604/09/2604.06502v1-vlmshield-efficient-and-robust-defense-of-vision-language-models-against-malicious-prompts)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
-8. [SafeCtrl: Region-Aware Safety Control for Text-to-Image Diffusion via Detect-Then-Suppress](/202604/08/2604.03941v1-safectrl-region-aware-safety-control-for-text-to-image-diffusion-via-detect-then-suppress)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：文本到图像对抗攻击防御
-9. [TM-BSN: Triangular-Masked Blind-Spot Network for Real-World Self-Supervised Image Denoising](/202604/08/2604.04484v1-tm-bsn-triangular-masked-blind-spot-network-for-real-world-self-supervised-image-denoising)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
-10. [Think in Strokes, Not Pixels: Process-Driven Image Generation via Interleaved Reasoning](/202604/08/2604.04746v2-think-in-strokes-not-pixels-process-driven-image-generation-via-interleaved-reasoning)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：图像生成过程驱动方法
-11. [CLEAR: Unlocking Generative Potential for Degraded Image Understanding in Unified Multimodal Models](/202604/08/2604.04780v1-clear-unlocking-generative-potential-for-degraded-image-understanding-in-unified-multimodal-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：图像生成模型的鲁棒性提升
+   evidence：对抗攻击的图像防御策略
 
 ### 速读区论文标签
-1. [FlowID : Enhancing Forensic Identification with Latent Flow-Matching Models](/202604/08/2603.29591v1-flowid--enhancing-forensic-identification-with-latent-flow-matching-models)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-2. [SHIFT: Stochastic Hidden-Trajectory Deflection for Removing Diffusion-based Watermark](/202604/08/2603.29742v2-shift-stochastic-hidden-trajectory-deflection-for-removing-diffusion-based-watermark)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-3. [RawGen: Learning Camera Raw Image Generation](/202604/08/2604.00093v1-rawgen-learning-camera-raw-image-generation)  
+1. [SAGE: Subsurface AI-driven Geostatistical Extraction with proxy posterior](/202604/09/2604.00307v1-sage-subsurface-ai-driven-geostatistical-extraction-with-proxy-posterior)  
    标签：评分：8.0/10、query:image-generation
-   evidence：图像生成与物理表示
-4. [Convergence of Byzantine-Resilient Gradient Tracking via Probabilistic Edge Dropout](/202604/08/2604.00449v1-convergence-of-byzantine-resilient-gradient-tracking-via-probabilistic-edge-dropout)  
+   evidence：生成对抗网络用于图像生成
+2. [Shapley-Guided Neural Repair Approach via Derivative-Free Optimization](/202604/09/2604.00422v1-shapley-guided-neural-repair-approach-via-derivative-free-optimization)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：研究对抗攻击下的图像模型保护方法
-5. [GazeCLIP: Gaze-Guided CLIP with Adaptive-Enhanced Fine-Grained Language Prompt for Deepfake Attribution and Detection](/202604/08/2603.29295v1-gazeclip-gaze-guided-clip-with-adaptive-enhanced-fine-grained-language-prompt-for-deepfake-attribution-and-detection)  
+   evidence：对抗攻击的图像防御策略
+3. [ONE-SHOT: Compositional Human-Environment Video Synthesis via Spatial-Decoupled Motion Injection and Hybrid Context Integration](/202604/09/2604.01043v1-one-shot-compositional-human-environment-video-synthesis-via-spatial-decoupled-motion-injection-and-hybrid-context-integration)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：视频合成方法
+4. [Bridging the Simulation-to-Experiment Gap with Generative Models using Adversarial Distribution Alignment](/202604/09/2604.01169v1-bridging-the-simulation-to-experiment-gap-with-generative-models-using-adversarial-distribution-alignment)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+5. [Reliev3R: Relieving Feed-forward Reconstruction from Multi-View Geometric Annotations](/202604/09/2604.00548v1-reliev3r-relieving-feed-forward-reconstruction-from-multi-view-geometric-annotations)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动下的图像模型保护
+6. [Disentangling to Re-couple: Resolving the Similarity-Controllability Paradox in Subject-Driven Text-to-Image Generation](/202604/09/2604.00849v1-disentangling-to-re-couple-resolving-the-similarity-controllability-paradox-in-subject-driven-text-to-image-generation)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：图像对抗扰动生成方法
+7. [Region-Adaptive Generative Compression with Spatially Varying Diffusion Models](/202604/09/2604.01122v1-region-adaptive-generative-compression-with-spatially-varying-diffusion-models)  
    标签：评分：7.0/10、query:image-adversarial
    evidence：生成式图像对抗鲁棒性
-6. [Multimodal Models Meet Presentation Attack Detection on ID Documents](/202604/08/2603.29422v1-multimodal-models-meet-presentation-attack-detection-on-id-documents)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：利用多模态模型进行呈现攻击检测
-7. [EnsembleSHAP: Faithful and Certifiably Robust Attribution for Random Subspace Method](/202604/08/2603.30034v1-ensembleshap-faithful-and-certifiably-robust-attribution-for-random-subspace-method)  
+8. [Tex3D: Objects as Attack Surfaces via Adversarial 3D Textures for Vision-Language-Action Models](/202604/09/2604.01618v1-tex3d-objects-as-attack-surfaces-via-adversarial-3d-textures-for-vision-language-action-models)  
    标签：评分：7.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-8. [RAGShield: Provenance-Verified Defense-in-Depth Against Knowledge Base Poisoning in Government Retrieval-Augmented Generation Systems](/202604/08/2604.00387v1-ragshield-provenance-verified-defense-in-depth-against-knowledge-base-poisoning-in-government-retrieval-augmented-generation-systems)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的生成模型防护
-9. [Stepper: Stepwise Immersive Scene Generation with Multiview Panoramas](/202604/08/2603.28980v1-stepper-stepwise-immersive-scene-generation-with-multiview-panoramas)  
+9. [Multimodal Language Models Cannot Spot Spatial Inconsistencies](/202604/09/2604.00799v2-multimodal-language-models-cannot-spot-spatial-inconsistencies)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-10. [MMFace-DiT: A Dual-Stream Diffusion Transformer for High-Fidelity Multimodal Face Generation](/202604/08/2603.29029v1-mmface-dit-a-dual-stream-diffusion-transformer-for-high-fidelity-multimodal-face-generation)  
+   evidence：多模态模型中的空间不一致性
+10. [MIRANDA: MId-feature RANk-adversarial Domain Adaptation toward climate change-robust ecological forecasting with deep learning](/202604/09/2604.00800v1-miranda-mid-feature-rank-adversarial-domain-adaptation-toward-climate-change-robust-ecological-forecasting-with-deep-learning)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-11. [Semantic Communication for 6G Networks: A Trade-off between Distortion Criticality and Information Representability](/202604/08/2603.29293v1-semantic-communication-for-6g-networks-a-trade-off-between-distortion-criticality-and-information-representability)  
+   evidence：对抗攻击与防御技术
+11. [IDDM: Identity-Decoupled Personalized Diffusion Models with a Tunable Privacy-Utility Trade-off](/202604/09/2604.00903v1-iddm-identity-decoupled-personalized-diffusion-models-with-a-tunable-privacy-utility-trade-off)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像生成模型
-12. [Unify-Agent: A Unified Multimodal Agent for World-Grounded Image Synthesis](/202604/08/2603.29620v1-unify-agent-a-unified-multimodal-agent-for-world-grounded-image-synthesis)  
+   evidence：图像对抗攻击防御技术
+12. [Looking into a Pixel by Nonlinear Unmixing -- A Generative Approach](/202604/09/2604.01141v1-looking-into-a-pixel-by-nonlinear-unmixing----a-generative-approach)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
+   evidence：对抗扰动对生成模型的影响
 
 
 ### ⚡ 这个站点能做什么
