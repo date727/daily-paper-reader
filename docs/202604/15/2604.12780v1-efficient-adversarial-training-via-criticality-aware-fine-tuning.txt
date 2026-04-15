@@ -1,0 +1,596 @@
+Title: Efficient Adversarial Training via Criticality-Aware Fine-Tuning
+
+URL Source: https://arxiv.org/pdf/2604.12780v1
+
+Published Time: Wed, 15 Apr 2026 01:12:48 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Efficient Adversarial Training via Criticality-Aware Fine-Tuning 
+
+## Wenyun Li 1,2 Zheng Zhang 1,2* Dongmei Jiang 2 Yaowei Wang 1,2 Xiangyuan Lan 2,31Harbin Institute of Technology, Shenzhen 
+
+> 2
+
+## Pengcheng Laboratory 
+
+> 3
+
+## Pazhou Laboratory (Huangpu) 
+
+## {liwy, zhangzh, jiangdm, wangyw, lanxy }@pcl.ac.cn 
+
+## Abstract 
+
+Vision Transformer (ViT) models have achieved remark-able performance across various vision tasks, with scala-bility being a key advantage when applied to large datasets. This scalability enables ViT models to exhibit strong gen-eralization capabilities. However, as the number of pa-rameters increases, the robustness of ViT models to adver-sarial examples does not scale proportionally. Adversar-ial training (AT), one of the most effective methods for en-hancing robustness, typically requires fine-tuning the entire model, leading to prohibitively high computational costs, especially for large ViT architectures. In this paper, we aim to robustly fine-tune only a small subset of parame-ters to achieve robustness comparable to standard AT. To accomplish this, we introduce Criticality-Aware Adversar-ial Training (CAAT), a novel method that adaptively allo-cates resources to the most robustness-critical parameters, fine-tuning only selected modules. Specifically, CAAT effi-ciently identifies parameters that contribute most to adver-sarial robustness. It then leverages parameter-efficient fine-tuning (PEFT) to robustly adjust weight matrices where the number of critical parameters exceeds a predefined thresh-old. CAAT exhibits favorable generalization when scaled to larger vision transformer architectures, potentially paving the way for adversarial training at scale, e.g, compared with plain adversarial training, CAAT incurs only a 4.3% decrease in adversarial robustness while tuning approxi-mately 6% of its parameters. Extensive experiments on three widely used adversarial learning datasets demon-strate that CAAT outperforms state-of-the-art lightweight AT methods with fewer trainable parameters. 
+
+## 1. Introduction 
+
+In recent years, the ViT has become a mainstream architec-ture for various visual tasks, including image classification     
+
+> *Corresponding author. Benign Image
+> (Panda)
+> Adversarial Image
+> (Gibbon)
+> Panda
+> Panda
+> Classify
+> Correctly
+> Defense
+> Successfully
+> Standard AT
+> CAAT
+> Robust Vision Transformer
+> Embedding
+> Trans Block
+> Trans Block
+> Trans Block
+> MLP Head
+> …………
+> Embedding
+> Trans Block
+> Trans Block
+> MLP Head
+> ……
+> Block  ……
+> LoRA
+
+Figure 1. Illustration of standard AT and our CAAT. The param-eters highlighted in blue denote frozen parameters, while those in rhodo represent trainable parameters. We only tune the top-τ crit-ical parameters. 
+
+[1], image retrieval [2], and object detection [3]. A key ad-vantage behind ViT’s success is its scalability when applied to large datasets. The emergent phenomenon is widely re-garded as a foundational property of large language models, with similar patterns observed in computer vision [4]. Despite the significant success of large vision models, their robustness is often overlooked. Even the most ad-vanced ViT models [5, 6] remain vulnerable to evasion at-tacks from adversarial examples, where carefully crafted perturbations can easily mislead these models. This poses a serious problem in various applications. Enhancing the robustness of ViT models against adversarial examples to ensure reliable performance is therefore a prominent issue within the security community. To improve the robustness of ViT against adversar-ial examples, researchers have proposed multiple defense methods across preprocessing, training, and postprocess-ing stages. In the preprocessing phase, adversarial exam-ples in the input data are purified or reduced before be-ing sent to the ViT [7–9]. During the training stage, de-fenses often involve fine-tuning vulnerable pre-trained ViT 1      
+
+> arXiv:2604.12780v1 [cs.CV] 14 Apr 2026 Vulnerable ViT Robust Parameter Criticality
+> Calculation
+> Trainable Adapter
+> Allocation
+> Calculate each parameter’s
+> RPC via 𝑐 𝑛
+> (1)≈𝑔 𝑛
+> 2
+> Allocate trainable adapter to
+> the top -τparameters
+> Embedding
+> Trans Block
+> Trans Block
+> MLP Head
+
+…
+
+…
+
+…
+
+… …
+
+MHA 
+
+Norm 
+
+Norm 
+
+FFN 
+
+> LoRA
+> LoRA
+
+… …
+
+> Embedding
+> Trans Block
+> MLP Head
+
+…
+
+…
+
+… 
+
+> Robust ViT
+> MHA
+
+Norm 
+
+> Norm
+
+FFN  
+
+> LoRA Block Figure 2. The pipeline of our proposed Criticality-Aware Adversarial Training. Given a vulnerable ViT, we first identify the top-τcritical parameters for adversarial robustness. Instead of directly applying AT to these parameters, we leverage the representational capability of PEFT to enhance adversarial robustness.
+
+models to improve robustness through learning. Notable training-stage defenses include methods from [10, 11]. Fi-nally, postprocessing-stage defenses focus on modifying or analyzing the model’s output [12]. Among these methods, adversarial training [10] is one of the most well-known and effective approaches. Originally introduced by [10], AT en-hances model robustness by incorporating adversarial ex-amples into the training dataset. Standard AT typically in-volves fully fine-tuning a pre-trained model, requiring up-dates to the entire set of model parameters to achieve robust-ness. The distinction between standard AT and our CAAT is illustrated in Figure.1. However, for large ViT models, the vast number of parameters makes it infeasible to directly apply tradi-tional AT due to its substantial computational cost. To address the fine-tuning challenges in large models for downstream tasks, recent research has introduced vari-ous lightweight parameter-efficient fine-tuning (PEFT) [13] methods. Broadly, PEFT methods can be categorized into addition-based and reparameterization-based approaches. Addition-based PEFT methods add new trainable param-eters while keeping the original model parameters largely frozen; an example of this is the Adapter[14] method. In contrast, reparameterization-based PEFT methods replace existing model parameters with other trainable parame-ters rather than adding entirely new ones. Examples of reparameterization-based PEFT include prompt tuning [15] and LoRA[16]. PEFT methods typically require around 1% of the trainable parameters, improving the performance of pretrained large models on downstream tasks by fine-tuning a small subset of parameters. Recently, FullLoRA-AT[17] connected parameter-efficient techniques with AT, using an LNLoRA module to adversarially train a ViT with a lightweight approach. However, FullLoRA-AT[17] still tends to tune the backbone globally, leading to challenges with larger trainable parameters and lower robustness per-formance. To address the above issues, we introduce a new concept called Robust Parameter Criticality (RPC) to assess the im-portance of each position in a ViT model for adversarial robustness. RPC quantifies the criticality of each param-eter in terms of its contribution to adversarial robustness. We refer to modules with the highest RPC values as robust-critical modules. Our approach allocates trainable param-eters to these modules by proposing a novel Criticality-
+
+Aware Adversarial Training (CAAT) scheme, which iden-tifies the most critical positions to adaptively allocate train-able parameters. CAAT consists of two steps: (1) Robust parameter criticality: This step computes the RPC value for each parameter and identifies the robust-critical mod-ules. (2) Trainable Adapter Allocation: Instead of direct tuning, we utilize PEFT techniques to enhance adversarial robustness, training only around 1% of the parameters. The pipeline of our CAAT is illustrated in Figure.2. Experimental results demonstrate that CAAT achieves comparable robustness performance with approximately 1% of trainable parameters compared to full fine-tuning in standard AT (see Section 4.2). The computational cost of CAAT has been significantly reduced in terms of both mem-ory usage and training time (Section 4.3). Furthermore, CAAT demonstrates favorable generalization to larger ViT models (Section 4.4). Additionally, by calculating the RPC values, CAAT provides empirical insights into which pa-rameters in ViT are most susceptible to adversarial exam-ples (see Section 4.5). We further combine CAAT with other AT methods, such as TRADES [18], MART [19], and PRM [20], and observe that these incorporations lead to ad-ditional robustness improvements (see Section 4.6). The primary contributions of our research are summa-rized as follows: 1. We propose CAAT to alleviate the computational over-head of standard AT by utilizing PEFT techniques. 2Specifically, CAAT can achieve nearly the same robust-ness performance as full adversarial tuning with only 1% of trainable parameters; 2. We introduce a novel concept, RPC, to quantify the im-portance of each parameter for adversarial robustness. In this work, we tune only the most critical parameters to economize computational cost. Additionally, the RPC value serves as a tool for interpreting adversarial robust-ness; 3. Extensive experiments validate the superior effective-ness and efficiency of our method compared to other state-of-the-art lightweight AT techniques on three widely used datasets. 
+
+## 2. Related Work 
+
+2.1. Vision Transformer 
+
+ViT, introduced by [1], represents a revolutionary archi-tecture following conventional Convolutional Neural Net-works (CNNs) [21, 22], which achieved remarkable per-formance across various visual tasks [23, 24]. ViT cap-tures localized and hierarchical image information through self-attention mechanisms [25]. A key advantage of trans-former models is their scalability as training data increases, an emergent ability foundational to large language models [26]. Similar phenomena are also observed in computer vi-sion [4]. However, while the discrimination and generaliza-tion capabilities of transformer-based models improve, their robustness to abnormal data, such as adversarial examples, remains critical. The most notable robustness enhancement technique, AT [10], typically requires fully fine-tuning the target model. The high computational cost has become in-creasingly prohibitive, particularly given the growing pa-rameter complexity of modern large models. This work pi-oneers a method to enhance the robustness of transformer-based vision models with a limited number of trainable pa-rameters. 
+
+2.2. Adversarial Training 
+
+DNNs have been widely adopted in various vision tasks [27, 28] due to their high efficiency and generalization capabilities. However, they still face significant robust-ness challenges, particularly against adversarial examples [29]. To enhance robustness, researchers have proposed numerous methods for defense, including adversarial pu-rification [7], adversarial training [10], and certifiable de-fenses [30]. Among these, AT is widely recognized as the most effective method. First introduced by [10], AT im-proves model robustness by incorporating adversarial ex-amples into the training set. TRADES [18], which uses a trade-off loss to balance accuracy and robustness. MART [19], which applies a manifold regularization in the latent space. For adversarial training in ViT models, PRM [20] en-hances robustness by randomly removing gradients in atten-tion blocks during training, while ReiT [31] employs ran-dom entangled self-attention to strengthen adversarial ro-bustness. AAS-AT [32] adopts an adaptive attention scaling strategy to improve ViT robustness. 
+
+2.3. Parameter-efficient Fine-tune 
+
+Full fine-tuning is the mainstream approach for adapt-ing large-scale pre-trained models to downstream tasks, wherein all model weights are kept trainable. However, as models grow in size, PEFT [13] becomes a more viable op-tion, tuning only a small subset of parameters to meet com-putational constraints. PEFT methods can be broadly di-vided into addition-based and reparameterization-based cat-egories. Addition-based PEFT methods add trainable pa-rameters to the model and only adjust these additional com-ponents. A well-known addition-based PEFT method is the Adapter[14], with further developments [33, 34] enabling larger models to be fine-tuned with minimal additional pa-rameters. However, the attached modules in addition-based PEFT can incur extra computational costs. To address this, reparameterization-based PEFT approaches have been de-veloped. These methods replace original parameters in the model backbone, allowing for efficient fine-tuning with-out extra modules during inference. The prominent LoRA method [16] uses two low-rank matrices that can be merged into the weight matrices. FullLoRA-AT [17] was the first to apply PEFT in AT. However, it still tends to adjust the backbone globally. We emphasize the importance of tuning parameters at robustness-critical positions. Identifying such critical parameters through forward propagation offers valu-able guidance for more efficient adversarial training. Fur-thermore, our CAAT approach can determine the most criti-cal backbone positions, providing interpretability regarding how adversarial examples affect DNNs. 
+
+## 3. Method 
+
+3.1. Preliminaries 
+
+A n-block vision transformer is denoted as f (θ) =
+
+LN  x(n); θ(n) ◦ · · · ◦ LN  x(1) ; θ(1) , where θ(i) repre-sents the parameters of the i-th block, and LN (·) denotes the layer norm function. We consider the standard classifi-cation task with a distribution D over data points x ∈ Rd
+
+and corresponding labels y ∈ [k]. Additionally, a suitable loss function L(f (x, θ ) , y ), for instance, the cross-entropy loss, is always applied to train the ViT. Let S denote the set of allowed perturbations. For a given data point x, an adversarial attack seeks to optimize the perturbation δ to maximize the empirical risk as follows: 
+
+max  
+
+> δ∈S
+
+L (f (x + δ, θ ) , y ) . (1) 3Previous studies [35, 36] indicate that quasi-indistinguishable adversarial perturbations can easily deceive neural networks. To improve adversarial robust-ness, AT is commonly used as an effective defense strategy. We define adversarial risk minimization as follows: 
+
+min  
+
+> θ
+
+ρ (θ) , (2) where 
+
+ρ (θ) = E(x,y )∼D 
+
+
+
+max  
+
+> δ∈S
+
+L (f (x + δ, θ ) , y )
+
+
+
+(3) The object of adversarial training is to find model parame-ters that minimize the adversarial risk. Such notation fol-lows the standard min-max saddle point formulation intro-duced by [10]. 
+
+3.2. Robust Parameter Criticality 
+
+Recent research [37] has shown that the adversarial ro-bustness of fine-tuned backbone parameters varies signif-icantly across different positions. Furthermore, in robust fine-tuning of a pre-trained model, the efficiency of AT can be improved by primarily freezing the pre-trained backbone and only retraining the parameters critical to robustness. Building on this insight, we propose that not all parame-ters contribute equally to adversarial robustness in AT and introduce a novel criterion to measure the robust criticality of parameters in the pre-trained backbone. 
+
+Definition 1. (Robust Parameter Criticality ) Given the pre-trained model weights θ = θ(1) , θ (2) , . . . , θ (N ) ∈
+
+RN , the robust parameter criticality is denoted as C =
+
+{c1, c 2, . . . , c N }, the criticality cn for parameter θn is de-fined as 
+
+cn = ρ (x + δ, θ ) − ρ (x + δ, θ |θn = θ∗
+
+> n
+
+) , (4) 
+
+where θ∗ 
+
+> n
+
+= argmin 
+
+> θn
+
+(ρ (x + δ, θ )) . The robust tuned pa-rameters can be reparameterized as θ∗ 
+
+> n
+
+= θn + ∆ θn , where 
+
+∆θn denotes the update for θn after AT. 
+
+Robust parameter criticality quantifies each parameter’s contribution to the model’s adversarial robustness. Param-eters with the lowest criticality are deemed less important, as adjusting their weights has minimal impact on robustness improvement. The criticality cn of each parameter can be measured in-dividually. However, this approach becomes intractable as the number of parameters N in a ViT can be very large. For instance, ViT-B [1] contains approximately 85M parame-ters, making a sequential search for the most critical param-eters highly time-consuming. Inspired by [38], we can avoid evaluating all N param-eters by approximating cn in the vicinity of θ using a first-order Taylor expansion: 
+
+c(1)  
+
+> n
+
+= −gn∆θn , (5) where the gradients g = ∂ρ ∂θ , and gn representing the n-th elements of the gradient g. The gn in Eq. 5 can be eas-ily computed since the gradient g is already obtained from backpropagation. However, ∆θn remains unavailable, as it depends on the final convergent value of θn. To address this, we are inspired by [39], which suggests using the weight after a single training step as a surrogate for θ∗
+
+> n
+
+. This ap-proximation allows ∆θn in Eq.5 to be computed without requiring full convergence of θn. Consequently, Eq.5 can be simplified to 
+
+c(1)  
+
+> n
+
+= g2
+
+> n
+
+ϵ, (6) where ϵ is the learning rate. As ϵ is consistent across all parameters, we can omit it when measuring the criticality of each parameter, resulting in the final expression: 
+
+c(1)  
+
+> n
+
+≈ g2
+
+> n
+
+, (7) Thus, a parameter’s criticality can be assessed based on its potential to reduce adversarial risk. The pseudocode for calculating robust parameter criticality is provided in Al-gorithm.1. 
+
+Remark: The concept is related to previous works such as Taylor Pruning [38] and RiFT [37], though CAAT dif-fers significantly from them in two key aspects. First, the objectives diverge: Taylor Pruning[38] evaluates parame-ter importance during training, while RiFT[37] analyzes the impact of a parameter in an adversarially trained model to examine generalization. Second, the implementations vary. Taylor Pruning[38] estimates importance through the squared change in loss upon removal of a parameter, ulti-mately deriving importance as (gnθn)2. RiFT[37], on the other hand, evaluates a pre-trained adversarial model by adding a perturbation ∆θ to a parameter θn to analyze the robustness characteristics of module weights. 
+
+3.3. Trainable Adapter Allocation 
+
+Given a robust parameter criticality set C and a parameter critical threshold τ , an intuitive approach to AT is to directly fine-tune only the top-τ most critical parameters, keeping the remaining parameters fixed—a method we refer to as direct tuning. Specifically, we select the top-τ critical pa-rameters from C to form a robust bottleneck parameter set, denoted as B. For a parameter matrix Θ ∈ Rdin ×dout , a binary mask matrix M ∈ Rdin ×dout is defined as: 
+
+M i×j =
+
+(1, Θi×j ∈ B 
+
+0, Θi×j /∈ B (8) 4Algorithm 1 Calculating Robust Parameter Criticality 
+
+Input: Pre-trained ViT model with network parameters θ,partial train dataset D.
+
+Output: Criticality set C = {c1, c 2, . . . , c N }. 
+
+> 1:
+
+Initialize adversarial dataset: Dadv = {} and criticality set: C = {0}N . 
+
+> 2:
+
+for Batch B ∈ D do ▷ Generate adversarial dataset  
+
+> 3:
+
+Badv = PGD-10( θ, B) 
+
+> 4:
+
+Dadv = Dadv 
+
+S Badv  
+
+> 5:
+
+end for  
+
+> 6:
+
+for Batch Badv ∈ D adv do ▷ Calculate RPC  
+
+> 7:
+
+Calculate Loss ρ(θ, Badv ) 
+
+> 8:
+
+Calculate gradients g 
+
+> 9:
+
+for n ∈ { 1, . . . , N } do  
+
+> 10:
+
+Update criticality for the n-th parameter with: 
+
+cn = cn + g2 
+
+> n
+> 11:
+
+end for  
+
+> 12:
+
+end for 
+
+where Θi×j and M i×j represent the i × j-th elements of Θ
+
+and M , respectively. We then train the robust bottleneck pa-rameters using gradient descent, updating the weight matrix according to Θ′ ← Θ − ϵgΘ ⊙ M , where gΘ is the gradient of Θ.However, such direct tuning lacks sufficient representa-tional capability to effectively deal with adversarial exam-ple. Given that PEFT [40] has demonstrated remarkable performance in applications like text-image generation [41] and LLM tuning [42], achieving these results with less than 1% of trainable parameters, we propose incorporating PEFT modules into the weight matrices with a high concentration of critical parameters. Specifically, we employ two PEFT techniques in our indirect tuning approach: LoRA [16] and Adapter [14]. For example, we apply LoRA [16] to the crit-ical weight matrices, where a single update for Θ can be represented as follows: 
+
+Θ′ =
+
+(Θ + Θ down Θup , if Pdin ×dout  
+
+> i×j=0
+
+M i×j ≥ σtre 
+
+Θ − ϵgΘ ⊙ M, otherwise 
+
+(9) where Θdown ∈ Rdin ×dr and Θup ∈ Rdr ×dout are two learnable low-rank matrices used to approximate the update of Θ, with r as the rank where r ≪ min (din , d out ). Fine-tuning is then applied to Θ when its number of critical pa-rameters surpasses the threshold hyperparameter σtre . For instance, fine-tuning with LoRA requires 2×din ×dout ×dr
+
+trainable parameters per weight matrix. To ensure that the number of trainable parameters introduced by indirect tuning remains equal to or lower than the number of crit-ical parameters, we set the threshold σtre for LoRA to 
+
+2 × din × dout × dr .In this manner, our CAAT framework effectively inte-grates both direct and indirect tuning methods to enhance the robustness of ViT. As demonstrated in Section.4.7, em-pirical results reveal that indirect tuning offers superior ro-bustness performance compared to direct tuning, attributed to its enhanced representational capacity. The full CAAT algorithm is presented in Appendix. 
+
+## 4. Experiments 
+
+4.1. Experiment Setup 
+
+Datasets We evaluate our approach on three widely used image classification datasets: CIFAR10 [43], CIFAR100 [43], and ImageNet [44]. CIFAR10 and CIFAR100 con-tain 60,000 32 × 32 RGB images across 10 and 100 classes, respectively. In our experiments, we split CIFAR10 and CI-FAR100 into 50,000 training images and 10,000 test im-ages. ImageNet, corresponding to the ILSVRC 2012 chal-lenge, comprises 1,000 object classes, with 1,281,167 train-ing images and 100,000 testing images. 
+
+Models We selected the ViT-B [1], ViT-L[1], ViT-H[1], Swin-B [45] and Swin-L[45] models for our experiments. 
+
+Evaluation metrics To evaluate the adversarial robustness of various models, we measure robust test accuracy under different adversarial attack methods. Specifically, we use CW-20 [35], PGD-10 [10], and AutoAttack [46] to assess model robustness. Here, CW-k and PGD-k denote CW and PGD attacks with k iterative steps, respectively. The adver-sarial budget for these attacks is set to 8/255 , with a step size of 1/255 . Additionally, we evaluate the efficiency of robust fine-tuning for pretrained models by examining the number of learnable parameters required during AT. 
+
+Baseline In our study, we compare CAAT with other PEFT approaches, including Adapter [14], LoRA [16] and Aurora[47]. FullLoRA-AT [17] and HyperAT [48], which are partial-parameter robust fine-tuning methods aimed at enhancing model robustness. Additionally, we consider the full-parameter standard AT as a baseline. 
+
+Implementation details For a fair comparison, we set the robust fine-tuning epochs to 30 across all datasets. We em-ploy the AdamW optimizer [49] with cosine learning rate decay. The batch size, learning rate, and weight decay are set to 32, 1 ×10 −3, and 1 ×10 −4, respectively. Additionally, the number of adversarial samples used to calculate param-eter criticality in Algorithm.1 is set to 800 for each dataset. All experiments were conducted on a server equipped with 4 NVIDIA A6000 GPUs with 48GB of memory. PyTorch version 2.1.0 was used. We introduce two variants of our CAAT framework: the addition-based CAAT-Adapter and the reparameterization-based CAAT-LoRA. CAAT-Adapter directly tunes the hid-den representations corresponding to sensitive weight ma-trices, following the method in [14]. In CAAT-LoRA, a product of low-rank matrices is used to approximate up-5Table 1. Comparisons of different robust fine-tuning methods using a pre-trained ViT-B [1] backbone across various datasets. ’Total params’ represents the ratio of the total number of parameters involved in adversarial training, while ’Tuned/Total’ denotes the fraction of trainable parameters. The standard adversarial training is highlighted with a gray background. Additionally, the top-1 (%) accuracy is reported in bold , and the top-2 (%) accuracy is reported in underline. Dataset Method Tuned params (M) Tuned / Total (%) Clean Acc (%) CW-20 (%) PGD-10 (%) AutoAttack (%) Average (%) CIFAR-10 FULL 85.15 100 82.65 50.69 53.66 47.14 50.50 ADAPTER -8 1.07 1.25 80.00 48.51 47.82 44.15 46.83 ADAPTER -32 1.22 1.43 80.06 48.58 47.74 42.47 46.26 LORA-16 1.24 1.46 83.24 46.71 48.96 44.96 46.88 AURORA 1.15 1.35 81.25 45.71 43.86 42.88 44.15 FULL LORA-AT 2.46 2.87 84.93 47.67 50.30 45.28 47.75 HYPER AT 5.47 6.42 83.70 48.73 50.46 45.32 48.17 CAAT-A DAPTER 1.08 1.26 85.57 49.11 50.15 45.48 48.25 (+1.7) 
+
+CAAT-L ORA 1.09 1.27 87.12 49.33 51.21 46.37 48.97 (+1.7) 
+
+CIFAR-100 FULL 85.22 100 62.01 29.15 30.56 27.50 29.07 ADAPTER -8 1.07 1.26 60.01 19.57 21.35 18.63 19.85 ADAPTER -32 1.22 1.43 61.17 20.88 22.79 20.36 21.34 LORA-16 1.24 1.46 63.85 24.56 25.79 22.13 24.16 AURORA 1.15 1.35 58.67 23.44 24.03 21.55 23.01 FULL LORA-AT 2.46 2.89 61.12 24.77 26.01 23.75 24.84 HYPER AT 5.47 6.42 63.93 24.63 25.90 23.64 24.72 CAAT-A DAPTER 1.07 1.26 63.15 24.86 26.47 23.87 25.07 (+0.9) 
+
+CAAT-L ORA 1.09 1.28 64.01 25.14 28.05 24.52 25.90 (+4.2) 
+
+ImageNet FULL 85.15 100 73.02 55.83 52.53 49.72 52.69 ADAPTER -8 1.07 1.25 67.13 48.35 46.76 42.66 45.92 ADAPTER -32 1.22 1.43 68.51 47.38 44.17 42.49 44.68 LORA-16 1.24 1.46 72.10 42.78 50.90 45.95 46.54 AURORA 1.18 1.39 70.18 50.49 50.37 45.18 48.68 FULL LORA-AT 2.62 3.08 71.23 52.33 50.95 47.10 50.13 HYPER AT 5.77 6.78 70.33 52.88 51.33 46.88 50.36 CAAT-A DAPTER 1.07 1.26 71.77 52.83 51.00 48.01 50.61 (+0.5) 
+
+CAAT-L ORA 1.08 1.27 72.54 53.73 51.56 49.00 51.43 (+2.1) 
+
+dates to the sensitive weight matrices, as described in [16]. For both variants, initialization parameters are carefully set according to the original works. Specifically, the bottleneck rank for CAAT-LoRA is set to 16. 
+
+4.2. Main Results 
+
+In this section, we present the experimental results evalu-ating the robustness of our CAAT approach against vari-ous adversarial attacks on pre-trained models across multi-ple datasets. To validate the effectiveness of our method, we use CW-20[35], PGD-10[10], and AutoAttack[46] to assess model robustness. The robustness results on the ViT-B and Swin-B models are shown in Table.1 and Ap-pendix. Notably, our proposed CAAT-Adapter and CAAT-LoRA achieve the highest robustness performance with the fewest trainable parameters. For example, CAAT outper-forms the state-of-the-art FullLoRA-AT by a clear mar-gin of 1.58% in mean top-1 accuracy across the three datasets, while using fewer trainable parameters. We at-tribute our method’s superior robustness to the heuristic selection of critical parameters for fine-tuning. Addition-ally, we observe that reparameterization-based AT consis-tently outperforms addition-based variants, indicating that reparameterization-based PEFT is more effective due to its direct modification of the model’s parameters rather than relying on auxiliary parameters. Furthermore, our proposed CAAT achieves robustness close to that of full fine-tuning AT, using only approxi-mately 1% of the parameters. In terms of clean example accuracy, CAAT also demonstrates high performance, indi-cating that training only a subset of parameters can mitigate catastrophic forgetting during robust fine-tuning. However, when defending against other adversarial attacks, full fine-tuning AT maintains the highest robustness performance, as 6Table 2. Cost comparisons with ViT-B backbone on the CIFAR10 robustness when faced PGD-10 attack. The best result is in bold .
+
+Method Inference Memory (GB) Fine-tuning Memory (GB) Train time (h) Full 1.3 11.8 13.10 Adapter 2.0 14.0 11.30 LoRA 1.4 10.0 10.48 FullLoRA-AT 1.4 8.5 8.39 HyperAT 1.5 9.2 8.33 CAAT 1.3 7.3 6.00 
+
+Table 3. Adversarial robustness result of our CAAT when scaled to larger vision transformer architecture. The best result is in bold .
+
+Arch Method Paras Clean Acc CW-20 PGD-10 ViT-L Full 304.33 74.82 52.77 55.39 LoRA 23.58 70.53 48.90 54.86 
+
+FullLoRA-AT 81.14 61.76 50.07 44.90 CAAT 11.42 73.72 51.49 54.83 ViT-H Full 631.51 76.58 50.76 54.37 LoRA 40.36 69.32 44.39 45.97 FullLoRA-AT 108.39 70.33 43.60 48.33 CAAT 27.33 71.24 46.33 50.02 
+
+Swin-L Full 196.19 75.32 47.32 50.36 LoRA 18.93 44.36 33.72 35.84 FullLoRA-AT 63.72 50.32 37.64 38.11 CAAT 20.66 52.37 40.37 41.28 
+
+the frozen parameters in full AT contribute collectively to overall robustness. 
+
+4.3. Computational cost analysis 
+
+Moreover, we performed an experiment that analyzed the computational cost of CAAT in comparison with full fine-tuning and PEFT methods, such as Adapter and LoRA. Re-sults in Table.2 show that full fine-tuning incurs the highest costs in both memory usage and training time. Addition-based methods like Adapter require more memory during inference. In contrast, our proposed CAAT achieves the lowest resource consumption in both memory and training time. 
+
+4.4. Generalization to Larger ViT Architectures 
+
+Furthermore, our CAAT exhibits favorable generalization when scaled to larger vision transformer architectures, as re-ported in Table.3. This trend may facilitate the development of adversarially trained, significantly larger vision models, such as ViT-22B [50]. Notably, we observe that our CAAT relies on only approximately 6% of trainable parameters, resulting in a mean 4.3% decrease in adversarial robustness performance. 
+
+4.5. Observations on Criticality Parameters 
+
+Our criticality criterion identifies the most vulnerable pa-rameters to adversarial examples, serving as a tool to inter-pret neural network susceptibility to such attacks. In Fig-ure. 3, we visualize the selected critical parameters of the 
+
+Table 4. Results of combining CAAT with other AT methods. The best result is in bold .                                                                                                   
+
+> Dataset Combined AT Method Trainable Params(M) Clean Acc (%) PGD-10 (%) AutoAttack (%) CIFAR-10 TRADES Full 85.15 83.57 53.59 48.99 LoRA 4.72 84.73 50.45 45.90 FullLoRA-AT 4.86 86.88 51.66 46.01 CAAT 1.10 86.95 52.15 47.60
+> MART Full 85.15 83.66 53.57 49.05 LoRA 4.72 84.80 50.69 46.04 FullLoRA-AT 4.86 87.55 52.04 47.15 CAAT 1.10 87.72 52.21 47.40
+> PRM Full 85.15 83.45 53.57 48.76 LoRA 4.72 84.61 50.05 45.67 FullLoRA-AT 4.86 86.71 51.27 47.29 CAAT 1.10 86.87 52.01 47.58
+> CIFAR-100 TRADES Full 85.22 61.73 31.27 28.15 LoRA 4.72 61.83 26.33 23.09 FullLoRA-AT 4.86 61.88 28.93 26.44 CAAT 1.10 62.03 29.01 26.55
+> MART Full 85.22 61.80 31.32 28.26 LoRA 4.72 61.67 26.50 23.40 FullLoRA-AT 4.86 62.00 29.20 26.59 CAAT 1.10 62.05 29.25 26.67
+> PRM Full 85.22 61.40 31.06 28.07 LoRA 4.72 62.53 26.17 22.86 FullLoRA-AT 4.86 61.70 28.75 26.32 CAAT 1.10 61.80 28.87 26.36
+
+pre-trained ViT-B backbone when exposed to PGD-10 at-tacks with trainable parameter budgets of 0.05M, 0.1M, and 0.2M, respectively. From Figure 3, we observe that under extremely limited parameter budgets, e.g. , τ =0.05, only the first block and the final normalization layer are selected, indicating that adver-sarial examples primarily affect the initial block and the fi-nal normalization layer. As the trainable parameter budget increases, the normalization layers in the feed-forward net-work of the middle blocks gradually enter the critical set, suggesting that, at this stage, fully connected layers gain importance in terms of vulnerability. 
+
+4.6. Corporation with other AT methods 
+
+To further validate the effectiveness of CAAT, we incorpo-rated it with additional SOTA AT methods to enhance ro-bustness using a minimal number of trainable parameters. We conducted experiments with ViT-B trained on CIFAR10 and CIFAR100 using three different AT methods: TRADES [18], MART [19], and PRM [20]. The results, reported in Table. 4, show that when combined with other state-of-the-art AT methods, CAAT significantly outperforms other partial-parameter fine-tuning methods, such as FullLoRA-AT, in terms of robustness across different datasets. 
+
+4.7. Ablation Study 
+
+Effect of the trainable parameter proportion We con-duct the effectiveness of our proportion of trainable param-eters to determine its impact on model robustness. The ”Tuned/Total” denotes the fraction of trainable parameters. The result is shown in Figure. 4. The dashline indicates the fully fine-tuned upper bound. From the figure, we can find that CAAT can outperform the other methods in model robustness while being more parameter efficient. 7saib.1mron.0.skcolb
+
+> blocks.0.attn.v.bias
+> blocks.0.attn.proj.bias
+
+… …
+
+> norm.bias
+
+Block 0 Last Norm …(a) τ =0.05M blocks.0.norm1.bias 
+
+> blocks.0.attn.v.bias
+> blocks.0.attn.proj.bias
+
+… … …Block 0 Last Norm 
+
+> blocks.0.norm2.bias
+> blocks.1.norm1.bias
+
+Block 1 
+
+> norm.bias
+
+… … (b) τ =0.1M Block 0 Last Norm … Block 1 
+
+> saib.1mron.0.skcolb
+> blocks.0.attn.v.bias
+> blocks.0.attn.proj.bias
+
+… … …
+
+> blocks.0.norm2.bias
+
+…
+
+> blocks.0.norm2.weight
+> blocks.1.norm1.bias
+> norm.bias
+> norm.weight
+> blocks.2.norm1.bias
+> blocks.5.norm1.bias
+> blocks.10.norm1.bias
+> blocks.11.norm2.bias
+
+Block 2 Block 5 Block 10 Block 11 … … … … …
+
+(c) τ =0.2M 
+
+Figure 3. Visualization of the selected critical parameters of ViT-B on CIFAR10 when subjected to a PGD-10 attack under 0.05M, 0.1M, and 0.2M parameter budgets, respectively. 0.0 1.0 2.0 3.0 46.0 48.0 50.0 52.0 54.0 Tuned / Total params(%) PGD-10 Acc 
+
+Fully Finetune CAAT FullLoRA-AT LoRA Aadpter 
+
+Figure 4. Accuracy vs. parameter efficiency of ViT-B on the CI-FAR10 dataset under PGD-10 attack defense. 
+
+Effect of direct and indirect tuning We investigate the ef-fect of direct and indirect tuning on model robustness. Di-rect tuning involves directly fine-tuning critical parameters in response to adversarial examples, while indirect tuning employs partial parameter adjustments using PEFT tech-niques such as LoRA and Adapter. We conducted experi-ments with ViT-B on the CIFAR10 dataset under the PGD-10 attack. The results are presented in Table. 5, indicate that indirect tuning provides superior robustness overall. 
+
+Effect of different rank r We evaluate the robustness of our proposed CAAT-LoRA across different ranks r in the allo-cated LoRA. As shown in Table. 6, the model achieves the highest adversarial accuracy at ranks r = 16 and r = 32 .Considering the trade-off between parameter efficiency and 
+
+Table 5. Ablation study on direct and indirect tuning. The best result is in bold .                
+
+> Method Tuned / Total (%) Clean Acc (%) CW-20 (%) PGD-10 (%) AutoAttack (%) LoRA 1.24 83.24 46.71 50.30 45.28 CAAT(direct tuning) 1.15 79.68 46.82 50.35 45.55 CAAT(indirect tuning) 1.09 87.12 49.33 51.21 46.37
+
+model robustness, we set r = 16 as the default configura-tion in our work. 
+
+Table 6. Results of our CAAT under different rank r.
+
+Rank r Paras Clean Acc CW-20 PGD-10 AutoAttack 8 0.57 82.06 46.32 49.64 43.1 16 1.09 87.12 49.33 51.21 46.37 32 2.34 86.77 50.15 50.38 46.94 
+
+64 4.93 84.25 47.66 50.5 45.86 
+
+## 5. Conclusion 
+
+In this paper, we propose a lightweight CAAT method to efficiently enhance the adversarial robustness of pretrained ViT models using a partial critical-aware PEFT technique. By identifying the most critical parameters for adversarial robustness, our CAAT significantly reduces the number of trainable parameters in ViT. Furthermore, the robustness of CAAT benefits from its extensive representational ability. Extensive experiments demonstrate that our method not only requires less computational budget compared to previ-ous approaches but also achieves significant improvements 8in the robustness of models against adversarial attacks. In the future, we plan to extend our method to larger multi-modal models, such as LLaVA [51], to further enhance the adversarial robustness of large-scale transformer models. 
+
+## References 
+
+[1] A. Dosovitskiy, L. Beyer et al. , “An image is worth 16x16 words: Transformers for image recognition at scale,” in International Conference on Learning Representations ,2021. [Online]. Available: https://openreview.net/forum?id= YicbFdNTTy 1, 3, 4, 5, 6 [2] Q. Wu, Z. Zhang, Y. Liu, J. Zhang, and L. Nie, “Contrastive multi-bit collaborative learning for deep cross-modal hash-ing,” IEEE Transactions on Knowledge and Data Engineer-ing , vol. 36, no. 11, pp. 5835–5848, 2024. 1 [3] N. Carion, F. Massa, G. Synnaeve, N. Usunier, A. Kirillov, and S. Zagoruyko, “End-to-end object detection with transformers,” in ECCV , ser. Lecture Notes in Computer Science, A. Vedaldi, H. Bischof, T. Brox, and J. Frahm, Eds., vol. 12346. Springer, 2020, pp. 213–229. [Online]. Available: https://doi.org/10.1007/978-3-030-58452-8 13 1 [4] Y. Bai, X. Geng, K. Mangalam, A. Bar, A. L. Yuille, T. Dar-rell, J. Malik, and A. A. Efros, “Sequential modeling enables scalable learning for large vision models,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 22 861–22 872. 1, 3 [5] H. Touvron, M. Cord, A. Sablayrolles, G. Synnaeve, and H. J´ egou, “Going deeper with image transformers,” in ICCV , 2021, pp. 32–42. [Online]. Available: https: //doi.org/10.1109/ICCV48922.2021.00010 1 [6] C. R. Chen, Q. Fan, and R. Panda, “Crossvit: Cross-attention multi-scale vision transformer for image classification,” in 
+
+ICCV , 2021, pp. 347–356. [Online]. Available: https: //doi.org/10.1109/ICCV48922.2021.00041 1 [7] W. Nie, B. Guo, Y. Huang, C. Xiao, A. Vahdat, and A. Anandkumar, “Diffusion models for adversarial purification,” in International Conference on Machine Learning , ser. Proceedings of Machine Learning Research, K. Chaudhuri, S. Jegelka, L. Song, C. Szepesv´ ari, G. Niu, and S. Sabato, Eds., vol. 162. PMLR, 2022, pp. 16 805– 16 827. [Online]. Available: https://proceedings.mlr.press/ v162/nie22a.html 1, 3 [8] W. Xu, D. Evans, and Y. Qi, “Feature squeezing: Detecting adversarial examples in deep neural networks,” in 
+
+Network and Distributed System Security Symposium , 2018. [Online]. Available: https://www.ndss-symposium.org/wp-content/uploads/2018/02/ndss2018 03A-4 Xu paper.pdf [9] Y. Song, T. Kim, S. Nowozin, S. Ermon, and N. Kushman, “Pixeldefend: Leveraging generative models to understand and defend against adversarial examples,” in International Conference on Learning Representations , 2018. [Online]. Available: https://openreview.net/forum?id=rJUYGxbCW 1 [10] A. Madry, A. Makelov, L. Schmidt, D. Tsipras, and A. Vladu, “Towards deep learning models resistant to ad-versarial attacks,” in International Conference on Learning Representations , 2018. 2, 3, 4, 5, 6 [11] D. Wu, S. Xia, and Y. Wang, “Adversarial weight perturbation helps robust generalization,” in Neural Infor-mation Processing Systems , H. Larochelle, M. Ranzato, R. Hadsell, M. Balcan, and H. Lin, Eds., 2020. [Online]. Available: https://proceedings.neurips.cc/paper/2020/hash/ 1ef91c212e30e14bf125e9374262401f-Abstract.html 2 [12] T. Lee, B. Edwards, I. Molloy, and D. Su, “Defending against neural network model stealing attacks using deceptive per-turbations,” in 2019 IEEE Security and Privacy Workshops (SPW) , 2019, pp. 43–49. 2 [13] B. Lester, R. Al-Rfou, and N. Constant, “The power of scale for parameter-efficient prompt tuning,” in Empirical Methods in Natural Language Processing , M. Moens, X. Huang, L. Specia, and S. W. Yih, Eds. Association for Computational Linguistics, 2021, pp. 3045–3059. [Online]. Available: https://doi.org/10.18653/v1/2021.emnlp-main. 243 2, 3 [14] N. Houlsby, A. Giurgiu, S. Jastrzebski, B. Morrone, Q. de Laroussilhe, A. Gesmundo, M. Attariyan, and S. Gelly, “Parameter-efficient transfer learning for NLP,” in Proceedings of International Conference on Machine Learning , ser. Proceedings of Machine Learning Research, K. Chaudhuri and R. Salakhutdinov, Eds., vol. 97, 2019, pp. 2790–2799. [Online]. Available: http://proceedings.mlr. press/v97/houlsby19a.html 2, 3, 5 [15] T. B. Brown, B. Mann, N. Ryder, M. Subbiah et al. ,“Language models are few-shot learners,” in Neural Information Processing Systems , H. Larochelle, M. Ranzato, R. Hadsell, M. Balcan, and H. Lin, Eds., 2020. [Online]. Available: https://proceedings.neurips.cc/paper/2020/hash/ 1457c0d6bfcb4967418bfb8ac142f64a-Abstract.html 2 [16] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen, “LoRA: Low-rank adaptation of large language models,” in International Conference on Learning Representations , 2022. 2, 3, 5, 6 [17] Z. Yuan, J. Zhang, and S. Shan, “Fulllora-at: Efficiently boosting the robustness of pretrained vision transformers,” 
+
+arXiv preprint arXiv:2401.01752 , 2024. 2, 3, 5 [18] H. Zhang, Y. Yu, J. Jiao, E. Xing, L. El Ghaoui, and M. Jor-dan, “Theoretically principled trade-off between robustness and accuracy,” in International conference on machine learn-ing . PMLR, 2019, pp. 7472–7482. 2, 3, 7 [19] Y. Wang, D. Zou, J. Yi, J. Bailey, X. Ma, and Q. Gu, “Im-proving adversarial robustness requires revisiting misclassi-fied examples,” in International conference on learning rep-resentations , 2019. 2, 3, 7 [20] Y. Mo, D. Wu, Y. Wang, Y. Guo, and Y. Wang, “When adver-sarial training meets vision transformers: Recipes from train-ing to architecture,” Advances in Neural Information Pro-cessing Systems , vol. 35, pp. 18 599–18 611, 2022. 2, 3, 7 [21] Y. LeCun, L. Bottou, Y. Bengio, and P. Haffner, “Gradient-based learning applied to document recognition,” Proc. IEEE , vol. 86, no. 11, pp. 2278–2324, 1998. [Online]. Available: https://doi.org/10.1109/5.726791 3 [22] A. Krizhevsky, I. Sutskever, and G. E. Hinton, “Imagenet classification with deep convolutional neural networks,” in 
+
+Advances in Neural Information Processing Systems , P. L. 
+
+9Bartlett, F. C. N. Pereira, C. J. C. Burges, L. Bottou, and K. Q. Weinberger, Eds., 2012, pp. 1106–1114. [Online]. Available: https://proceedings.neurips.cc/paper/2012/hash/ c399862d3b9d6b76c8436e924a68c45b-Abstract.html 3 [23] A. Kirillov, E. Mintun, N. Ravi et al. , “Segment anything,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 4015–4026. 3 [24] B. Cheng, I. Misra, A. G. Schwing, A. Kirillov, and R. Gird-har, “Masked-attention mask transformer for universal image segmentation,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2022, pp. 1290– 1299. 3 [25] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and I. Polosukhin, “Attention is all you need,” in Advances in Neural Information Processing Systems , I. Guyon, U. von Luxburg, S. Bengio, H. M. Wallach, R. Fergus, S. V. N. Vishwanathan, and R. Garnett, Eds., 2017, pp. 5998–6008. [Online]. Available: https://proceedings.neurips.cc/paper/2017/hash/ 3f5ee243547dee91fbd053c1c4a845aa-Abstract.html 3 [26] A. Dubey, A. Jauhri, A. Pandey et al. , “The llama 3 herd of models,” arXiv preprint arXiv:2407.21783 , 2024. 3 [27] W. Li and C.-M. Pun, “Elf: An end-to-end local and global multimodal fusion framework for glaucoma grading,” in 
+
+2023 IEEE International Conference on Bioinformatics and Biomedicine (BIBM) . IEEE, 2023, pp. 4081–4085. 3 [28] F. Schroff, D. Kalenichenko, and J. Philbin, “Facenet: Aunified embedding for face recognition and clustering,” in 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , 2015, pp. 815–823. 3 [29] X. Wei, Y. Guo, and J. Yu, “Adversarial sticker: A stealthy attack method in the physical world,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 45, no. 3, pp. 2711–2725, 2022. 3 [30] F. Croce and M. Hein, “Provable robustness against all adversarial lp-perturbations for p ≥ 1,” arXiv preprint arXiv:1905.11213 , 2019. 3 [31] H. Gong, M. Dong, S. Ma, S. Camtepe, S. Nepal, and C. Xu, “Random entangled tokens for adversarially robust vision transformer,” in Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition , 2024, pp. 24 554–24 563. 3 [32] S. Jain and T. Dutta, “Towards understanding and improving adversarial robustness of vision transformers,” in Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 24 736–24 745. 3 [33] S. Chen, C. Ge, Z. Tong, J. Wang, Y. Song, J. Wang, and P. Luo, “Adaptformer: Adapting vision transformers for scalable visual recognition,” in Neural Information Processing Systems , S. Koyejo, S. Mohamed, A. Agar-wal, D. Belgrave, K. Cho, and A. Oh, Eds., 2022. [Online]. Available: http://papers.nips.cc/paper files/paper/ 2022/hash/69e2f49ab0837b71b0e0cb7c555990f8-Abstract-Conference.html 3 [34] P. Gao, S. Geng, R. Zhang, T. Ma, R. Fang, Y. Zhang, H. Li, and Y. Qiao, “Clip-adapter: Better vision-language models with feature adapters,” Int. J. Comput. Vis. , vol. 132, no. 2, pp. 581–595, 2024. [Online]. Available: https://doi.org/10.1007/s11263-023-01891-x 3 [35] N. Carlini and D. Wagner, “Towards evaluating the robust-ness of neural networks,” in IEEE Symposium on Security and Privacy , 2017, pp. 39–57. 4, 5, 6 [36] I. J. Goodfellow, J. Shlens, and C. Szegedy, “Explaining and harnessing adversarial examples,” in International Confer-ence on Learning Representations , Y. Bengio and Y. LeCun, Eds., 2015. 4 [37] K. Zhu, X. Hu, J. Wang, X. Xie, and G. Yang, “Improv-ing generalization of adversarial training via robust critical fine-tuning,” in International Conference on Computer Vi-sion , 2023. 4 [38] P. Molchanov, A. Mallya, S. Tyree, I. Frosio, and J. Kautz, “Importance estimation for neural network pruning,” in Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2019, pp. 11 264–11 272. [Online]. Available: http://openaccess.thecvf.com/content CVPR 2019 / html / Molchanov Importance Estimation for Neural Network Pruning CVPR 2019 paper.html 4 [39] H. Cai, L. Zhu, and S. Han, “Proxylessnas: Direct neural architecture search on target task and hardware,” in International Conference on Learning Representations ,2019. [Online]. Available: https://openreview.net/forum?id= HylVB3AqYm 4 [40] S. Mangrulkar, S. Gugger, L. Debut, Y. Belkada, S. Paul, and B. Bossan, “Peft: State-of-the-art parameter-efficient fine-tuning methods,” https://github.com/huggingface/peft, 2022. 5[41] M. Zhong, Y. Shen, S. Wang, Y. Lu, Y. Jiao, S. Ouyang, D. Yu, J. Han, and W. Chen, “Multi-lora composition for image generation,” arXiv preprint arXiv:2402.16843 , 2024. 5[42] N. Ding, Y. Qin, G. Yang, F. Wei, Z. Yang, Y. Su, S. Hu, Y. Chen, C.-M. Chan, W. Chen et al. , “Parameter-efficient fine-tuning of large-scale pre-trained language models,” Na-ture Machine Intelligence , vol. 5, no. 3, pp. 220–235, 2023. 5[43] A. Krizhevsky, G. Hinton et al. , “Learning multiple layers of features from tiny images,” 2009. 5 [44] O. Russakovsky, J. Deng, H. Su, J. Krause et al. , “Imagenet large scale visual recognition challenge,” Int. J. Comput. Vis. , vol. 115, no. 3, pp. 211–252, 2015. [Online]. Available: https://doi.org/10.1007/s11263-015-0816-y 5 [45] Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, and B. Guo, “Swin transformer: Hierarchical vision transformer using shifted windows,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 10 012–10 022. 5, 2 [46] F. Croce and M. Hein, “Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks,” in Proceedings of Machine Learning Research ,ser. Proceedings of Machine Learning Research, vol. 119, 2020, pp. 2206–2216. [Online]. Available: http: //proceedings.mlr.press/v119/croce20b.html 5, 6 [47] H. Wang, X. Yang, J. Chang, D. Jin, J. Sun, S. Zhang, X. Luo, and Q. Tian, “Parameter-efficient tuning of 
+
+10 large-scale multimodal foundation model,” 2023. [Online]. Available: https://arxiv.org/abs/2305.08381 5 [48] K. Lv, H. Cao, K. Tu, Y. Xu, Z. Zhang, X. Ding, and Y. Wang, “Hyper adversarial tuning for boosting adversarial robustness of pretrained large vision models,” 
+
+CoRR , vol. abs/2410.05951, 2024. [Online]. Available: https://doi.org/10.48550/arXiv.2410.05951 5 [49] I. Loshchilov, F. Hutter et al. , “Fixing weight decay regular-ization in adam,” arXiv preprint arXiv:1711.05101 , vol. 5, 2017. 5 [50] M. Dehghani, J. Djolonga, B. Mustafa, P. Padlewski, J. Heek 
+
+et al. , “Scaling vision transformers to 22 billion parameters,” in International Conference on Machine Learning . PMLR, 2023, pp. 7480–7512. 7 [51] B. Li, Y. Zhang, D. Guo, R. Zhang et al. , “Llava-onevision: Easy visual task transfer,” CoRR , vol. abs/2408.03326, 2024. [Online]. Available: https://doi.org/10.48550/arXiv.2408. 03326 9 
+
+11 Efficient Adversarial Training via Criticality-Aware Fine-Tuning 
+
+# Supplementary Material 
+
+## 6. Algorithm of CAAT 
+
+A detailed description of the CAAT algorithm is provided in Algorithm.2. 
+
+Algorithm 2 Criticality-Aware Adversarial Training 
+
+Input: Pre-trained ViT model with network parameter θ,adversarial dataset Dadv , adversarial training iteration steps T , learning rate γ.
+
+Output: The adversarial trained model weights θ∗ 
+
+> AT
+
+. 
+
+> 1:
+
+Initialize criticality set: C = {0}N . 
+
+> 2:
+
+Step 1 : Calculate RPC for each parameter  
+
+> 3:
+
+for every parameter weight θj ∈ θ do  
+
+> 4:
+
+Calculate RPC of θj using Algorithm.1.  
+
+> 5:
+
+end for  
+
+> 6:
+
+Step 2 : Allocate trainable adapter and AT.  
+
+> 7:
+
+Select the module whose RPC value exceeds the thresh-old to generate the binary mask matrix M as shown in Eq.8.  
+
+> 8:
+
+for t =1, . . . , T do ▷ AT for T epochs  
+
+> 9:
+
+for Batch Badv ∈ D adv do  
+
+> 10:
+
+Calculate Loss ρ(θ, Badv ) 
+
+> 11:
+
+Calculate gradients Θ′ ← Θ − ϵgΘ ⊙ M 
+
+> 12:
+
+end for  
+
+> 13:
+
+end for  
+
+> 14:
+
+Return : The adversarial trained model weights θ∗ 
+
+> AT
+
+.
+
+## 7. Training Details 
+
+7.1. Experiment Code 
+
+The source code is available at https://anonymous. 4open.science/r/CAAT-CF86 .
+
+## 8. Experiment Results 
+
+8.1. Effect of number of adversarial samples 
+
+We also investigate the effect of varying the number of ad-versarial samples used to calculate parameter criticality. Re-sults in Table. 7 show that the robustness accuracy increases slightly from 200 to 600 samples and plateaus thereafter. This suggests that the robustness accuracy is not highly sen-sitive to the number of training samples. Calculating pa-rameter criticality with 800 adversarial samples is efficient, with CAAT taking only 8 seconds per forward propagation.  
+
+> Table 7. Effect of the number of adversarial samples used to cal-culate parameter criticality. The best result is in bold .
+
+Sample Num. 200 400 600 800 PGD-10 Acc. 50.10 50.13 50.15 50.15 
+
+## 9. Ethical Impact 
+
+We propose Criticality-Aware Adversarial Training (CAAT), a method aimed at achieving parameter-efficient adversarial training. It is important to note that enhancing robustness is not the primary objective of this work. While our research currently focuses on ViT with relatively small parameter sizes, we plan to extend our methods to larger models. We believe that advancing robust research on large models, particularly LLM, will enhance the reliability and trustworthiness of LLM systems. A deeper understanding of the vulnerabilities in LLMs can enable their more effective utilization, especially in scenarios requiring high reliability. 1Table 8. Comparisons of different robust fine-tuning methods using a pre-trained Swin-B [45] backbone across various datasets. The standard adversarial training is highlighted with a gray background. Additionally, the top-1 (%) accuracy is reported in bold , and the top-2 (%) accuracy is reported in underline. Dataset Method Tuned params (M) Tuned / Total (%) Clean Acc (%) CW-20 (%) PGD-10 (%) AutoAttack (%) CIFAR-10 FULL 86.69 100 81.28 48.66 50.69 46.27 ADAPTER -8 1.72 1.98 75.68 42.10 38.85 39.37 ADAPTER -32 2.00 2.31 76.53 42.53 39.88 39.47 LORA-16 3.15 3.63 80.84 45.73 46.59 43.81 FULL LORA-AT 3.17 3.66 82.51 45.75 47.58 44.27 CAAT-A DAPTER 1.15 1.33 82.89 46.62 47.72 43.95 CAAT-L ORA 1.25 1.44 83.57 47.14 48.15 44.52 
+
+CIFAR-100 FULL 86.76 100 59.93 28.02 30.48 26.27 ADAPTER -8 1.72 1.98 50.52 20.52 21.06 20.22 ADAPTER -32 2.00 2.31 51.77 20.18 21.72 21.37 LORA-16 3.15 3.63 58.32 24.77 26.19 21.82 FULL LORA-AT 3.17 3.65 58.60 25.00 26.39 22.18 CAAT-A DAPTER 1.17 1.35 58.66 25.10 26.95 22.34 CAAT-L ORA 1.26 1.45 59.73 25.63 28.57 24.94 
+
+2
