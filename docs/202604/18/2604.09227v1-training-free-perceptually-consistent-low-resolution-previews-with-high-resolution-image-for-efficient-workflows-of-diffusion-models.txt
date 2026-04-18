@@ -1,0 +1,983 @@
+Title: Training-free, Perceptually Consistent Low-Resolution Previews with High-Resolution Image for Efficient Workflows of Diffusion Models
+
+URL Source: https://arxiv.org/pdf/2604.09227v1
+
+Published Time: Mon, 13 Apr 2026 00:59:47 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# Training-free, Perceptually Consistent Low-Resolution Previews with High-Resolution Image for Efficient Workflows of Diffusion Models 
+
+## Wongi Jeong ∗1 Hoigi Seo ∗1 Se Young Chun 1,2†
+
+> 1
+
+## Dept. of Electrical and Computer Engineering, 2INMC & IPAI Seoul National University, Republic of Korea 
+
+{wg7139, seohoiki3215, sychun }@snu.ac.kr 
+
+## Abstract 
+
+Image generative models have become indispensable tools to yield exquisite high-resolution (HR) images for everyone, ranging from general users to professional designers. How-ever, a desired outcome often requires generating a large number of HR images with different prompts and seeds, re-sulting in high computational cost for both users and ser-vice providers. Generating low-resolution (LR) images first could alleviate computational burden, but it is not straight-forward how to generate LR images that are perceptually consistent with their HR counterparts. Here, we consider the task of generating high-fidelity LR images, called Pre-views, that preserve perceptual similarity of their HR coun-terparts for an efficient workflow, allowing users to identify promising candidates before generating the final HR image. We propose the commutator-zero condition to ensure the LR-HR perceptual consistency for flow matching models, leading to the proposed training-free solution with down-sampling matrix selection and commutator-zero guidance. Extensive experiments show that our method can generate LR images with up to 33% computation reduction while maintaining HR perceptual consistency. When combined with existing acceleration techniques, our method achieves up to 3 × speedup. Moreover, our formulation can be ex-tended to image manipulations, such as warping and trans-lation, demonstrating its generalizability. 
+
+## 1. Introduction 
+
+Diffusion generative models [6, 8, 13, 38, 42], with their strong ability to approximate complex probability distri-butions, have been used for diverse tasks, including im-age synthesis [4, 8, 37, 38], high-quality 3D asset genera-tion [32, 39, 41, 48], video generation [14, 47, 55], and text modeling [10, 27, 35]. Building on this foundation, flow matching models [8, 25, 29, 33] that learn velocity fields   
+
+> * Authors contributed equally. †Corresponding author.
+
+have further expanded these capabilities, demonstrating im-proved scalability. Fueled by these advances, diffusion-based models have become powerful tools in real-world ser-vices, not only for creators such as designers and photogra-phers but also general users in image and video synthesis. However, since state-of-the-art generative AI tools pro-duce diverse images from a single prompt, users require ex-tensive seed (or prompt) searching to obtain the desired out-put. To speed up this workflow, several methods proposed to accelerate diffusion model inference. Caching-based ap-proaches [5, 30, 31, 34, 56], reuse redundant features or predict future latents to enable faster synthesis, introduce memory overhead and may alter perceptual similarity be-tween original images and generated images from acceler-ation. More recent methods [18, 45] achieve acceleration by spatially downsampling latents; however, this approach distorts the latent representation, hindering the recovery of high-quality images with composition and color fidelity. We now raise a fundamental question: Instead of gener-ating high-resolution images for every candidate, can we accelerate the seed search process by using perceptually similar low-resolution image candidates? 
+
+In response to this question, we consider a workflow, called Preview Generation , where users first generate di-verse low-resolution (LR) candidates (Previews), then per-form a high-resolution (HR) sampling using the selected seed and prompt. This enables efficient image selection and maintains quality with reduced computational cost. The core component for it is our proposed LR generation that preserves the color composition and structure of their HR counterparts. We reformulate this objective as enforcing the zero-vector commutator between the downsampling opera-tion and the flow matching model, assuming trajectory com-pliance. To achieve this in a training-free manner, we intro-duce a principled selection of mutually exclusive downsam-pling operators that best satisfy the commutator-zero con-dition. A fixed-point–inspired commutator-zero guidance mitigates accumulated errors using only forward passes, eliminating costly backpropagation. 1
+
+> arXiv:2604.09227v1 [eess.IV] 10 Apr 2026
+
+High -res. gen. for multiple seeds (compute -intensive) 
+
+> Prompt : “ Chubby, cheerful forest
+> spirit with oversized glowing
+> eyes, peeking from behind a
+> giant mushroom. Close -up, eye -
+> level shot, vibrant pastel colors,
+> cute cartoon style, whimsical
+> atmosphere .”
+
+Low -res.gen . for multiple seeds (cost -efficient) 
+
+Is it possible to generate a 
+
+low -resolution image that 
+
+is identical to the high -
+
+resolution image? High -res. gen. 
+
+w/ selected seed 
+
+Latency 
+
+. . . 
+
+. . . 
+
+Slow! 
+
+Fast! (3 × speedup) 
+
+Current Workflow 
+
+Proposed Workflow Figure 1. Motivation of Preview Generation. Most users of generative AI usually produce diverse candidate images through repeated trials from multiple seeds (or prompts) to obtain a desired result. Our goal is to accelerate this workflow by generating low-resolution images that share the same content as their high-resolution counterparts but can be produced much faster in a training-free manner. 
+
+We extensively evaluate our method against various al-ternatives on state-of-the-art models, including FLUX.1-dev [24] and Stable Diffusion 3.5-L [8] (SD3.5-L). Base-lines include approaches that reduce the number of func-tion evaluations (NFE), generate images directly in LR, or na¨ ıvely downsample latents at the desired timestep. Across image quality, perceptual, and low-level similarity metrics, our method consistently yields LR images that more faith-fully align with their HR counterparts. Furthermore, we demonstrate that the commutator-zero condition generalizes beyond downsampling, enabling integration into sampling processes involving operations such as warping and trans-lation, underscoring the generalizability of our formulation. Our contribution can be summarized as follows. • We consider Preview Generation , the task to generate LR images with perceptually similar HR contents for effi-cient workflows and formulate this as the commutator-zero condition in the flow-matching model. We propose downsample matrix selection and commutator-zero guid-ance to enforce this condition in a training-free manner. • Our extensive experiments across diverse metrics demon-strate that LR images from our approach outperform al-ternative solutions in perceptual similarity to the original HR images, achieving up to 1.53 × acceleration. • We show that integrating the proposed method with temporal-axis acceleration yields a 3.05 × speedup, and further demonstrate its strong generalization to a variety of image manipulation tasks. 
+
+## 2. Related Works 
+
+Flow matching models. Flow matching [29] is a genera-tive framework that models the transformation of a simple prior distribution ( e.g. , Gaussian) into the complex data dis-tribution ( e.g. , image) by learning a deterministic transport map via a continuous-time ODE. The evolution of a sample 
+
+xt over time is governed by the learned velocity field vθ :
+
+dx t = vθ (xt, t )dt. (1) This approach eliminates the need for stochastic sampling required by previous approaches. In particular, the con-ditional flow matching objective trains the neural network 
+
+vθ (xt, t ) to predict a target conditional velocity field. Rec-tified Flow [33], an efficient variant, uses a linear interpola-tion path between noise x0 and the data sample x1:
+
+xt = (1 − t)x0 + tx 1, x 0 ∼ N (0 , I), t ∈ [0 , 1] . (2) This interpolated linear (rectified) path corresponds to a constant ground-truth conditional velocity field: 
+
+ut(xt|x1) = dx t
+
+dt = x1 − x0. (3) The model is then trained to predict this velocity by mini-mizing the mean squared error between the predicted veloc-ity vθ (xt, t ) and ut(xt|x1), producing straight trajectories and thus requiring fewer function evaluations for sampling. 2Temporal-axis acceleration. To reduce the high infer-ence latency of large-scale flow matching models, several methods cache intermediate features [5, 30, 31, 34, 56] for acceleration. Rectified flow-based models [2, 8, 23, 26, 33] with linear trajectories and Diffusion Transformers [36] with inherent redundancy are primary targets. ∆-DiT [5] caches layer-wise feature residuals and skips redundant layers, ToCa [56] applies token-wise caching, and Tay-lorSeer [31] leverages Taylor expansion to predict trajec-tories and update cached features. However, these methods yield only linear speedup with memory overhead propor-tional to cached features or timesteps, limiting scalability. 
+
+Spatial-axis acceleration. Orthogonal to caching-based acceleration, several methods reduce the number of to-kens [18, 45, 54] for noise prediction, achieving quadratic speedup. Bottleneck Sampling [45] performs full-resolution denoising to capture global semantics, downsam-ples mid-stage latents to save computation, and upsamples later to restore quality. RALU [18] begins with a low-resolution latent and selectively upsamples detailed regions such as edges for faster sampling. However, direct latent manipulation disturbs content preservation, causing devia-tions in composition and color; thus, accelerated outputs cannot faithfully reconstruct the HR counterpart. 
+
+## 3. Method 
+
+In diffusion models, the early denoising stages primarily de-fine an image’s global layout [16, 22, 50]. Building on this observation, we apply downsampling at a specific timestep 
+
+tD during high-resolution (HR) sampling, leveraging the globally coherent representations formed early in the pro-cess to generate low-resolution (LR) images that remain closely aligned with their HR counterparts. This section motivates Preview generation (Sec. 3.1), introduces meth-ods to address discrepancies between LR and HR images af-ter downsampling (Sec. 3.2, Sec. 3.3, Sec. 3.4), and presents the overall algorithm (Sec. 3.5). 
+
+3.1. Why not super-resolution? 
+
+A natural question to our pipeline—first generating Pre-views for candidate selection and then synthesizing full-resolution images—is: why not generate LR images and up-sample a chosen image via super-resolution? Prior works on high-resolution synthesis [7, 12, 17, 21, 51] consistently show that errors introduced at LR propagate during upsam-pling. As illustrated in Fig. 2, the LR-upsampled image (left) lacks the fine details present in the directly generated HR image (right), consistent with previous findings. 
+
+3.2. Compliance and commutative-ness 
+
+Compliance of the trajectory. To assess the feasibility of producing an LR image identical to the downsampled (a) Image generated with LR → SR (b) Image generated with HR                 
+
+> "A cat is flying in the air, high speed continuous shooting"
+> Figure 2. Comparison between SR-upsampled and directly generated HR images. Using FLUX.1-dev, we (a) generated a low-resolution (LR, 256 ×256 ) image followed by 4×super-resolution (SR) to obtain a high-resolution (HR, 1024 ×1024 )image, and (b) directly generated an HR ( 1024 ×1024 ) image. As shown in the close-up view, (a) fails to recover eye-region and fine fur details lost at the LR stage, whereas (b) preserves both global structure and fine details with high fidelity.
+
+version of its HR counterpart, we define a flow ODE over the downsampled trajectory x↓ 
+
+> t
+
+as follows: 
+
+dx ↓ 
+
+> t
+
+= Dvθ (xt, t )dt, (4) where D ∈ R hw s2 ×hw is a downsampling matrix with height 
+
+h, width w, and scale factor s. Let x↓ 
+
+> 1
+
+and x1 denote the fi-nal LR and HR images obtained from the trajectories x↓ 
+
+> t
+
+and 
+
+xt, respectively. For the Preview generation task to be valid, the compliance condition x↓ 
+
+> 1
+
+= Dx1 should hold. Although Zhang et al. [53] noted that this condition is not strictly sat-isfied in learned flow matching models, they reported strong empirical performance under this assumption. Similarly, we observe that assuming compliance for the downsampling operator yields consistent and effective results. 
+
+Commutative-ness of flow-matching. We aim to quickly synthesize the downsampled image that preserves the con-tent of the original high-resolution image. To this end, we formulate to accelerate the sampling by feeding the learned flow matching model vθ with the downsampled latent Dxt
+
+in place of the high-resolution latent xt. However, this sub-stitution raises a critical issue: Does the following commu-tator condition hold? 
+
+[D, v θ ]( xt, t ) ≜ Dvθ (xt, t ) − vθ (Dxt, t ) ?
+
+= 0. (5)          
+
+> Table 1. Mean L2-norm of the commutator across models.
+> We report the spatial-wise averaged L2-norm of the commutator over 100 samples for FLUX.1-dev and Stable Diffusion 3.5-Large (SD3.5-L). All models generate images or videos with 30 func-tion evaluations (NFE). These results illustrate that flow matching models do not satisfy the commutator condition.
+> Base model FLUX.1-dev SD3.5-L
+> ∥[D, v θ]( xt, t )∥(±1σ)111.03 (±29 .63) 105.90 (±22 .38)
+
+3𝑥 !! 𝑣 "(𝑥 !! , 𝑡 #)
+
+𝐃 ∗𝑣 "(𝑥 #$, 𝑡 $)
+
+𝑥 $
+
+. . . 𝐃 ∗(𝑥 $)
+
+Target space 
+
+. . . 
+
+𝑥 !!"# 
+
+> ↓
+
+𝑥 !!"$
+
+> ↓
+
+𝑚 iterations 
+
+𝑣 "(𝐃 ∗𝑥 #! , 𝑡 $)
+
+𝑥 '
+
+: Comm. guidance 
+
+𝑥 $
+
+> ↓
+
+. . . 𝑥 !!"# 
+
+> ↓
+
+𝑥 $
+
+> ↓
+> : Naïve
+> : Ours
+
+𝐃 ∗𝑥 #!
+
+𝑥 #!
+
+> ↓
+> Down.
+
+Full resolution 
+
+1024 × 1024 
+
+Naïve 
+
+512 × 512 
+
+Ours 
+
+512 × 512 
+
+𝐃 ∗𝑥 !!
+
+𝑥 !!
+
+> ↓
+> Prompt : “ An abstract
+> work of art showing
+> endless possibilities, long
+> exposure photography,
+> perspective drawing. ”
+> 𝑠
+
+. . . 
+
+𝐃 & 
+
+> ($,))
+
+𝐃 + 
+
+> ($,))
+
+𝐃 ,"
+
+> ($,))
+
+𝐃 &
+
+> ($,))
+
+𝒙 - 
+
+> $,)
+
+𝐃 +
+
+> ($,))
+
+𝒙 - 
+
+> $,)
+
+𝐃 ,"
+
+> ($,))
+
+𝒙 -
+
+> $,)
+
+𝑑 
+
+. . . 
+
+. . . 
+
+𝑠 
+
+𝑑 𝒙 #
+
+> ($,))
+
+Downsample matrix selection 
+
+Commutator -zer o guidance 
+
+𝑣 "(𝑥 #! 
+
+> ↓
+
+, 𝑡 $)
+
+𝑠 
+
+𝐃 ∗ = argmin 
+
+> 𝒌 /𝟏 ,…,𝒔 𝟐
+
+[𝐃 4, 𝑣 "](𝒙 #, 𝑡 )
+
+𝑥 #! 
+
+> ↓
+
+= 𝐃 ∗𝑥 #! + 𝛼 𝐃 ∗𝑣 " 𝑥 #! , 𝑡 $ − 𝑣 " 𝐃 ∗𝑥 #$, 𝑡 $ 
+
+> High -res. Space
+> Low -res. Space
+> DreamSim : 42.7 DreamSim : 8.36
+
+Figure 3. Overall framework. (Left, Top) Overview of our proposed framework. Sampling is first performed in the high-resolution (HR) space up to timestep tD , after which downsampling is applied using the selected downsample matrix from (Right, Top) . To maintain alignment with HR sampling, commutator-zero guidance is applied as shown in (Right, Bottom) . Finally, as illustrated in (Left, Bottom) ,our method produces a low-resolution image with lower DreamSim score, which indicates better LR-HR consistency. 
+
+In general, this commutator-zero condition does not hold as seen in Tab. 1. Thus, we propose a method that encourages to minimize the norm of the commutator ∥[D, v θ ]( xt, t )∥
+
+with respect to the elements under our control, D and xt.We design our approach from both D (Sec. 3.3) and xt
+
+(Sec. 3.4) to better satisfy this condition in Eq. (5). 
+
+3.3. Downsample matrix selection 
+
+We found that an appropriate choice of the downsampling matrix D alone reduces ∥[D, v θ ]( xt, t )∥, improving align-ment with HR images. However, this raises two issues: non-binary D may cause correlation of noise thereby degrad-ing fidelity, and optimizing D is computationally expen-sive, hindering fast LR generation. To overcome these chal-lenges, we propose generating multiple candidate D matri-ces and selecting the one that minimizes ∥[D, v θ ]( xt, t )∥.We generate candidates as follows. For each spatial block of size s × s, we define a block-wise downsampling matrix Ds×s : R(s×s)×d → Rd, where d is the channel dimension of the latent feature. One element is randomly selected from the s2 spatial positions, yielding s2 non-overlapping candidates. Aggregating the hw/s 2 block-wise matrices Ds×s over the spatial domain forms the global downsampling operator D : R(hw )×d → R(hw/s 2)×d:
+
+Dk ≜
+
+> h/s
+
+M
+
+> i=1
+> w/s
+
+M
+
+> j=1
+
+D(i,j )
+
+> s×s,k
+
+!
+
+Π, k ∈ { 1, . . . , s 2}, (6) where Π is a block-gathering permutation matrix that rear-ranges input latent rows so elements within each s×s block are contiguous. D(i,j ) 
+
+> s×s
+
+denotes the local downsampler for the (i, j )-th block, and ⊕ represents the direct sum forming a block-diagonal matrix of all local operators D(i,j ) 
+
+> s×s
+
+. The 
+
+s2 mutually exclusive matrices constructed in this manner form a set Ddown as below: 
+
+Ddown ≜ {D1, . . . , Ds2 }, Di ⊙ Dj = 0 (i̸ = j). (7) Next, for each element in Ddown , we calculate the commuta-tor and select the matrix Di with the lowest mean L2-norm of the commutator to get the final downsample matrix D∗:
+
+D∗ = arg min  
+
+> i=1 ,...,s 2
+
+∥[Di, v θ ]( xt, t )∥, Di ∈ D down . (8) Through this approach, we can obtain D∗ with the same computational cost as evaluating a single vθ (xt, t ). Using 
+
+D∗, we define the downsampled latent of xt as follows: 
+
+x↓ 
+
+> t
+
+≜ D∗xt. (9) 
+
+3.4. Commutator-zero guidance 
+
+We now turn to x↓ 
+
+> t
+
+manipulation to reduce the commutator norm. The most straightforward approach is to update xt
+
+via backpropagation; however, this strategy contradicts our objective of rapid LR image synthesis. Instead of relying on computation-heavy gradient updates and inspired by meth-ods based on fixed-point iteration [1, 11, 15], we adopt a fixed-point iteration–like update rule. 
+
+x↓,k +1  
+
+> t
+
+= x↓,k t + α · (D∗vθ (xt, t ) − vθ (x↓,k t , t )) , (10) 4Algorithm 1 Preview generation with our method 
+
+Require: Rectified flow model vθ , NFE N , timestep schedule ti, height h, width w, scale factor s, down-sample step D where D/N ≈ 0.3, correction iteration 
+
+m, correction step size α.
+
+Ensure: Denoised output x1 
+
+> 1:
+
+x0 ∼ N (0 , I ) ▷ t 0 = 0 , tN = 1  
+
+> 2:
+
+for i = 0 , . . . , N − 1 do  
+
+> 3:
+
+if ti = tD then  
+
+> 4:
+
+vθ (xtD , t D ) ← vθ (xti , t i) 
+
+> 5:
+
+for k = 0 , . . . , s 2 − 1 do  
+
+> 6:
+
+Dk ←
+
+ Lh/s l=1 
+
+Lw/s m=1 D(l,m )
+
+> s×s,j
+
+ 
+
+> 7:
+
+end for  
+
+> 8:
+
+D∗ ← arg min k=1 ,...,s 2 ∥[Dk, v θ ]( xti , t ti )∥  
+
+> ▷Downsample matrix selection (Sec. 3.3) 9:
+
+xti ← D∗xti 
+
+> 10:
+
+end if  
+
+> 11:
+
+if ti ≥ tD and ti < t D+m+1 then  
+
+> 12:
+
+xti ← xti + α ·  D∗vθ (xtD , t D ) − vθ (xti , t i)  
+
+> ▷commutator-zero guidance (Sec. 3.4) 13:
+
+end if  
+
+> 14:
+
+xti+1 ← xti + ( ti − ti+1 ) · vθ (xti , t i) 
+
+> 15:
+
+end for  
+
+> 16:
+
+return x1
+
+where x↓,k t is the latent with the k-th iteration, and α is a step size. However, this update rule requires storing xt at every step t, and computing vθ (xt, t ) is prohibitively slow. Even without storing xt, approximating it through x↓,k t is inaccurate, and finding a suitable inverse of D∗ for approx-imation is challenging. We thus turn our attention to the following well-known property of rectified flow [3, 20, 49]: 
+
+vθ (xt0 , t ) ≈ vθ (xt0+∆ t, t + ∆ t), (11) where ∆t denotes a small deviation in timestep. Eq. (11) in-dicates that, since the velocity field learned by the rectified flow is linearized, its values remain similar within the neigh-borhood of any timestep t0. Motivated by this property, we propose to reuse the previously computed vθ (xtD tD ) at the downsampling timestep tD for free instead of explicitly computing vθ (xt, t ) at timestep t as follows: 
+
+x↓,k +1  
+
+> t
+
+= x↓,k t + α · (D∗vθ (xtD , t D )
+
+| {z }
+
+> Eq. (11)
+
+−vθ (x↓,k t , t )) . (12) Through this approach, we achieve computational effi-ciency by updating x↓,k t using only vθ (x↓,k t , t ), which is substantially less expensive to compute than vθ (xkt , t ).Our implementation satisfies the condition in Eq. (11) by restricting the updates to m steps after tD . For efficiency, we perform an update with k = 1 at each of these timesteps. 
+
+3.5. Algorithm 
+
+We present the complete algorithm for the proposed method in Algorithm 1. As noted earlier, early steps primarily cap-ture global structure. To ensure the LR image aligns with its HR counterpart, sampling is first performed at full res-olution up to timestep tD , after which the feature map is downsampled by a scale factor s. The full-resolution ve-locity predictions are stored for commutator-zero guidance. A set of downsampling matrix candidates is then generated, and the one D∗ with the smallest commutator is selected. With D∗ and the stored predictions, commutator-zero guid-ance is applied for the next m timesteps, producing a LR image x1 consistent with its HR counterpart. 
+
+## 4. Experiments 
+
+We evaluate the efficacy of our approach both quantita-tively and qualitatively. All baseline methods are assessed with state-of-the-art flow matching models, FLUX.1-dev [24] and Stable Diffusion 3.5-Large [8] (SD3.5-L) with BFloat16 precision. For hyperparameter settings, both models use m = 5, NFE N = 30 , downsample step 
+
+D = 10 , with α = 0 .04 for FLUX and α = 0 .01 for SD3.5. 
+
+4.1. Quantitative results 
+
+Baselines. We compare our method against three base-lines: (i) reducing the number of function evaluations to NFE = 20 , (ii) directly generating lower-resolution ( 512 ×
+
+512 ) images, and (iii) performing downsampling at timestep 
+
+tD using a na¨ ıve strategy followed by continued generation. 
+
+Dataset and Metrics. To better reflect practical gener-ation workflows, we evaluate our method on the PixArt-Eval30K [4] dataset, which features semantically detailed and artistically rich prompts describing complex and dy-namic scenes, instead of the conventional MS-COCO dataset [28]. For quantitative evaluation, 5K prompts are randomly selected from PixArt-Eval30K for evaluation. To evaluate our approach, we employ standard similar-ity metrics, including PSNR and FSIM [52]. Since seed selection mostly relies on perceptual similarity, we addi-tionally use perceptual metrics DreamSim [9] and Diff-Sim [43], commonly adopted for measuring perceptual cor-respondence [19, 40, 44]. We also use PIQE [46], a no-reference image quality assessment metric. All images were evaluated with the resolution of 512 × 512 . Further details are provided in the supplementary materials. 
+
+Comparison with baselines. We present quantitative comparison results in Tab. 2. On FLUX.1-dev, our method achieves the best performance in image quality, perceptual similarity, and PSNR, while ranking second in FSIM. No-tably, the NFE-reduced alternative that scored highest in 5Table 2. Quantitative comparison on FLUX.1-dev and SD3.5-L. Using the FLUX.1-dev and Stable Diffusion 3.5-Large (SD3.5-L) models with NFE = 30 , we generate HR ( 1024 × 1024 ) reference images. We compare three variants: (i) reduced-NFE generation, (ii) LR ( 512 × 512 ) generation with the same NFE, and (iii) a na¨ ıve baseline applying nearest downsampling at timestep tD . Each method is evaluated for computational efficiency, image quality, and consistency with the reference. Numbers in parentheses denote the NFE used; if omitted, NFE = 30 is applied as in the reference. We denote the best performance in bold and second-best performance with underline. 
+
+Method Efficiency Image quality Perceptual sim. Low-level sim. Latency(s) ↓ TFLOPs ↓ Speed ↑ PIQE ↓ DreamSim ↓ DiffSim ↑ PSNR (dB) ↑ FSIM ↑
+
+FLUX.1-dev (30) 14.78 1800.49 1.00 × 28.92 - - - -FLUX.1-dev (20) 10.01 1205.25 1.49 × 34.78 7.25 0.8686 20.633 0.8268 
+
+Low-res. 4.94 602.96 2.99 × 29.11 21.02 0.7352 11.936 0.6147 Na¨ ıve Down. 8.53 1029.43 1.75 × 31.71 9.20 0.8584 18.221 0.7375 
+
+Ours 9.76 1178.30 1.53 × 28.55 6.83 0.8721 21.182 0.7953 
+
+Method Efficiency Image quality Perceptual sim. Low-level sim. Latency(s) ↓ TFLOPs ↓ Speed ↑ PIQE ↓ DreamSim ↓ DiffSim ↑ PSNR (dB) ↑ FSIM ↑
+
+SD3.5-L (30) 14.51 1533.81 1.00 × 29.39 - - - -SD3.5-L (20) 9.87 1029.15 1.49 × 36.28 15.61 0.7893 13.496 0.6782 Low-res. 4.74 531.83 2.88 × 31.95 28.46 0.6538 8.318 0.5517 Na¨ ıve Down. 8.29 890.58 1.72 × 29.75 14.81 0.7956 13.858 0.6919 
+
+Ours 9.36 1019.17 1.50 × 31.55 13.47 0.8117 14.457 0.7408                            
+
+> Table 3. Quantitative comparison on FLUX.1-dev with temporal-axis acceleration. We compare our approach combined with orthogonal temporal-axis acceleration. Our method achieves superior performance across all metrics, including image quality, perceptual similarity, and low-level similarity.
+> Method Speed ↑PIQE ↓DreamSim ↓PSNR (dB) ↑
+> FLUX.1-dev (30) 1.00 ×28.92 --FLUX.1-dev (10) 2.95 ×32.82 16.97 16.427 Taylor only 3.21 ×28.10 9.17 18.667
+> Ours + Taylor 3.05 ×27.47 7.79 19.953
+
+FSIM exhibits the lowest overall image quality. On SD3.5-L, our method attains the best performance across all met-rics except for image quality, where it ranks second. Nev-ertheless, it surpasses the na¨ ıve baseline in both percep-tual and low-level similarity, demonstrating the efficacy and generalizability of the proposed method. 
+
+Integration with temporal-axis acceleration. Since temporal-axis acceleration methods are orthogonal to our approach, they can be combined with our framework to achieve additional efficiency. As shown in Tab. 3, we in-tegrate the state-of-the-art diffusion acceleration method, TaylorSeer [31], with our approach. The combined method achieves 3.05 × speedup, higher HR consistency and image quality compared to using the same level of NFE reduction. 
+
+4.2. Qualitative results 
+
+In Fig. 4, we present qualitative comparisons for the 512 ×
+
+512 setting. While other alternatives often result in changes to image composition, lighting, or color scheme, the pro-posed strategy successfully produces low-resolution images that are perceptually very similar to their high-resolution counterparts. Additional qualitative results for this setting, generation at 256 × 256 resolution, and results combined with temporal-axis acceleration are provided in the supple-mentary materials. 
+
+4.3. Generalization of commutator-zero guidance 
+
+Our commutator-zero guidance implies that any operation that does not incur correlation between noise can substi-tute for D. To verify this, we tested two image manipula-tions during synthesis: translation and warping. For transla-tion, our method better preserves the original image, with-out generating additional objects or pattern that does not ex-ists in an original image. Since warping incurs correlation, we adapted correction [18, 45]. As shown in Fig. 5, na¨ ıve warping and translation introduces artifacts and unintended objects, whereas our approach effectively removes them. 
+
+4.4. Ablation study 
+
+We conducted an ablation study to assess the individual contributions of the downsampling matrix selection and commutator-zero guidance components, and evaluate the effectiveness of their alternative configurations. All experi-ments were performed on 500 randomly selected prompts from the PixArt-Eval30K dataset using the FLUX.1-dev model. Further studies are provided in the supplementary. 
+
+Effect of D selection. We validate our method by com-paring strategies for selecting the downsampling matrix: spatial-wise Nearest, random sampling, and a variant us-6FLUX.1 -dev 
+
+> Original
+> (1024  × 1024 )
+> Ours
+> (512  × 512 )
+> Naïve
+> (512  × 512 )
+> Reduced  timestep
+> (1024  × 1024 )
+> Low res.
+> (512  × 512 )
+> Stable Diffusion 3.5 -Large
+
+Figure 4. Qualitative comparison of our proposed method. While other simple alternatives often result in changes to composition, object size, or even color tone, our proposed approach synthesizes low-resolution images faster while preserving the composition and color fidelity of the original image. The prompts used for image generation are provided in the supplementary materials. Original Image Naïve 
+
+> Translation  Warping
+
+Ours 
+
+Figure 5. Generalization of commutator-zero guidance. We show that commutator-zero guidance can be expanded to other op-erations. For warping, a large kernel ( 128 × 128 ) with correlation correction produces distortion, while our method effectively han-dles artifacts. For translation, na¨ ıve cause noticeable difference and unintended objects, whereas ours preserves image content. 
+
+ing arg max( ·) in Eq. (8). As shown in Tab. 4, Nearest 
+
+D, which loses more information, performs worst. The 
+
+arg max variant also underperforms, while Random D lies between it and our arg min approach. These results show that minimizing the commutator yields better performance. 
+
+Effect of commutator-zero guidance. To examine the effect of commutator-zero guidance, we conducted an ab-lation study as shown in Tab. 5. Without applying this cor-rection, the HR counterpart alignment noticeably weakens, leading to a decrease in low-level similarity and perceptual consistency. These results underscore the validity of our formulation and the contribution of the commutator-zero guidance to the effectiveness of our method. 
+
+Hyperparameter study. We performed a hyperparame-ter study by varying the correction iteration count m and step size α in the commutator-zero guidance. As shown in Tab. 6, increasing m consistently improves PSNR and pro-duces outputs more aligned with the HR counterpart, vali-7Table 4. Ablation study on D selection. We compare three strate-gies for selecting D: (i) nearest-neighbor downsampling, (ii) ran-dom sampling, and (iii) D∗ obtained via the arg max( ·) operation in Eq. 8. The results show that our approach, which minimizes the commutator value, achieves the best performance. 
+
+PIQE ↓ DreamSim ↓ PSNR ↑ (dB) Nearest D 29.72 10.39 18.069 Random D 27.35 7.40 20.851 
+
+arg max( ·) (Eq. 8) 27.83 8.55 20.408 Full (Ours) 27.08 7.05 20.962 
+
+Table 5. Ablation study on commutator-zero guidance. Com-paring results with and without commutator-zero guidance (CG) shows that while computational efficiency slightly decreases with correction, both perceptual similarity and PSNR increase, high-lighting the effectiveness of our proposed method. 
+
+CG PIQE ↓ DreamSim ↓ PSNR ↑ (dB) 
+
+✗ 31.89 8.56 19.115 
+
+✓ 27.08 7.05 20.962 
+
+Table 6. Ablation study on hyperparameter m and α. We in-vestigate how varying m and α affects performance. Increasing m
+
+improves PSNR but also raises computational demand, showing a clear trade-off. Each m exhibits an optimal step size α.                                    
+
+> mα0.01 0.02 0.03 0.04 0.05 0.06 319.788 20.256 20.522 20.645 20.599 20.393 419.961 20.546 20.859 20.930 20.804 20.551
+> 520.119 20.794 21.104 21.146 20.957 20.543 620.260 21.004 21.303 21.293 21.004 20.569 720.387 21.182 21.467 21.389 21.025 20.503
+
+dating the module’s effectiveness. We further observe that each m has an optimal α. Balancing performance and com-putational efficiency, we set m = 5 and α = 0 .04 .
+
+## 5. Discussion 
+
+Analysis on the norm of commutator. While downsam-ple matrix selection explicitly minimizes the commutator, the effect of commutative-ness guidance (CG) requires em-pirical validation. As shown in Fig. 6, CG effectively re-duces the commutator magnitude, aligning the LR trajec-tory more closely with the HR counterpart. A Wilcoxon signed-rank test comparing commutator norms between tD
+
+and tD+m shows that without CG, the commutator in-creases significantly ( p = 9 .62 × 10 −38 ), whereas with CG it decreases significantly ( p = 3 .38 × 10 −25 ), confirming improvement at the 0.05 significance level. 40 20 0 20 40 60   
+
+> Commutator norm difference
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Count  Increase Decrease
+> Changes of average commutator norm
+> w/o CG. ( = 6.25)
+> w/ CG ( = -4.95)
+
+Figure 6. Changes in average commutator norm. We measure the change in commutator norm at timesteps tD and tD+m with and without applying commutator-zero guidance (CG). When CG is applied, the commutator norm decreases significantly, whereas without CG, it shows a statistically significant increase. 1 2 3 4 5 6 7 8 9 10 
+
+> k
+> 0.94
+> 0.96
+> 0.98
+> 1.00
+> Cosine similarity
+> FLUX.1-dev
+> SD3.5-L
+
+Figure 7. Cosine similarity analysis on velocity consistency of flow-matching models. We report the mean and stan-dard deviation of cosine similarity between vθ (xtD , t D ) and 
+
+vθ (xtD+k , t D+k ) over 500 samples. The similarity remains above 0.95 for k ≤ 5, supporting the validity of the approximation. 
+
+Consistency of velocity field. As discussed in Sec. 3.4, we promote commutative-ness without extra computation using the approximation in Eq. (11). To validate its accu-racy within our chosen m iterations, we measured the co-sine similarity between vθ (xtD , t D ) and vθ (xtD+k , t D+k)
+
+over 500 samples. The results, shown in Fig. 7, indicate that with D = 9 and m = 5 , the similarity remains above 0.95, confirming the validity of the assumption in Eq. (11). 
+
+## 6. Conclusion 
+
+In this work, we revisited the long-standing efficiency chal-lenge in diffusion-based generative models and introduced 
+
+Preview Generation , a framework that enables accelerated image synthesis workflow. By reformulating the problem as enforcing a commutator-zero condition between the down-sampling operator and the flow matching model, we derived a principled means of ensuring that low-resolution (LR) tra-jectories remain consistent with their high-resolution (HR) counterparts. Our approach further integrates downsam-pling matrix selection and commutator-zero guidance, en-abling faithful LR generation. Extensive experiments with various models validate the effectiveness of our method across diverse metrics. Beyond acceleration, our formula-tion generalizes to spatial manipulations, suggesting a uni-fied perspective on resolution and transformation-consistent generative processes. 8Acknowledgement 
+
+This work was supported in part by Institute of Informa-tion & communications Technology Planning & Evalua-tion (IITP) grants funded by the Korea government(MSIT) [No.RS-2021-II211343, Artificial Intelligence Graduate School Program (Seoul National University) / No.RS-2025-02314125, Effective Human-Machine Teaming With Mul-timodal Hazy Oracle Models], the National Research Foun-dation of Korea(NRF) grant funded by the Korea govern-ment(MSIT) (No. RS-2025-02263628), the BK21 FOUR program of the Education and Research Program for Fu-ture ICT Pioneers, Seoul National University and Samsung Electronics MX Division. 
+
+## Appendix A. Details on compliance 
+
+We assume compliance of the downsampled trajectory when performing preview generation. A natural question is whether this compliance property genuinely holds. Zhang et al. [53] provide a proof in the appendix of their work, showing that under an L-Rectified Flow, the deviation be-tween the compliant trajectory and the true trajectory is bounded by O(1 /L ). Their analysis indicates that, al-though exact compliance is not guaranteed, approximation becomes reasonable once L is sufficiently large. Building on this result, we consider our compliance assumption to be well justified. 
+
+## B. Detailed Experimental Setup 
+
+B.1. Experiment compute resources 
+
+All experiments are run on an NVIDIA A100 GPU, which serves as our primary compute resource. Float-ing operations (FLOPs) were measured using the 
+
+torch.profiler tool, and the latency results in Tab. 2 are benchmarked directly on the same GPU. 
+
+B.2. Evaluation dataset 
+
+Commonly used evaluation benchmarks such as MS-COCO contain short prompts and limited scene diversity, making them inadequate for representing the aesthetic and complex prompting environments typical of designers or photogra-phers, which are the primary targets of our study. Instead, we adopt the more challenging PixArt-30K evaluation set to better align with real-world usage. From this dataset, we randomly sample 5,000 prompts whose lengths range from a maximum of 1,885 characters to a minimum of 2 charac-ters, with a median of 319 and a mean of 413 characters. This wide spectrum of prompt lengths and expressiveness   
+
+> * Authors contributed equally. †Corresponding author.
+
+allows us to capture the dynamic and realistic prompting scenarios encountered in practical workflows. 
+
+B.3. Metrics 
+
+To evaluate the performance of our preview generation, we employ a range of image similarity and image quality met-rics. This section provides detailed explanations of each metric, including their computation procedures and specific evaluation criteria. 
+
+PIQE [46]. PIQE is a no-reference image quality met-ric that estimates perceptual distortion by analyzing devi-ations from natural scene statistics at the block level. The image is first transformed into Mean Subtracted Contrast Normalized (MSCN) coefficients, after which each non-overlapping block is classified as either spatially active or uniform based on its MSCN variance. Spatially ac-tive blocks are then examined for two types of degrada-tions: noticeable structural distortions, detected via low-variance edge segments, and noise distortions, character-ized using a center–surround deviation measure. For each distorted block, PIQE assigns a distortion score derived from the block-level MSCN variance, which is inversely proportional to perceived quality for structural distortions and directly proportional for noise. The final PIQE score aggregates block-level distortions according to PIQE =
+
+PNSA  
+
+> k=1
+
+DSk + C1
+
+NSA + C1
+
+(S1) where NSA is the number of spatially active blocks and Dsk
+
+is the distortion score of the k-th block. Lower PIQE val-ues indicate higher perceptual quality, making it suitable for evaluating preview fidelity without requiring reference im-ages. We leveraged block size 8, and all other parameters were set to default value. 
+
+DreamSim [9]. DreamSim is a mid-level perceptual sim-ilarity metric learned from the NIGHTS dataset, designed to outperform traditional perceptual metrics such as LPIPS that mainly capture low-level or patch-level distortions. By ensembling CLIP, OpenCLIP, and DINO embeddings and fine-tuning them with LoRA, DreamSim aligns more closely with human visual judgments across variations in pose, layout, shape, and semantic content—factors that LPIPS is not sensitive to. For an image pair (x, x ′), Dream-Sim computes similarity using the cosine distance 
+
+D(x, x ′) = 1 − cos( fθ (x), f θ (x′)) (S2) This formulation enables DreamSim to capture perceptual relationships that extend beyond pixel-level fidelity, yield-ing substantially higher agreement with human preferences compared to LPIPS and other prior perceptual metrics. 9DiffSim [43]. DiffSim is a visual similarity metric that leverages the attention features of pretrained diffusion mod-els to overcome the limitations of traditional perceptual sim-ilarity measures such as LPIPS, which primarily capture low-level patch statistics and often fail to reflect human judgments of layout, pose, and semantic consistency. Diff-Sim introduces the Aligned Attention Score (AAS), which aligns the latent representations of two images through the attention mechanism of the Stable Diffusion U-Net and computes a cosine-based similarity on these aligned fea-tures. For latent representations LA and LB extracted from a chosen attention layer, DiffSim computes AAS (LA, L B ) (S3) 
+
+= cos( attn (QA, K B , V B ), attn (QB , K A, V A)) ,
+
+allowing the metric to evaluate both appearance and style similarity while compensating for spatial misalign-ment. Comprehensive evaluations across human-aligned, instance-level, style, and low-level similarity benchmarks show that DiffSim consistently surpasses LPIPS, CLIP, and DINO, demonstrating substantially higher agreement with human perceptual judgments. 
+
+PSNR. PSNR is a full-reference image similarity metric that measures the fidelity between a generated image and its reference by comparing pixel-level reconstruction error. It is defined using the mean squared error (MSE) between two images x and x′, where a higher PSNR indicates closer pixel-wise correspondence. Formally, for images with max-imum possible pixel value Imax , PSNR is computed as PSNR (x, x ′) = 10 log 10 
+
+ I2max 
+
+MSE (x, x ′)
+
+
+
+. (S4) Because PSNR is sensitive to exact pixel alignment, it strongly correlates with low-level distortions such as noise, blur, and compression artifacts but is limited in evaluating perceptual or semantic similarity, making it complementary to metrics such as DreamSim, and DiffSim. 
+
+FSIM [52]. FSIM is a full-reference metric designed to capture low-level similarity by focusing on image structures and contrast patterns that are strongly aligned with human visual sensitivity. It relies on two fundamental low-level cues—phase congruency and gradient magnitude—which respectively encode structural information (edges, corners, and local features) and local contrast. Because these cues emphasize fine-grained texture, sharpness, and structural fi-delity, FSIM provides reliable measurements of low-level distortions such as blur, noise, compression artifacts, and local geometric degradation. The metric aggregates these cues using a feature-weighted formulation, FSIM (x, x ′) = 
+
+P 
+
+> p
+
+(SPC (p) · SGM (p) · W (p)) 
+
+P 
+
+> p
+
+W (p) , (S5) and is widely used when accurate evaluation of pixel-level and structural consistency is required. 
+
+B.4. Prompts in qualitative results 
+
+Due to space limitations in the main paper, we could not in-clude the prompts used for the qualitative results presented in the main script, and therefore provide them here. They are summarized in Tab. S1, where the attached indices fol-low the left-to-right column order. The first four prompts are used for FLUX.1-dev, and the last three prompts are used for the qualitative results of SD 3.5-L. To demonstrate performance under diverse prompting conditions, we delib-erately include prompts ranging from short to long. 
+
+## C. Additional Experiments 
+
+C.1. Effect of the number of fixed-point iterations 
+
+In Eq. (10), the update is defined as a fixed-point iteration over k steps. For efficiency, however, we adopt the setting 
+
+k = 1 in our main experiments. To assess the effect of using larger values of k, we additionally evaluate the method with 
+
+k > 1.As shown in Tab. S2, increasing k yields marginal im-provement or degradation in performance, but leads to a noticeable increase in runtime. Therefore, using k = 1 pro-vides a favorable choice for better efficiency. 
+
+C.2. Preview generation on lower resolution 
+
+In the main paper, we only report preview generation at a resolution of 512 × 512 . However, this setting alone is not sufficient to fully assess the effectiveness of the preview generation. Therefore, we additionally conduct experiments at a lower resolution of 256 × 256 .Fig. S2 presents the qualitative results at a resolution of 
+
+256 × 256 . While the reduced resolution inevitably intro-duces slight blurriness, the generated images remain highly perceptually similar to the original images. Although dif-fusion models exhibit significantly degraded generative ca-pability when directly operating at such a low resolution, the use of commutative-zero guidance effectively mitigates this issue, enabling the production of visually coherent and reliable previews. 
+
+## D. Additional Qualitative Results 
+
+This section presents additional qualitative results that could not be included in the main paper due to space con-straints. 10 Table S1. The prompts used for the qualitative results in the main paper are ordered from the left column to the right column. 
+
+Prompt used in main qualitative results 1pixelated Quantum entanglement Fentanyl digital banality, dishevelled, avant-garde multicultural diaspora hu-mans contorted jumping twisted broken distorted lighting casts high contrast shadows lighting Hasselblad h6d -400c, carl zeiss batis super close up 16mm f/ 2.8, ricoh r1 2Small Dragon with Finnish elf characters, in a Finnish forest, in the style of korik kokiri, volumetric lighting, lively tableaus, mori kei, dark gold and green, vray, konica big mini. a figure and a mushroom stand among mushrooms in a forest, in the style of rendered in cinema4d, bill gekas, light gold and green, anime-inspired character designs. 3 Chinese man has invented a machine that can travel in time, High and short depth of field, stippling 4 shadoflectocyberchromos, You got a heart of stone, you can never feel. 5 Black Hole Sun + ultra high quality + beautiful colours + psychedelic + 3D rendered 6A Stone Island X Cottweiler menswear collaboration editorial campaign shot by Johnny Dufort. Pa Salieu is modelling. Metallic fabrics. Mesh inserts. Two-tone materials. Chameleon fabrics. Color-flip materials. Technical treatments and washes to the materials. Night, Raining. 7In the image, there are two individuals engrossed in reading a magazine. The person on the left, clad in a black sweater, is holding the magazine with both hands, indicating a deep interest in the content. On the right, another person, wearing a red shirt, is also holding the magazine with both hands, mirroring the actions of the person on the left. They are seated comfortably on a white couch, which stands out against the backdrop of a white wall adorned with a window. The window allows for natural light to filter into the room, illuminating the scene and casting soft shadows. The magazine they are reading is open, suggesting that they are actively engaged in reading it. The pages of the magazine are not visible in the image, but one can infer from their focused expressions that they are reading about something of interest. There is no text visible in the image, and the relative positions of the objects suggest a casual and relaxed atmosphere. The image captures a quiet moment of shared interest and learning between the two individuals.                      
+
+> Table S2. Quantitative comparison across different values of k.
+> kTFLOPs ↓Speed ↑PIQE ↓DreamSim ↓PSNR (dB) ↑
+> 11178.30 1.53 ×28.55 6.83 21.182 21277.56 1.41 ×28.79 6.85 21.132 31376.84 1.31 ×28.88 6.76 21.132
+
+D.1. Qualitative Results on FLUX 
+
+Fig. S3, S4 provide qualitative comparisons demonstrating that our proposed method produces images that are percep-tually more similar to the original ones compared with other baselines. 
+
+D.2. Qualitative Results on SD3.5-L 
+
+Similarly, Fig. S5, S6 show that, on Stable Diffusion 3.5 Large (SD3.5-L), our method yields results that better pre-serve perceptual similarity to the original images than the competing baselines. 
+
+D.3. Qualitative Results on Video Models 
+
+We conducted video synthesis experiments with Hunyuan-Video [23], as shown in Fig. S1, and observed that the reduced-timestep baseline (NFE 50 →30) yields increas-ingly inconsistent compositions as the number of frames grows. In contrast, our method generates perceptually con-sistent LR videos while achieving a 1.75 × speedup, with generation times of 1,661 sec (Original), 1,025 sec (Re-duced), and 951 sec (Ours) for 120-frame video generation. 
+
+D.4. Integration with Temporal-axis Acceleration 
+
+Tab. 3 shows that integrating our proposed method with the temporal-axis acceleration technique TaylorSeer [31] yields additional speedup with almost no performance degrada-tion, improving the acceleration from 1.53 × to 3.05 ×. Fur-thermore, Fig. S7 provides a qualitative comparison of the generated images. We observe that the outputs remain nearly indistinguishable both when applying our method alone and when incorporating TaylorSeer, indicating that the original images are preserved with high perceptual fi-delity even at the 3.05 × acceleration setting. 
+
+## E. Limitation 
+
+The proposed approach relies on the approximate commutator-zero condition and trajectory compliance, both of which hold empirically but are not guaranteed 11 Hunyuan 
+
+> (1280 ×736 )
+> Ours
+> (640 ×368 )
+
+“Several giant wooly mammoths approach treading through a snowy meadow...”     
+
+> Reduced.
+> (1280 ×736 )
+> Frame 0 Frame 30 Frame 60 Frame 90 Frame 120 Figure S1. Qualitative results on video diffusion. Using our preview generation framework with HunyuanVideo, we compare against an alternative approach that reduces NFE from 50 to 30. While Mammoth deviates from the full-step composition beyond a certain frame, our preview generation faithfully preserves the composition of the high-resolution content.
+
+across all architectures or sampling schedules. Since the method operates within a training-free setting, the selected downsampling operators are restricted to mutually exclu-sive, block-wise matrices, which may limit expressiveness and introduce sensitivity to spatial structure. The reuse of velocity predictions assumes local linearity of rectified flows, which may weaken under models exhibiting strong temporal variation or non-linear behavior, potentially reducing stability for more complex scenes or extreme prompts. Although the method improves LR–HR align-ment, the corrections introduce additional computation, presenting an inherent trade-off between accuracy and acceleration. Finally, while the formulation generalizes to certain spatial manipulations, its applicability to broader transformations or non-flow-based generative frameworks remains an open direction for future investigation. 12 Original 
+
+(1024 × 1024) 
+
+Ours 
+
+(256 × 256) 
+
+Original 
+
+(1024 × 1024) 
+
+Ours 
+
+(256 × 256) 
+
+“The image captures a hauntingly beautiful scene of a 
+
+forest shrouded in fog. Dominating the center of the 
+
+frame is a large tree, …” 
+
+“In the image, a majestic gray elephant is captured in a 
+
+moment of tranquility. The elephant, with its large white 
+
+tusks gleaming, is standing on a patch of dirty ground …” 
+
+“Colorful painting of a German Shepherd.” 
+
+“The image presents a still life arrangement on a dark 
+
+blue background. Dominating the scene are three 
+
+bottles of milk, each varying in size and shape …” 
+
+“The image presents a vibrant scene of a cocktail hour. 
+
+Dominating the center of the image is a martini glass, 
+
+filled with a green cocktail …” 
+
+“In the image, a ginger cat is the main subject, 
+
+captured in a close -up shot. The cat’s fur is a vibrant 
+
+orange color, and its eyes are a striking yellow …” 
+
+“A beach with palm trees and a clear blue sky.” 
+
+“In the heart of a verdant garden, a vibrant yellow 
+
+flower takes center stage. Its petals, slightly curled at 
+
+the edges, radiate ou twards in a captivating display … ”
+
+> FLUX.1 -dev
+
+Figure S2. Qualitative results of our proposed method at a lower resolution of 256 × 256 .
+
+13 Original 
+
+(1024 × 1024) 
+
+Ours 
+
+(512 × 512) 
+
+Reduced timestep 
+
+(1024 × 1024) 
+
+Low res. 
+
+(512 × 512) 
+
+Naïve 
+
+(512 × 512) 
+
+> FLUX.1 -dev
+
+“Various users profiles pictures of a person in a minimalist cartoon like style high resolution, white background.” 
+
+“A white and black paint pattern that looks like paper, in the style of expressive brush strokes, light blacks and beige, Jap ane se -influenced 
+
+prints, stylized animal motifs, loose gestures..” 
+
+“A cat is flying in the air, high speed continuous shooting, Dadaism, 2K, high detail.” 
+
+“Colorful ice cream in waffle cones on grey background .”
+
+“Girl with greyblue eyes and fiery red, straight, waist length hair, beautiful face, full body picture, warm lights, warm colors.” 
+
+“Realistic photo of this guy in business casual attire, work, smartly dressed, extremely detailed.” Figure S3. Qualitative comparison of our proposed method on FLUX. 
+
+14 Original 
+
+(1024 × 1024) 
+
+Ours 
+
+(512 × 512) 
+
+Reduced timestep 
+
+(1024 × 1024) 
+
+Low res. 
+
+(512 × 512) 
+
+Naïve 
+
+(512 × 512) 
+
+> FLUX.1 -dev
+
+“Cute watercolor cozy coupe, clipart, on white background.” 
+
+“The image captures a serene winter scene. A frozen lake, its surface a solid sheet of ice and snow, stretches out towards the horizon …” 
+
+“Photograph of huge headquarters in a prairie, bioarchitecture by Erwin Wurm .” 
+
+“Female fortnite sports god character.” 
+
+“Old library, old book, broken door, little dog, old man, ultra realistic, cinematic shot.” 
+
+“The image captures a serene rural scene dominated by a green barn with a curved roof. The barn, painted in a vibrant shade o f g reen, stands 
+
+out against the lush greenery that surrounds it…” Figure S4. Qualitative comparison of our proposed method on FLUX. 
+
+15 Original 
+
+(1024 × 1024) 
+
+Ours 
+
+(512 × 512) 
+
+Reduced timestep 
+
+(1024 × 1024) 
+
+Low res. 
+
+(512 × 512) 
+
+Naïve 
+
+(512 × 512) 
+
+> Stable  DIffusion  3.5 -Large
+
+“Watercolor grey ornate pumpkin, vibrant, fantasy, isolated, white background.” 
+
+“In the image, a small figurine of a boy is captured in a moment of tranquility. He is seated on a rock, his legs crossed in a r elaxed manner…” 
+
+“A Chinese person has two contradictory Chinese personality traits at the same time, both good and evil, light painting, Impr ess ionism.” 
+
+“A handwritten love letter on aged parchment, mosaic style, high resolution.” 
+
+“A Sunny Garden, Close up, wide light, manga, high detail.” 
+
+“August 07, 2005.” Figure S5. Qualitative comparison of our proposed method on SD3.5-Large. 
+
+16 Original 
+
+(1024 × 1024) 
+
+Ours 
+
+(512 × 512) 
+
+Reduced timestep 
+
+(1024 × 1024) 
+
+Low res. 
+
+(512 × 512) 
+
+Naïve 
+
+(512 × 512) 
+
+> Stable  DIffusion  3.5 -Large
+
+“An extremely basic anchor design for a tattoo, antique colors.” 
+
+“A clock showing 12:00, watercolor painting.” 
+
+“Single pink rose lay on a wooden table, romantic conception.” 
+
+“Photograph of huge headquarters in a prairie, bioarchitecture by Erwin Wurm .” 
+
+“A Chinese person has two contradictory Chinese personality traits at the same time, both good and evil, light painting, Impr ess ionism.” 
+
+“Skeleton hanging at the gravestone Halloween, in the style of Jason Edmiston, bold, cartoonish lithographs, orange.” Figure S6. Qualitative comparison of our proposed method on SD3.5-Large. 
+
+17 Original Ours Ours + TaylorSeer 
+
+1800 TFLOPs 
+
+Method 
+
+Computation 1178 TFLOPs 590 TFLOPs 
+
+1.00 ×Speedup 1.53 × 3.05 ×
+
+Resolution 1024 × 1024 512 × 512 512 × 512 Figure S7. Qualitative comparison after integrating temporal-axis acceleration on FLUX. 
+
+18 References 
+
+[1] Xingjian Bai and Luke Melas-Kyriazi. Fixed point diffusion models. In CVPR , pages 9430–9440, 2024. 4 [2] Stephen Batifol, Andreas Blattmann, Frederic Boesel, Sak-sham Consul, Cyril Diagne, Tim Dockhorn, Jack English, Zion English, Patrick Esser, Sumith Kulal, et al. Flux. 1 kontext: Flow matching for in-context image generation and editing in latent space. arXiv e-prints , pages arXiv–2506, 2025. 3 [3] Quentin Bertrand, Anne Gagneux, Mathurin Massias, and R´ emi Emonet. On the closed-form of flow matching: Gen-eralization does not arise from target stochasticity. arXiv preprint arXiv:2506.03719 , 2025. 5 [4] Junsong Chen, Chongjian Ge, Enze Xie, Yue Wu, Lewei Yao, Xiaozhe Ren, Zhongdao Wang, Ping Luo, Huchuan Lu, and Zhenguo Li. Pixart-σ: Weak-to-strong training of diffu-sion transformer for 4k text-to-image generation. In ECCV ,pages 74–91. Springer, 2024. 1, 5 [5] Pengtao Chen, Mingzhu Shen, Peng Ye, Jianjian Cao, Chongjun Tu, Christos-Savvas Bouganis, Yiren Zhao, and Tao Chen. Delta-dit: A training-free acceleration method tailored for diffusion transformers. arXiv preprint arXiv:2406.01125 , 2024. 1, 3 [6] Prafulla Dhariwal and Alexander Nichol. Diffusion mod-els beat gans on image synthesis. NeurIPS , 34:8780–8794, 2021. 1 [7] Ruoyi Du, Dongliang Chang, Timothy Hospedales, Yi-Zhe Song, and Zhanyu Ma. Demofusion: Democratising high-resolution image generation with no $$$. In CVPR , pages 6159–6168, 2024. 3 [8] Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas M¨ uller, Harry Saini, Yam Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling recti-fied flow transformers for high-resolution image synthesis. In ICLR , 2024. 1, 2, 3, 5 [9] Stephanie Fu, Netanel Tamir, Shobhita Sundaram, Lucy Chai, Richard Zhang, Tali Dekel, and Phillip Isola. Dream-sim: Learning new dimensions of human visual similarity using synthetic data. NeurIPS , 36:50742–50768, 2023. 5, 9 [10] Shansan Gong, Mukai Li, Jiangtao Feng, Zhiyong Wu, and Lingpeng Kong. Diffuseq: Sequence to sequence text gener-ation with diffusion models. In ICLR , 2023. 1 [11] Chen Hang, Zhe Ma, Haoming Chen, Xuwei Fang, Vincent Xie, Faming Fang, Guixu Zhang, and Hongbin Wang. Ex-ploring fixed point in image editing: theoretical support and convergence optimization. NeurIPS , 37:20031–20054, 2024. 4[12] Yingqing He, Shaoshu Yang, Haoxin Chen, Xiaodong Cun, Menghan Xia, Yong Zhang, Xintao Wang, Ran He, Qifeng Chen, and Ying Shan. Scalecrafter: Tuning-free higher-resolution visual generation with diffusion models. In ICLR ,2023. 3 [13] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising dif-fusion probabilistic models. NeurIPS , 33:6840–6851, 2020. 1[14] Jonathan Ho, Tim Salimans, Alexey Gritsenko, William Chan, Mohammad Norouzi, and David J Fleet. Video dif-fusion models. NeurIPS , 35:8633–8646, 2022. 1 [15] Seongmin Hong, Suh Yoon Jeon, Kyeonghyun Lee, Ernest Ryu, and Se Young Chun. Gradient-free decoder inversion in latent diffusion models. NeurIPS , 37:82982–83007, 2024. 4[16] Xingchang Huang, Corentin Salaun, Cristina Vasconcelos, Christian Theobalt, Cengiz Oztireli, and Gurprit Singh. Blue noise for diffusion models. In ACM SIGGRAPH , pages 1–11, 2024. 3 [17] Jinho Jeong, Sangmin Han, Jinwoo Kim, and Seon Joo Kim. Latent space super-resolution for higher-resolution image generation with diffusion models. In CVPR , pages 2355– 2365, 2025. 3 [18] Wongi Jeong, Kyungryeol Lee, Hoigi Seo, and Se Young Chun. Upsample what matters: Region-adaptive latent sam-pling for accelerated diffusion transformers. arXiv preprint arXiv:2507.08422 , 2025. 1, 3, 6 [19] Maxwell Jones, Sheng-Yu Wang, Nupur Kumari, David Bau, and Jun-Yan Zhu. Customizing text-to-image models with a single image pair. In SIGGRAPH Asia , pages 1–13, 2024. 5 [20] Lei Ke, Haohang Xu, Xuefei Ning, Yu Li, Jiajun Li, Haoling Li, Yuxuan Lin, Dongsheng Jiang, Yujiu Yang, and Linfeng Zhang. Proreflow: Progressive reflow with decomposed ve-locity. In CVPR , pages 28029–28038, 2025. 5 [21] Gwanghyun Kim, Hayeon Kim, Hoigi Seo, Dong Un Kang, and Se Young Chun. Beyondscene: Higher-resolution human-centric scene generation with pretrained diffusion. In 
+
+ECCV , pages 126–142. Springer, 2024. 3 [22] Yulhwa Kim, Dongwon Jo, Hyesung Jeon, Taesu Kim, Dae-hyun Ahn, Hyungjun Kim, et al. Leveraging early-stage ro-bustness in diffusion models for efficient and high-quality image synthesis. NeurIPS , 36:1229–1244, 2023. 3 [23] Weijie Kong, Qi Tian, Zijian Zhang, Rox Min, Zuozhuo Dai, Jin Zhou, Jiangfeng Xiong, Xin Li, Bo Wu, Jianwei Zhang, et al. Hunyuanvideo: A systematic framework for large video generative models. arXiv preprint arXiv:2412.03603 , 2024. 3, 11 [24] Black Forest Labs. Flux.1-dev. https : / / huggingface . co / black - forest - labs / FLUX.1-dev , 2024. 2, 5 [25] Black Forest Labs, Stephen Batifol, Andreas Blattmann, Frederic Boesel, Saksham Consul, Cyril Diagne, Tim Dock-horn, Jack English, Zion English, Patrick Esser, et al. Flux. 1 kontext: Flow matching for in-context image generation and editing in latent space. arXiv preprint arXiv:2506.15742 ,2025. 1 [26] Shufan Li, Konstantinos Kallidromitis, Akash Gokul, Zichun Liao, Yusuke Kato, Kazuki Kozuka, and Aditya Grover. Om-niflow: Any-to-any generation with multi-modal rectified flows. In CVPR , pages 13178–13188, 2025. 3 [27] Xiang Li, John Thickstun, Ishaan Gulrajani, Percy S Liang, and Tatsunori B Hashimoto. Diffusion-lm improves control-lable text generation. NeurIPS , 35:4328–4343, 2022. 1 [28] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Doll´ ar, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In 
+
+ECCV , pages 740–755. Springer, 2014. 5 
+
+19 [29] Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximil-ian Nickel, and Matt Le. Flow matching for generative mod-eling. In ICLR , 2023. 1, 2 [30] Feng Liu, Shiwei Zhang, Xiaofeng Wang, Yujie Wei, Haonan Qiu, Yuzhong Zhao, Yingya Zhang, Qixiang Ye, and Fang Wan. Timestep embedding tells: It’s time to cache for video diffusion model. In CVPR , pages 7353–7363, 2025. 1, 3 [31] Jiacheng Liu, Chang Zou, Yuanhuiyi Lyu, Junjie Chen, and Linfeng Zhang. From reusing to forecasting: Accel-erating diffusion models with taylorseers. arXiv preprint arXiv:2503.06923 , 2025. 1, 3, 6, 11 [32] Ruoshi Liu, Rundi Wu, Basile Van Hoorick, Pavel Tok-makov, Sergey Zakharov, and Carl Vondrick. Zero-1-to-3: Zero-shot one image to 3d object. In ICCV , pages 9298– 9309, 2023. 1 [33] Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and transfer data with rectified flow. ICLR , 2023. 1, 2, 3 [34] Xinyin Ma, Gongfan Fang, and Xinchao Wang. Deepcache: Accelerating diffusion models for free. In CVPR , pages 15762–15772, 2024. 1, 3 [35] Shen Nie, Fengqi Zhu, Zebin You, Xiaolu Zhang, Jingyang Ou, Jun Hu, Jun Zhou, Yankai Lin, Ji-Rong Wen, and Chongxuan Li. Large language diffusion models. arXiv preprint arXiv:2502.09992 , 2025. 1 [36] William Peebles and Saining Xie. Scalable diffusion models with transformers. In ICCV , pages 4195–4205, 2023. 3 [37] Dustin Podell, Zion English, Kyle Lacey, Andreas Blattmann, Tim Dockhorn, Jonas M¨ uller, Joe Penna, and Robin Rombach. Sdxl: Improving latent diffusion models for high-resolution image synthesis. In ICLR , 2024. 1 [38] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨ orn Ommer. High-resolution image syn-thesis with latent diffusion models. In CVPR , pages 10684– 10695, 2022. 1 [39] Hoigi Seo, Hayeon Kim, Gwanghyun Kim, and Se Young Chun. Ditto-nerf: Diffusion-based iterative text to omni-directional 3d model. arXiv preprint arXiv:2304.02827 ,2023. 1 [40] Hoigi Seo, Wongi Jeong, Jae-sun Seo, and Se Young Chun. Skrr: Skip and re-use text encoder layers for memory effi-cient text-to-image generation. In Forty-second International Conference on Machine Learning , 2025. 5 [41] Yichun Shi, Peng Wang, Jianglong Ye, Long Mai, Kejie Li, and Xiao Yang. Mvdream: Multi-view diffusion for 3d gen-eration. In ICLR , 2024. 1 [42] Jiaming Song, Chenlin Meng, and Stefano Ermon. Denois-ing diffusion implicit models. In International Conference on Learning Representations , 2021. 1 [43] Yiren Song, Xiaokang Liu, and Mike Zheng Shou. Diffsim: Taming diffusion models for evaluating visual similarity. In 
+
+ICCV , pages 16904–16915, 2025. 5, 10 [44] Yoad Tewel, Omri Kaduri, Rinon Gal, Yoni Kasten, Lior Wolf, Gal Chechik, and Yuval Atzmon. Training-free consis-tent text-to-image generation. ACM TOG , 43(4):1–18, 2024. 5[45] Ye Tian, Xin Xia, Yuxi Ren, Shanchuan Lin, Xing Wang, Xuefeng Xiao, Yunhai Tong, Ling Yang, and Bin Cui. Training-free diffusion acceleration with bottleneck sam-pling. arXiv preprint arXiv:2503.18940 , 2025. 1, 3, 6 [46] Narasimhan Venkatanath, D Praneeth, S Channappayya Sumohana, S Medasani Swarup, et al. Blind image quality evaluation using perception based features. In 2015 twenty first national conference on communications (NCC) , pages 1–6. IEEE, 2015. 5, 9 [47] Team Wan, Ang Wang, Baole Ai, Bin Wen, Chaojie Mao, Chen-Wei Xie, Di Chen, Feiwu Yu, Haiming Zhao, Jianx-iao Yang, et al. Wan: Open and advanced large-scale video generative models. arXiv preprint arXiv:2503.20314 , 2025. 1[48] Zhengyi Wang, Cheng Lu, Yikai Wang, Fan Bao, Chongxuan Li, Hang Su, and Jun Zhu. Prolificdreamer: High-fidelity and diverse text-to-3d generation with variational score distilla-tion. NeurIPS , 36:8406–8441, 2023. 1 [49] Hanshu Yan, Xingchao Liu, Jiachun Pan, Jun Hao Liew, Qiang Liu, and Jiashi Feng. Perflow: Piecewise rectified flow as universal plug-and-play accelerator. NeurIPS , 37: 78630–78652, 2024. 5 [50] Xingyi Yang, Daquan Zhou, Jiashi Feng, and Xinchao Wang. Diffusion probabilistic model made slim. In CVPR , pages 22552–22562, 2023. 3 [51] Jinjin Zhang, Qiuyu Huang, Junjie Liu, Xiefan Guo, and Di Huang. Diffusion-4k: Ultra-high-resolution image synthesis with latent diffusion models. In CVPR , pages 23464–23473, 2025. 3 [52] Lin Zhang, Lei Zhang, Xuanqin Mou, and David Zhang. Fsim: A feature similarity index for image quality assess-ment. IEEE transactions on Image Processing , 20(8):2378– 2386, 2011. 5, 10 [53] Yasi Zhang, Peiyu Yu, Yaxuan Zhu, Yingshan Chang, Feng Gao, Ying Nian Wu, and Oscar Leong. Flow priors for linear inverse problems via iterative corrupted trajectory matching. 
+
+NeurIPS , 37:57389–57417, 2024. 3, 9 [54] Yuechen Zhang, Jinbo Xing, Bin Xia, Shaoteng Liu, Bo-hao Peng, Xin Tao, Pengfei Wan, Eric Lo, and Jiaya Jia. Training-free efficient video generation via dynamic token carving. arXiv preprint arXiv:2505.16864 , 2025. 3 [55] Zangwei Zheng, Xiangyu Peng, Tianji Yang, Chenhui Shen, Shenggui Li, Hongxin Liu, Yukun Zhou, Tianyi Li, and Yang You. Open-sora: Democratizing efficient video production for all. arXiv preprint arXiv:2412.20404 , 2024. 1 [56] Chang Zou, Xuyang Liu, Ting Liu, Siteng Huang, and Lin-feng Zhang. Accelerating diffusion transformers with token-wise feature caching. arXiv preprint arXiv:2410.05317 ,2024. 1, 3 
+
+20
