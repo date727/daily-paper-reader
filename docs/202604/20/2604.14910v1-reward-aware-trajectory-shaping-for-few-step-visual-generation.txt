@@ -1,0 +1,771 @@
+Title: Reward-Aware Trajectory Shaping for Few-step Visual Generation
+
+URL Source: https://arxiv.org/pdf/2604.14910v1
+
+Published Time: Fri, 17 Apr 2026 01:04:39 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Reward-Aware Trajectory Shaping for Few-step Visual Generation 
+
+## Rui Li ∗∗ 
+
+rui.li@mail.ustc.edu.cn University of Science and Technology of China HeFei, China 
+
+## Bingyu Li †∗ 
+
+rui.li@mail.ustc.edu.cn University of Science and Technology of China HeFei, China 
+
+## Yuanzhi Liang 
+
+TeleAI ShangHai, China 
+
+## Haibin Huang 
+
+TeleAI ShangHai, China 
+
+## Chi Zhang 
+
+TeleAI ShangHai, China 
+
+## XueLong Li 
+
+xuelong_li@ieee.org TeleAI ShangHai, China 
+
+Abstract 
+
+Achieving high-fidelity generation in extremely few sampling steps has long been a central goal of generative modeling. Existing ap-proaches largely rely on distillation-based frameworks to compress the original multi-step denoising process into a few-step genera-tor. However, such methods inherently constrain the student to imitate a stronger multi-step teacher, imposing the teacher as an upper bound on student performance. We argue that introducing 
+
+preference alignment awareness enables the student to optimize toward reward-preferred generation quality, potentially surpassing the teacher instead of being restricted to rigid teacher imitation. To this end, we propose Reward-Aware Trajectory Shaping (RATS) ,a lightweight framework for preference-aligned few-step genera-tion. Specifically, teacher and student latent trajectories are aligned at key denoising stages through horizon matching, while a reward-aware gate is introduced to adaptively regulate teacher guidance based on their relative reward performance. Trajectory shaping is strengthened when the teacher achieves higher rewards, and relaxed when the student matches or surpasses the teacher, thereby enabling continued reward-driven improvement. By seamlessly integrating trajectory distillation, reward-aware gating, and pref-erence alignment, RATS effectively transfers preference-relevant knowledge from high-step generators without incurring additional test-time computational overhead. Experimental results demon-strate that RATS substantially improves the efficiency–quality trade-off in few-step visual generation, significantly narrowing the gap between few-step students and stronger multi-step generators. 
+
+CCS Concepts 
+
+• Computing methodologies → Computer vision tasks . 
+
+> ∗Both authors contributed equally to this research.
+> †Both authors contributed equally to this research. Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org.
+> Conference acronym ’XX, Woodstock, NY
+> ©2018 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-1-4503-XXXX-X/2018/06 https://doi.org/XXXXXXX.XXXXXXX
+
+Keywords 
+
+Few-step Generation, Distillation, Reward Fine-tuning 
+
+ACM Reference Format: 
+
+Rui Li, Bingyu Li, Yuanzhi Liang, Haibin Huang, Chi Zhang, and XueLong Li. 2018. Reward-Aware Trajectory Shaping for Few-step Visual Generation. In Proceedings of Make sure to enter the correct conference title from your rights confirmation email (Conference acronym ’XX). ACM, New York, NY, USA, 17 pages. https://doi.org/XXXXXXX.XXXXXXX 
+
+1 Introduction 
+
+Generative models have achieved remarkable progress in visual synthesis, producing highly realistic and diverse outputs across both image and video domains [ 12 , 32 , 35 ]. However, despite these advances, high-quality synthesis still typically relies on iterative de-noising with many sampling steps, resulting in substantial inference cost. This issue is particularly severe in visual generation, where the high dimensionality of spatiotemporal outputs makes long de-noising trajectories computationally prohibitive [ 6, 12 , 25 , 35 ]. Con-sequently, enabling high-quality generation under an extremely limited step budget has become a central problem in efficient visual synthesis. Recent progress in few-step generation has shown that long de-noising trajectories can be aggressively compressed while retaining competitive visual quality [ 3 , 15 , 16 , 20 – 22 , 26 , 27 , 33 , 39 , 45 , 46 ]. However, most existing methods remain fundamentally distillation-driven: a few-step student is trained to imitate a stronger many-step generator under a fixed step budget. This makes the student highly effective at trajectory compression, yet largely bounded by the capa-bility of the teacher. In other words, the main limitation is no longer efficiency alone, but the fact that few-step students are typically optimized to imitate, rather than to align (shown in Fig. 1(a)). A natural way to overcome this teacher-imposed ceiling is to directly optimize the few-step student toward human preferences with reward-based post-training. Such methods have recently shown strong ability to improve text faithfulness, aesthetic quality, and overall preference alignment in visual generation [ 1 , 17 , 18 , 23 , 34 ,43 , 44 , 50 ]. However, directly applying terminal reward optimiza-tion to the few-step regime introduces a fundamental difficulty (shown in Fig. 1(b)): although reward signals are defined on final outputs, from the perspective of the denoising process they are only observed after the full rollout and therefore act as delayed  
+
+> arXiv:2604.14910v1 [cs.CV] 16 Apr 2026 Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al.
+
+supervision over the trajectory. Prior work has shown that diffu-sion alignment with reinforcement learning can be significantly affected by sparse or delayed rewards, leading to temporal credit assignment difficulties [ 5, 7, 9 , 24 , 28 , 36 ]. This challenge becomes especially severe under extreme step compression, where each denoising step must simultaneously support both synthesis and alignment[13, 30, 31, 40]. These observations suggest that few-step alignment should not be viewed merely as an output-level reward optimization problem, but as a trajectory-level reward allocation problem. Therefore, the central question is not only how to optimize a few-step generator with rewards, but also how to provide informative intermediate guidance so that preference signals can be effectively propagated across an aggressively compressed denoising trajectory. Motivated by the comparison in Fig. 1, we propose Reward-Aware Trajectory Shaping (RATS) , a training framework for preference-aligned few-step generation. Our core insight is that intermediate denoising knowledge from a stronger many-step gen-erator should be transferred to the few-step student only when it remains beneficial under the current reward objective, thereby al-lowing the student to benefit from teacher guidance without being constrained by it. Concretely, our method employs a few-step stu-dent [ 35 ] as the sole generator at inference time, while introducing a multi-step exponential moving average (EMA) teacher only during training to provide multi-stage latent guidance. We adopt a sigma-based horizon matching strategy to align teacher–student latent trajectories across multiple denoising stages. More importantly, we introduce a reward gate that dynamically modulates the strength of teacher guidance according to relative reward performance: when the teacher achieves a higher reward, trajectory shaping is strength-ened to provide informative intermediate priors; when the student approaches or even surpasses the teacher, the teacher constraint is automatically weakened. In this way, the teacher acts as a condi-tional source of preference-relevant trajectory knowledge rather than a rigid target for imitation. As a result, our framework substantially improves the efficiency– quality frontier in few-step generation. It significantly narrows the gap between a few-step student and stronger multi-step generators, while fully preserving the deployment efficiency of the student model. In summary, this work makes the following principal con-tributions: 
+
+• We systematically investigate the teacher-bounded bottle-neck in preference-aligned few-step generation, and refor-mulate the problem as reward-aware trajectory shaping .
+
+• We introduce RATS , a training paradigm that conditionally transfers intermediate knowledge from a multi-step EMA teacher through a reward gate , enabling the student to go beyond static teacher imitation. 
+
+• We instantiate a lightweight framework that combines multi-stage trajectory alignment with reward-gated guidance .The teacher is required only during training, fully preserving the student’s deployment efficiency. 
+
+• Extensive experiments demonstrate that RATS significantly improves the efficiency–quality trade-off, consistently out-performing existing baselines and substantially narrowing the gap to multi-step generators. guidance     
+
+> Delayed reward
+> Reward Model
+> (a) Static Distillation (b) Reward-only Optimization
+> (c)Ours
+
+Multi-step 
+
+Teacher 
+
+Few-step 
+
+Student   
+
+> Teacher Capability
+> Boundary
+> Text prompt  Temporal Credit
+> Assignment Challenge
+
+Few-step 
+
+Model 
+
+> Text prompt
+> Text prompt
+
+Multi-step 
+
+Teacher 
+
+Few-step 
+
+Student 
+
+> Reward Model
+> Reward-Aware
+> Trajectory Shaping
+> adaptive adjust and
+> multi-horizon
+> reward-aware
+> guidance
+> training
+> frozen
+
+Figure 1: Comparison of our framework with existing few-step generation and reward optimization paradigms. 
+
+2 Related Work 2.1 Few-Step Visual Generation 
+
+Improving the efficiency of diffusion and flow-based generative models has become a central topic in visual generation. Existing approaches, including improved samplers, progressive or adver-sarial distillation, consistency-based modeling, and post-training acceleration strategies, have shown that long denoising trajecto-ries can be compressed into only a few sampling steps while pre-serving competitive generation quality [ 2, 3 , 10 , 15 , 16 , 19 – 22 , 25 –27 , 29 , 33 , 39 , 45 – 49 ]. In video generation, few-step acceleration is especially important because the high dimensionality of spa-tiotemporal outputs makes multi-step sampling particularly expen-sive [ 12 , 35 ]. Despite their effectiveness, existing few-step meth-ods are primarily designed for trajectory compression rather than downstream alignment. Their objective is typically to reproduce the behavior of a stronger many-step generator as faithfully as possible under a constrained sampling budget. Consequently, while they improve efficiency, they offer limited flexibility for the few-step model to deviate from or improve beyond the teacher when optimization is driven by preference-aligned objectives. In con-trast, our work studies few-step generation from the perspective of preference alignment, and explicitly addresses the limitation of teacher-bounded distillation. 
+
+2.2 Visual Preference Alignment 
+
+Reward-based post-training has recently emerged as an effective paradigm for improving text faithfulness, aesthetic quality, and human preference alignment in diffusion and flow-based visual generation [ 1, 17 , 18 , 23 , 34 , 43 , 44 , 50 ]. These methods typically optimize generation quality using external reward signals, often instantiated through learned preference or reward models [ 4, 11 ,Reward-Aware Trajectory Shaping for Few-step Visual Generation Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+38 , 41 , 42 , 51 ]. More recent GRPO-style methods further demon-strate the promise of online reward optimization for visual genera-tion [ 7, 14 , 17 , 36 , 37 , 43 ]. Taken together, these advances reveal a gap between two research directions: few-step generation focuses on efficient teacher imitation, while visual preference alignment fo-cuses on reward-driven output optimization. Our work lies at their intersection, where the central challenge is how to align a heavily compressed denoising trajectory without remaining bounded by the teacher. However, directly applying reward optimization to few-step generation remains challenging. Although reward signals can supervise final outputs, they are only defined after the full rollout and therefore act as delayed supervision over the denoising trajectory. Prior work has shown that sparse or delayed rewards can lead to temporal credit assignment difficulties in sequential op-timization [ 5, 9 , 24 , 28 ]. This issue becomes even more severe in the few-step regime, where each denoising step carries a larger share of both synthesis and alignment. Our work addresses this problem by complementing terminal reward optimization with intermediate trajectory guidance from a stronger many-step generator, enabling preference-aware shaping of the few-step denoising process. 
+
+3 Method 
+
+We present Reward-Aware Trajectory Shaping (RATS) shown in Figure 2, a training framework that reframes few-step generation from static teacher imitation to reward-aware trajectory shaping .Rather than training a few-step student to unconditionally repro-duce a many-step teacher, RATS selectively transfers intermediate denoising knowledge only when it remains beneficial under the current reward objective, enabling the student to inherit useful high-step guidance while retaining the freedom to surpass the teacher. A multi-step EMA teacher participates exclusively during training ; at inference time, only the lightweight few-step student is deployed, incurring zero additional cost. We realize this idea through three interlocking mechanisms: (i) an EMA teacher that adaptes with the student, providing non-stationary yet stable trajectory references. 
+
+(ii) sigma-aligned multi-horizon matching that extracts dense in-termediate guidance by aligning predictions across mismatched step schedules; and (iii) a reward gate that dynamically modulates the shaping strength based on relative reward performance, en-abling the student to surpass the teacher when it is ready. These components are detailed in Sections 3.2 to 3.4. 
+
+3.1 Problem Formulation 
+
+Flow-matching generative models. We consider flow-matching generative models, where a learned velocity field 𝑣 𝜃 : X × [ 0, 1] → X defines a probability flow that transports samples from a noise dis-tribution 𝑝 1 = N ( 0, I) to the data distribution 𝑝 0. Given a monotoni-cally decreasing noise schedule {𝜎 𝑡 }𝑁 𝑡 =0 constructed via a time-shift function 𝜙 𝑠 (𝑡 ) = 𝑠𝑡 /( 1 + ( 𝑠 − 1)𝑡 ) with shift factor 𝑠 , the velocity network 𝑣 𝜃 is trained such that, at any noise level 𝜎 𝑡 , the clean-data estimate ( 𝑥 0-prediction) can be recovered as: 
+
+ˆx(𝑡 ) 
+
+> 0
+
+= x𝑡 − 𝜎 𝑡 · 𝑣 𝜃 (x𝑡 , 𝜎 𝑡 ). (1) To generate samples, the model iteratively denoises from x1 ∼ 𝑝 1
+
+through a stochastic re-interpolation schedule: at each step 𝑡 , the predicted clean sample ˆx(𝑡 ) 
+
+> 0
+
+is blended with fresh noise 𝝐 𝑡 ∼ N ( 0, I)
+
+Algorithm 1 RATS: One Training Iteration 
+
+Input: Student 𝜃 𝑆 , teacher 𝜃 𝑇 , reward model 𝑅 , decoder D, hori-zons H ={ ¯𝜎 𝑚 }𝑀 𝑚 =1, weights {𝑤 𝑚 }, shaping coefficient 𝛼 , EMA decay 𝛾 , gate temperature 𝜏  
+
+> 1:
+
+Sample noise x1 ∼ N ( 0, I); sample prompt 𝑐 ∼ 𝑝 𝑐  
+
+> 2:
+
+Student rollout: 𝝉 𝑆 𝜃 𝑆 ← run 𝑆 -step sampling (Eq. 1,2); collect trace { ˆx𝑆, (𝑖 ) 
+
+> 0
+
+}𝑆 𝑖 =1 ⊲ with ∇ 
+
+> 3:
+
+Teacher rollout: 𝝉 𝑇 𝜃 𝑇 ← run 𝑇 -step sampling with same (x1, 𝑐 );collect trace { ˆx𝑇 , ( 𝑗 ) 
+
+> 0
+
+}𝑇 𝑗 =1 ⊲ no ∇ 
+
+> 4:
+
+Decode student output: y𝑆 = D ( ˆx𝑆, (𝑆 ) 
+
+> 0
+
+); compute Lreward (Eq. 3) and 𝑅 𝑆 = 𝑅 (y𝑆 , 𝑐 ) 
+
+> 5:
+
+for 𝑚 = 1, . . . , 𝑀 do  
+
+> 6:
+
+Compute schedule-agnostic correspondence 𝜋 𝑆 𝑚 , 𝜋 𝑇 𝑚 (Eq. 5)  
+
+> 7:
+
+Compute per-horizon divergence L𝑚 (Eq. 6)  
+
+> 8:
+
+end for  
+
+> 9:
+
+Lshape ← Í𝑀 𝑚 =1 𝑤 𝑚 L𝑚 ⊲ Eq. 7  
+
+> 10:
+
+Decode teacher output: y𝑇 = D ( ˆx𝑇 , (𝑇 ) 
+
+> 0
+
+); compute 𝑅 𝑇 =
+
+𝑅 (y𝑇 , 𝑐 ) ⊲ no ∇ 
+
+> 11:
+
+Compute reward gate: 𝑔 ← 𝜎  (𝑅 𝑇 − 𝑅 𝑆 )/ 𝜏  ⊲ Eq. 8  
+
+> 12:
+
+Ltotal ← L reward + 𝛼 · 𝑔 · L shape ⊲ Eq. 9  
+
+> 13:
+
+Backpropagate ∇𝜃 𝑆 Ltotal ; update 𝜃 𝑆 via optimizer  
+
+> 14:
+
+EMA update: 𝜃 𝑇 ← 𝛾 𝜃 𝑇 + ( 1 − 𝛾 ) 𝜃 𝑆 ⊲ Eq. 4 at the next noise level: 
+
+x𝑡 +1 = (1 − 𝜎 𝑡 +1) ˆx(𝑡 ) 
+
+> 0
+
++ 𝜎 𝑡 +1 𝝐 𝑡 . (2) This formulation re-projects the current estimate onto the interpo-lation path between the predicted clean sample and a new noise realization at each step, providing a smooth denoising trajectory that is amenable to gradient-based optimization. We denote the full 𝑁 -step sampling trajectory as 𝝉 𝑁 𝜃 ≜  x1, ˆx(1) 
+
+> 0
+
+, . . . , ˆx(𝑁 )
+
+> 0
+
+, which records the 𝑥 0-prediction at every denoising step. 
+
+Reward-driven optimization. Given a differentiable reward model 
+
+𝑅 : Y → R and a decoder D : X → Y that maps latent codes to the observation space, the reward objective over a student with 𝑆 
+
+sampling steps is: 
+
+Lreward (𝜃 𝑆 ) = Ex1∼𝑝 1, 𝑐 ∼𝑝 𝑐 
+
+h
+
+ℓ
+
+
+
+𝑅  D
+
+
+
+ˆx𝑆 
+
+> 0
+
+
+
+, 𝑐 , 𝑟 ∗ i 
+
+, (3) where 𝑐 denotes the conditioning signal (e.g., text prompt), 𝑝 𝑐 the prompt distribution, ℓ (· , ·) a task-specific scalar loss, and 𝑟 ∗ the target reward. 
+
+The efficiency gap. While Eq. 3 can improve generation quality across specific target, it alone cannot close the large performance gap introduced by aggressive step reduction. The reward signal, de-spite providing dense pixel-space gradients on the final output, con-stitutes terminal supervision from the trajectory perspective: it is defined only after the entire rollout 𝝉 𝑆 𝜃 𝑆 is completed. Formally, the per-step credit 𝜕 Lreward /𝜕𝑣 𝜃 (x𝑡 , 𝜎 𝑡 ) must be propagated through all subsequent steps via the chain rule, and this attribution becomes increasingly diffuse as 𝑆 shrinks and each step shoulders a larger burden. This temporal credit assignment bottleneck motivates our approach: complementing terminal reward with structured inter-mediate trajectory guidance. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. Teacher trajectory  Teacher Output 
+
+EMA 
+
+update 
+
+> Reward
+> Model
+
+Reward Gate 
+
+> Reward
+> Model
+> Reward -aware Gating
+
+Student trajectory 
+
+Student Output 
+
+Train -Only 
+
+Inference -used 
+
+Sigma -aligned 
+
+Multi -horizon 
+
+Matching 
+
+Multi -step 
+
+Teacher 
+
+Few -step 
+
+Student 
+
+> Text prompt
+
+Few -step 
+
+Student 
+
+inference 
+
+> A cute happy Corgi playing
+> in park, sunset, racking focus
+> Few -step
+> denoise
+
+Figure 2: Overview of Reward-Aware Trajectory Shaping (RATS). Given the same initial noise and text prompt, a few-step student and a multi-step EMA teacher are jointly rolled out during training. Their intermediate predictions are aligned at multiple shared noise levels through sigma-aligned multi-horizon matching, producing a shaping loss Lshape . The final outputs are further evaluated by a reward model, and a reward gate dynamically controls the strength of trajectory shaping based on the relative rewards of teacher and student. During inference, only the few-step student is used, introducing no extra cost. 
+
+3.2 Trajectory Shaping 
+
+This subsection describes the trajectory shaping mechanism: how the teacher is constructed and updated, and how its intermediate predictions guide the student. 
+
+EMA teacher and paired sampling. Let 𝜃 𝑆 and 𝜃 𝑇 denote the stu-dent and teacher parameters, respectively. The teacher is initialized as a copy of the student, then frozen and kept in evaluation mode throughout training. After each student update at iteration 𝑘 , the teacher is updated via exponential moving average (EMA): 
+
+𝜃 (𝑘 +1) 
+
+> 𝑇
+
+← 𝛾𝜃 (𝑘 ) 
+
+> 𝑇
+
++ ( 1 − 𝛾 )𝜃 (𝑘 +1) 
+
+> 𝑆
+
+, 𝛾 ∈ ( 0, 1), (4) where 𝛾 is the decay coefficient. The EMA update is applied only to the adapter parameters, while the shared pretrained backbone remains fixed. In each training iteration, the student takes 𝑆 steps and the teacher 𝑇 steps, with 𝑇 ≫ 𝑆 , which are driven from the same initial noise x1 and conditioned on the same prompt 𝑐 , produc-ing paired trajectories 𝝉 𝑆 𝜃 𝑆 and 𝝉 𝑇 𝜃 𝑇 . This design provides a stable and up-to-date teacher reference while isolating the effect of step compression from other sources of variation. 
+
+Sigma-aligned multi-horizon matching. To provide intermedi-ate trajectory supervision beyond terminal alignment, we match the student and teacher predictions at multiple noise levels along the denoising path. A direct step-index alignment is inappropriate when 𝑆 ≠ 𝑇 , since the same index in the two samplers generally corresponds to different noise scales. We therefore align trajectories in sigma space. Concretely, we define a set of 𝑀 sigma horizons 
+
+H = { ¯𝜎 𝑚 }𝑀 𝑚 =1 spanning the denoising trajectory. For each hori-zon ¯𝜎 𝑚 , we select the nearest step in each sampling schedule via a sigma-proximity operator: 
+
+𝜋 𝑆 𝑚 = arg min   
+
+> 𝑖 ∈ { 1,...,𝑆 }
+
+|𝜎 𝑆 𝑖 − ¯𝜎 𝑚 |, 𝜋 𝑇 𝑚 = arg min   
+
+> 𝑗 ∈ { 1,...,𝑇 }
+
+|𝜎 𝑇 𝑗 − ¯𝜎 𝑚 |. (5) The operator 𝜋 establishes a schedule-agnostic correspondence be-tween the two trajectories, making the method invariant to specific step counts and sigma schedule designs. 
+
+Per-horizon divergence. At each matched horizon 𝑚 , we measure the discrepancy between the student’s and teacher’s 𝑥 0-predictions via a composite divergence that captures both directional and mag-nitude errors in the latent space: 
+
+L𝑚 = 𝜆 cos ©«
+
+1 −
+
+vec ( ˆx𝑆 
+
+> 0,𝜋 𝑆 𝑚
+
+), vec ( ˆx𝑇 
+
+> 0,𝜋 𝑇 𝑚
+
+)
+
+vec ( ˆx𝑆 
+
+> 0,𝜋 𝑆 𝑚
+
+) · vec ( ˆx𝑇 
+
+> 0,𝜋 𝑇 𝑚
+
+)
+
+ª®¬| {z }
+
+> structural alignment
+
++ 𝜆 ℓ2 ˆx𝑆 
+
+> 0,𝜋 𝑆 𝑚
+
+− ˆx𝑇 
+
+> 0,𝜋 𝑇 𝑚
+> 2
+> 𝐹
+
+| {z }
+
+> magnitude alignment
+
+,
+
+(6) where vec (·) flattens the latent tensor to a vector per sample, ∥ · ∥ 𝐹 
+
+denotes the Frobenius norm, 𝜆 cos and 𝜆 ℓ2 are balancing coefficients. The cosine term enforces structural coherence (global layout, se-mantic composition), while the Frobenius term penalizes intensity and contrast deviations. 
+
+Aggregated shaping objective. The per-horizon divergences are aggregated into the total shaping loss: 
+
+Lshape (𝜃 𝑆 , 𝜃 𝑇 ) =
+
+> 𝑀
+
+∑︁ 
+
+> 𝑚 =1
+
+𝑤 𝑚 · L 𝑚 
+
+
+
+ˆx𝑆 
+
+> 0,𝜋 𝑆 𝑚
+
+, ˆx𝑇 
+
+> 0,𝜋 𝑇 𝑚
+
+
+
+. (7) The horizon weights {𝑤 𝑚 } increase with decreasing noise, plac-ing greater emphasis on near-final predictions that most strongly influence output quality. When shaping is enabled, the student’s gradient-tracking window is extended to cover at least the earliest horizon step 𝜋 𝑆  
+
+> 1
+
+, ensuring that gradients flow through all horizon-relevant denoising steps. 
+
+3.3 Reward-Gated Modulation 
+
+The trajectory shaping term offers informative supervision, en-abling students to gain few-step generation ability from the multi-step trajectories of the teacher. However, applying it uncondition-ally risks degenerating into rigid imitation of the teacher’s trajec-tory, thereby undermining the student’s self-correction capacity during denoising. and reintroduce a teacher-bounded ceiling. To Reward-Aware Trajectory Shaping for Few-step Visual Generation Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+avoid such situation and enable preference-aligned knowledge dis-tillation, we modulate the shaping loss according to the relative reward performance between teacher and student. Let 𝑅 (· , 𝑐 ) define the reward function, where 𝑐 denotes the condi-tioning input. The reward scores of the teacher and student outputs are then given by 
+
+𝑅 𝑇 = 𝑅  D ( ˆx𝑇  
+
+> 0
+
+), 𝑐 , 𝑅 𝑆 = 𝑅  D ( ˆx𝑆  
+
+> 0
+
+), 𝑐 .
+
+Then, we define a scalar reward gate 
+
+𝑔 (𝑅 𝑇 , 𝑅 𝑆 ) = 11 + exp  −( 𝑅 𝑇 − 𝑅 𝑆 )/ 𝜏  , (8) where 𝜎 (·) is the sigmoid function and 𝜏 > 0 controls the sharpness of the transition. Both 𝑅 𝑇 and 𝑅 𝑆 are treated as constants during backpropagation, so no gradients flow through the gate itself. When the teacher achieves higher reward than the student, the gate approaches 1 and the shaping signal is emphasized, allowing the student to exploit the teacher’s intermediate trajectory as a useful prior. When the student matches or exceeds the teacher, the gate decreases toward 0, suppressing the shaping term and pre-venting the student from being constrained by an inferior teacher trajectory. In this way, teacher guidance is applied only when it is beneficial, yielding an automatic curriculum in which shaping dom-inates early training and gradually fades as the student improves. This conditional modulation is what allows RATS to benefit from trajectory-level supervision without sacrificing the student’s ability to surpass the teacher. 
+
+3.4 Training Objective 
+
+After confirming the model’s ability to perform few-step gener-ation while maintaining output quality, we proceed to formalize the complete training objective that integrates reward optimization with gated trajectory shaping. 
+
+Ltotal (𝜃 𝑆 ) = Lreward (𝜃 𝑆 ) + 𝛼 𝑔 (𝑅 𝑇 , 𝑅 𝑆 ) L shape (𝜃 𝑆 , 𝜃 𝑇 ). (9) where 𝛼 > 0 is the shaping coefficient that balances the two objec-tives. Only the student’s adapter parameters 𝜃 𝑆 receive gradient updates; the teacher 𝜃 𝑇 is updated solely via EMA (Eq. 4). Opti-mization alternates between updating the student parameters via 
+
+∇𝜃 𝑆 Ltotal and maintaining the teacher through an EMA update. The full training procedure for one iteration is summarized in Al-gorithm 1. 
+
+4 Experiments 4.1 Experimental Setup 
+
+We adopt FLUX1.0-dev as the base model for image generation and 
+
+Wan2.1-T2V-1.3B-480P as the base model for video generation. Both models are fine-tuned with LoRA [ 8], using HPSv2.1 [ 38 ] as the reward model. For image generation, we use CFG scale = 3.5
+
+and shift = 3, and report results under 3, 5, 8, and 50 NFEs. The generated images are evaluated using HPS, PickScore, and ImageRe-ward. For video generation, we adopt CFG scale = 5 and shift = 3,and report results under 5 and 8 NFEs. The generated videos are evaluated using VBench. For both image and video generation, the EMA coefficient 𝛾 is set to 0.999 , and the teacher inference steps are set to 50 . All experiments are conducted on the DanceGRPO 
+
+Table 1: Comparison of original and tuned models under different sampling steps. pink upward arrows indicate the improvement over FLUX1.0 dev at the same number of NFEs. 
+
+Method NFEs HPS PickScore ImageReward Baseline 3 18.43 19.99 -0.3551 Ours 3 32.15 ↑13.72 22.46 ↑2.47 1.0956 ↑1.4506 
+
+Baseline 5 26.12 21.83 0.7443 Ours 5 32.16 ↑6.04 22.68 ↑0.85 1.1337 ↑0.3894 
+
+Baseline 8 28.43 22.42 0.9140 Ours 8 33.81 ↑5.38 23.14 ↑0.72 1.3240 ↑0.4100 
+
+Baseline 50 29.76 22.59 1.0037 Ours 50 32.95 ↑3.19 22.79 ↑0.20 1.1544 ↑0.1507 
+
+Table 2: Quantitative results for image generation. Pink up-ward arrows and Green downward arrows indicate the change of Ours relative to the best non-Ours method at the same number of NFEs. 
+
+Method NFEs HPS PickScore ImageReward Flux 3 18.43 19.99 -0.3551 Hyper-SD[25] 3 28.80 22.14 0.9882 SenseFlow[6] 3 30.63 22.33 1.2030 Ours 3 32.15 ↑1.52 22.46 ↑0.13 1.0956 ↓0.1074 
+
+Flux 5 26.12 21.83 0.7443 Hyper-SD[25] 5 27.83 22.08 1.0710 SenseFlow[6] 5 30.99 22.53 1.2110 Ours 5 32.16 ↑1.17 22.68 ↑0.15 1.3337 ↑0.1227 
+
+Flux 8 28.43 22.42 0.9140 Hyper-SD[25] 8 30.50 22.76 1.0410 SenseFlow[6] 8 30.99 22.59 1.1720 Ours 8 33.81 ↑2.82 23.14 ↑0.38 1.3240 ↑0.1520 
+
+Flux 50 29.76 22.59 1.0037 Hyper-SD[25] 50 30.01 22.51 0.9461 SenseFlow[6] 50 30.69 22.31 1.0810 Ours 50 32.95 ↑2.26 22.79 ↑0.26 1.1544 ↑0.0734 
+
+dataset, which contains 50K prompts, and training is performed on 
+
+8 NVIDIA H100 GPUs. 
+
+4.2 Quantitative Results for Few-Step Image Generation 
+
+4.2.1 Comparison with the Baseline Model. As shown in Table 1, our method consistently improves the generation quality of FLUX1.0-dev across all tested sampling budgets, including 3, 5, 8, and 50 NFEs. More importantly, the gains are most pronounced in the extremely low-step regime. At 3 NFEs, our method improves HPS, PickScore, and ImageReward by 13.72, 2.47, and 1.4506, respectively, over the original model. Such a substantial margin under a severely con-strained sampling budget indicates that our method is particularly effective at improving few-step sampling efficiency. As the number of sampling steps increases, the improvement remain clear even at 50 NFEs, showing that the improvement is not obtained at the expense of standard multi-step generation quality. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+Figure 3: Qualitative results on Flux. Few-step image generation: left—Hyper-Flux, middle—SenseFlow, right—Ours. 
+
+Figure 4: Qualitative comparison between our method with 8 NFEs and Wan with 50 NFEs. Our method produces consistently better visual quality, stronger text alignment, and more coherent motion dynamics than Wan-50NFE. 
+
+This observation is important, since it indicates that the proposed method improves few-step generation without compromising the model’s original capability under larger-step inference. 
+
+4.2.2 Comparison with Strong Few-Step Baselines. Table 2 further compares our method with strong few-step baselines, including Hyper-SD and SenseFlow. Our model achieves the best HPS and PickScore across all evaluated step settings, and also attains the best ImageReward at 5, 8, and 50 NFEs. Although SenseFlow obtains a slightly higher ImageReward at 3 NFEs, our method still delivers the strongest overall performance in this highly constrained setting. These results show that our approach is not only effective relative to the original FLUX1.0-dev baseline, but also highly competitive against state-of-the-art few-step generation methods. More impor-tantly, our advantage is not restricted to one specific metric or one specific sampling budget: it consistently transfers across both reward-aligned and external evaluation metrics, while remaining robust under larger-step inference. Since HPSv2.1 is used as the reward model during training, HPS can be regarded as an in-domain metric, while PickScore and ImageReward serve as out-of-domain metrics for evaluating generalization beyond the training reward. Our method achieves clear improvements not only on HPS, but also on PickScore and ImageReward across few-step settings. This is an important observation: the gain is not limited to the reward-aligned Reward-Aware Trajectory Shaping for Few-step Visual Generation Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Table 3: Overall evaluation results. Pink upward arrows in-dicate the improvement over Wan at the same number of NFEs. 
+
+Method NFEs Quality Score Semantic Score Total Score Wan 50 83.08 62.93 79.05 Ours 50 83.99 ↑0.91 65.99 ↑3.06 80.40 ↑1.35 
+
+Wan 8 77.82 48.74 72.01 Ours 8 82.66 ↑4.84 70.35 ↑21.61 80.20 ↑8.19 
+
+Wan 5 73.64 34.10 65.73 Ours 5 81.23 ↑7.59 67.78 ↑33.68 78.53 ↑12.80 
+
+Table 4: Quantitative results for video generation. Blue up-ward arrows and red downward arrows indicate the change of Ours relative to Wan at the same number of NFEs.                                                   
+
+> Method NFEs AQ Color HA IQ MO OC OCons Scene SR SC Wan 541.42 61.65 34.00 39.30 7.85 21.75 13.32 5.45 22.57 90.75 Ours 571.81
+> ↑30.39
+> 90.26
+> ↑28.61
+> 67.00
+> ↑33.00
+> 72.70
+> ↑33.40
+> 67.75
+> ↑59.90
+> 75.47
+> ↑53.72
+> 22.15
+> ↑8.83
+> 26.16
+> ↑20.71
+> 83.50
+> ↑60.93
+> 98.07
+> ↑7.32
+> Wan 850.31 81.47 61.00 51.15 23.01 41.45 17.15 7.84 47.16 91.73 Ours 874.78
+> ↑24.47
+> 87.83
+> ↑6.36
+> 72.00
+> ↑11.00
+> 75.40
+> ↑24.25
+> 73.90
+> ↑50.89
+> 84.57
+> ↑43.12
+> 23.25
+> ↑6.10
+> 24.37
+> ↑16.53
+> 84.97
+> ↑37.81
+> 98.32
+> ↑6.59
+> Wan 50 58.66 84.59 72.00 66.02 54.87 68.51 22.85 17.65 67.13 93.90 Ours 50 66.89
+> ↑8.23
+> 74.52
+> ↓10.07
+> 75.00
+> ↑3.00
+> 76.32
+> ↑10.30
+> 70.35
+> ↑15.48
+> 78.56
+> ↑10.05
+> 23.85
+> ↑1.00
+> 22.02
+> ↑4.37
+> 67.40
+> ↑0.27
+> 96.27
+> ↑2.37
+
+Table 5: Ablation study on few-step image generation under different sampling budgets. Results are reported at 3, 5, and 8 NFEs, evaluated by HPS, PickScore, and ImageReward.                                                     
+
+> NFEs Method HPS PickScore ImageReward 3Reward-Only 20.33 20.26 0.1353 3Distillation-Only 24.34 20.61 0.4523 3Reward+Distillation(no gate) 26.72 21.35 0.9981 3Ours 32.15 22.46 1.0956 5Reward-Only 26.88 22.01 0.8912 5Distillation-Only 27.01 22.38 0.8013 5Reward+Distillation(no gate) 29.97 22.35 1.0718 5Ours 32.16 22.68 1.1337 8Reward-Only 29.86 22.77 0.9560 8Distillation-Only 30.10 22.04 0.9230 8Reward+Distillation(no gate) 33.18 22.82 1.1568 8RATS 33.81 23.14 1.3240
+
+metric used in optimization, but transfers consistently to external preference and quality metrics. In particular, under 5-step and 8-step inference, our method achieves performance compara-ble to or even better than the 50-step FLUX baseline on multi-ple metrics . We attribute this behavior to the reward-aware nature of our design. Rather than forcing the student to mimic the teacher uniformly, we introduce a reward-aware gating mechanism that adaptively balances distillation learning and preference-oriented optimization. Once the student has acquired a certain level of few-step generation capability, improving visual quality and alignment with human preferences becomes more important than overfitting to the teacher’s trajectory itself. 
+
+Table 6: Ablation results about 𝛼 values. 
+
+NFEs 𝛼 HPS PickScore ImageReward 30.2 32.33 22.08 1.0082 0.5 32.08 22.47 1.1052 1 31.88 22.06 1.0826 2 32.15 22.46 1.0956 50.2 31.78 22.09 1.1615 0.5 32.09 22.51 1.2058 1 32.16 22.68 1.3337 2 31.87 22.36 1.0891 80.2 33.07 22.56 1.1730 0.5 32.24 22.67 1.1829 1 33.81 23.14 1.3240 2 32.13 22.97 1.1622 
+
+4.3 Few-Step Video Generation 
+
+4.3.1 Overall Comparison. As shown in Table 3, our method con-sistently improves Wan across all evaluated sampling budgets, in-cluding 5, 8, and 50 NFEs. Similar to the image generation results, the gains are most significant in the low-step regime. At 5 NFEs, our method improves the Quality Score, Semantic Score, and Total Score by 7.59, 33.68, and 12.80 points, respectively. At 8 NFEs, the corresponding gains remain large, reaching 4.84, 21.61, and 8.19 points. Even at 50 NFEs, our method still brings consistent improve-ments of 0.91, 3.06, and 1.35 points. These results indicate that our method is particularly effective for few-step video generation, while also preserving gains under standard multi-step inference. More importantly, our few-step model can already match or even surpass the strong multi-step baseline . With only 8 NFEs, our method achieves a Total Score of 80.20, outperforming Wan at 50 NFEs, which obtains 79.05. Even under 5-NFEs inference, our method reaches 78.53 in Total Score, which is already very close to the 50-step Wan baseline, while achieving a substantially higher Semantic Score (67.78 vs. 62.93). This suggests that the proposed method significantly improves generation efficiency, especially in terms of semantic alignment under constrained sampling budgets. 
+
+4.3.2 Detailed VBench Analysis. The detailed VBench results in Table 4 further support this conclusion. Under both 5-step and 8-step inference, our method improves a broad range of dimensions, including Aesthetic Quality, Background Consistency, Color, Hu-man Action, Imaging Quality, Multiple Objects, Object Class, Over-all Consistency, Scene, Spatial Relationship, Subject Consistency, and Temporal Style. In particular, the large gains on Multiple Ob-jects, Object Class, Spatial Relationship, and Human Action indicate that our method substantially enhances semantic controllability and compositional understanding in few-step video generation. Al-though a few dimensions, such as Appearance Style and Dynamic Degree, remain slightly lower, the improvements on most quality-and semantic-related dimensions are much larger, leading to clear gains in the overall evaluation. 
+
+4.4 Ablation 
+
+4.4.1 Effectiveness of reward-aware training. Table 5 evaluates the contribution of each component under different sampling budgets. Both Reward-Only and Distillation-Only improve performance to Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+Figure 5: Teacher–student quality comparison on the first frames of generated videos throughout training. Our method progressively enables the few-step student to outperform the multi-step teacher in generation quality. Table 7: Efficiency comparison of different methods. Best and second-best results are highlighted.                                 
+
+> Method Step Time (s) Peak Memory (GB) Per-Step Compute (TFLOPs) Total Steps (K) Total Time (h) Extra-Data Few-Step Generation Preference Align SenseFlow 7.31 78.87 801.28 12.0 24.35 Yes Yes No DanceGRPO 212.71 34.05 1605.00 0.2 11.78 No No Yes Ours 7.57 67.67 1229.60 0.4 0.83 No Yes Yes
+
+some extent, but neither of them alone matches the full model. Sim-ply combining the two objectives without gating further improves the results, yet still remains consistently below our final method. Importantly, our method not only performs best on HPS, which is closely related to the training reward, but also consistently achieves the highest PickScore and ImageReward, showing that the gain is not merely due to overfitting to the reward model, but instead re-flects genuine improvements in generation quality. As the number of sampling steps increases, the margin between the full model and the ablated variants gradually decreases, while remaining con-sistently positive. This trend suggests that the proposed design is particularly beneficial for few-step generation, where efficient guidance and preference alignment are both crucial. 
+
+4.4.2 Ablation on 𝛼 . Table 6 studies the effect of the weighting coefficient 𝛼 . We observe that the optimal value depends on the sampling budget, but intermediate values generally work better than overly small or overly large ones. Overall, the results show that our method is robust to a reasonable range of 𝛼 , while moderate values provide the most balanced performance across different metrics. 
+
+4.5 Qualitative Evaluation 
+
+4.5.1 Qualitative Result for Image Generation. The qualitative im-age results further support the quantitative findings. As shown in Figure 3, compared with Hyper-SD and SenseFlow, our method (the third column in each group) consistently generates images with more complete structures, cleaner local details, and more faith-ful semantic alignment under few-step inference. Across diverse prompts involving portraits, stylized characters, complex costumes, fantasy scenes, and compositional backgrounds, our results are generally sharper and more balanced in both global composition and local fidelity. In particular, our method better preserves visually important regions such as facial identity, clothing texture, object boundaries, and background richness, indicating that the proposed reward-aware trajectory shaping improves not only sampling ef-ficiency but also human-preferred visual quality in challenging low-NFE regimes. 
+
+4.5.2 Qualitative Result for Video Generation. The qualitative video results show an equally clear advantage and further demonstrate the generality of our method across image and video generation. As shown in Figure 4, our 8-NFE model already produces perceptu-ally better videos than Wan with 50 inference steps, with clearer subjects, richer backgrounds, and stronger semantic consistency across the three examples. In the corgi case, our result yields a more faithful dog appearance with sharper fur texture and a more vivid park scene; in the fantasy rabbit case, it preserves a clearer subject identity and more detailed environmental rendering; in the laughing-person case, it better captures facial expression and portrait clarity. More importantly, Figure 5 shows that, as training proceeds, our few-step student progressively surpasses the multi-step teacher in generation quality . This observation strongly supports our central claim that the proposed method is not merely a teacher-imitation strategy, but a general reward-aware few-step generation framework that can exceed teacher performance while maintaining strong visual quality and semantic alignment. 
+
+4.6 Efficiency analysis of different methods 
+
+As Table 7, our method achieves a significantly better efficiency and performance trade-off compared to prior approaches. While SenseFlow has a comparable per-step cost, it relies on external high-quality data and requires 12K training steps, resulting in over 24 hours of training. DanceGRPO, although using fewer steps, suffers from extremely high per-step latency and remains time-consuming in practice. In contrast, our method converges within only 0.4K steps and completes training in about 50 minutes without any extra data, while still supporting both few-step generation and preference alignment. This highlights the superior practicality and scalability of our approach. 
+
+4.7 Student Surpasses Teacher in RATS 
+
+Figure 6 shows that the student progressively surpasses the teacher during training, as evidenced by higher smoothed rewards and a consistently positive reward gap. The effect is particularly pro-nounced in the few-step regime, demonstrating the effectiveness of our framework under constrained sampling budgets. 
+
+5 Conclusion 
+
+In this paper, we presented RATS , a reward-aware trajectory shap-ing framework for few-step generation. Instead of relying only on Reward-Aware Trajectory Shaping for Few-step Visual Generation Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 0 50 100 150 200 250 300 350 400                                               
+
+> Step
+> 0.10 0.15 0.20 0.25 0.30 0.35 0.40
+> Reward
+> 3-NFE - Smoothed Reward Comparison
+> Student raw Teacher raw Student smooth (w=20) Teacher smooth (w=20) Student > Teacher
+> 050 100 150 200 250 300 350 400
+> Step
+> 0.15 0.20 0.25 0.30 0.35 0.40
+> Reward
+> 5-NFE - Smoothed Reward Comparison
+> Student raw Teacher raw Student smooth (w=20) Teacher smooth (w=20) Student > Teacher
+> 050 100 150 200 250 300 350 400
+> Step
+> 0.10 0.15 0.20 0.25 0.30 0.35 0.40
+> Reward
+> 8-step - Smoothed Reward Comparison
+> Student raw Teacher raw Student smooth (w=20) Teacher smooth (w=20) Student > Teacher
+> 050 100 150 200 250 300 350 400
+> Step
+> 0.20
+> 0.15
+> 0.10
+> 0.05
+> 0.00 0.05 0.10
+> Gap
+> Good region: gap > 0
+> 3-NFE - Reward Gap (Studen t - T eacher)
+> Raw gap = Student - Teacher Smoothed gap (w=20) Gap = 0 Good region (gap > 0)
+> 050 100 150 200 250 300 350 400
+> Step
+> 0.10
+> 0.05
+> 0.00 0.05 0.10
+> Gap
+> Good region: gap > 0
+> 5-NFE - Reward Gap (Student -Teacher)
+> Raw gap = Student - Teacher Smoothed gap (w=20) Gap = 0 Good region (gap > 0)
+> 050 100 150 200 250 300 350 400
+> Step
+> 0.10
+> 0.05
+> 0.00 0.05 0.10 0.15 0.20
+> Gap
+> Good region: gap > 0
+> 8-step - Reward Gap (Student - Teacher)
+> Raw gap = Student - Teacher Smoothed gap (w=20) Gap = 0 Good region (gap > 0)
+
+Figure 6: Smoothed reward comparison (top) and reward gap (bottom) for 3-step and 5-step settings. The student model gradually surpasses the teacher, as shown by higher smoothed rewards in the later stages. 
+
+final-output reward or rigid teacher imitation, RATS introduces sigma-aligned multi-horizon trajectory matching together with a reward-aware gate, enabling the student to benefit from teacher guidance when useful while still surpassing the teacher when re-ward optimization becomes more informative. Extensive experi-ments on both image and video generation show that RATS consis-tently improves low-NFE generation, with especially clear gains in the most challenging few-step regimes. These results suggest that effective few-step alignment depends not only on optimizing the final reward, but also on shaping the intermediate denoising trajec-tory during training. We hope this work provides a useful direction for bridging fast inference and high-quality aligned generation. 
+
+Acknowledgments 
+
+To Robert, for the bagels and explaining CMYK and color spaces. 
+
+References 
+
+[1] Kevin Black, Michael Janner, Yilun Du, Ilya Kostrikov, and Sergey Levine. 2023. Training diffusion models with reinforcement learning. arXiv preprint arXiv:2305.13301 (2023). [2] Clement Chadebec, Onur Tasar, Eyal Benaroche, and Benjamin Aubin. [n. d.]. Flash diffusion: Accelerating any conditional diffusion model for few steps image generation. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 39. 15686–15695. [3] Junsong Chen, Shuchen Xue, Yuyang Zhao, Jincheng Yu, Sayak Paul, Junyu Chen, Han Cai, Enze Xie, and Song Han. 2025. Sana-sprint: One-step diffusion with continuous-time consistency distillation. arXiv preprint arXiv:2503.09641 (2025). [4] Paul F Christiano, Jan Leike, Tom Brown, Miljan Martic, Shane Legg, and Dario Amodei. 2017. Deep reinforcement learning from human preferences. Advances in neural information processing systems 30 (2017). [5] Kenji Doya. 2000. Reinforcement learning in continuous time and space. Neural computation 12, 1 (2000), 219–245. [6] Xingtong Ge, Xin Zhang, Tongda Xu, Yi Zhang, Xinjie Zhang, Yan Wang, and Jun Zhang. 2025. SenseFlow: Scaling Distribution Matching for Flow-based Text-to-Image Distillation. arXiv preprint arXiv:2506.00523 (2025). [7] Xiaoxuan He, Siming Fu, Yuke Zhao, Wanli Li, Jian Yang, Dacheng Yin, Fengyun Rao, and Bo Zhang. 2025. Tempflow-grpo: When timing matters for grpo in flow models. arXiv preprint arXiv:2508.04324 (2025). [8] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Liang Wang, Weizhu Chen, et al . 2022. Lora: Low-rank adaptation of large language models. Iclr 1, 2 (2022), 3. [9] Jacek Karwowski, Oliver Hayman, Xingjian Bai, Klaus Kiendlhofer, Charlie Grif-fin, and Joar Skalse. 2023. Goodhart’s law in reinforcement learning. arXiv preprint arXiv:2310.09144 (2023). [10] Dongjun Kim, Chieh-Hsin Lai, Wei-Hsiang Liao, Naoki Murata, Yuhta Takida, Toshimitsu Uesaka, Yutong He, Yuki Mitsufuji, and Stefano Ermon. 2024. Consis-tency Trajectory Models: Learning Probability Flow ODE Trajectory of Diffusion. In ICLR . OpenReview.net. [11] Yuval Kirstain, Adam Polyak, Uriel Singer, Shahbuland Matiana, Joe Penna, and Omer Levy. 2023. Pick-a-pic: An open dataset of user preferences for text-to-image generation. Advances in neural information processing systems 36 (2023), 36652–36663. [12] Weijie Kong, Qi Tian, Zijian Zhang, Rox Min, Zuozhuo Dai, Jin Zhou, Jiangfeng Xiong, Xin Li, Bo Wu, Jianwei Zhang, et al . 2024. Hunyuanvideo: A systematic framework for large video generative models. arXiv preprint arXiv:2412.03603 
+
+(2024). [13] Boyi Li, Yifan Shen, Yuanzhe Liu, Yifan Xu, Jiateng Liu, Xinzhuo Li, Zhengyuan Li, Jingyuan Zhu, Yunhan Zhong, Fangzhou Lan, et al . 2026. Toward Cognitive Su-persensing in Multimodal Large Language Model. arXiv preprint arXiv:2602.01541 
+
+(2026). [14] Junzhe Li, Yutao Cui, Tao Huang, Yinping Ma, Chun Fan, Miles Yang, and Zhao Zhong. 2025. MixGRPO: Unlocking Flow-based GRPO Efficiency with Mixed ODE-SDE. arXiv preprint arXiv:2507.21802 (2025). [15] Jiachen Li, Qian Long, Jian Zheng, Xiaofeng Gao, Robinson Piramuthu, Wenhu Chen, and William Yang Wang. 2024. T2v-turbo-v2: Enhancing video generation model post-training through data, reward, and conditional guidance design. arXiv preprint arXiv:2410.05677 (2024). [16] Shanchuan Lin, Anran Wang, and Xiao Yang. 2024. Sdxl-lightning: Progressive adversarial diffusion distillation. arXiv preprint arXiv:2402.13929 (2024). [17] Jie Liu, Gongye Liu, Jiajun Liang, Yangguang Li, Jiaheng Liu, Xintao Wang, Pengfei Wan, Di Zhang, and Wanli Ouyang. 2025. Flow-grpo: Training flow matching models via online rl. arXiv preprint arXiv:2505.05470 (2025). [18] Jie Liu, Gongye Liu, Jiajun Liang, Ziyang Yuan, Xiaokun Liu, Mingwu Zheng, Xiele Wu, Qiulin Wang, Menghan Xia, Xintao Wang, et al . 2025. Improving video generation with human feedback. arXiv preprint arXiv:2501.13918 (2025). [19] Cheng Lu and Yang Song. 2024. Simplifying, stabilizing and scaling continuous-time consistency models. arXiv preprint arXiv:2410.11081 (2024). [20] Eric Luhman and Troy Luhman. 2021. Knowledge distillation in iterative gen-erative models for improved sampling speed. arXiv preprint arXiv:2101.02388 
+
+(2021). [21] Simian Luo, Yiqin Tan, Longbo Huang, Jian Li, and Hang Zhao. 2023. Latent consistency models: Synthesizing high-resolution images with few-step inference. 
+
+arXiv preprint arXiv:2310.04378 (2023). [22] Yang Luo, Xuanlei Zhao, Mengzhao Chen, Kaipeng Zhang, Wenqi Shao, Kai Wang, Zhangyang Wang, and Yang You. 2025. Enhance-A-Video: Better Generated Video for Free. arXiv preprint arXiv:2502.07508 (2025). [23] Mihir Prabhudesai, Russell Mendonca, Zheyang Qin, Katerina Fragkiadaki, and Deepak Pathak. 2024. Video diffusion alignment via reward gradients. arXiv preprint arXiv:2407.08737 (2024). [24] Marc’Aurelio Ranzato, Sumit Chopra, Michael Auli, and Wojciech Zaremba. 2015. Sequence level training with recurrent neural networks. arXiv preprint arXiv:1511.06732 (2015). [25] Yuxi Ren, Xin Xia, Yanzuo Lu, Jiacheng Zhang, Jie Wu, Pan Xie, Xing Wang, and Xuefeng Xiao. 2024. Hyper-sd: Trajectory segmented consistency model for efficient image synthesis. arXiv preprint arXiv:2404.13686 (2024). [26] Tim Salimans and Jonathan Ho. 2022. Progressive Distillation for Fast Sam-pling of Diffusion Models. In The Tenth International Conference on Learning Representations, ICLR 2022, Virtual Event, April 25-29, 2022 . OpenReview.net. https://openreview.net/forum?id=TIdIXIpzhoI [27] Axel Sauer, Dominik Lorenz, Andreas Blattmann, and Robin Rombach. 2024. Adversarial diffusion distillation. In European Conference on Computer Vision .Springer, 87–103. [28] Wolfram Schultz, Peter Dayan, and P Read Montague. 1997. A neural substrate of prediction and reward. Science 275, 5306 (1997), 1593–1599. [29] Huiyang Shao, Xin Xia, Yuhong Yang, Yuxi Ren, Xing Wang, and Xuefeng Xiao. 2025. RayFlow: Instance-Aware Diffusion Acceleration via Adaptive Flow Trajec-tories. arXiv preprint arXiv:2503.07699 (2025). [30] Yifan Shen, Jiateng Liu, Xinzhuo Li, Yuanzhe Liu, Bingxuan Li, Houze Yang, Wenqi Jia, Yijiang Li, Tianjiao Yu, James Matthew Rehg, et al . 2026. EgoForge: Goal-Directed Egocentric World Simulator. arXiv preprint arXiv:2603.20169 (2026). [31] Yifan Shen, Yuanzhe Liu, Jingyuan Zhu, Xu Cao, Xiaofeng Zhang, Yixiao He, Wenming Ye, James Matthew Rehg, and Ismini Lourentzou. 2025. Fine-grained preference optimization improves spatial reasoning in vlms. arXiv preprint arXiv:2506.21656 (2025). [32] Xiaoyu Shi, Zhaoyang Huang, Fu-Yun Wang, Weikang Bian, Dasong Li, Yi Zhang, Manyuan Zhang, Ka Chun Cheung, Simon See, Hongwei Qin, et al . 2024. Motion-i2v: Consistent and controllable image-to-video generation with explicit motion modeling. In ACM SIGGRAPH 2024 Conference Papers . 1–11. [33] Yang Song, Prafulla Dhariwal, Mark Chen, and Ilya Sutskever. 2023. Consistency Models. In International Conference on Machine Learning . PMLR, 32211–32252. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+[34] Bram Wallace, Meihua Dang, Rafael Rafailov, Linqi Zhou, Aaron Lou, Senthil Purushwalkam, Stefano Ermon, Caiming Xiong, Shafiq Joty, and Nikhil Naik. 2024. Diffusion Model Alignment Using Direct Preference Optimization. In CVPR .IEEE, 8228–8238. [35] Team Wan, Ang Wang, Baole Ai, Bin Wen, Chaojie Mao, Chen-Wei Xie, Di Chen, Feiwu Yu, Haiming Zhao, Jianxiao Yang, et al . 2025. Wan: Open and advanced large-scale video generative models. arXiv preprint arXiv:2503.20314 (2025). [36] Jin Wang, Jianxiang Lu, Guangzheng Xu, Comi Chen, Haoyu Yang, Linqing Wang, Peng Chen, Mingtao Chen, Zhichao Hu, Longhuang Wu, et al . 2026. TAGRPO: Boosting GRPO on Image-to-Video Generation with Direct Trajectory Alignment. 
+
+arXiv preprint arXiv:2601.05729 (2026). [37] Yibin Wang, Zhimin Li, Yuhang Zang, Yujie Zhou, Jiazi Bu, Chunyu Wang, Qinglin Lu, Cheng Jin, and Jiaqi Wang. 2025. Pref-GRPO: Pairwise Preference Reward-based GRPO for Stable Text-to-Image Reinforcement Learning. arXiv preprint arXiv:2508.20751 (2025). [38] Xiaoshi Wu, Yiming Hao, Keqiang Sun, Yixiong Chen, Feng Zhu, Rui Zhao, and Hongsheng Li. 2023. Human preference score v2: A solid benchmark for evaluat-ing human preferences of text-to-image synthesis. arXiv preprint arXiv:2306.09341 
+
+(2023). [39] Sirui Xie, Zhisheng Xiao, Diederik P. Kingma, Tingbo Hou, Ying Nian Wu, Kevin P. Murphy, Tim Salimans, Ben Poole, and Ruiqi Gao. 2024. EM Distillation for One-step Diffusion Models. In NeurIPS .[40] Feng Xu, Guangyao Zhai, Xin Kong, Tingzhong Fu, Daniel FN Gordon, Xueli An, and Benjamin Busam. 2025. STARE-VLA: Progressive Stage-Aware Reinforcement for Fine-Tuning Vision-Language-Action Models. arXiv preprint arXiv:2512.05107 
+
+(2025). [41] Jiazheng Xu, Yu Huang, Jiale Cheng, Yuanming Yang, Jiajun Xu, Yuan Wang, Wenbo Duan, Shen Yang, Qunlin Jin, Shurun Li, et al . 2024. Visionreward: Fine-grained multi-dimensional human preference learning for image and video generation. arXiv preprint arXiv:2412.21059 (2024). [42] Jiazheng Xu, Xiao Liu, Yuchen Wu, Yuxuan Tong, Qinkai Li, Ming Ding, Jie Tang, and Yuxiao Dong. 2023. Imagereward: Learning and evaluating human prefer-ences for text-to-image generation. Advances in Neural Information Processing Systems 36 (2023), 15903–15935. [43] Zeyue Xue, Jie Wu, Yu Gao, Fangyuan Kong, Lingting Zhu, Mengzhao Chen, Zhiheng Liu, Wei Liu, Qiushan Guo, Weilin Huang, et al . 2025. DanceGRPO: Unleashing GRPO on Visual Generation. arXiv preprint arXiv:2505.07818 (2025). [44] Xiaomeng Yang, Zhiyu Tan, and Hao Li. 2025. IPO: Iterative preference optimiza-tion for text-to-video generation. arXiv preprint arXiv:2502.02088 (2025). [45] Tianwei Yin, Michaël Gharbi, Taesung Park, Richard Zhang, Eli Shechtman, Fredo Durand, and Bill Freeman. 2024. Improved distribution matching distillation for fast image synthesis. Advances in neural information processing systems 37 (2024), 47455–47487. [46] Tianwei Yin, Michaël Gharbi, Richard Zhang, Eli Shechtman, Fredo Durand, William T Freeman, and Taesung Park. 2024. One-step diffusion with distribution matching distillation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 6613–6623. [47] Zhenyu Yu, Mohd Yamani Idna Idris, and Pei Wang. 2025. Visualizing Our Changing Earth: A Creative AI Framework for Democratizing Environmental Storytelling Through Satellite Imagery. In NeurIPS 2025 .[48] Zhenyu Yu, Mohd Yamani Idna Idris, Pei Wang, and Rizwan Qureshi. 2026. DINOv3-Powered Multi-Task Foundation Model for Quantitative Remote Sensing Estimation. AAAI 2026 40, 48 (2026), 41455–41456. [49] Zhenyu Yu, Haoran Jiang, Pei Wang, Zizhen Lin, and Yong Xiang. 2026. Spa-tiotemporal Alignment for Remote Sensing Image Recovery via Terrain-Aware Diffusion. ICASSP 2026 (2026). [50] Hangjie Yuan, Shiwei Zhang, Xiang Wang, Yujie Wei, Tao Feng, Yining Pan, Yingya Zhang, Ziwei Liu, Samuel Albanie, and Dong Ni. 2024. Instructvideo: Instructing video diffusion models with human feedback. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 6463–6474. [51] Yi-Fan Zhang, Xingyu Lu, Xiao Hu, Chaoyou Fu, Bin Wen, Tianke Zhang, Changyi Liu, Kaiyu Jiang, Kaibing Chen, Kaiyu Tang, et al . 2025. R1-reward: Training multimodal reward model through stable reinforcement learning. arXiv preprint arXiv:2505.02835 (2025). 
+
+Due to the page constraint of the main paper, the supplemen-tary material provides additional methodological details, parameter settings, and extended qualitative and quantitative results. It is organized as follows: 
+
+• Ablation studies under different shaping budgets. 
+
+• Additional qualitative results. 
+
+• Detailed implementation settings for image and video exper-iments. 
+
+.1 Ablation on shaping budgets 
+
+To study the effectiveness of our shaping design under different teacher-student shaping budgets, we vary the shaping budget from 
+
+3 to 5 and 8 NFEs while keeping all other settings fixed. The com-pared variants differ only in how teacher shaping is applied across denoising horizons. Specifically, single-horizon applies shaping only at the final horizon, uniform-horizons performs multi-horizon shap-ing with equal weights, and ours performs multi-horizon shaping with non-uniform weights. Table 8 shows a clear and consistent trend across all denoising budgets. Under 3, 5, and 8 NFEs, ours achieves the best results, 
+
+uniform-horizons ranks second, and single-horizon performs the worst. This ordering is consistent across all three metrics, including HPS, PickScore, and ImageReward, suggesting that the advantage of our design is stable under different few-step settings. Across all budgets, both multi-horizon variants consistently out-perform single-horizon . This shows that applying teacher shaping only at the final horizon is not sufficient for few-step generation. In contrast, introducing teacher guidance across multiple denoising horizons provides stronger supervision and leads to better overall generation quality. These results suggest that few-step generation benefits from shaping signals distributed along the denoising pro-cess, rather than relying only on the last horizon. 
+
+Ours further improves over uniform-horizons at every denoising budget. Since these two variants use the same shaping horizons and differ only in how the horizons are weighted, the performance gap comes from the weighting scheme itself rather than the horizon set. This indicates that different denoising horizons should not be treated equally during teacher shaping. Instead, properly allocating shaping strength across horizons is important for achieving better few-step generation performance. Increasing the student denoising budget improves all three vari-ants. This is expected, since a larger denoising budget gives the student more capacity to refine the sample. However, the relative ordering among the methods remains unchanged as the budget increases. This means that the gain of our method is not tied to a particular sampling regime. Its advantage remains visible from the most constrained 3-step setting to the less restrictive 8-step setting. Overall, these results show that effective teacher shaping requires not only multiple denoising horizons, but also a proper allocation of shaping strength across them. 
+
+.2 Additional qualitative results 
+
+To further demonstrate the superiority of our few-step generation approach, we present additional qualitative comparisons for both image and video generation under varying few-step inference set-tings. These examples complement the quantitative results and illustrate the behavior of our method under limited denoising bud-gets. We focus on low-NFE cases, where generation often suffers from structural errors, semantic drift, and loss of fine details. Such settings make the advantage of our method easier to observe. 
+
+.2.1 Image generation. , Figs. 7, 8, and 9 show that our method con-sistently performs better across different inference budgets. Across a wide range of prompts, our results are generally more faithful to the text and exhibit better visual quality than the baselines. The improvements can be seen in object structure, local details, and Reward-Aware Trajectory Shaping for Few-step Visual Generation Conference acronym ’XX, June 03–05, 2018, Woodstock, NY                                                
+
+> 3 NFE 5 NFE 8 NFE Student Steps HPS ↑PickScore ↑ImageReward ↑HPS ↑PickScore ↑ImageReward ↑HPS ↑PickScore ↑ImageReward ↑
+> single-horizon 30.87 22.01 1.0521 31.84 22.25 1.0975 33.42 22.76 1.2813 uniform-horizons 32.04 22.18 1.0778 32.01 22.41 1.1029 33.66 23.00 1.3084 ours 32.15 22.46 1.0956 32.16 22.68 1.1337 33.81 23.14 1.3240
+
+Table 8: Ablation on teacher shaping across different denoising horizons. We compare single-horizon shaping, uniform multi-horizon shaping, and our non-uniform multi-horizon shaping under 3, 5, and 8 NFE inference budgets. Our method consistently achieves the best performance across all settings. 
+
+overall image cleanliness. Common failure cases, such as missing attributes, distorted shapes, and blurry textures, are also less fre-quent. The advantage of our method becomes clearer as the number of inference steps decreases. At 8 steps, the gain is mainly reflected in finer details and cleaner synthesis. At 5 or 3 steps, the benefit is more evident in global structure and semantic correctness. Overall, these examples show that our method improves both image quality and reliability in few-step generation. 
+
+.2.2 Video generation. Figs. 10 and 11 compare our 8-NFE and 5-NFE results with 50-NFE Wan. The results show that our method brings clear improvements in few-step video generation, even under a much smaller inference budget. Compared with the baselines, our method improves both frame quality and temporal consistency. The generated videos have more stable object identity, smoother scene evolution, and fewer temporal artifacts such as flickering and abrupt appearance changes. The motion is also more faithful to the input prompt. These advantages are especially important in low-step settings, where temporal errors are more likely to accumulate across frames. Overall, our method produces videos that are cleaner, more coherent over time, and more reliable under constrained few-step inference. These qualitative gains highlight the main advantage of our method over existing distilled few-step baselines. In most distilla-tion methods, the student model is trained to imitate the teacher trajectory, which makes its performance naturally bounded by the teacher model. With reward-gated teacher shaping, the student can selectively absorb useful guidance from the teacher without being constrained to rigid trajectory imitation. This effectively alleviates the issue of the student model being forced into mechanical imita-tion of the teacher. Besides, human preference alignment further pushes the student toward outputs that better match visual quality and user preference. These design allow the student to break the teacher ceiling and achieve better quality than the teacher model. 
+
+.3 Detailed Implementation Settings 
+
+To improve the reproducibility of our experiments, we provide the detailed implementation settings for both image and video generation in this section. 
+
+.3.1 Image Generation. Our image generation experiments are built on the official FLUX.1-dev backbone with parameter-efficient fine-tuning. Specifically, we freeze the base transformer and op-timize only LoRA adapters inserted into the attention projection layers to_q , to_k , and to_v . The LoRA rank, scaling factor, and dropout are set to 16 , 16 , and 0.01 , respectively. All experiments are conducted at a spatial resolution of 512 × 512 . We use a per-rank batch size of 1 and per-loop batch size og 8 without gradient accumulation and train for 400 optimization steps. For optimization, we use 8-bit AdamW with a learning rate of 
+
+1 × 10 −4, weight decay of 1 × 10 −4, and gradient clipping with a maximum norm of 1.0. The learning rate is kept constant after 
+
+10 warmup steps. Training is performed in bf16 mixed precision with gradient checkpointing enabled. The maximum text sequence length is set to 512 in all runs. For training-time sampling, we adopt an Euler-style scheduler. The student model uses 3, 5, or 8 denoising steps, while the EMA teacher always uses 50 steps. The classifier-free guidance scale is set to 3.5, and the shift parameter is fixed to 3.0 for both teacher and student so that their trajectories remain comparable under the same sampling formulation. Moreover, the teacher and the student are initialized from the same noise. Additionally, we use HPS v2.1 as the reward model. The EMA decay for updating the teacher is fixed to 0.999 . In the shaping loss, the cosine term and the ℓ2 term are weighted by 1.0 and 0.05 ,respectively. Multi-horizon shaping is applied at target sigma values 
+
+{0.75 , 0.40 , 0.15 } with corresponding weights {0.2, 0.3, 0.5}. Reward gating is enabled by default, with the gate temperature set to 0.02 .The reward gate is computed from the reward difference between teacher and student, and the final objective consists of the reward loss plus a reward-gated shaping term. 
+
+.3.2 Video Generation. Our video generation experiments are built on the official Wan2.1-T2V-1.3B-diffusers backbone with param-eter -efficient fine-tuning. Specifically, we freeze the base video transformer and optimize only LoRA adapters inserted into the attention projection layers to_q , to_k , and to_v . The LoRA rank, scaling factor, and dropout are set to 16 , 16 , and 0.01 , respectively. In our main setting, videos are generated at a spatial resolution of 
+
+160 × 240 with 53 frames at 16 FPS. To reduce text-encoding over-head, we precompute prompt embeddings offline and use cached embeddings during fine-tuning. We use a per-rank batch size of 1 and per-loop batch size of 8
+
+with gradient accumulation set to 8, and train for 400 optimiza-tion steps. For optimization, we use 8-bit AdamW with a learning rate of 1 × 10 −4, weight decay of 1 × 10 −2, and gradient clipping with a maximum norm of 1.0. Training is performed in bf16 mixed precision with gradient checkpointing enabled. For training-time sampling, we adopt our modified Wan latent sampler with a shifted sigma schedule. The student model uses 
+
+5 or 8 denoising steps, while the EMA teacher uses 50 steps. The classifier-free guidance scale is set to 5.0, the shift parameter is fixed Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+to 3.0 for both teacher and student. Moreover, the teacher and the student are initialized from the same noise. In the main HPS-based setting, rewards are computed from every other decoded frame over the generated video. We use HPS v2.1 as the reward model. The EMA decay for updat-ing the teacher is fixed to 0.999 . In the shaping loss, the cosine term and the ℓ2 term are weighted by 1.0 and 0.05 , respectively. Multi-horizon shaping is applied at target sigma values {0.75 , 0.40 , 0.15 }
+
+with corresponding weights {0.2, 0.3, 0.5}. Reward gating is en-abled by default, with the gate temperature set to 0.02 . The reward gate is computed from the reward difference between teacher and student, and the final objective consists of the reward loss plus a reward-gated shaping term. 
+
+> Received 20 February 2007; revised 12 March 2009; accepted 5 June 2009
+
+Reward-Aware Trajectory Shaping for Few-step Visual Generation Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Figure 7: Qualitative results on Flux. 8-NFE image generation: left—Hyper-Flux, middle—SenseFlow, right—Ours. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+Figure 8: Qualitative results on Flux. 5-NFE image generation: left—Hyper-Flux, middle—SenseFlow, right—Ours. Reward-Aware Trajectory Shaping for Few-step Visual Generation Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Figure 9: Qualitative results on Flux. 3-NFE image generation: left—Hyper-Flux, middle—SenseFlow, right—Ours. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+Figure 10: Additional qualitative comparisons on Wan-based video generation under 8-NFE inference. Compared with the baselines, our method produces videos with better frame-level visual quality and more faithful alignment with the text prompt. Reward-Aware Trajectory Shaping for Few-step Visual Generation Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Figure 11: Additional qualitative comparisons on Wan-based video generation under 5-NFE inference. Compared with the baselines, our method produces videos with better frame-level visual quality and more faithful alignment with the text prompt.
