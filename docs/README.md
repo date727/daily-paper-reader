@@ -6,79 +6,82 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-04-20
-- 运行时间：2026-04-20 20:07:47 UTC
+- 最新运行日期：2026-04-21
+- 运行时间：2026-04-21 20:18:50 UTC
 - 运行状态：成功
-- 本次总论文数：19
-- 精读区：7
+- 本次总论文数：20
+- 精读区：8
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读7篇高分论文，速读12篇前沿研究，聚焦AI生成内容与图像编辑技术。  
-高分论文涉及多比特图像水印与轨道视频生成，速读文章探讨AI内容责任机制与精细化编辑方法。  
-建议关注图像隐写术与视频生成技术进展，并探索AI内容检测工具的实际应用。
-- 详情：[/202604/20/README](/202604/20/README)
+今日完成20篇前沿论文的精读与速读，涵盖多媒体取证、图像生成及记忆模型等方向。  
+精读论文聚焦于多媒体取证与高质量图像生成技术，两篇获9.0高分。  
+建议关注字节级生成预测在数据恢复中的应用或频率感知流匹配算法的图像生成细节。
+- 详情：[/202604/21/README](/202604/21/README)
 
 ### 精读区论文标签
-1. [ADD for Multi-Bit Image Watermarking](/202604/20/2604.11491v1-add-for-multi-bit-image-watermarking)  
+1. [Byte-level generative predictions for forensics multimedia carving](/202604/21/2604.11010v1-byte-level-generative-predictions-for-forensics-multimedia-carving)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：图像水印技术用于生成式图像保护
-2. [Towards Realistic and Consistent Orbital Video Generation via 3D Foundation Priors](/202604/20/2604.12309v1-towards-realistic-and-consistent-orbital-video-generation-via-3d-foundation-priors)  
+   evidence：研究对抗扰动下的图像模型保护
+2. [Frequency-Aware Flow Matching for High-Quality Image Generation](/202604/21/2604.15521v1-frequency-aware-flow-matching-for-high-quality-image-generation)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：频率感知流匹配用于高质量图像生成
+3. [APC: Transferable and Efficient Adversarial Point Counterattack for Robust 3D Point Cloud Recognition](/202604/21/2604.15708v1-apc-transferable-and-efficient-adversarial-point-counterattack-for-robust-3d-point-cloud-recognition)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-3. [Direct Discrepancy Replay: Distribution-Discrepancy Condensation and Manifold-Consistent Replay for Continual Face Forgery Detection](/202604/20/2604.12941v1-direct-discrepancy-replay-distribution-discrepancy-condensation-and-manifold-consistent-replay-for-continual-face-forgery-detection)  
+   evidence：对抗点攻击与3D点云识别
+4. [Aletheia: Physics-Conditioned Localized Artifact Attention (PhyLAA-X) for End-to-End Generalizable and Robust Deepfake Video Detection](/202604/21/2604.16486v1-aletheia-physics-conditioned-localized-artifact-attention-phylaa-x-for-end-to-end-generalizable-and-robust-deepfake-video-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-4. [Enhanced Text-to-Image Generation by Fine-grained Multimodal Reasoning](/202604/20/2604.13491v1-enhanced-text-to-image-generation-by-fine-grained-multimodal-reasoning)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：细粒度多模态推理生成图像
-5. [Reward-Aware Trajectory Shaping for Few-step Visual Generation](/202604/20/2604.14910v1-reward-aware-trajectory-shaping-for-few-step-visual-generation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-6. [Beyond Prompts: Unconditional 3D Inversion for Out-of-Distribution Shapes](/202604/20/2604.14914v1-beyond-prompts-unconditional-3d-inversion-for-out-of-distribution-shapes)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：图像生成模型的鲁棒性研究
-7. [Quality-Aware Calibration for AI-Generated Image Detection in the Wild](/202604/20/2604.15027v1-quality-aware-calibration-for-ai-generated-image-detection-in-the-wild)  
+   evidence：物理条件下的对抗鲁棒性
+5. [HQA-VLAttack: Towards High Quality Adversarial Attack on Vision-Language Pre-Trained Models](/202604/21/2604.16499v1-hqa-vlattack-towards-high-quality-adversarial-attack-on-vision-language-pre-trained-models)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
+6. [Towards Generalizable Deepfake Image Detection with Vision Transformers](/202604/21/2604.17376v1-towards-generalizable-deepfake-image-detection-with-vision-transformers)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动下的图像模型保护
+7. [Ranking Abuse via Strategic Pairwise Data Perturbations](/202604/21/2604.17805v1-ranking-abuse-via-strategic-pairwise-data-perturbations)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：研究对抗扰动对图像生成模型的影响
+8. [MetaCloak-JPEG: JPEG-Robust Adversarial Perturbation for Preventing Unauthorized DreamBooth-Based Deepfake Generation](/202604/21/2604.18537v1-metacloak-jpeg-jpeg-robust-adversarial-perturbation-for-preventing-unauthorized-dreambooth-based-deepfake-generation)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动图像防御技术
 
 ### 速读区论文标签
-1. [Toward Accountable AI-Generated Content on Social Platforms: Steganographic Attribution and Multimodal Harm Detection](/202604/20/2604.10460v1-toward-accountable-ai-generated-content-on-social-platforms-steganographic-attribution-and-multimodal-harm-detection)  
+1. [Towards Realistic 3D Emission Materials: Dataset, Baseline, and Evaluation for Emission Texture Generation](/202604/21/2604.11006v1-towards-realistic-3d-emission-materials-dataset-baseline-and-evaluation-for-emission-texture-generation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：图像生成内容的可追溯性与安全检测
-2. [FineEdit: Fine-Grained Image Edit with Bounding Box Guidance](/202604/20/2604.10954v1-fineedit-fine-grained-image-edit-with-bounding-box-guidance)  
+   evidence：图像对抗扰动生成方法
+2. [Synthius-Mem: Brain-Inspired Hallucination-Resistant Persona Memory Achieving 94.4% Memory Accuracy and 99.6% Adversarial Robustness on LoCoMo](/202604/21/2604.11563v1-synthius-mem-brain-inspired-hallucination-resistant-persona-memory-achieving-944-memory-accuracy-and-996-adversarial-robustness-on-locomo)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击的鲁棒性研究
+3. [AdversarialCoT: Single-Document Retrieval Poisoning for LLM Reasoning](/202604/21/2604.12201v1-adversarialcot-single-document-retrieval-poisoning-for-llm-reasoning)  
    标签：评分：8.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-3. [LoViF 2026 Challenge on Human-oriented Semantic Image Quality Assessment: Methods and Results](/202604/20/2604.11207v1-lovif-2026-challenge-on-human-oriented-semantic-image-quality-assessment-methods-and-results)  
+4. [Cell Instance Segmentation via Multi-Task Image-to-Image Schrödinger Bridge](/202604/21/2604.12318v1-cell-instance-segmentation-via-multi-task-image-to-image-schrdinger-bridge)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：图像对抗攻击防御技术
-4. [StreamMark: A Deep Learning-Based Semi-Fragile Audio Watermarking for Proactive Deepfake Detection](/202604/20/2604.11917v1-streammark-a-deep-learning-based-semi-fragile-audio-watermarking-for-proactive-deepfake-detection)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：音频水印与对抗扰动相关
-5. [How You Ask Matters! Adaptive RAG Robustness to Query Variations](/202604/20/2604.10745v1-how-you-ask-matters-adaptive-rag-robustness-to-query-variations)  
+   evidence：图像对抗攻击与防御
+5. [Robust Adversarial Policy Optimization Under Dynamics Uncertainty](/202604/21/2604.10974v1-robust-adversarial-policy-optimization-under-dynamics-uncertainty)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的检索鲁棒性
-6. [HuiYanEarth-SAR: A Foundation Model for High-Fidelity and Low-Cost Global Remote Sensing Imagery Generation](/202604/20/2604.11444v1-huiyanearth-sar-a-foundation-model-for-high-fidelity-and-low-cost-global-remote-sensing-imagery-generation)  
+   evidence：对抗鲁棒性强化
+6. [Reading Between the Pixels: Linking Text-Image Embedding Alignment to Typographic Attack Success on Vision-Language Models](/202604/21/2604.12371v2-reading-between-the-pixels-linking-text-image-embedding-alignment-to-typographic-attack-success-on-vision-language-models)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-7. [RationalRewards: Reasoning Rewards Scale Visual Generation Both Training and Test Time](/202604/20/2604.11626v2-rationalrewards-reasoning-rewards-scale-visual-generation-both-training-and-test-time)  
+   evidence：对抗攻击对生成模型影响
+7. [CoD-Lite: Real-Time Diffusion-Based Generative Image Compression](/202604/21/2604.12525v2-cod-lite-real-time-diffusion-based-generative-image-compression)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-8. [Can we Watermark Low-Entropy LLM Outputs?](/202604/20/2604.12051v1-can-we-watermark-low-entropy-llm-outputs)  
+   evidence：生成式图像对抗鲁棒性
+8. [A Sanity Check on Composed Image Retrieval](/202604/21/2604.12904v1-a-sanity-check-on-composed-image-retrieval)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像保护
-9. [Shuffling the Data, Stretching the Step-size: Sharper Bias in constant step-size SGD](/202604/20/2604.10373v1-shuffling-the-data-stretching-the-step-size-sharper-bias-in-constant-step-size-sgd)  
+   evidence：对抗扰动图像检索
+9. [Tracking High-order Evolutions via Cascading Low-rank Fitting](/202604/21/2604.10980v1-tracking-high-order-evolutions-via-cascading-low-rank-fitting)  
    标签：评分：6.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-10. [AdverMCTS: Combating Pseudo-Correctness in Code Generation via Adversarial Monte Carlo Tree Search](/202604/20/2604.10449v1-advermcts-combating-pseudo-correctness-in-code-generation-via-adversarial-monte-carlo-tree-search)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击下的模型保护方法
-11. [SEED: A Large-Scale Benchmark for Provenance Tracing in Sequential Deepfake Facial Edits](/202604/20/2604.10522v1-seed-a-large-scale-benchmark-for-provenance-tracing-in-sequential-deepfake-facial-edits)  
+10. [Gradient-Variation Regret Bounds for Unconstrained Online Learning](/202604/21/2604.11151v1-gradient-variation-regret-bounds-for-unconstrained-online-learning)  
    标签：评分：6.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-12. [Generative Data-engine Foundation Model for Universal Few-shot 2D Vascular Image Segmentation](/202604/20/2604.10737v1-generative-data-engine-foundation-model-for-universal-few-shot-2d-vascular-image-segmentation)  
+11. [HDR Video Generation via Latent Alignment with Logarithmic Encoding](/202604/21/2604.11788v1-hdr-video-generation-via-latent-alignment-with-logarithmic-encoding)  
+   标签：评分：6.0/10、query:image-generation
+   evidence：研究生成模型在HDR生成中的应用
+12. [BiasIG: Benchmarking Multi-dimensional Social Biases in Text-to-Image Models](/202604/21/2604.11934v1-biasig-benchmarking-multi-dimensional-social-biases-in-text-to-image-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击防御技术
+   evidence：研究文本到图像模型中的多维社会偏见
 
 
 ### ⚡ 这个站点能做什么
