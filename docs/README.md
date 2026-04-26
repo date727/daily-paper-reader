@@ -6,82 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-04-25
-- 运行时间：2026-04-25 19:52:26 UTC
+- 最新运行日期：2026-04-26
+- 运行时间：2026-04-26 19:53:29 UTC
 - 运行状态：成功
-- 本次总论文数：20
-- 精读区：8
+- 本次总论文数：19
+- 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读8篇、速读12篇论文，聚焦AI生成技术与图像处理等领域  
-2) 高分论文集中于文本驱动的3D布局生成与卫星图像去雾技术，展现AI在视觉创作与遥感应用中的突破  
-3) 建议优先阅读文本生成3D布局与卫星图像去雾的精读论文，并关注图像照明控制及图神经网络对抗性研究的速读内容
-- 详情：[/202604/25/README](/202604/25/README)
+今日精读7篇、速读12篇论文，聚焦高分成果与前沿技术突破  
+高分论文覆盖移动图像超分、扩散模型重采样优化，速读内容涉及天文数据分析、多模态系统对抗性增强及联邦学习隐私保护  
+建议优先阅读移动设备图像增强与扩散模型可控重采样方法，或探索隐私安全联邦学习在实际场景中的应用潜力
+- 详情：[/202604/26/README](/202604/26/README)
 
 ### 精读区论文标签
-1. [Co-generation of Layout and Shape from Text via Autoregressive 3D Diffusion](/202604/25/2604.16552v1-co-generation-of-layout-and-shape-from-text-via-autoregressive-3d-diffusion)  
+1. [The First Challenge on Mobile Real-World Image Super-Resolution at NTIRE 2026: Benchmark Results and Method Overview](/202604/26/2604.17306v1-the-first-challenge-on-mobile-real-world-image-super-resolution-at-ntire-2026-benchmark-results-and-method-overview)  
    标签：评分：9.0/10、query:image-generation
-   evidence：3D扩散模型生成
-2. [IncepDeHazeGAN: Novel Satellite Image Dehazing](/202604/25/2604.16609v1-incepdehazegan-novel-satellite-image-dehazing)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：生成对抗网络用于图像去雾
-3. [Local Inconsistency Resolution: The Interplay between Attention and Control in Probabilistic Models](/202604/25/2604.17140v1-local-inconsistency-resolution-the-interplay-between-attention-and-control-in-probabilistic-models)  
+   evidence：移动设备上的图像超分辨率挑战
+2. [Interpolating Discrete Diffusion Models with Controllable Resampling](/202604/26/2604.17310v1-interpolating-discrete-diffusion-models-with-controllable-resampling)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击防御策略
-4. [A Comparative Evaluation of Geometric Accuracy in NeRF and Gaussian Splatting](/202604/25/2604.18205v1-a-comparative-evaluation-of-geometric-accuracy-in-nerf-and-gaussian-splatting)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：图像生成质量的评估方法
-5. [CityRAG: Stepping Into a City via Spatially-Grounded Video Generation](/202604/25/2604.19741v1-cityrag-stepping-into-a-city-via-spatially-grounded-video-generation)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-6. [On the convergence of an adaptive denoiser driven iterative regularization with early stopping](/202604/25/2604.20360v1-on-the-convergence-of-an-adaptive-denoiser-driven-iterative-regularization-with-early-stopping)  
+   evidence：扩散模型鲁棒性提升
+3. [IncreFA: Breaking the Static Wall of Generative Model Attribution](/202604/26/2604.17736v2-increfa-breaking-the-static-wall-of-generative-model-attribution)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击防御技术
-7. [Linear Image Generation by Synthesizing Exposure Brackets](/202604/25/2604.21008v1-linear-image-generation-by-synthesizing-exposure-brackets)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：图像生成方法
-8. [ID-Eraser: Proactive Defense Against Face Swapping via Identity Perturbation](/202604/25/2604.21465v1-id-eraser-proactive-defense-against-face-swapping-via-identity-perturbation)  
+   evidence：生成模型属性学习
+4. [Local Linearity of LLMs Enables Activation Steering via Model-Based Linear Optimal Control](/202604/26/2604.19018v1-local-linearity-of-llms-enables-activation-steering-via-model-based-linear-optimal-control)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击防御技术
+   evidence：LLM激活控制方法
+5. [Image Generators are Generalist Vision Learners](/202604/26/2604.20329v1-image-generators-are-generalist-vision-learners)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：查找图像生成相关论文
+6. [Stochasticity in Tokenisation Improves Robustness](/202604/26/2604.16037v1-stochasticity-in-tokenisation-improves-robustness)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动下的图像模型保护
+7. [PPEDCRF: Dynamic-CRF-Guided Selective Perturbation for Background-Based Location Privacy in Video Sequences](/202604/26/2604.17163v1-ppedcrf-dynamic-crf-guided-selective-perturbation-for-background-based-location-privacy-in-video-sequences)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动用于视频背景隐私保护
 
 ### 速读区论文标签
-1. [TokenLight: Precise Lighting Control in Images using Attribute Tokens](/202604/25/2604.15310v1-tokenlight-precise-lighting-control-in-images-using-attribute-tokens)  
+1. [Extending Galactic foreground emission with neural networks](/202604/26/2604.16167v1-extending-galactic-foreground-emission-with-neural-networks)  
    标签：评分：8.0/10、query:image-generation
-   evidence：图像光照控制方法
-2. [TopFeaRe: Locating Critical State of Adversarial Resilience for Graphs Regarding Topology-Feature Entanglement](/202604/25/2604.15370v1-topfeare-locating-critical-state-of-adversarial-resilience-for-graphs-regarding-topology-feature-entanglement)  
+   evidence：使用生成对抗网络进行图像生成
+2. [Penny Wise, Pixel Foolish: Bypassing Price Constraints in Multimodal Agents via Visual Adversarial Perturbations](/202604/26/2604.16515v1-penny-wise-pixel-foolish-bypassing-price-constraints-in-multimodal-agents-via-visual-adversarial-perturbations)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-3. [Semiclassics at the cusp](/202604/25/2604.15422v1-semiclassics-at-the-cusp)  
+   evidence：使用对抗扰动进行图像生成攻击
+3. [SafeLM: Unified Privacy-Aware Optimization for Trustworthy Federated Large Language Models](/202604/26/2604.16606v1-safelm-unified-privacy-aware-optimization-for-trustworthy-federated-large-language-models)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-4. [From Competition to Coopetition: Coopetitive Training-Free Image Editing Based on Text Guidance](/202604/25/2604.15948v1-from-competition-to-coopetition-coopetitive-training-free-image-editing-based-on-text-guidance)  
+   evidence：对抗扰动下的图像模型保护
+4. [Cross-Modal Attention Analysis and Optimization in Vision-Language Models: A Study on Visual Reliability](/202604/26/2604.17217v1-cross-modal-attention-analysis-and-optimization-in-vision-language-models-a-study-on-visual-reliability)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的协同编辑方法
-5. [From Seeing to Simulating: Generative High-Fidelity Simulation with Digital Cousins for Generalizable Robot Learning and Evaluation](/202604/25/2604.15805v1-from-seeing-to-simulating-generative-high-fidelity-simulation-with-digital-cousins-for-generalizable-robot-learning-and-evaluation)  
+   evidence：视觉可靠性与对抗评估
+5. [Coevolving Representations in Joint Image-Feature Diffusion](/202604/26/2604.17492v1-coevolving-representations-in-joint-image-feature-diffusion)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像模拟与增强
-6. [Efficient Video Diffusion Models: Advancements and Challenges](/202604/25/2604.15911v1-efficient-video-diffusion-models-advancements-and-challenges)  
+   evidence：对抗攻击下的鲁棒性提升
+6. [IncreFA: Breaking the Static Wall of Generative Model Attribution](/202604/26/2604.17736v1-increfa-breaking-the-static-wall-of-generative-model-attribution)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-7. [Adaptive Forensic Feature Refinement via Intrinsic Importance Perception](/202604/25/2604.16879v1-adaptive-forensic-feature-refinement-via-intrinsic-importance-perception)  
+   evidence：生成式图像对抗鲁棒性
+7. [PlankFormer: Robust Plankton Instance Segmentation via MAE-Pretrained Vision Transformers and Pseudo Community Image Generation](/202604/26/2604.17856v1-plankformer-robust-plankton-instance-segmentation-via-mae-pretrained-vision-transformers-and-pseudo-community-image-generation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：通过内在重要性感知提升检测能力
-8. [Adaptive Forensic Feature Refinement via Intrinsic Importance Perception](/202604/25/2604.16879v2-adaptive-forensic-feature-refinement-via-intrinsic-importance-perception)  
+   evidence：生成式图像对抗鲁棒性
+8. [DifFoundMAD: Foundation Models meet Differential Morphing Attack Detection](/202604/26/2604.17961v1-diffoundmad-foundation-models-meet-differential-morphing-attack-detection)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：通过内在重要性感知提升检测能力
-9. [Diffusion Autoencoder for Unsupervised Artifact Restoration in Handheld Fundus Images](/202604/25/2604.15723v1-diffusion-autoencoder-for-unsupervised-artifact-restoration-in-handheld-fundus-images)  
-   标签：评分：6.0/10、query:image-generation
-   evidence：生成对抗网络在图像生成中的应用
-10. [Beyond Text Prompts: Precise Concept Erasure through Text-Image Collaboration](/202604/25/2604.15829v1-beyond-text-prompts-precise-concept-erasure-through-text-image-collaboration)  
+   evidence：基础模型用于变形攻击检测
+9. [Breaking Euston: Recovering Private Inputs from Secure Inference by Exploiting Subspace Leakage](/202604/26/2604.17238v1-breaking-euston-recovering-private-inputs-from-secure-inference-by-exploiting-subspace-leakage)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
-11. [UniEditBench: A Unified and Cost-Effective Benchmark for Image and Video Editing via Distilled MLLMs](/202604/25/2604.15871v1-unieditbench-a-unified-and-cost-effective-benchmark-for-image-and-video-editing-via-distilled-mllms)  
+   evidence：图像对抗扰动安全防护
+10. [Bit-Flip Vulnerability of Shared KV-Cache Blocks in LLM Serving Systems](/202604/26/2604.17249v1-bit-flip-vulnerability-of-shared-kv-cache-blocks-in-llm-serving-systems)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
-12. [Making Image Editing Easier via Adaptive Task Reformulation with Agentic Executions](/202604/25/2604.15917v1-making-image-editing-easier-via-adaptive-task-reformulation-with-agentic-executions)  
+   evidence：图像对抗攻击防御技术
+11. [Spectral Forensics of Diffusion Attention Graphs for Copy-Move Forgery Detection](/202604/26/2604.17287v1-spectral-forensics-of-diffusion-attention-graphs-for-copy-move-forgery-detection)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
+   evidence：利用预训练模型检测图像篡改
+12. [When Background Matters: Breaking Medical Vision Language Models by Transferable Attack](/202604/26/2604.17318v1-when-background-matters-breaking-medical-vision-language-models-by-transferable-attack)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗攻击下的医学模型破坏
 
 
 ### ⚡ 这个站点能做什么
