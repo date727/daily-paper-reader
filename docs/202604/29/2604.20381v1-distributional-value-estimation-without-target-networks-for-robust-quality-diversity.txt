@@ -1,0 +1,565 @@
+Title: Distributional Value Estimation Without Target Networks for Robust Quality-Diversity
+
+URL Source: https://arxiv.org/pdf/2604.20381v1
+
+Published Time: Thu, 23 Apr 2026 00:44:43 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Distributional Value Estimation Without Target Networks for Robust Quality-Diversity 
+
+# Behrad Koohy 
+
+behrad.koohy@luffy.ai Luffy.AI Culham, Oxfordshire, United Kingdom 
+
+# Jamie Bayne 
+
+jamie.bayne@luffy.ai Luffy.AI Culham, Oxfordshire, United Kingdom 
+
+Figure 1: The Optimisation Loop of QDHUAC. The algorithm maintains a shared Replay Buffer D populated by the evolutionary search. A global Target-Free Distributional Critic learns continuously from this diverse data to guide a gradient-based policy, which accelerates the discovery of high-performing solutions. To stabilise learning at high Update-to-Data (UTD) ratios without a target network, the critic employs compact residual blocks utilising Hybrid Normalisation. We apply Weight Normalisation to control the gradient magnitude, followed by Batch Normalisation to mitigate the internal covariate shift caused by the non-stationary archive distribution. This architecture keeps the target-free critic and the population synchronised. 
+
+## Abstract 
+
+Quality-Diversity (QD) algorithms excel at discovering diverse repertoires of skills, but are hindered by poor sample efficiency and often require tens of millions of environment steps to solve complex locomotion tasks. Recent advances in Reinforcement Learning (RL) have shown that high Update-to-Data (UTD) ratios accelerate Actor-Critic learning. While effective, standard high-UTD algorithms typ-ically utilise target networks to stabilise training. This requirement introduces a significant computational bottleneck, rendering them impractical for resource-intensive Quality-Diversity (QD) tasks where sample efficiency and rapid population adaptation are criti-cal. In this paper, we introduce QDHUAC, a sample-efficient, target-free and distributional QD-RL algorithm that provides dense and low-variance gradient signals, which enables high-UTD training for Dominated Novelty Search whilst requiring an order of magnitude 
+
+Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org. 
+
+GECCO ’26, San José, Costa Rica 
+
+© 2026 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-x-xxxx-xxxx-x/YY/MM https://doi.org/10.1145/nnnnnnn.nnnnnnn 
+
+fewer environment steps. We demonstrate that our method enables stable training at high UTD ratios, achieving competitive coverage and fitness on high-dimensional Brax environments with an order of magnitude fewer samples than baselines. Our results suggest that combining target-free distributional critics with dominance-based selection is a key enabler for the next generation of sample-efficient evolutionary RL algorithms. 
+
+## Keywords 
+
+Genetic Algorithms, Quality-Diversity, Actor-Critic, Reinforcement Learning 
+
+ACM Reference Format: 
+
+Behrad Koohy and Jamie Bayne. 2026. Distributional Value Estimation Without Target Networks for Robust Quality-Diversity. In Proceedings of The Genetic and Evolutionary Computation Conference 2026 (GECCO ’26). ACM, New York, NY, USA, 11 pages. https://doi.org/10.1145/nnnnnnn.nnnnnnn 
+
+## 1 Introduction 
+
+Quality-Diversity (QD) optimisation focuses on the discovery of di-verse and high-performing skill repertoires that solve complex tasks in parallel. By combining evolutionary search with local competi-tion, algorithms such as MAP-Elites [ 28 ] and Dominated Novelty Search (DNS) [ 1 ] provide distinct advantages over standard Rein-forcement Learning (RL) baselines in domains that explicitly require  
+
+> arXiv:2604.20381v1 [cs.LG] 22 Apr 2026 GECCO ’26, July 13–17, 2026, San José, Costa Rica Koohy et al.
+
+discovering a diverse repertoire of skills or transferring behaviours to new tasks [ 32 ]. However, this performance comes at a severe computational cost in sample efficiency. Performant QD methods often require tens of millions of environment interactions to deliver performant agents, limiting their practicality for expensive simula-tions and real-world robotics. Concurrently, the field of off-policy Deep RL has seen breakthroughs in sample efficient algorithms. High Update-to-Data (UTD) ratio algorithms, which perform more gradient updates per environment step, have allowed model-free al-gorithms to match the sample efficiency of model-based approaches [ 7]. However, naive integration has been shown to not translate directly when applied to QD-RL algorithms [25]. We posit that this failure stems partially from the inherent diver-sity of new trajectories generated by QD approaches. In traditional actor-critic RL, the optimal policy evolves slowly, allowing for a lagging target network (via Polyak averaging) to provide stable regression targets. In QD-RL, this target is derived from sampling the diverse population of agents maintained by QD, which expands rapidly and stochastically. A lagged target network fails to track this volatile and entropic frontier, introducing a misalignment between computed gradients and the true gradient derived from the current population, which is increasingly destructive with increased UTD. In this paper, we propose QDHUAC, a QD-RL algorithm that re-solves the need for a target network via a target-free distributional critic architecture, allowing our critic to more directly track the diversity of the QD archive. To accommodate the high UTD ratios required for sample efficient learning, we utilise a novel hybrid normalisation architecture which constrains the critic’s gradient magnitudes through combined weight and batch normalisation, creating a trust region in parameter space that remains stable un-der heavy distribution shifts of a diverse replay buffer. Our spe-cific contributions are: (1) We identify the Target Tracking Lag as the primary bottleneck for high UTD learning in evolutionary systems. (2) We introduce QDHUAC, a comprehensive and sam-ple-efficient Quality-Diversity Reinforcement Learning algorithm that enables stable, target-free learning at UTD ratios ≥ 10 . (3) To achieve this stability within unstructured, non-stationary archives such as Dominated Novelty Search (DNS), we design a target-free, distributional, and residual critic architecture that utilises hybrid normalisation (weight and batch normalisation) to mitigate value divergence. (4) We demonstrate that QDHUAC achieves compa-rable coverage and fitness on high-dimensional Brax locomotion tasks with an order of magnitude sample efficiency compared to QD-RL baselines. 
+
+## 2 Background 
+
+We define the Update-to-Data (UTD) ratio, denoted as 𝐺 , as the number of gradient updates performed on the neural network pa-rameters for every environment step collected. Standard online reinforcement learning algorithms typically operate in a low-UTD regime ( 𝐺 ≈ 1), tying the learning speed directly to the simulation throughput. In contrast, sample-efficient RL aims to maximise the information extracted from limited interactions by operating in a High-UTD regime ( 𝐺 > 1). While increasing G theoretically im-proves sample efficiency by re-using experience, in practice, high update ratios trained on off-policy rapidly lead to value overesti-mation and divergence [10, 25]. Lim et al . [25] demonstrated that standard QD-RL agents are significantly under-trained, and increased the update frequency to standard RL levels (UTD ≈ 1) in order to increase returns. However, they also found that pushing beyond this to High-UTD regimes (e.g., using DroQ [ 21 ]) with UTD = 20 yielded minimal performance increase at a large and impractical computational cost. We hypothe-sise that this failure to scale is due to the target network bottleneck. In architectures with target networks, performing iterations of up-dates against an outdated target network creates a feedback loop of stale value estimation, an effect which is amplified in the QD-RL setting. However, naively removing the target network severely degrades stability; D’Oro et al . [10] identified the target network as the crit-ical component allowing RL algorithms to scale with the replay ratio. To mitigate instability without target networks, prior work has relied on ensemble methods [ 7, 21 ], which incur significant computational costs, or periodic network resets [ 10 , 39 ], which discard accumulated value information, leading to periodic per-formance collapses that disrupt the precise ranking required for evolutionary selection. Recently, Bhatt et al . [5] challenged the ubiquity of target net-works, demonstrating that they are not a fundamental require-ment for value estimation, but rather an architectural compensation for internal covariate shift [ 23 ]. By replacing the target network with Batch Normalisation, they proposed the CrossQ architecture, which allows the critic to track the current policy distribution instantaneously without the latency introduced by Polyak averag-ing. This ’zero-lag’ property is particularly advantageous for the non-stationary frontiers of Quality-Diversity. However, the diverse and high-variance nature of QD archives exacerbates the risk of value divergence. Consequently, while CrossQ provides the theo-retical foundation for synchronised learning, stabilising it within a population-based framework requires further regularisation to constrain the Lipschitz constant of the critic [16]. 
+
+## 3 Target-Free Distributional Value Estimation 
+
+Standard QD-RL methods rely on the actor-critic framework, where a critic 𝑄 𝜃 estimates the value of a policy 𝜋 𝜙 . This is a natural fit to a diverse population of actors, as a sound Q-function is valid across all policies. To ensure stability in Q learning, these methods universally employ a target network 𝑄 𝜃 ′ , a lagging copy of the critic parameters updated via Polyak averaging 𝜃 ′ ← 𝜏𝜃 + ( 1 − 𝜏 )𝜃 ′.While effective for stationary RL tasks, in QD-RL, the optimal policy is not a single point but a rapidly expanding frontier of diverse behaviours. As the archive A discovers new diverse behaviours, the distribution of state-action pairs (𝑠, 𝑎 ) shifts drastically. While target networks effectively stabilise learning in stationary regimes, they inherently introduce a value estimation latency [ 5 ]. In the context of QD, where the goal is rapid expansion of the behavioural frontier, this latency manifests as Update Staleness [13, 41]. To enable stable target-free learning at high UTD ratios, we in-troduce a hybrid normalisation critic architecture. We decouple the stabilisation of the optimisation landscape from the stabilisation of the input distribution by combining Weight Normalisation (WN) Distributional Value Estimation Without Target Networks for Robust Quality-Diversity GECCO ’26, July 13–17, 2026, San José, Costa Rica 
+
+[ 36 ] and Batch Normalisation (BN) [ 23 ]. To prevent value diver-gence in adversarial settings such as actor-critic without a target network, we must constrain the gradient magnitude of the critic [ 17 ] and apply weight normalisation to every affine layer 𝑙 in the critic: 
+
+W = 𝑔 
+
+|| v|| v (1) where v is the parameter vector and 𝑔 is a learnable scalar. Unlike Spectral Normalisation [ 16 ], which strictly bounds the singular values, WN controls the gradient magnitude while preserving ex-pressivity. The replay buffer in QD-RL contains a mixture of diverse behaviours, which can create severe internal covariate shift. We apply BN after WN but before the activation function: 
+
+𝑦 = ℎ − 𝜇 B√︃ 
+
+𝜎 2 
+
+> B
+
++ 𝜖 
+
+· 𝛾 + 𝛽 (2) where ℎ is the aggregated input signal from the preceding layer, 𝜇 B
+
+and 𝜎 2 
+
+> B
+
+are the mean and variance computed across the minibatch 
+
+B, 𝜖 is a small constant added for numerical stability, and 𝛾 and 
+
+𝛽 are learnable scale and shift parameters. This normalisation of statistics across the minibatch B aids the robustness of the critic to the broad and diverse behaviours used to populate the replay buffer. Furthermore, our use of BN serves to smooth the optimisation landscape [ 37 ]. The combination of WN for optimisation stability and BN for distributional stability allows for high-UTD training without reducing the learning rate [ 30 ]. To accurately estimate batch statistics for normalisation without a target network, we adopt the CrossQ technique of concatenating the current observa-tions 𝑠 𝑡 and next observations 𝑠 𝑡 +1 into a single batch. This ensures the batch normalisation layers estimate statistics over the full state distribution visited by the policies. While CrossQ [ 5] originally proposed a scalar critic with BN, we identify that scalar regression (MSE) is insufficient for the high-variance regime of QD. To address this, we employ a categorical distributional critic, as described in the C51 algorithm, [ 3, 9 ]. In QD-RL, the replay buffer D contains transitions from thousands of distinct policies (the evolving population). To the critic, this diver-sity manifests as high aleatoric uncertainty as the same state 𝑠 may yield vastly different returns depending on which agent generated the transition. A scalar critic 𝑄 (𝑠, 𝑎 ) averages these returns into a single mean, discarding the underlying structure. In contrast, a distributional critic 𝑍 (𝑠, 𝑎 ) learns the full probability mass function, allowing for more general and accurate value estimation [ 3 ]. Fur-thermore, scalar MSE loss provides sparse gradients, particularly when values plateau, and the cross-entropy loss used in distribu-tional learning provides richer and denser gradient signals that accelerate representation learning in the early stages of training, a property crucial for sample efficiency [ 8 , 20 ]. Additionally, in algorithms without a target network, scalar updates can cause large and oscillating updates that destabilise the actor. By distributing probability mass across fixed atoms, the distributional update is less volatile as mass shifts gradually between adjacent atoms rather than causing sudden spikes in the mean value [26]. Formally, we model the state-action value distribution 𝑍 𝜋 (𝑠, 𝑎 )
+
+using a discrete support of 𝑁 atoms {𝑧 𝑖 }𝑁 𝑖 =1, uniformly spaced be-tween 𝑉 𝑚𝑖𝑛 and 𝑉 𝑚𝑎𝑥 . The critic outputs a probability distribution 
+
+𝑝 𝜃 (𝑠, 𝑎 ) such that 𝑍 𝜋 (𝑠, 𝑎 ) = Í𝑖 𝑝 𝑖 (𝑠, 𝑎 )𝑧 𝑖 . The target distribution is computed via the projected Bellman update Φ ˆT𝑍 𝜃 :
+
+ˆT𝑧 𝑗 = 𝑟 + 𝛾𝑧 𝑗 , projected onto support {𝑧 𝑖 } (3) where ˆT is the Bellman operator that applies the observed reward 𝑟 
+
+and discount factor 𝛾 to shift the atoms, and Φ is the projection oper-ator that maps the probabilities of these shifted atoms back onto the fixed original support {𝑧 𝑖 }. We minimise the Cross-Entropy loss be-tween the current distribution and the projected target distribution, computed using the current critic: 
+
+L𝑐𝑟𝑖𝑡𝑖𝑐 (𝜃 ) =
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑚 𝑖 log 𝑝 𝑖 (𝑠, 𝑎 ; 𝜃 ) (4) where 𝑚 𝑖 is the projection of the current target distribution onto atom 𝑖 . To ensure the return distribution fits within the support of the distributional critic [𝑉 𝑚𝑖𝑛 , 𝑉 𝑚𝑎𝑥 ], we scale all environmental rewards by a factor of 0.01 .With a robust and target-free critic 𝑍 𝜃 , we can now optimise the policy 𝜋 𝜙 . Unlike standard deterministic gradients (TD3) [ 15 ], we employ entropy regularisation [ 18 ] to prevent the policy from collapsing into a single mode, a critical requirement for maintaining the diversity required by the QD archive [ 11 ]. The policy is updated to maximise the expected value of the distributional critic while maximising entropy H ( 𝜋 (·| 𝑠 )) :
+
+𝐽 (𝜙 ) = E𝑠 ∼D ,𝑎 ∼𝜋 𝜃 [E [𝑍 𝜋 (𝑠, 𝑎 )] + 𝛼 H (·| 𝑠 )] (5) where E [𝑍 𝜋 (𝑠, 𝑎 )] is the mean value of the categorical distribution. The entropy temperature 𝛼 is automatically tuned to maintain a target entropy, ensuring that the gradient-based learner remains stochastic enough to discover novel niches that the evolutionary op-erators might miss. Specifically, we treat 𝛼 as a Lagrange multiplier optimised against the dual objective constraint ¯H :
+
+𝐽 (𝛼 ) = E𝛼 ∼𝜋 𝑖 
+
+−𝛼 log 𝜋 𝑡 (𝑎 |𝑠 𝑡 ) − 𝛼 ¯H  (6) where ¯H is the target entropy, set to −|U| , the dimensionality of the action space U, following standard practice [18]. Approximating the value distribution 𝑍 𝜋 across the heteroge-neous and non-stationary support of a QD archive necessitates a function approximator with high representational capacity. How-ever, scaling the depth of standard multi-layer perceptrons in RL frequently leads to optimisation instability due to gradient degrada-tion in lower layers [ 2, 8, 40 ]. To reconcile the requirement for high capacity with the need for stable optimisation, we utilise a compact residual critic. This architecture utilises identity mappings to facil-itate signal propagation during backpropagation. Unlike varying the depth in standard feed-forward networks, where gradients are strictly multiplicative through non-linearities, our architecture de-fines the output of a block ℎ𝑙 +1 as the summation of the input ℎ𝑙 
+
+and a residual transformation F [19]: 
+
+ℎ𝑙 +1 = ℎ𝑙 
+
+|{z} 
+
+> Identity Mapping
+
++ W 2 (𝜎 (W 1(ℎ𝑙 ))) 
+
+| {z }  
+
+> Residual Mapping F ( ℎ𝑙 )
+
+(7) where W denotes the hybrid (WN + BN) normalised linear layers. The identity mapping preserves the magnitude of the gradient sig-nal, mitigating vanishing gradients in high-UTD training regimes and ensuring that the Bellman error effectively updates the feature GECCO ’26, July 13–17, 2026, San José, Costa Rica Koohy et al. 
+
+extraction layers. This architecture for the critic was specifically introduced by Nauman et al . [29] , which demonstrated that while standard RL architectures saturate at small parameter counts, com-bining deep residual connections with strong regularisation allows the critic to maintain plasticity at high UTD ratios. We adapt the ’Optimistic’ component from Nauman et al . [29] to the distributional setting. In the original scalar implementation, optimism is enforced by explicitly initialising the final layer bias to output 𝑉 𝑚𝑎𝑥 , forcing the agent to explore by overestimating values at initialisation. In contrast, our approach achieves this optimism implicitly through the maximum entropy property of the distribu-tional head. At initialisation, standard weight distributions yield output logits near zero, resulting in a uniform probability mass over the atoms {𝑧 𝑖 }. Consequently, the initial value estimate defaults to the mean of the support E[𝑍 ] ≈ 𝑉 𝑚𝑖𝑛 +𝑉 𝑚𝑎𝑥  
+
+> 2
+
+. By setting 𝑉 𝑚𝑎𝑥 to a realistic upper bound on returns, this uniform prior effectively acts as a maximum entropy regulariser on the value estimates, encour-aging the agent to explore state-action pairs where the critic has not yet concentrated probability mass. To manage the population of diverse strategies, we employ Dom-inated Novelty Search (DNS) [ 1 ] rather than the structured archive typically used in MAP-Elites. While MAP-Elites relies on a rigid, pre-defined tessellation of the descriptor space, which imposes ar-tificial discretisation artifacts [ 42 ] and necessitates careful tuning of grid resolution [ 24 ], DNS maintains an unstructured population (or ’repertoire’) of fixed size. Survivors are selected based on ’dom-inated novelty’, a meta-fitness defined as the average distance in descriptor space to the 𝑘 -nearest neighbours that possess supe-rior fitness. This metric creates a selection pressure that naturally identifies and maintains a balance between performance versus diversity. DNS allows the population to adapt dynamically to the rapidly shifting geometry of the solution space, a property that is critical when coupled with a High-UTD learner that can swiftly alter the scale and distribution of reachable behaviours. At each generation, the DNS archive is evolved via a hybrid mutation strategy. Firstly, we apply gene-level Iso+Line mutations [42 ] to ensure broad coverage of the descriptor space. Secondly, we perform purely gradient-based updates on a subset of parents to ac-celerate local exploitation. Finally, we inject the High-UTD gradient-optimised policy 𝜋 𝜙 . The gradient policy exploits the global value landscape learnt by the critic, while the gene-level mutations en-sure broad coverage of the descriptor space. Collectively, these agents explore the search space broadly, unconstrained by the lim-itations of a single local optimisation. Transitions generated by this heterogeneous population are aggregated in D, allowing the target-free critic to learn from a diverse distribution of behaviours. Consequently, when 𝜋 𝜙 is re-injected, it benefits from High-UTD training on this diverse experience to aggressively exploit the most promising niches of the search space discovered by the population. To further improve sample efficiency, we employ Prioritised Ex-perience Replay [ 38 ], sampling transitions proportional to their temporal difference error with a priority exponent 𝜔 = 0.6. We formalise the combination of these elements in Algorithm 1. 
+
+Algorithm 1 QDHUAC (Quality-Diversity High Update Actor-Critic)  
+
+> 1:
+
+Initialise: Policy 𝜋 𝜙 , Distributional Critic 𝑍 𝜃 , Archive A, Re-play Buffer D 
+
+> 2:
+
+Initialise: Emitter E (e.g., PGA-ME with genetic operators)  
+
+> 3:
+
+Hyperparameters: Learning rates 𝜂 𝑎𝑐𝑡𝑜𝑟 , 𝜂 𝑐𝑟𝑖𝑡𝑖𝑐 , Temperature 
+
+𝛼 , UTD Ratio 𝑈  
+
+> 4:
+
+for generation 𝑔 = 1, . . . , 𝐺 do  
+
+> 5:
+
+Generate population of genotypes {𝜃 𝑖 }𝑁 𝑖 =1 ∼ E (A)  
+
+> 6:
+
+Evaluate {𝜃 𝑖 } in environment to get fitness 𝑓 𝑖 , descriptor 𝑑 𝑖 ,and transitions 𝜏 𝑖  
+
+> 7:
+
+Add {𝜃 𝑖 , 𝑓 𝑖 , 𝑑 𝑖 } to Archive A 
+
+> 8:
+
+Add transitions 𝜏 𝑖 to Replay Buffer D 
+
+> 9:
+
+for 𝑗 = 1, . . . , 𝑁 × 𝑈 do  
+
+> 10:
+
+Sample batch 𝐵 ∼ D  
+
+> 11:
+
+Critic Update: Compute distributional loss L𝑐𝑟𝑖𝑡𝑖𝑐 using 
+
+𝑍 𝜃  
+
+> 12:
+
+𝜃 ← 𝜃 − 𝜂 𝑐𝑟𝑖𝑡𝑖𝑐 ∇𝜃 L𝑐𝑟𝑖𝑡𝑖𝑐  
+
+> 13:
+
+Actor Update: Compute max-entropy loss L𝑎𝑐𝑡𝑜𝑟  
+
+> 14:
+
+𝜙 ← 𝜙 − 𝜂 𝑎𝑐𝑡𝑜𝑟 ∇𝜙 L𝑎𝑐𝑡𝑜𝑟  
+
+> 15:
+
+Update temperature 𝛼 automatically (Eq. 5)  
+
+> 16:
+
+end for  
+
+> 17:
+
+Inject RL actor 𝜋 𝜙 into Archive A 
+
+> 18:
+
+end for 
+
+## 4 Empirical Methodology 
+
+To evaluate the sample efficiency and stability of our proposed method, we conduct experiments on high-dimensional continu-ous control tasks. We implement our algorithm using the QDax framework [6]. 
+
+## 4.1 Environments 
+
+We select five challenging locomotion tasks from the standard QDax suite [ 6 ]. These environments are chosen for their high-dimensional state-action spaces and complex dynamics, providing a rigorous testbed for stability in high-UTD regimes. 
+
+• Hopper (|S| = 11 , |A| = 3): A monopedal robot that must hop forward while maintaining balance. 
+
+• Walker2D (|S| = 17 , |A| = 6): A bipedal robot that must balance and hop forward. 
+
+• HalfCheetah (|S| = 18 , |A| = 6): A fast two-legged robot requiring stable gait coordination. 
+
+• Ant (|S| = 87 , |A| = 8): A quadruped with a large state space, requiring coordination of multiple legs. 
+
+• Humanoid (|S| = 227 , |A| = 17 ): The most challenging high-dimensional control task, often prone to early termina-tion (falling) which destabilises standard RL critics. 
+
+## 4.2 Baselines 
+
+To validate the contributions of our target-free distributional archi-tecture, we compare against established Quality-Diversity baselines in PGA-ME and QD-PG. PGA-ME combines genetic variation with a TD3-based actor-critic. Crucially, PGA-ME relies on target net-works and typically operates at a low-UTD ratio. Comparing against PGA-ME isolates the benefits of our high-UTD, target-free critic. Distributional Value Estimation Without Target Networks for Robust Quality-Diversity GECCO ’26, July 13–17, 2026, San José, Costa Rica 
+
+Quality-Diversity Policy Gradient (QD-PG), a fully gradient-driven approach, utilises policy gradients for both quality and diversity maximisation via dual critics. This comparison serves as a reference for a state-of-the-art QD-RL algorithm that fully utilises differen-tiable diversity objectives but remains constrained by standard target network updates. We use the hyperparameters from the orig-inal implementations [ 31 , 33 ], with the exception of an environment length of 1000 steps and an environment batch size of 10 .We evaluate performance using standard Quality-Diversity met-rics [ 34 ]. Firstly, QD-Score, defined as the sum of fitnesses of all solutions in the archive. This metric captures both the diversity (archive size) and the quality (fitness) of the population. Secondly, coverage, defined as the proportion of the descriptor space discov-ered by the algorithm. Thirdly, to evaluate sample efficiency, we measure the Area Under the Curve (AUC) of the QD-Score over the training horizon. This penalises methods that eventually converge but require significantly more samples to do so. Finally, we measure the max fitness of the archive. We conduct our experiments using the JAX/MJX backend to enable massive parallelisation [ 14 ]. We employ a C51 distributional critic with 𝑁 = 101 atoms support over the range [𝑉 𝑚𝑖𝑛 , 𝑉 𝑚𝑎𝑥 ]. To accommodate the varying reward scales of different environments, we apply a reward scaling factor of 0.01 to fit returns within the critic’s support. The full list of hyperparameters and architectural details used for QDHUAC can be found in Appendix 6.1. 
+
+## 4.3 Results 
+
+To validate the efficacy of our target-free distributional framework, we benchmark QDHUAC against PGA-ME [ 25 , 31 ] and QD-PG [ 33 ], two QD-RL based approaches. We evaluate performance across five standard continuous control locomotion tasks from the Brax suite via QDax [ 6, 14 ]. All methods were trained for 2 million environ-ment steps, with an environment batch size of 10. To accurately compare between algorithms using structured archives such as PGA-ME and QD-PG, and unstructured archives such as QDHUAC, we evaluate coverage using a unified passive archive. Specifically, all behaviours discovered by all algorithms during training are pro-jected onto a standard, pre-defined MAP-Elites grid solely for the purpose of calculating the coverage metric, ensuring that the struc-tural differences in their native archives do not skew the evaluation. The empirical results presented in Figure 2 validate our core hy-pothesis: that the primary bottleneck in applying sample-efficient RL to Quality-Diversity is not flawed integration strategies, but the Target Tracking Lag introduced by standard target networks. By removing this bottleneck, QDHUAC demonstrates that High-UTD learning can be effectively stabilised in population-based search, leading to superior optimisation and coverage in complex exploration domains, while returning increases in maximum fitness across all evaluated tasks. In environments with difficult exploration dynamics, such as Walker2D and Hopper, the baseline methods fail to achieve signifi-cant QD scores. In these tasks, the current "optimal" policy is not a static target but a rapidly expanding frontier. Standard target net-works, which update via Polyak averaging, lag behind this frontier. This latency causes the critic to misidentify novel, high-performing solutions as low-value (False Negatives), effectively suppressing the discovery of new niches. In contrast, QDHUAC’s target-free critic more closely tracks the population’s true value distribution, encouraging the exploitation of new niches as they are discovered. The rapid initial rise in QD Score across all environments sug-gests that the Distributional Critic (C51) provides superior learning signals compared to the scalar critics used in PGA-ME. In the high-variance regime of a diverse replay buffer, a scalar Mean Squared Error (MSE) loss often washes out the underlying structure of re-turns. The cross-entropy loss used in QDHUAC provides richer, denser gradient signals that accelerate representation learning in the early stages. This is particularly advantageous in Ant, where QDHUAC achieves high fitness early in training, leveraging the distributional head to navigate the complex morphology despite the high aleatoric uncertainty of the archive. While QDHUAC achieves significantly higher Max Fitness in the Ant and HalfCheetah environments, we observe a reduction in total coverage compared to PGA-ME. We hypothesise that this is a byproduct of the aggressive exploitation pressure introduced by High-UTD gradient updates. In high-dimensional control tasks, the gradient signal strongly guides the policy toward stable, high-performing gaits. Since QDHUAC updates the policy magnitude more frequently than the baseline, the population converges rapidly toward these high-fitness regions, potentially at the expense of exploring lower-fitness regions of the descriptor space. However, the massive gains in Max Fitness (e.g., reaching nearly 8000 in HalfCheetah compared to the baseline’s 3500) suggest that this trade-off is highly beneficial; QDHUAC prioritises populating the archive with elite, high-quality solutions rather than spreading into low-performing regions often traversed by purely divergent search. In the Humanoid task, which presents the most challenging high-dimensional state and action space, QDHUAC demonstrates in-creased sample efficiency in discovering diverse behaviours. While its maximum fitness climbs in a step-wise manner and surpasses the baselines to reach nearly 4000, its ability to rapidly construct a diverse repertoire of distinct and surviving gaits is demonstrated in the QD-Score. We hypothesise that the increased UTD allows the population to find surviving gaits earlier, in contrast to the standard baselines, which struggle to find these behaviours. In summary, QDHUAC outperforms baselines by resolving the structural conflict between High-UTD learning and QD. By discard-ing the target network, we eliminate the lag that blinds standard critics to rapid evolutionary progress, where the hybrid normalized architecture provides the stability required to exploit these gains. 
+
+Analysis of Value Estimation Latency. Standard QD-RL algorithms rely on Polyak-averaged target networks to stabilise value estima-tion. We hypothesised that in the highly non-stationary regime of Quality-Diversity search, this averaging introduces a Target Track-ing Lag that creates a pessimistic bias, causing the rejection of novel, high-performing solutions While QDHUAC trains using a Target-Free critic 𝑄 𝜃 , we simul-taneously maintained a target network 𝑄 𝜃 ′ . This network was not used for gradient updates but was updated at every step using standard Polyak averaging with 𝜏 = 0.005 
+
+By logging the predictions of 𝑄 𝜃 ′ alongside 𝑄 𝜃 , we measure the precise opportunity cost and latency introduced by the target network mechanism in empirical environments. We computed the actual discounted return 𝐺 𝑡 for the top performing agents in each GECCO ’26, July 13–17, 2026, San José, Costa Rica Koohy et al. 0.00  
+
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> Ant
+> QD Score
+> 1e6
+
+QD Score 
+
+> 0
+> 10
+> 20
+> 30
+> 40
+
+Coverage  
+
+> 800
+> 850
+> 900
+> 950
+> 1000
+> 1050
+
+Max Fitness  
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 1e12
+
+QD Score (AUC)                  
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> Walker2D
+> QD Score
+> 1e6
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> 5000
+> 6000
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0 1e12
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> HalfCheetah
+> QD Score
+> 1e6
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 0
+> 2000
+> 4000
+> 6000
+> 8000
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 1e12
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Hopper
+> QD Score
+> 1e6
+> 0
+> 20
+> 40
+> 60
+> 0
+> 1000
+> 2000
+> 3000
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1e12
+> 0K 500K 1.0M 1.5M 2.0M
+> Steps
+> 0
+> 50000
+> 100000
+> 150000
+> 200000
+> 250000
+> Humanoid
+> QD Score
+> 0K 500K 1.0M 1.5M 2.0M
+> Steps
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 0K 500K 1.0M 1.5M 2.0M
+> Steps
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> 5000
+> 6000
+> 0K 500K 1.0M 1.5M 2.0M
+> Steps
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 1e11
+
+QDHUAC (Ours) PGA-ME QD-PG 
+
+Figure 2: Benchmarking Sample Efficiency and Performance. We compare QDHUAC (Ours) against baselines across five continuous control locomotion tasks. QDHUAC demonstrates improvements in sample efficiency, achieving higher scores earlier than baselines in complex environments such as Humanoid and Ant. Coverage is measured as % of projected archive covered, as seen in Bahlous-Boldi et al. [1]. 
+
+batch and raw environmental rewards were unscaled by the reward scaling factor 𝜆 −1 prior to discounting: 
+
+𝐺 𝑡 =
+
+𝑇 ∑︁ 
+
+𝑘 =0
+
+𝛾 𝑘 (𝜆 −1𝑟 𝑡 +𝑘 ) (8) This provides an objective measure of the true value of the cur-rent policy, independent of the critic’s estimation. We define the pessimism gap Δ𝑄 as the difference between the target free esti-mate and the target network estimate: Δ𝑄 = E𝑠 ∼D [𝑄 𝜃 (𝑠, 𝜋 (𝑠 ))] − 
+
+E𝑠 ∼D [𝑄 ′
+
+𝜃 (𝑠, 𝜋 (𝑠 ))] A positive gap (Δ𝑄 > 0) indicates that 𝑄 𝜃 ′
+
+is estimating higher values than the target network (optimism), while a negative gap indicates the reverse. Furthermore, we mea-sure the False Negative Rate (FNR), defined as the frequency with which a solution achieves high fitness ( 𝐺 𝑡 > 𝜂 90 ) but the critic esti-mates a value lower than the current archive threshold ( 𝑄 < 𝜂 90 ). FNR =
+
+Í I(𝐺 𝑡 >𝜂 90 ∧ ˆ𝑄 <𝜂 90 )Í I(𝐺 𝑡 >𝜂 90 ) A high FNR indicates that the critic is providing pessimistic gradient updates that actively discourage the Distributional Value Estimation Without Target Networks for Robust Quality-Diversity GECCO ’26, July 13–17, 2026, San José, Costa Rica 0 5.0e5 1.0e6 1.5e6 2.0e6 
+
+> Environment Steps
+> −0.2
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> False Negatives
+> Gradient Misalignment Rate
+> Target-Free (Ours)
+> Target Network (Shadow)
+
+Figure 3: Deconstructing the Pessimism Gap in Target Net-works. To quantify the impact of target networks on discovery of diverse behaviours, we trained a standard Polyak-averaged target network (labelled "Shadow Target", with 𝜏 = 0.005 )alongside our target-free critic on HalfCheetah ( 𝑁 = 5). The shadow target underestimated the true discounted return during periods of rapid policy improvement, creating a pes-simism gap. This underestimation leads to a high FNR, where the target network misidentifies improving agents as low-value, suppressing the development of niches of new be-haviours. 5k 10k 20k 40k 
+
+> Updates per Data (UTD) / Batch Size
+> 6000
+> 7000
+> 8000
+> 9000
+> 10000
+> Maximum Fitness (at 2M steps)
+> Scaling Robustness: Impact of Normalization
+> Normalization
+> Without Normalization
+> With Normalization (Ours)
+
+Figure 4: Scaling Robustness and the Role of Hybrid Normali-sation. We evaluate the stability of our critic under increasing Update-to-Data (UTD) ratios, ranging from 5𝑘 to 40 𝑘 updates per iteration on HalfCheetah ( 𝑁 = 5). While the standard unnormalised critic suffers from performance degradation at high UTD ratios, losing ≈ 30% of its peak fitness as updates increase, the batch and weight normalised layers significantly mitigate this instability. The normalised critic maintains high performance across the sweep, with a performance peak at 20,000 updates per iteration ( 𝑈𝑇 𝐷 = 2), demonstrating that distributional stability is required for high-UTD training. 
+
+policy from exploiting valid, high-performing regions of the de-scriptor space. While the archive itself uses environmental fitness for retention, the policy optimiser relies entirely on the critic. A false negative here represents a critical failure in the learning signal; the critic tells the actor that a high-value region is poor, effectively suppressing the gradient-based discovery of that niche. Furthermore, the critic in our architecture governs generation, not selection. The selection mechanism (DNS) is grounded in reality; it uses the actual, ground-truth fitness returned by the environment to determine whether a new child is integrated into the population. The Q-network, however, drives the gradient-based mutation oper-ator, guiding the policy update Δ𝜙 𝑄 (𝑠, 𝜋 𝜙 (𝑠 )) towards regions of ostensibly higher value. Therefore, when we analyse the impact of the critic on discovery, we refer to the quality of the offspring proposed by the gradient update. If the critic is pessimistic or in-accurate (as seen with the shadow target network), the gradient ascent step directs the policy toward sub-optimal manifolds. De-spite being optimised against the critic, these generated children possess low true fitness and are therefore eliminated by the rigor-ous selection filter of DNS. Consequently, a poor Q-network does not mis-rank the archive but actively destabilises the generative process, producing a stream of non-viable candidates that fail to survive, thereby stalling the expansion of the archive. Figure 3 provides the FNR for 𝑁 = 5 independent seeds in HalfCheetah. We observe that the standard target network sys-tematically fails to track rapid fitness improvements, resulting in a persistent FNR that acts as a ’pessimism penalty’ on the learn-ing process. Conversely, our target-free architecture achieves neg-ligible misalignment, ensuring that the policy receives accurate, optimistic gradients. This suggests that the latency introduced by target networks is not merely a theoretical concern, but a structural bottleneck that actively prevents the policy from consolidating the gains made by the evolutionary search. 
+
+High-UTD vs Low-UTD Ablation. We hypothesise that removal of the target network enables higher sample efficiency, provided that the critic can remain stable. To validate the necessity of BN and WN in our network architecture, we evaluated the agent’s performance across a sweep of Update-to-Data (UTD) ratios, ranging from 5,000 (UTD=0.5) to 40,000 (UTD=4) updates per iteration. Figure 4 illus-trates the impact of normalisation on scaling robustness on the HalfCheetah environment with 𝑁 = 5 unique seeds. We observe that the standard unnormalised distributional critic struggles to utilise the higher UTD and suffers from performance degradation as the UTD ratio increases further. At 40k updates per iteration, the unnormalised agent loses approximately 30% of its maximum fitness capacity, indicating that the critic begins to overfit to the replay buffer, losing its ability to generalise to new transitions. In contrast, the hybrid normalisation architecture demonstrates greater stability, effectively mitigating divergence and allowing the agent to maintain high performance at higher update frequencies, a core requirement for environment step constrained algorithms. Notably, QDHUAC achieves its peak performance at 20,000 updates per iteration, balancing sample efficiency with training stability. While there is a minor saturation effect observed at 40k updates per iteration, common in high-UTD methods such as REDQ [ 7], the normalised critic remains more robust than the baseline, confirming that architectural regularisation is a requirement for target-free learning in high-update QD-RL. 
+
+Isolating the Impact of Hybrid Normalisation. To address whether both Weight Normalisation (WN) and Batch Normalisation (BN) are strictly necessary, we isolated their effects on the Humanoid envi-ronment. Figure 5 shows the choice of normalisation has a negligible GECCO ’26, July 13–17, 2026, San José, Costa Rica Koohy et al. 0.4         
+
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> Relative Coverage (%)
+> Humanoid
+> 0K 1.0M 2.0M 3.0M 4.0M 5.0M
+> Steps
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> 1.05
+> Relative Max Fitness
+> BN + WN (Ours) No Norm BN Only WN Only
+
+Figure 5: Ablation of Critic Normalisation Components. Rel-ative performance of normalisation schemes on the Hu-manoid environment, normalised against the full QDHUAC architecture (BN + WN, solid blue line). While coverage is minimally affected, combining both Batch and Weight Nor-malisation is uniquely required to prevent long-term value divergence and maintain peak maximum fitness. 
+
+effect on overall descriptor Coverage. However, it has a profound impact on Maximum Fitness. We observe that an unnormalised critic ("No Norm") and a critic using only Weight Normalisation ("WN Only") suffer severe performance degradation, losing up to 20% of their fitness capacity. While using Batch Normalisation alone ("BN Only") initially stabilises the network, supporting findings from CrossQ [ 5], it begins to lose plasticity and degrade after 2 million steps. The combination of both ("BN + WN") maintains sta-ble, peak exploitation performance throughout the entire training run. This suggests that while BN is sufficient to anchor the shifting input distribution of the archive, WN is required to strictly bound the Lipschitz constant and prevent late-stage gradient divergence under high-UTD regimes. Finally, to ensure that our sample efficiency gains are attrib-utable to the target-free critic rather than the specific choice of evolutionary archive, we conducted an ablation study substituting Dominated Novelty Search (DNS) with a standard MAP-Elites grid. Details and results of this ablation can be found in Appendix 6.2. 
+
+## 5 Related Work 
+
+The integration of a gradient-based optimisation into evolution-ary search has been a primary driver of performance in contin-uous control QD. Nilsson and Cully [31] and Pierrot et al . [33] demonstrated that integrating off-policy gradient updates along-side evolutionary variation significantly accelerates the discovery of high-performing policies. However, these methods inherit the limitations of standard actor-critic architectures; they rely on target networks to stabilise learning, which restricts them to low UTD ratios to avoid divergence, a restriction that is incompatible with low data QD-RL or sample efficient QD-RL. While Lim et al . [25] explored increasing the UTD ratio in QD-RL, they found that per-formance plateaued or degraded due to the instability of off-policy updates on diverse data. While recent works have attempted to scale these approaches, such as Xue et al . [43] , which improved efficiency through architectural decomposition, they do not ad-dress the fundamental sample-inefficiency of the critic update itself, leaving the potential of high-UTD learning untapped. Recent advances in sample-efficient RL has focused on increasing the UTD ratio. Algorithms such as REDQ [ 7] and DroQ [ 21 ] utilise ensemble methods to mitigate the bias-variance tradeoff at high-UTD ratios, but at a significant computational cost. Recent work has identified the "primacy bias" [ 30 ], where agents overfit to early data, while Ma et al . [27] demonstrated that high replay ratios lead to a loss of plasticity in the value network. To combat this, approaches such as SPEQ [35] propose offline stabilisation phases and Hussing et al . [22] highlighted the necessity of combatting value divergence through aggressive regularisation. CrossQ [ 5 ] proposed replacing the target network with Batch Normalisation [ 23 ] to enable target-free learning. While QDHUAC shares the target-free approach in Bhatt et al . [5] , QDHUAC extends this direction through a distributional target-free critic with hybrid normalisation, which we demonstrate is critical for maintaining stability when learning from the non-stationary distributions of a QD archive. Distributional RL [ 3 , 4, 9, 26 ] models the full distribution of returns rather than just the mean, and improves scalability of net-works, even in problems which are naturally framed as regression problems [ 12 ]. The C51 algorithm [ 3 ] demonstrated that categorical distributions provide richer gradient signals and improved stability in discrete settings. QDHUAC accelerates representation learning in the early stages of evolution by utilising the dense gradients of the cross-entropy loss, an property essential for escaping the local optima found in high-dimensional locomotion tasks. 
+
+## 6 Conclusion 
+
+In this work, we identified the Target Tracking Lag as a funda-mental structural bottleneck preventing the application of sample-efficient Reinforcement Learning to Quality-Diversity optimisation. We demonstrated that standard target networks, while stabilising stationary RL tasks, fail to track the rapidly expanding frontier of an evolutionary population, resulting in a pessimistic value bias that suppresses discovery. To resolve this, we introduced QDHUAC, a novel QD-RL algo-rithm that leverages a Target-Free Distributional Critic. By com-bining Hybrid Normalisation (Weight and Batch Normalisation) with the dense gradient signals of a categorical distribution, QD-HUAC enables stable learning at higher Update-to-Data (UTD) ra-tios without the latency of Polyak averaging. Our empirical results on high-dimensional locomotion tasks confirm that this architec-ture significantly improves sample efficiency, achieving high Max Fitness scores with an order of magnitude fewer environment steps than existing baselines. These findings suggest that the future of efficient evolutionary learning lies not merely in scaling update ratios, but in designing critic architectures that are robust to the non-stationarity inherent in population-based search. Distributional Value Estimation Without Target Networks for Robust Quality-Diversity GECCO ’26, July 13–17, 2026, San José, Costa Rica 
+
+## References 
+
+[1] Ryan Bahlous-Boldi, Maxence Faldor, Luca Grillotti, Hannah Janmohamed, Lisa Coiffard, Lee Spector, and Antoine Cully. 2025. Dominated novelty search: Rethinking local competition in quality-diversity. In Proceedings of the Genetic and Evolutionary Computation Conference . 104–112. [2] David Balduzzi, Marcus Frean, Lennox Leary, JP Lewis, Kurt Wan-Duo Ma, and Brian McWilliams. 2017. The shattered gradients problem: If resnets are the answer, then what is the question?. In International conference on machine learning .PMLR, 342–350. [3] Marc G Bellemare, Will Dabney, and Rémi Munos. 2017. A distributional perspec-tive on reinforcement learning. In International conference on machine learning .PMLR, 449–458. [4] Marc G Bellemare, Will Dabney, and Mark Rowland. 2023. Distributional rein-forcement learning . MIT Press. [5] Aditya Bhatt, Daniel Palenicek, Boris Belousov, Max Argus, Artemij Ami-ranashvili, Thomas Brox, and Jan Peters. 2019. Crossq: Batch normalization in deep reinforcement learning for greater sample efficiency and simplicity. arXiv preprint arXiv:1902.05605 (2019). [6] Felix Chalumeau, Bryan Lim, Raphael Boige, Maxime Allard, Luca Grillotti, Manon Flageat, Valentin Macé, Guillaume Richard, Arthur Flajolet, Thomas Pierrot, et al . 2024. QDax: A library for quality-diversity and population-based algorithms with hardware acceleration. Journal of Machine Learning Research 25, 108 (2024), 1–16. [7] Xinyue Chen, Che Wang, Zijian Zhou, and Keith Ross. 2021. Randomized ensembled double q-learning: Learning fast without a model. arXiv preprint arXiv:2101.05982 (2021). [8] Tyler Clark, Mark Towers, Christine Evers, and Jonathon Hare. 2024. Beyond the rainbow: High performance deep reinforcement learning on a desktop pc. 
+
+arXiv preprint arXiv:2411.03820 (2024). [9] Will Dabney, Mark Rowland, Marc Bellemare, and Rémi Munos. 2018. Distri-butional reinforcement learning with quantile regression. In Proceedings of the AAAI conference on artificial intelligence , Vol. 32. [10] Pierluca D’Oro, Max Schwarzer, Evgenii Nikishin, Pierre-Luc Bacon, Marc G Bellemare, and Aaron Courville. 2022. Sample-efficient reinforcement learning by breaking the replay ratio barrier. In Deep Reinforcement Learning Workshop NeurIPS 2022 .[11] Benjamin Eysenbach, Abhishek Gupta, Julian Ibarz, and Sergey Levine. 2018. Diversity is all you need: Learning skills without a reward function. arXiv preprint arXiv:1802.06070 (2018). [12] Jesse Farebrother, Jordi Orbay, Quan Vuong, Adrien Ali Taïga, Yevgen Chebotar, Ted Xiao, Alex Irpan, Sergey Levine, Pablo Samuel Castro, Aleksandra Faust, et al .2024. Stop regressing: Training value functions via classification for scalable deep rl. arXiv preprint arXiv:2403.03950 (2024). [13] William Fedus, Prajit Ramachandran, Rishabh Agarwal, Yoshua Bengio, Hugo Larochelle, Mark Rowland, and Will Dabney. 2020. Revisiting fundamentals of experience replay. In International conference on machine learning . PMLR, 3061–3071. [14] C Daniel Freeman, Erik Frey, Anton Raichuk, Sertan Girgin, Igor Mordatch, and Olivier Bachem. 2021. Brax–a differentiable physics engine for large scale rigid body simulation. arXiv preprint arXiv:2106.13281 (2021). [15] Scott Fujimoto, Herke Hoof, and David Meger. 2018. Addressing function ap-proximation error in actor-critic methods. In International conference on machine learning . PMLR, 1587–1596. [16] Florin Gogianu, Tudor Berariu, Mihaela C Rosca, Claudia Clopath, Lucian Buso-niu, and Razvan Pascanu. 2021. Spectral normalisation for deep reinforcement learning: an optimisation perspective. In International Conference on Machine Learning . PMLR, 3734–3744. [17] Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vincent Dumoulin, and Aaron C Courville. 2017. Improved training of wasserstein gans. Advances in neural information processing systems 30 (2017). [18] Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. 2018. Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor. In International conference on machine learning . Pmlr, 1861–1870. [19] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. 2016. Identity mappings in deep residual networks. In European conference on computer vision . Springer, 630–645. [20] Matteo Hessel, Joseph Modayil, Hado Van Hasselt, Tom Schaul, Georg Ostro-vski, Will Dabney, Dan Horgan, Bilal Piot, Mohammad Azar, and David Silver. 2018. Rainbow: Combining improvements in deep reinforcement learning. In 
+
+Proceedings of the AAAI conference on artificial intelligence , Vol. 32. [21] Takuya Hiraoka, Takahisa Imagawa, Taisei Hashimoto, Takashi Onishi, and Yoshi-masa Tsuruoka. 2021. Dropout q-functions for doubly efficient reinforcement learning. arXiv preprint arXiv:2110.02034 (2021). [22] Marcel Hussing, Claas Voelcker, Igor Gilitschenski, Amir-massoud Farahmand, and Eric Eaton. 2024. Dissecting deep rl with high update ratios: Combatting value divergence. arXiv preprint arXiv:2403.05996 (2024). [23] Sergey Ioffe. 2015. Batch normalization: Accelerating deep network training by reducing internal covariate shift. arXiv preprint arXiv:1502.03167 (2015). [24] Hannah Janmohamed and Antoine Cully. 2025. Multi-objective quality-diversity in unstructured and unbounded spaces. In Proceedings of the Genetic and Evolu-tionary Computation Conference . 149–157. [25] Bryan Lim, Manon Flageat, and Antoine Cully. 2023. Understanding the synergies between quality-diversity and deep reinforcement learning. In Proceedings of the Genetic and Evolutionary Computation Conference . 1212–1220. [26] Clare Lyle, Marc G Bellemare, and Pablo Samuel Castro. 2019. A comparative analysis of expected and distributional reinforcement learning. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 33. 4504–4511. [27] Guozheng Ma, Lu Li, Sen Zhang, Zixuan Liu, Zhen Wang, Yixin Chen, Li Shen, Xueqian Wang, and Dacheng Tao. 2023. Revisiting plasticity in visual reinforce-ment learning: Data, modules and training stages. arXiv preprint arXiv:2310.07418 
+
+(2023). [28] Jean-Baptiste Mouret and Jeff Clune. 2015. Illuminating search spaces by mapping elites. arXiv preprint arXiv:1504.04909 (2015). [29] Michal Nauman, Mateusz Ostaszewski, Krzysztof Jankowski, Piotr Miłoś, and Marek Cygan. 2024. Bigger, regularized, optimistic: scaling for compute and sample efficient continuous control. Advances in neural information processing systems 37 (2024), 113038–113071. [30] Evgenii Nikishin, Max Schwarzer, Pierluca D’Oro, Pierre-Luc Bacon, and Aaron Courville. 2022. The primacy bias in deep reinforcement learning. In International conference on machine learning . PMLR, 16828–16847. [31] Olle Nilsson and Antoine Cully. 2021. Policy gradient assisted map-elites. In 
+
+Proceedings of the Genetic and Evolutionary Computation Conference . 866–875. [32] Eleni Nisioti, Erwan Plantec, Milton Montero, Joachim Pedersen, and Sebastian Risi. 2025. When Does Neuroevolution Outcompete Reinforcement Learning in Transfer Learning Tasks?. In Proceedings of the Genetic and Evolutionary Compu-tation Conference . 48–57. [33] Thomas Pierrot, Valentin Macé, Felix Chalumeau, Arthur Flajolet, Geoffrey Cideron, Karim Beguir, Antoine Cully, Olivier Sigaud, and Nicolas Perrin-Gilbert. 2022. Diversity policy gradient for sample efficient quality-diversity optimiza-tion. In Proceedings of the Genetic and Evolutionary Computation Conference .1075–1083. [34] Justin K Pugh, Lisa B Soros, and Kenneth O Stanley. 2016. Quality diversity: A new frontier for evolutionary computation. Frontiers in Robotics and AI 3 (2016), 40. [35] Carlo Romeo, Girolamo Macaluso, Alessandro Sestini, and Andrew D Bagdanov. 2025. SPEQ: Offline Stabilization Phases for Efficient Q-Learning in High Update-To-Data Ratio Reinforcement Learning. arXiv preprint arXiv:2501.08669 (2025). [36] Tim Salimans and Durk P Kingma. 2016. Weight normalization: A simple repa-rameterization to accelerate training of deep neural networks. Advances in neural information processing systems 29 (2016). [37] Shibani Santurkar, Dimitris Tsipras, Andrew Ilyas, and Aleksander Madry. 2018. How does batch normalization help optimization? Advances in neural information processing systems 31 (2018). [38] Tom Schaul, John Quan, Ioannis Antonoglou, and David Silver. 2015. Prioritized experience replay. arXiv preprint arXiv:1511.05952 (2015). [39] Max Schwarzer, Johan Samir Obando Ceron, Aaron Courville, Marc G Bellemare, Rishabh Agarwal, and Pablo Samuel Castro. 2023. Bigger, better, faster: Human-level atari with human-level efficiency. In International Conference on Machine Learning . PMLR, 30365–30380. [40] Samarth Sinha, Homanga Bharadhwaj, Aravind Srinivas, and Animesh Garg. 2020. D2rl: Deep dense architectures in reinforcement learning. arXiv preprint arXiv:2010.09163 (2020). [41] Chen Tessler, Guy Tennenholtz, and Shie Mannor. 2019. Distributional policy optimization: An alternative approach for continuous control. Advances in Neural Information Processing Systems 32 (2019). [42] Vassilis Vassiliades, Konstantinos Chatzilygeroudis, and Jean-Baptiste Mouret. 2017. Using centroidal voronoi tessellations to scale up the multidimensional archive of phenotypic elites algorithm. IEEE Transactions on Evolutionary Com-putation 22, 4 (2017), 623–630. [43] Ke Xue, Ren-Jian Wang, Pengyi Li, Dong Li, Jianye Hao, and Chao Qian. 2024. Sample-efficient quality-diversity by cooperative coevolution. In The Twelfth International Conference on Learning Representations .GECCO ’26, July 13–17, 2026, San José, Costa Rica Koohy et al. 
+
+## Appendix 6.1 Hyperparameters for QDHUAC 
+
+Table 1: Hyperparameters for QDHUAC. We separate param-eters into three categories: general training settings (shared across environments), the specific architecture and support range for the Distributional Target-Free Critic, and the evolu-tionary parameters for Dominated Novelty Search (DNS). All environments use the same hyperparameters, except for the support range, which are adjusted to match the return scale of each task. 
+
+Parameter Value 
+
+General Training 
+
+Optimiser Adam Critic Learning Rate 3 × 10 −4
+
+Actor Learning Rate 3 × 10 −4
+
+Alpha Learning Rate 3 × 10 −4
+
+Discount Factor ( 𝛾 ) 0.99 Batch Size 512 Replay Buffer Size 1 × 10 6
+
+Gradient Updates per Generation 40,000 Reward Scaling Factor 0.01 
+
+Distributional Critic (C51) 
+
+Architecture ResNet (2 Blocks, 512 Dim) Number of Atoms ( 𝑁 ) 101 Support Range ( 𝑉 𝑚𝑖𝑛 , 𝑉 𝑚𝑎𝑥 ) [− 200 , 1000 ] †
+
+Weight Decay 0.0 
+
+Dominated Novelty Search (DNS) 
+
+Archive Capacity 250 DNS Nearest Neighbors ( 𝑘 ) 7Mutation Proportion (GA) 0.5 Iso Mutation 𝜎 0.005 Line Mutation 𝜎 0.1 Gradient Mutation Steps 10 Environment Batch Size 10        
+
+> †Exceptions: Ant ( [− 150 ,2500 ] ) and Humanoid ( [− 150 ,1500 ] ) use expanded ranges to account for higher maximum returns.
+
+## 6.2 Impact of Archive Structure (DNS vs. MAP-Elites) 
+
+To ensure that the performance gains observed in QDHUAC are attributable to the target-free critic architecture rather than the choice of evolutionary archive, we conducted an ablation study substituting Dominated Novelty Search (DNS) with a standard structured MAP-Elites grid with QDHUAC. Figure 6 illustrates the relative performance of MAP-Elites nor-malized against DNS (baseline 1.0) on the HalfCheetah and Hu-manoid environments over 5 million steps. The results demonstrate that the choice of archive does not significantly alter the maximum fitness capacity of the algorithm; the relative Max Fitness heavily overlaps 1.0 with no statistically significant divergence. MAP-Elites exhibits a small relative increase in Coverage, which is expected given its uniformly discretised grid that explicitly forces spatial di-versity, whereas the unstructured nature of DNS allows for slightly more aggressive local exploitation. Crucially, because both archive variants perform comparably and successfully leverage the High-UTD updates, we conclude that the improvements in sample efficiency over baselines (e.g., PGA-ME) are caused by our target-free hybrid normalised critic, rather than the isolated inclusion of DNS. Distributional Value Estimation Without Target Networks for Robust Quality-Diversity GECCO ’26, July 13–17, 2026, San José, Costa Rica 0.8 
+
+> 1.0
+> 1.2
+> 1.4
+> HalfCheetah
+> Relative Coverage (%)
+
+Relative Coverage (%) 
+
+> −0.5
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+
+Relative Max Fitness           
+
+> 0K 1.0M 2.0M 3.0M 4.0M 5.0M
+> Steps
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> Humanoid
+> Relative Coverage (%)
+> 0K 1.0M 2.0M 3.0M 4.0M 5.0M
+> Steps
+> 0.90
+> 0.95
+> 1.00
+> 1.05
+
+DNS (Ours) MAP-Elites 
+
+Figure 6: Evaluating Archive Comparability. Relative performance of a structured MAP-Elites archive compared against the unstructured DNS archive (normalized to a baseline of 1.0, solid blue line) within the QDHUAC framework. Shaded regions represent the standard deviation across 5 independent seeds. The lack of significant divergence in Max Fitness confirms that the sample efficiency gains of QDHUAC are robust to the choice of underlying evolutionary archive.
