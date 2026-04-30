@@ -1,0 +1,964 @@
+Title: Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks
+
+URL Source: https://arxiv.org/pdf/2604.23238v1
+
+Published Time: Tue, 28 Apr 2026 00:32:10 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks 
+
+Max Hartman * 1 Vidhata Jayaraman * 1 Moulik Choraria 1 Lav R. Varshney 2
+
+# Abstract 
+
+Frontier models push the boundaries of what is learnable at extreme computational costs, yet dis-tillation via sampling reasoning traces exposes closed-source frontier models to adversarial third parties who can bypass their guardrails and mis-appropriate their capabilities, raising safety, secu-rity, and intellectual privacy concerns. To address this, there is growing interest in building antidis-tillation methods, which aim to poison reasoning traces to hinder downstream student model learn-ing while maintaining teacher performance. How-ever, current techniques lack theoretical ground-ing, requiring either heavy fine-tuning or access to student model proxies for gradient based attacks, and often lead to a significant teacher performance degradation. In this work, we present a theoret-ical formulation of antidistillation as a Stackel-berg game, grounding a problem that has so far largely been approached heuristically. Guided by the desired design properties our formulation reveals, we propose TraceGuard , an efficient, post-generation black-box method to poison sen-tences with high importance for teacher reasoning. Our work offers a scalable solution to share model insights safely, ensuring that the advancement of reasoning capabilities does not come at the cost of intellectual privacy or AI safety alignment. 
+
+# 1. Introduction 
+
+Reasoning in large language models (LLMs) has led to sig-nificant performance improvements on difficult multi-step reasoning tasks such as mathematics, software debugging, and general strategic planning (OpenAI, 2024; Qwen, 2024; Anthropic, 2026b). In addition to these performance gains, reasoning traces provide practical insights into how answers 
+
+> 1
+
+Department of Electrical & Computer Engineering, University of Illinois at Urbana-Champaign, United States 2Stony Brook University, New York, United States. Correspondence to: Max Hartman <maxh3@illinois.edu >.
+
+Preprint. April 28, 2026. 
+
+are generated, improving the trustworthiness of models for users. However, providing full reasoning traces poses a se-curity challenge: while knowledge distillation via reasoning traces was proposed to improve training efficiency (Hsieh et al., 2023; Mukherjee et al., 2023), distilled models have since been shown to match and even surpass their teachers at a fraction of the cost (Guo et al., 2025), raising significant intellectual privacy concerns for frontier labs competing at the edge of learnability (Anthropic, 2026a). These concerns are now reaching the forefront of United States national policy, with recent legislative proposals explicitly targeting the extraction of capabilities from closed-source AI models (119th Congress, 2026; Kratsios, 2026) that essentially cir-cumvent export controls on compute. Furthermore, from a safety perspective, recent work has shown that distilled mod-els often lose the safety alignment trained into the teacher model (Jahan & Sun, 2025; Shi et al., 2026). This creates a direct pathway from publicly exposed reasoning traces to unmoderated, potentially dangerous models. Methods have been proposed to mitigate this risk (Savani et al., 2025; Ma et al., 2026; Li et al., 2025; Ma et al., 2026). While these defensive techniques represent a significant step forward, they are currently bottlenecked by three pri-mary constraints: computational overhead from retraining either the teacher or training an additional model used in the system; a noticeable degradation in the teacher model’s final output performance; and unacceptable level of inco-herence in the sampled reasoning trace. In addition to the practical limitations, the theoretical foundations of distilla-tion defense methods remain significantly underexplored as current approaches largely lack any formal guarantees necessary for reliable deployment. In this work, we cast antidistillation in a game-theoretic framework, taking a step toward closing this gap. We then show that existing methods such as Antidistillation Sam-pling and Defensive Output Generation arise as special cases of this formulation, while drawing attention on an important yet overlooked aspect of the problem: detectability. Factor-ing in the need to maintain teacher performance and trace coherence, we then ask a natural next question: under these constraints, where and how should a defender intervene? We draw on recent work in LLM interpretability, which has shown that specific tokens in reasoning traces are dispropor-1
+
+> arXiv:2604.23238v1 [cs.CR] 25 Apr 2026 Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks
+
+tionately important to the model output and reasoning flow. For example, certain sentences have been shown to have a significant importance in the way reasoning trajectories are generated, known as thought anchors (Bogdan et al., 2025). Additionally, high entropy tokens have been shown to have similar properties (Wang et al., 2025). Guided by these find-ings, we propose TraceGuard , a training-free, black-box method that poisons sentences anchored at key branching tokens, degrading student post-distillation accuracy while preserving teacher performance and trace coherence. To summarize, our contributions are as follows: 1. We provide an improved formulation of the antidistilla-tion task as a bi-level optimization problem, with the goal of motivating future cryptography and security work from a theoretical perspective. We provide in-tuition via a security-motivated poisoning method to justify why poisoning fewer tokens makes a poisoning method less detectable. 2. We argue that poisoning branching tokens is an effec-tive way to cause student degradation with a small token poisoning budget. We propose a method to effi-ciently poison these tokens, while maintaining gram-matical coherence in the poisoned trace. This is demon-strated through experiments comparing the degradation versus tokens poisoned. 
+
+# 2. Related Work 
+
+2.1. Antidistilation 
+
+Antidistillation techniques aim to prevent adversarial model distillation attacks by modifying a teacher’s outputs to be poor training data for the student. Savani et al. (2025) pro-posed antidistillation sampling (ADS), which perturbs the next-token probability distribution of the teacher model by encouraging the generation of tokens to degrade a student model, via a proxy model. Ma et al. (2026) proposed a prompting approach, which instructs the LLM to generate less distillation-friendly reasoning traces, and a gradient-based approach, which perturbs tokens post-generation to maximize test loss on a proxy model. The Defensive Output Generation (DOGe) method (Li et al., 2025) finetunes the teacher model’s final layer with a loss to prevent student learning. Ding et al. (2025) finetunes an LLM to remove self-talk tokens from the reasoning trace. We build upon these works by developing a game-theoretic formulation of the problem and proposing a method that addresses the gaps we observe in these works. 
+
+2.2. Reasoning in LLMs 
+
+Chain-of-thought (CoT) reasoning, in which models are trained to generate intermediate reasoning steps, emerged in recent years as a technique to improve the performance of models on complex multi-step tasks (Wei et al., 2022). The Tree-of-thought (ToT) technique generalized and improved CoT by enabling LLMs to consider different reasoning paths (Yao et al., 2023). Reinforcement learning post-training with human-annotated reasoning data was used as an approach to distill reasoning capabilities models. Reinforcement learn-ing without human-labeled data was then proposed (OpenAI, 2024; Qwen, 2024). Recently, models have been trained to learn reasoning by distilling knowledge from a large reason-ing model, such as the R1-distill series (Guo et al., 2025). 
+
+2.3. Data Poisoning 
+
+Data poisoning is an integrity attack on the training phase of machine learning models. These types of attacks manipulate the distribution of training data itself to harm the model according to an objective determined by the attacker (Fan et al., 2022). Early work on the topic started with these attacks on support vector machines and neural networks (Biggio et al., 2012; Shafahi et al., 2018). These attacks have also been shown effective against LLMs (Carlini et al., 2024; Souly et al., 2025). Our work shows that antidistillation can be formulated in a very similar manner to data poisoning, where the roles of the attack and defender are flipped. 
+
+# 3. A Game-Theoretic Formulation of Antidistillation 
+
+3.1. Notation 
+
+D denotes the clean reference dataset; ˜D denotes a can-didate poisoned dataset drawn from an admissible pertur-bation set B around D; θT and θS denote the teacher and student parameters with corresponding parameter spaces 
+
+ΘT and ΘS ; and ˜L and L denote the training loss on ˜D and evaluation loss on D, respectively. 
+
+3.2. Formulation 
+
+In prior literature, antidistillation techniques have primarily focused on minimizing the utility of distilling from reason-ing traces while preserving teacher performance. However, any practical defense must also account for detectability: if an attacker can identify that a defense is in place, they can adapt their sampling strategy to evade it. In this section, we formalize the antidistillation problem and show how our general setting naturally handles both concerns. We motivate our framework by first analyzing the related problem of data poisoning, in which an adversary injects corrupted examples into a training set such that any model trained on it performs poorly at test time. The adversary is constrained to perturbations that remain close to legitimate data, so that the attack is not trivially detectable. This inter-2Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks 
+
+action can be viewed as a Stackelberg game, stated formally in Appendix A. We find that antidistillation fits this template closely: a model provider releases outputs (the “dataset”) that a third party uses to train a student model, and the provider would like those outputs to be useful to legitimate users while being maximally unhelpful as training data for the student. The bi-level structure carries over directly. That said, antidistillation differs from classical data poison-ing in two important ways. First, the architecture of the downstream model to be poisoned is not necessarily a pri-ori known. Previous methods typically assume access to a proxy model (Savani et al., 2025; Li et al., 2025), however such an assumption may fail to hold. As such, instead of just maximizing the harm caused to the optimal model trained on the poisoned data, the goal of antidistillation is to max-imize the minimum error across all potential architectures by optimizing the poison in the training data. Second, as a conceptual difference in this setting, the roles of the attacker and defender are flipped from the classical data poisoning formulation: the defender is poisoning the data whereas the attacker is training the optimal model from the poisoned data. This gives rise to a slightly different Stackelberg game, where the defender is concerned with maximizing the loss over all allowed architectures rather than maximizing the loss over a specific known architecture. This is because the attacker has a priori chosen a specific architecture to fine-tune; however, the defender does not know that choice of architecture. Formally, the defender seeks a robust poisoned dataset ˜D∗ 
+
+> T
+
+such that 
+
+˜D∗ 
+
+> T
+
+= arg max    
+
+> ˜DT∈B (D;θT,ΘT)
+
+inf  
+
+> H∈F
+
+Ex∼pdata 
+
+h
+
+L(h∗H( ˜DT ); x)
+
+i
+
+,
+
+where B(D; θT , ΘT )1 is the set of admissible poisoned datasets which can depend on the original dataset produced by the teacher D, on the teacher’s parameters θT , and on the architecture of the teacher ΘT . Additionally, F is the set of admissible function classes (e.g. model architectures), 
+
+pdata is the true data distribution, and L is the population loss function. Here, h∗H( ˜DT ) is defined as 
+
+h∗H( ˜DT ) := arg inf 
+
+> h∈H
+
+˜L(h; ˜DT ).
+
+In contrast to this robust formulation for the defender, the attacker’s objective is simply 
+
+h∗Hs ( ˜DT ) = arg inf 
+
+> h∈H s
+
+˜L(h; ˜DT ),
+
+where the attacker wants to minimize, for their specific architecture Hs, the loss on the poisoned dataset.   
+
+> 1For convenience, this set will be denoted as Bfor the remain-der of this paper.
+
+This formulation provides the defender with a strict the-oretical guarantee: as long as the attacker’s true architec-ture satisfies Hs ∈ F , the actual population loss accrued, 
+
+Ex∼pdata 
+
+h
+
+L
+
+
+
+h∗Hs
+
+ ˜D∗
+
+> T
+
+
+
+; x
+
+i 
+
+, is bounded from below by the solution to the robust max-inf objective in (1). The above game gives rise to the following robust opti-mization formulation of antidistillation (from the defender’s perspective): 
+
+˜DT = arg max  
+
+> ˜DT∈B
+
+inf  
+
+> H∈F
+
+Ex∼pdata 
+
+h
+
+L
+
+
+
+h∗H
+
+ ˜DT
+
+
+
+; x
+
+i 
+
+. (1) 
+
+Remark 3.1 . Observe that (1) fundamentally differs from formulating the problem as directly evaluating the empirical risk minimizer over the entire function space: 
+
+˜DT = arg max  
+
+> ˜DT∈B
+
+Ex∼pdata 
+
+
+
+L
+
+
+
+arg inf 
+
+> h∈F
+
+˜L
+
+
+
+h; ˜DT
+
+
+
+; x
+
+ 
+
+.
+
+If F is sufficiently expressive, directly evaluating 
+
+arg inf h∈F allows the model to perfectly memorize the poisoned dataset ˜DT while performing arbitrarily poorly on the true distribution pdata . This makes the defender’s task trivial. By placing the inf H∈F outside the population loss, we impose a stricter, more realistic burden on the de-fender: it must find a universal poison that maximizes the generalization error against the most resilient admissible architecture, rather than merely exploiting a hypothetical overfit model. 
+
+Remark 3.2 . In practice, most constraint sets B(D; θT , ΘT )
+
+will take the form 
+
+Bϵ(D; θT ) := 
+
+n ˜DT : d( ˜DT (˜θT ), D (θT )) ≤ ϵ, ˜θT ∈ ΘT
+
+o
+
+,
+
+where θT ∈ ΘT , d is some distortion measure between the perturbed dataset ˜DT , which is perhaps a function of some perturbed teacher model ˜θT , and D, which is a function of 
+
+θT . This distortion measure allows one to capture both the difference in performance of the perturbed dataset (or per-turbed teacher model) and the detectability of the proposed antidistillation method. 
+
+3.3. Instantiations of the Antidistillation Game 
+
+Within this subsection, we go through consequences of two specific instantiations of the antidistillation game with re-spect to F.3.3.1. S TUDENT ARCHITECTURE IS KNOWN 
+
+We first consider the simplest case where F = {H} . In this case the antidistillation problem (1) simplifies to 
+
+˜DT = arg max 
+
+> ˜D∈B
+
+Ex∼pdata 
+
+
+
+L
+
+
+
+arg inf 
+
+> h∈H
+
+˜L
+
+
+
+h; ˜DT
+
+
+
+; x
+
+ 
+
+.
+
+(2) 3Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks 
+
+The antidistillation problem in this case reduces to the data poisoning problem, described in Appendix A. When the student model architecture is a priori known, literature from data poisoning can be used to adequately determine the “best” poisoning policy. 3.3.2. D EFENDER HAS PRIOR OVER ARCHITECTURES 
+
+Often, defenders will have some prior PF , which describes the likelihood different model architectures are for distil-lation attacks. For example, a defender may assign a very high probability to Transformer-based architectures, thus encoding useful information to make their defense stronger. Concretely, the space of allowable student architectures may be finite, thus allowing the defender to construct the follow-ing probability space (F, 2F , P F ). We note that in practice, one would have to imbue the space of all admissible student architectures with a σ-algebra, which may be non-trivial. Regardless, this permits the following relaxation of (1): 
+
+˜DT = arg max  
+
+> ˜DT∈B
+
+EH∼ PF
+
+h
+
+Ex∼pdata 
+
+h
+
+L
+
+
+
+h∗H
+
+ ˜DT
+
+
+
+; x
+
+ii 
+
+(3) 
+
+= arg max  
+
+> ˜DT∈B
+
+E(H,x )∼PF ⊗pdata 
+
+h
+
+L
+
+
+
+h∗H
+
+ ˜DT
+
+
+
+; x
+
+i 
+
+.
+
+(4)  
+
+> 2
+
+Also, observe that 
+
+max  
+
+> ˜DT∈B
+
+inf  
+
+> H∈F
+
+Ex∼pdata 
+
+h
+
+L
+
+
+
+h∗H
+
+ ˜DT
+
+
+
+; x
+
+i 
+
+≤ max  
+
+> ˜DT∈B
+
+E(H,x )∼PF ⊗pdata 
+
+h
+
+L
+
+
+
+h∗H
+
+ ˜DT
+
+
+
+; x
+
+i 
+
+,
+
+meaning that this is an upper-bound relaxation of the orig-inal worst-case, max max-min objective. However, the Bayesian setting may still be more practically useful as a defender will often have some prior on the feasible student architectures. 
+
+Remark 3.3 . This Bayesian reframing transforms the origi-nal purely adversarial game into a Bayesian Robust Stack-elberg game, where the defender maximizes their expected payoff against a known distribution of attacker types. 
+
+3.4. Generalization of Previous Antidistillation Methods 
+
+The main distinction between different antidistillation meth-ods is how they instantiate the set of admissible perturba-tions of the dataset D and in what they consider the set of viable student architectures. In the remainder of this subsec-tion, we show how both Antidistillation Sampling (Savani et al., 2025) and Defensive Output Generation (Li et al., 2025) fit into the framework of (1). 
+
+> 2
+
+Assuming L is non-negative and measurable, since PF and 
+
+pdata are independent this follows by Fubini’s theorem. 
+
+3.4.1. A NTIDISTILLATION SAMPLING 
+
+ADS proceeds in an online antidistillation fashion, where individual teacher outputs are given per user query. Their formulation is a greedy approach to the outer maximiza-tion over ˜DT , where they try to maximize the loss of each individual teacher output. ADS considers the following perturbation to the teacher output distribution: 
+
+˜p(· | x1: t; θT ) := 1
+
+Z exp 
+
+ 1
+
+τ log p(· | x1: t; θT )+ λ∆( · | x1: t; θP )
+
+
+
+,
+
+where Z is a normalization factor, τ is the sampling tem-perature, p(· | x1: t; θT ) is the original teacher distribution for token t + 1 , λ is a scaling hyperparameter and ∆ is a perturbation to the output distribution determined by the gradients of a proxy model. 3
+
+Thus, the set of admissible perturbations is the following, 
+
+BADS (D; θT ) = {˜xi : ˜ xi ∼ ˜p(· | x1: t; θT )}ni=1 . (5) 3.4.2. D EFENSIVE OUTPUT GENERATION 
+
+DOGe proposes that the task of antidistillation can be framed as the following bi-level optimization problem. The defender controls the teacher’s parameters to maximize its performance while weakening any student distilled from its outputs. The optimization problem is thus: 
+
+θ∗ 
+
+> T
+
+= arg max 
+
+> θT
+
+[Perf( θT ) − λ · Perf ( θ∗ 
+
+> S
+
+)] 
+
+θ∗ 
+
+> S
+
+= arg min 
+
+> θS
+
+L(θS ; DKD (θT )) ,
+
+where Perf( ·) is the performance of the input model, DKD 
+
+is the outputs of the teacher model θ∗ 
+
+> T
+
+, and λ > 0 is a scaling hyperparameter. We connect this to our formulation in (1) by first defining 
+
+BDOGe (D; θT , ΘT ) (6) 
+
+=
+
+n ˜DT : ˜DT ∼ p(· | θT ), θ T ∈ ΘT , Perf( θT ) ≥ τ
+
+o
+
+.
+
+(7) If we now consider the case where |F| = 1 , (1) simplifies to 
+
+˜DT = arg max  
+
+> ˜DT∈B DOGe
+
+Ex∼pdata 
+
+h
+
+−Perf( θ∗ 
+
+> S
+
+( ˜DT ); x)
+
+i
+
+.
+
+Since the dataset entirely depends on the parameters θT we can determine ˜DT equivalently by finding 
+
+θ∗ 
+
+> T
+
+= arg max     
+
+> θT∈ΘT,Perf( θT)≥τ
+
+Ex∼pdata 
+
+h
+
+−Perf( θ∗ 
+
+> S
+
+( ˜DT ); x)
+
+i
+
+,
+
+> 3
+
+∆( · | x1: t; θP ) = ℓ(θ+ 
+
+> P
+
+) − ℓ(θP )= ℓ(θP + η∇θP log p(xt+1 | x1: t; θP )) − ℓ(θP )
+
+4Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks 
+
+and taking a Lagrangian relaxation of this problem yields 
+
+θ∗ 
+
+> T
+
+= arg max  
+
+> θT∈ΘT
+
+Perf( θT ) − λPerf( θ∗ 
+
+> S
+
+(θT )) 
+
+which is exactly the DOGe framework. 
+
+3.5. A Gaussian Case Study 
+
+The prior works, ADS and DOGe, perturb the teacher’s output distribution (within some λ ball) at every token posi-tion, analogous to ℓ2 attacks on images (Moosavi-Dezfooli et al., 2016; Madry et al., 2019) in the adversarial robust-ness literature. However, a well-established finding from this area is that sparse, targeted perturbations can be equally effective while being harder to detect. One-pixel attacks (Su et al., 2017) and the Jacobian-based Saliency Map Approach (JSMA) (Wiyatno & Xu, 2018) demonstrate that perturb-ing a small number of carefully chosen input dimensions suffices to fool classifiers, often with greater success than uniform perturbation at equivalent total distortion budgets. Motivated by this analogy, we ask: what are the theoretical properties of an antidistillation method that modifies only 
+
+k ≪ L tokens in a reasoning trace of length L? To study this, we consider a simple Gaussian perturbation scheme that admits closed-form detectability bounds. Specifically, we consider the following constraint set B. Let 
+
+D = {x(i)}ni=1 be the clean dataset generated by teacher model θT where each output is a sequence of length Li
+
+(i.e. x(i) = ( x(i)1 , . . . , x (i) 
+
+> Li
+
+)). Let fθT (x<t ) ∈ R|V| denote the pre-softmax logits of the teacher model at step t over a vocabulary V. We define the constraint set Bη,k (D; θT ) as the set of all ˜DT = {˜x(i)} such that the following conditions hold for every sequence i ∈ { 1, . . . , N }:1. There exists a mask of chosen token indices M (i) ⊂{1, . . . , L i} such that |M (i)| ≤ k
+
+2. For all t / ∈ M (i), the original token is perfectly pre-served (i.e. ˜x(i) = x(i)). 3. For all t ∈ M (i), the perturbed token ˜x(i) is sampled from the following perturbed distribution 
+
+˜x(i) ∼ softmax( fθT (x(i)
+
+> <t
+
+)+ ξt), where ξt ∼ N (0 , σ 2I)
+
+4. We have the following bound on the variance σ2
+
+σ2 ≤ 2ηk
+
+We can see that since the constraint set perturbs some set of k tokens post-generation, the performance of the teacher model can be perfectly maintained by not perturbing the answer token(s). Broadly, the set of admissible architectures could be some set of known LLM architectures. Because we are restricting to autoregressive models, if token t is poisoned in this way, then the student model will be at-tempting to learn noise when it predicts token t from the previous t − 1 tokens. As such, this will likely degrade student performance. Thus, the main concern will be the de-tectability of this method. In Proposition 3.4 and Corollary 3.5 we provide results on the detectability of this method as measured by the expected Kullback-Leibler divergence between the perturbed distribution used and the original teacher distribution. 
+
+Proposition 3.4. Let z ∈ RV be a vector of logits defining a teacher distribution PT = softmax( z). Let ϵ ∈ RV be a random noise vector satisfying E[∥ϵ∥22] = σ2, and define the perturbed distribution PP = softmax( z + ϵ). Then 
+
+Eϵ[DKL (PP ∥ PT )] ≤ σ2
+
+2 .
+
+Proof. Rewriting the KL divergence between the two soft-max distributions as the Bregman divergence generated by the log-sum-exp function Φ, its integral form expresses the KL as a path integral of ϵ⊤∇2Φ ϵ, which is a variance under the intermediate softmax and hence bounded by ∥ϵ∥22. Eval-uating R 10 t dt = 12 and taking expectation with E∥ϵ∥22 = σ2
+
+yields the bound σ2/2. See full proof in Appendix D. This shows that the divergence of a single next-token dis-tribution is bounded proportionally to the variance of the perturbation noise. In the following corollary, we show that the expected divergence for some k independent tokens is bounded proportionally to the number of tokens and noise added to each token. 
+
+Corollary 3.5. If ϵ(i) ∈ RV is applied to k independent tokens with E[∥ϵ(i)∥] ≤ σ2, ∀i then 
+
+Eϵ[DKL (PP ∥ PT )] ≤ k σ2
+
+2 .
+
+Proof. Since the k noisy token distributions are condition-ally independent given the unchanged context, the joint KL divergence factorizes into a sum of k per-token KL diver-gences. We can then apply the previous proposition to each term bounds the total by kσ 2/2 (proof in Appendix D). The main takeaway is that for any dataset in Bη,k (D; θT )
+
+such that the mask tokens are chosen independently, the detectability is less than η. As the divergence between the perturbed distribution grows linearly with k, this shows that using a method which modifies fewer tokens will be less detectable by an attacker. This will serve as the guiding design principle for our method in the next section. 5Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks  
+
+> Figure 1. The figure shows a poisoned reasoning trace of a sample prompt from MATH (Hendrycks et al., 2021) using the Gaussian perturbation method described above and std=10. This poisoned trace has many grammatical errors.
+
+# 4. Method 
+
+4.1. A Naive Approach to Sparse Perturbations 
+
+While the Gaussian case study establishes that modifying fewer tokens reduces detectability, directly implementing 
+
+Bη,k , that is, selecting k positions and adding Gaussian noise to their logits faces three obstacles. First, a noise intensity dilemma : large σ produces tokens that break grammatical coherence with unperturbed neigh-bors (Figure 1), while small σ is absorbed by the softmax and fails to change the sampled token at all (Figure 2). This tension is inherent to perturbing individual token logits while leaving adjacent tokens fixed. Second, combinatorial hardness : selecting which k of L
+
+tokens to perturb requires evaluating  Lk
+
+ candidate subsets, each requiring a student training run to assess effective-ness. Even greedy approximations require backpropagation through a non-differentiable discrete sampling operation. Third, local detectability : although aggregate KL remains bounded by Corollary 3.5, a distiller can easily flag posi-tions where the observed token does fit in the context of the sentence, leading to obvious incoherence. These limitations motivate a method that identifies struc-turally important positions without combinatorial search and perturbs them in a way that preserves local coherence. 
+
+4.2. Identifying Critical Reasoning Steps 
+
+Rather than searching over  Lk
+
+ token subsets, we leverage the finding that reasoning traces have highly non-uniform importance. Specifically, Bogdan et al. (2025) showed that  
+
+> Figure 2. The figure shows a poisoned reasoning trace of a sample prompt from MATH (Hendrycks et al., 2021) using the Gaussian perturbation method described above using std = 0 .5. Many tokens which were poisoned did not modify the token from baseline because the poisoning to their logits was too small.
+
+a small fraction of sentences, termed thought anchors , have significant counterfactual importance on the final answer. These are predominantly planning sentences (e.g., “Alter-natively, maybe I can calculate this in decimal”) and un-certainty management sentences (e.g., “Wait, I made a mis-take”), while active computation sentences perform prede-termined operations with minimal causal influence. Com-plementary work also shows that ∼20% of tokens are high-entropy “forks” that steer reasoning trajectories (Wang et al., 2025), and that replacing individual critical tokens can even flip model outputs (Lin et al., 2025). While these ideas do provide a clear starting point, a nat-ural concern is whether removing these anchors from the teacher’s trace actually degrades student models trained via distillation, given that the teacher’s own answer is unaf-fected. To that end, recent work from Zhang et al. (2025) shows that activation patching at key reasoning tokens in distilled DeepSeek-R1 models reliably alters final answers, confirming that functional dependence on reasoning steps transfers through SFT. Since fine-tuning gradients are largest at the teacher’s most informative tokens (precisely the plan-ning tokens within thought anchors), removing these sen-tences remove the highest-gradient training signals. Note that by targeting thought anchors, we also resolve the pitfalls listed in Section 4.1: there is no noise parameter to tune (sentences are either removed or retained), no com-binatorial search (targets are identified by their semantic role), and no local incoherence (the removed sentences are self-reflective steps whose absence still preserves the logical flow of surrounding text). The method requires no proxy model, making it compatible with the robust formulation 6Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks    
+
+> Figure 3. Example trace poisoning with the TraceGuard method. Without explicitly searching for thought anchors, each sentence that gets poisoned by the method is a thought anchor (Bogdan et al., 2025). These sentences have been shown to disproportionately affect answer quality.
+
+in (1) where Hs is unknown. 
+
+4.3. TraceGuard Algorithm 1 TraceGuard: Targeted Trace Poisoning 
+
+Require: Reasoning trace D = {s1, s 2, . . . , s n}, branch-ing tokens S = {“Wait”, “Hold on”, . . . }, removal bud-get k
+
+Ensure: Poisoned reasoning trace ˜D 
+
+> 1:
+
+Initialize ˜D ← ∅  
+
+> 2:
+
+Initialize removedCount ← 0 
+
+> 3:
+
+for all si ∈ D do  
+
+> 4:
+
+firstToken ← GET FIRST TOKEN (si) 
+
+> 5:
+
+if firstToken ∈ S and removedCount < k then  
+
+> 6:
+
+removedCount ← removedCount + 1 {Remove anchor } 
+
+> 7:
+
+else  
+
+> 8:
+
+Append si to ˜D {Keep sentence } 
+
+> 9:
+
+end if  
+
+> 10:
+
+end for  
+
+> 11:
+
+Return ˜D
+
+Having established the case for targeting thought anchors, a practical challenge remains: the full receiver-head methodol-ogy of Bogdan et al. (2025) requires a forward pass with at-tention extraction per trace, which is computationally expen-sive. However, we observe empirically that high-importance sentences are strongly correlated with sentences beginning with characteristic discourse markers such as “Wait”, “Hold on”, and “Alternatively.” This lightweight keyword heuristic identifies thought anchors with reasonable accuracy at zero additional compute cost, and we adopt it as the basis for our proposed method, TraceGuard , formalized in Algorithm 1. The removal budget k, which denotes the maximum number of branching sentences that can be removed for each trace, is included so we can vary the poisoning intensity. We provide an example of our method poisoning a reasoning trace in Figure 3. 
+
+# 5. Experiments 
+
+In the following experiments, we evaluate the distillation performance degradation using teacher traces both unaltered and protected with TraceGuard . We then evaluate how the accuracy changes when a student is distilled with these datasets. When poisoning, we vary the removal budget by searching for at most k = 10 , 20 , 50 reasoning sentences to remove in each trace. We report the accuracy drop from baseline to poisoned distillation versus the average num-ber of tokens poisoned per trace. We use DeepSeek-R1-Distill-Qwen-7B as the teacher model, and Llama-3.2-3B, Llama-3.2-1B, and Gemma 3 1B as student models. Exact distillation training parameters and setup are provided in Appendix C. Because of these fundamental differences between our method and existing methods (training, modification of traces, etc), making a direct comparison would be unfair. The contribution of proposing this method is to show the importance of branching anchors in student distillation, and how removing them is a simple way to protect a teacher model from distillation attacks. Therefore, we evaluate two primary trends: the correlation between the number of poisoned reasoning sentence tokens and student distillation degradation, and comparative efficacy of our method against random sentence pruning. 
+
+5.1. Results 
+
+Based on Figure 4, there is a positive relationship between the number of tokens in the poisoned branch sentences and the accuracy drop between baseline and poisoned distillation. We hypothesize that the reason such a trend is not seen for LLama 3.2 1B is because the baseline student accuracy is so low (7.78%) that poisoning traces has minimal effect (if the student model is already unable to learn from baseline traces, poisoning the traces will not have a substantial impact). The amount of student accuracy degradation scales sub-linearly. This suggests that poisoning more tokens only marginally increases degradation. Additionally, based on Corollary 3.5, the divergence of the perturbed and original distribution scales linearly with k. Thus, there is a trade-off between number of tokens poisoned and the detectability of the method. Future methods should ideally poison very few tokens to minimize detectability, while preventing student distillation. To verify that these results are due to branching sentences 7Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks  
+
+> Figure 4. Accuracy drop between baseline versus poisoned rea-soning trace distillation for varying numbers of tokens poisoned trained on MATH (Hendrycks et al., 2021). Teacher used was DeepSeek R1 Distill Qwen 7B with accuracy an of 73.8%. Base-line distillation accuracy of LLama 3.2 3B was 20.9%, Gemma 3.1 1B was 20.1%, and Llama 3.2 1B was 7.78%. The max number of tokens generated per sample in all examples is 4096. Based on these results, there is a positive relationship between number of tokens in branching sentences poisoned and the accuracy drop. We hypothesize that the reason such a trend is not seen for LLama 3.2 1B is because the baseline student accuracy is so low that poisoning traces has minimal effect.
+
+specifically (and not just from poisoning any sentences), we include an additional experiment in which we poison random reasoning trace sentences, and compare the accuracy drop between this trivial method and our branching sentence method. We include this study in Appendix B. 
+
+# 6. Discussion 
+
+We present a general formulation of antidistillation as a robust bi-level optimization problem, showing how it sub-sumes both data poisoning as a special case and existing methods such as ADS and DOGe as specific instantiations. Our detectability analysis establishes that sparse perturba-tion, modifying fewer tokens, is provably less detectable, which motivates TraceGuard , a lightweight defense that removes thought anchor sentences from reasoning traces. We demonstrate its efficacy in a black-box setting, show-ing that it requires no proxy model, no teacher fine-tuning, and no additional forward passes, while preserving teacher accuracy by construction. Several directions remain open. Our detectability bounds assume independent token perturbations; extending these to the dependent setting and to sentence deletion (rather than token-level noise) would strengthen the theoretical ground-ing of TraceGuard . Our current method uses a keyword heuristic to approximate thought anchors, and a more pre-cise identification method could yield stronger results, while motivating interpretability research into how students inter-nalize reasoning structure during distillation. Finally, our formulation assumes the defender knows when an attacker is querying; incorporating side information about attack confidence into poisoning intensity is a natural extension. 
+
+# 7. Limitations 
+
+The proposed antidistillation formulation is mainly used to motivate directional ideas for poisoning strategies. Here, (3.5) and (3.4) make the assumption that the tokens are independent, which is unrealistic in practice. The 
+
+TraceGuard method’s key limitation is in its assump-tion that sentences starting with branching tokens in set S
+
+is a strong indicator that the sentence is a thought anchor. While reasoning literature suggests the importance of these tokens for output generation, which we discuss, directly de-tecting thought anchors directly would be a more-grounded approach to find important sentences. 
+
+# 8. Conclusion 
+
+In this work, we provide a general formulation of Antidistil-lation as a bi-level optimization problem. We show how the data poisoning problem is a special case of the antidistilla-tion problem. We show how this setup subsumes existing methods and provide preliminary detectability results on this problem. Based on recent LLM interpretability results and our de-tectability insights, we also propose the TraceGuard de-fense method as an efficient solution against distillation at-tacks. Our method protects important reasoning tokens and maintains teacher accuracy performance, while not finetun-ing the teacher model or using a proxy model to approximate the student. 
+
+# Impact Statement 
+
+The problem studied in this work is very relevant to to-day’s global AI policy. Distillation attacks have been used to undermine the intellectual privacy of the teacher model provider and essentially circumvent export controls by low-ering the computational bar to obtaining performant reason-ing models. In the United States, this led to Bill HR8283 (119th Congress, 2026), deeming distillation attacks as a threat to the United States. As such, this problem is rele-vant with regards to AI regulations and policy. Additionally, given the literature suggesting safety alignment guardrails can be lost from distillation post-training (Li et al., 2026; Jahan & Sun, 2025; Shi et al., 2026), distillation attacks may be in conflict with AI safety guidelines around the world (National Information Security Standardization Tech-nical Committee (TC260), 2023; European Parliament and Council of the European Union, 2024). 8Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks 
+
+# References 
+
+119th Congress. H.r. 8283 (ih) - deterring amer-ican ai model theft act of 2026. Technical re-port, U.S. House of Representatives, April 2026. URL https://www.congress.gov/bill/ 119th-congress/house-bill/8283 . Intro-duced in House (IH). Anthropic. Detecting and preventing distillation at-tacks. https://www.anthropic.com/news/ detecting-and-preventing-distillation-attacks ,February 2026a. Anthropic. Claude Opus 4.6 system card. Tech-nical report, Anthropic, February 2026b. URL 
+
+https://www-cdn.anthropic.com/ 14e4fb01875d2a69f646fa5e574dea2b1c0ff7b5. pdf . Accessed: 2026-04-11. Biggio, B., Nelson, B., and Laskov, P. Poisoning attacks against support vector machines. In Proceedings of the 29th International Coference on International Conference on Machine Learning , ICML’12, pp. 1467–1474, Madi-son, WI, USA, 2012. Omnipress. ISBN 9781450312851. Bogdan, P. C., Macar, U., Nanda, N., and Conmy, A. Thought anchors: Which llm reasoning steps mat-ter?, 2025. URL https://arxiv.org/abs/2506. 19143 .Carlini, N., Jagielski, M., Choquette-Choo, C. A., Paleka, D., Pearce, W., Anderson, H., Terzis, A., Thomas, K., and Tramer, F. Poisoning Web-Scale Training Datasets is Practical . In 2024 IEEE Symposium on Security and Privacy (SP) , pp. 407–425, Los Alamitos, CA, USA, May 2024. IEEE Computer Society. doi: 10.1109/SP54263.2024.00179. URL 
+
+https://doi.ieeecomputersociety.org/ 10.1109/SP54263.2024.00179 .Ding, J., Cui, L., Dong, L., Zheng, N., and Wei, F. Information-preserving reformulation of reasoning traces for antidistillation, 2025. URL https://arxiv. org/abs/2510.11545 .European Parliament and Council of the European Union. Regulation (EU) 2024/1689 of 13 June 2024 Laying Down Harmonised Rules on Artificial Intelligence (Artifi-cial Intelligence Act), 2024. URL https://eur-lex. europa.eu/eli/reg/2024/1689/oj . Art. 15: Accuracy, Robustness and Cybersecurity. Fan, J., Yan, Q., Li, M., Qu, G., and Xiao, Y. A survey on data poisoning attacks and defenses. In 2022 7th IEEE International Conference on Data Science in Cyberspace (DSC) , pp. 48–55, 2022. doi: 10.1109/DSC55868.2022. 00014. Guo, D., Yang, D., Zhang, H., Song, J., Wang, P., Zhu, Q., Xu, R., Zhang, R., Ma, S., Bi, X., Zhang, X., Yu, X., Wu, Y., Wu, Z. F., Gou, Z., Shao, Z., Li, Z., Gao, Z., Liu, A., Xue, B., Wang, B., Wu, B., Feng, B., Lu, C., Zhao, C., Deng, C., Ruan, C., Dai, D., Chen, D., Ji, D., Li, E., Lin, F., Dai, F., Luo, F., Hao, G., Chen, G., Li, G., Zhang, H., Xu, H., Ding, H., Gao, H., Qu, H., Li, H., Guo, J., Li, J., Chen, J., Yuan, J., Tu, J., Qiu, J., Li, J., Cai, J. L., Ni, J., Liang, J., Chen, J., Dong, K., Hu, K., You, K., Gao, K., Guan, K., Huang, K., Yu, K., Wang, L., Zhang, L., Zhao, L., Wang, L., Zhang, L., Xu, L., Xia, L., Zhang, M., Zhang, M., Tang, M., Zhou, M., Li, M., Wang, M., Li, M., Tian, N., Huang, P., Zhang, P., Wang, Q., Chen, Q., Du, Q., Ge, R., Zhang, R., Pan, R., Wang, R., Chen, R. J., Jin, R. L., Chen, R., Lu, S., Zhou, S., Chen, S., Ye, S., Wang, S., Yu, S., Zhou, S., Pan, S., Li, S. S., Zhou, S., Wu, S., Yun, T., Pei, T., Sun, T., Wang, T., Zeng, W., Liu, W., Liang, W., Gao, W., Yu, W., Zhang, W., Xiao, W. L., An, W., Liu, X., Wang, X., Chen, X., Nie, X., Cheng, X., Liu, X., Xie, X., Liu, X., Yang, X., Li, X., Su, X., Lin, X., Li, X. Q., Jin, X., Shen, X., Chen, X., Sun, X., Wang, X., Song, X., Zhou, X., Wang, X., Shan, X., Li, Y. K., Wang, Y. Q., Wei, Y. X., Zhang, Y., Xu, Y., Li, Y., Zhao, Y., Sun, Y., Wang, Y., Yu, Y., Zhang, Y., Shi, Y., Xiong, Y., He, Y., Piao, Y., Wang, Y., Tan, Y., Ma, Y., Liu, Y., Guo, Y., Ou, Y., Wang, Y., Gong, Y., Zou, Y., He, Y., Xiong, Y., Luo, Y., You, Y., Liu, Y., Zhou, Y., Zhu, Y. X., Huang, Y., Li, Y., Zheng, Y., Zhu, Y., Ma, Y., Tang, Y., Zha, Y., Yan, Y., Ren, Z. Z., Ren, Z., Sha, Z., Fu, Z., Xu, Z., Xie, Z., Zhang, Z., Hao, Z., Ma, Z., Yan, Z., Wu, Z., Gu, Z., Zhu, Z., Liu, Z., Li, Z., Xie, Z., Song, Z., Pan, Z., Huang, Z., Xu, Z., Zhang, Z., and Zhang, Z. Deepseek-r1 incentivizes reasoning in llms through reinforcement learning. Nature ,645(8081):633–638, September 2025. ISSN 1476-4687. doi: 10.1038/s41586-025-09422-z. URL http://dx. doi.org/10.1038/s41586-025-09422-z .Hendrycks, D., Burns, C., Kadavath, S., Arora, A., Basart, S., Tang, E., Song, D., and Steinhardt, J. Measuring mathematical problem solving with the MATH dataset. In Thirty-fifth Conference on Neural Information Process-ing Systems Datasets and Benchmarks Track (Round 2) ,2021. URL https://openreview.net/forum? id=7Bywt2mQsCe .Hsieh, C.-Y., Li, C.-L., Yeh, C.-k., Nakhost, H., Fu-jii, Y., Ratner, A., Krishna, R., Lee, C.-Y., and Pfis-ter, T. Distilling step-by-step! outperforming larger language models with less training data and smaller model sizes. In Rogers, A., Boyd-Graber, J., and Okazaki, N. (eds.), Findings of the Association for Computational Linguistics: ACL 2023 , pp. 8003–8017, Toronto, Canada, July 2023. Association for Computa-tional Linguistics. doi: 10.18653/v1/2023.findings-acl. 9Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks 
+
+507. URL https://aclanthology.org/2023. findings-acl.507/ .Jahan, S. and Sun, R. Black-box behavioral distillation breaks safety alignment in medical llms, 2025. URL 
+
+https://arxiv.org/abs/2512.09403 .Kratsios, M. J. National security technology memo-randum 4 (nstm-4): Adversarial distillation of ameri-can ai models. Memorandum, The White House, Of-fice of Science and Technology Policy, April 2026. URL https://whitehouse.gov/wp-content/ uploads/2026/04/NSTM-4.pdf . Memorandum for the Heads of Executive Departments and Agencies. Li, P., Tan, Z., Zhang, M., Qu, H., Liu, H., and Chen, T. Doge: Defensive output generation for llm protection against knowledge distillation, 2025. URL https:// arxiv.org/abs/2505.19504 .Li, X., Zhen, H.-L., Yin, L., Yu, X., Dong, Z., and Yuan, M. What matters for safety alignment?, 2026. URL 
+
+https://arxiv.org/abs/2601.03868 .Lin, Z., Liang, T., Xu, J., Lin, Q., Wang, X., Luo, R., Shi, C., Li, S., Yang, Y., and Tu, Z. Critical tokens matter: Token-level contrastive estimation enhances llm’s rea-soning capability, 2025. URL https://arxiv.org/ abs/2411.19943 .Ma, X., Yeoh, W., Zhang, N., and Vorobeychik, Y. Pro-tecting language models against unauthorized distillation through trace rewriting, 2026. URL https://arxiv. org/abs/2602.15143 .Madry, A., Makelov, A., Schmidt, L., Tsipras, D., and Vladu, A. Towards deep learning models resistant to ad-versarial attacks, 2019. URL https://arxiv.org/ abs/1706.06083 .Moosavi-Dezfooli, S.-M., Fawzi, A., and Frossard, P. Deep-fool: a simple and accurate method to fool deep neural networks, 2016. URL https://arxiv.org/abs/ 1511.04599 .Mukherjee, S. S., Mitra, A., Jawahar, G., Agarwal, S., Palangi, H., and Awadallah, A. Orca: Progressive learn-ing from complex explanation traces of gpt-4. arXiv: Computation and Language , June 2023. National Information Security Standardization Technical Committee (TC260). Cybersecurity technology— basic security requirements for generative artificial intelligence services (draft for feedback). Technical report, National Information Security Standardiza-tion Technical Committee, oct 2023. URL https: //cset.georgetown.edu/publication/ china-gen-ai-safety-standard-draft/ .Accessed: 2026-04-22. OpenAI. Learning to reason with llms, 2024. URL https://openai.com/index/ learning-to-reason-with-llms/ . Accessed: 2024-09-12. Qwen. Qwq: Reflect deeply on the boundaries of the unknown, November 2024. URL https://qwenlm. github.io/blog/qwq-32b-preview/ .Savani, Y., Trockman, A., Feng, Z., Xu, Y. E., Schwarzschild, A., Robey, A., Finzi, M., and Kolter, J. Z. Antidistillation sampling, 2025. URL https: //arxiv.org/abs/2504.13146 .Shafahi, A., Huang, W. R., Najibi, M., Suciu, O., Studer, C., Dumitras, T., and Goldstein, T. Poison frogs! tar-geted clean-label poisoning attacks on neural networks. In Proceedings of the 32nd International Conference on Neural Information Processing Systems , NIPS’18, pp. 6106–6116, Red Hook, NY, USA, 2018. Curran Asso-ciates Inc. Shi, H., Wang, G., Ouyang, T., and Wang, A. Ease: Practical and efficient safety alignment for small language models. 
+
+Proceedings of the AAAI Conference on Artificial Intel-ligence , 40(44):37923–37931, Mar. 2026. doi: 10.1609/ aaai.v40i44.41129. URL https://ojs.aaai.org/ index.php/AAAI/article/view/41129 .Souly, A., Rando, J., Chapman, E., Davies, X., Hasircioglu, B., Shereen, E., Mougan, C., Mavroudis, V., Jones, E., Hicks, C., Carlini, N., Gal, Y., and Kirk, R. Poisoning attacks on llms require a near-constant number of poison samples, 2025. URL https://arxiv.org/abs/ 2510.07192 .Su, J., Vargas, D. V., and Sakurai, K. One pixel attack for fooling deep neural networks. CoRR ,abs/1710.08864, 2017. URL http://arxiv.org/ abs/1710.08864 .Wang, S., Yu, L., Gao, C., Zheng, C., Liu, S., Lu, R., Dang, K., Chen, X.-H., Yang, J., Zhang, Z., Liu, Y., Yang, A., Zhao, A., Yue, Y., Song, S., Yu, B., Huang, G., and Lin, J. Beyond the 80/20 rule: High-entropy minority tokens drive effective reinforcement learning for LLM reason-ing. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. URL https: //openreview.net/forum?id=yfcpdY4gMP .Wei, J., Wang, X., Schuurmans, D., Bosma, M., ichter, b., Xia, F., Chi, E., Le, Q. V., and Zhou, D. Chain-of-thought prompting elicits reasoning in large language models. In Koyejo, S., Mohamed, S., Agarwal, A., Belgrave, D., Cho, K., and Oh, A. (eds.), Advances in Neural Informa-tion Processing Systems , volume 35, pp. 24824–24837. Curran Associates, Inc., 2022. 10 Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks 
+
+Wiyatno, R. and Xu, A. Maximal jacobian-based saliency map attack, 2018. URL https://arxiv.org/abs/ 1808.07945 .Yao, S., Yu, D., Zhao, J., Shafran, I., Griffiths, T. L., Cao, Y., and Narasimhan, K. R. Tree of thoughts: Deliberate problem solving with large language models. In Thirty-seventh Conference on Neural Information Processing Systems , 2023. URL https://openreview.net/ forum?id=5Xc1ecxO1h .Zhang, J., Lin, Q., Rajmohan, S., and Zhang, D. From rea-soning to answer: Empirical, attention-based and mech-anistic insights into distilled deepseek r1 models, 2025. URL https://arxiv.org/abs/2509.23676 .11 Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks 
+
+# A. Formulation of Data Poisoning as Stackelberg game 
+
+In data poisoning, an attacker wants to find a set of data points sufficiently “close” to real data points that maximally harm the performance of a given statistical model. This format can be viewed as a Stackelberg game, where the attacker commits to a poisoned dataset ˜D, after which the defender attempts to find the optimal model parameters from it. Observe that the best action for the defender in this game is: 
+
+θ∗( ˜D) := arg min 
+
+> θ∈Θ
+
+˜L(θ; ˜D),
+
+while the optimal action for the attacker to take is: 
+
+˜D∗ := arg max 
+
+> ˜D∈B
+
+L(θ∗( ˜D); D).
+
+Therefore, the game can be viewed as the following bi-level optimization problem: 
+
+˜D = arg max 
+
+> ˜D∈B
+
+L(arg min 
+
+> θ
+
+˜L(θ; ˜D); D), (8) where ˜D is the poisoned dataset, B is the set of admissible poisoned datasets, D is the dataset for final evaluation, L is the loss function to evaluate the optimal model θ, and ˜L is the loss function for evaluating the model on the poisoned dataset. The solution, ( ˜D∗, θ ∗( ˜D∗)) , to (8) constitutes the Stackelberg equilibrium for this data poisoning game. 
+
+# B. Method against random sentence poisoning 
+
+Our method shows that student model distillation performance is worse when the teacher model traces are poisoned than baseline. In this additional experiment, we compare the results of our standard method to poisoning random sentences. The goal of this experiment is to verify that the backtracking sentences we poison are truly important for distillation.    
+
+> Figure 5. Accuracy drop between baseline versus poisoned reasoning trace distillation for varying numbers of tokens based on TraceGuard versus Random Sentence Removal. Based on the figure, poisoning random sentences has a substantially lower impact on distillation performance than the branching sentences. In this experiment, the teacher mdoel is DeepSeek R1 Distill Qwen 7B and the student model is Llama 3.2 3B.
+
+From Figure 5, the distillation performance gap is minimal for a varying number of tokens poisoned. 
+
+# C. Distillation experimental setup 
+
+In this work, we run knowledge distillation experiments on the student models using traces generated by the teacher model. The models are trained using HuggingFace’s SFTTrainer with the following optimal hyperparameters: 12 Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks 
+
+Parameter Value 
+
+Optimizer Fused AdamW Learning Rate 5 × 10 −4
+
+LR Schedule Cosine decay with 3% linear warmup Batch Size 16 (via gradient accumulation) Epochs 3Weight Decay 0.1 Gradient Clipping 1.0 (max norm) Context Window 4096 tokens Precision bfloat16 (mixed precision) Attention Mechanism Flash Attention ( sdpa ) 
+
+> Table 1. Hyperparameters and Hardware Settings for Student Model Distillation
+
+These hyperparameters are very similar to those used in the Antidistillation Sampling method (Savani et al., 2025). 
+
+# D. Proofs 
+
+Proof of Proposition 3.4. We begin by defining the log-sum-exp function 
+
+Φ( z) = log X
+
+> w∈V
+
+exp( zw).
+
+Φ has two important properties: 
+
+∇Φ( z) = PT , (9) 
+
+∇2Φ( z) = diag( PT ) − PT P ⊤ 
+
+> T
+
+. (10) Because log PT (v) = zv − Φ( z) and log PP (v) = zv + ϵv − Φ( z + ϵ), the KL divergence expands as 
+
+DKL (PP ∥ PT ) = X
+
+> v
+
+PP (v)log PP (v) − log PT (v)
+
+= X
+
+> v
+
+PP (v)ϵv − Φ( z + ϵ) + Φ( z)
+
+= Φ( z) − Φ( z + ϵ) + ⟨∇ Φ( z + ϵ), ϵ ⟩.
+
+Rewriting ϵ = z − (z + ϵ) in the inner product recovers the definition of the Bregman divergence generated by Φ:
+
+DKL (PP ∥ PT ) = Φ( z) − Φ( z + ϵ) − ⟨∇ Φ( z + ϵ), z − (z + ϵ)⟩ = DΦ(z, z + ϵ).
+
+We know that any Bregman divergence admits the integral representation 
+
+DΦ(z, z + ϵ) = 
+
+Z 10
+
+t ϵ ⊤∇2Φ( z + tϵ ) ϵ dt, 
+
+where the path is the line segment z + tϵ for t ∈ [0 , 1] . Writing Pt = ∇Φ( z + tϵ ) for the intermediate softmax distribution, this gives 
+
+DKL (PP ∥ PT ) = 
+
+Z 10
+
+t ϵ ⊤ diag( Pt) − PtP ⊤
+
+> t
+
+ ϵ dt. 
+
+The quadratic form equals the variance of the components of ϵ under Pt:
+
+ϵ⊤ diag( Pt) − PtP ⊤
+
+> t
+
+ ϵ = X
+
+> v
+
+Pt(v) ϵ2 
+
+> v
+
+−
+
+X 
+
+> v
+
+Pt(v) ϵv
+
+2
+
+= Var Pt (ϵ).
+
+13 Protecting the Trace: A Principled Black-Box Approach Against Distillation Attacks 
+
+Now we also have, 
+
+Var Pt (ϵ) ≤ X
+
+> v
+
+Pt(v) ϵ2 
+
+> v
+
+≤ X
+
+> v
+
+ϵ2 
+
+> v
+
+= ∥ϵ∥22.
+
+Hence, uniformly for all t ∈ [0 , 1] ,
+
+ϵ⊤∇2Φ( z + tϵ ) ϵ ≤ ∥ ϵ∥22.
+
+Substituting in the bound we get, 
+
+DKL (PP ∥ PT ) ≤
+
+Z 10
+
+t ∥ϵ∥22 dt. 
+
+Since ∥ϵ∥22 no longer depends on t or on the intermediate distributions Pt, we may pass the expectation through the integral: 
+
+Eϵ[DKL (PP ∥ PT )] ≤ Eϵ
+
+Z 10
+
+t ∥ϵ∥22 dt 
+
+
+
+=
+
+Z 10
+
+t Eϵ
+
+∥ϵ∥22
+
+ dt 
+
+= σ2
+
+Z 10
+
+t dt = σ2 · 12 = σ2
+
+2 .
+
+Proof of Corollary 3.5. Observe that since the k token distributions that are independently perturbed by noise are themselves independently conditioned on the original unchanged context (because the noise is added post-hoc, not during generation), we have that 
+
+PP (yM |x, y \M ) = 
+
+> k
+
+Y
+
+> i=1
+
+PP (ymi |x, y \M ).
+
+Similarly, 
+
+PT (yM |x, y \M ) = 
+
+> k
+
+Y
+
+> i=1
+
+PT (ymi |x, y \M )
+
+Thus, we have that 
+
+DKL (PP (yM ) ∥ PT (yM )) = 
+
+> k
+
+X
+
+> i=1
+
+DKL (PP (ymi ) ∥ PT (ymi )) .
+
+Taking expectations, we have that 
+
+E
+
+" kX
+
+> i=1
+
+(PP (yM ) ∥ PT (yM )) 
+
+#
+
+=
+
+> k
+
+X
+
+> i=1
+
+E [DKL (PP (ymi ) ∥ PT (ymi ))] 
+
+≤
+
+> k
+
+X
+
+> i=1
+
+σ2
+
+2 = k σ2
+
+2
+
+14
