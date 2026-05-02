@@ -1,0 +1,915 @@
+Title: 2604.24379v1.pdf
+
+URL Source: https://arxiv.org/pdf/2604.24379v1
+
+Published Time: Tue, 28 Apr 2026 01:53:30 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# Certified geometric robustness - Super-DeepG 
+
+## No´ emie Cohen 1,2, M´ elanie Ducoffe 1, Timoth´ ee Fayard 2, Christophe Gabreau 1,Claire Pagetti 2, Xavier Pucel 21 Airbus, 2 French Aerospace Lab, ONERA April 28, 2026  
+
+> ©2026 IEEE. Personal use of this material is permitted. Permission from IEEE must be obtained for all other uses, in any current or future media, including reprinting/republishing this material for advertising or promotional purposes, creating new collective works, for resale or redistribution to servers or lists, or reuse of any copyrighted component of this work in other works.
+
+Abstract 
+
+Safety-critical applications are required to perform as expected in normal operations. Image pro-cessing functions are often required to be insensitive to small geometric perturbations such as rotation, scaling, shearing or translation. This paper addresses the formal verification of neural networks against geometric perturbations on their image dataset. Our method Super-DeepG improves the reasoning used in linear relaxation techniques and Lipschitz optimization, and provides an implementation that lever-ages GPU hardware. By doing so, Super-DeepG achieves both precision and computational efficiency of robustness certification, to an extent that outperforms prior work. Super-DeepG is shared as an open-source tool on GitHub 1.
+
+# 1 Introduction 
+
+Neural networks are ubiquitously used across various safety-critical applications, such as Cyber-Physical Systems. We aim to verify neural networks used for aircraft runway detection during the landing phase, utilizing the LARD dataset [5]. For such applications, it is imperative to ensure that the system satisfies a set of safety properties. One particular safety property is the robustness of a function, ensuring that perturbations on its inputs do not alter its outputs in an undesirable manner. A reliable approach to check robustness is to apply formal methods. Practically, a feed-forward neural network can be described as a function f : Rn → Rm. Given an input domain C ⊆ Rn and a robustness property P ⊆ Rm, the verification problem can be formulated as: 
+
+∀x0 ∈ C , does f (x0) satisfy P? (1) To solve the verification problem in Equation 1, two main tasks must be carried out. First, the input domain 
+
+C must be tightly defined, so that it accurately reflects the intended perturbations. Second, verifiers, such as Marabou [11], are then used to check the property. In the literature, the input domain C is often represented as a norm-based perturbation region around a fixed input x. White noise perturbation for instance is defined by the l∞ norm ball, i.e., C = {x0 ∈ Rn | ∥ x − x0∥∞ ≤ ϵ}. This type of domain is not specific to any class of function implemented by the neural network. In this work, we focus on image processing functions, and investigate image perturbations induced by geo-metric transformations. Unlike norm-based perturbations, which alter pixel intensities directly while keeping their positions fixed, these transformations shift and interpolate pixel values, complicating the definition of 
+
+> 1https://github.com/NoCohen66/superDeepG
+
+1
+
+> arXiv:2604.24379v1 [cs.AI] 27 Apr 2026
+
+the input domain C. This paper addresses the problem of efficiently determining a precise geometry-based input domain. Several methods exist for this purpose. However, none of them can be described as both: (1) precise, ensuring that the input domain is tight enough for effective property verification; (2) scalable, allowing to verify large neural networks; (3) fast, leveraging GPU utilization for enhanced performance. We build on the 
+
+DeepG [2] approach due to its strong theoretical foundation and precision in geometry-based input domain verification, despite its computational cost. Our main contributions are as follows: 1. We reformulate the mathematical foundations underlying the different optimization steps employed by 
+
+DeepG . We eliminate the use of iterative methods, propose new formulations for each optimization problem and achieve equivalent precision. 2. This change not only removes a major computational bottleneck but also enables efficient GPU par-allelization, yielding up to a 526 × speedup. We achieve significant geometric certification results on TinyImageNet without training specifically for geometric robustness. 3. We provide an open-source implementation within the auto LiRPA [20] verifier, encapsulating the geometric transformations in a CustomOp , which simplifies integration and usability for practitioners. Section 2 recalls the mathematical background and the problem statement. Section 3 provides an overview of related work in the field. Section 4 summarizes the DeepG approach and its use of computationally expensive iterative methods to solve mathematical problems. Section 5 presents Super-DeepG and our efficient solutions to these mathematical problems. Section 6 shows experiments to compare our method with state-of-the-art approaches on benchmark networks. Section 7 concludes the paper. 
+
+# 2 Background 
+
+We consider images composed of c channels of matrices n × m where n, m are odd integers. Since all computations and perturbations are applied channel-wise, we restrict the presentation to a single channel to simplify notations. In particular, images become 2D tensors. Let A, B ∈ Rn×m, A ≥ B (resp. A ≤ B)denotes ∀i, j , Ai,j ≥ Bi,j (resp. Ai,j ≤ Bi,j ). We use A and A to denote the lower and upper bounds of a matrix A, i.e., A ≤ A ≤ A.
+
+## 2.1 Geometric transformation 
+
+A geometric image transformation is usually defined as a function g : Rd × Rn×m → Rn×m, where κ ∈ Rd
+
+is the transformation parameter (e.g. rotation angle). In robustness verification, each image is analyzed independently, thus we consider a single image x ∈ Rn×m, and study its geometric transformation gx :
+
+Rd → Rn×m. We denote pi,j (κ) the pixel value at position ( i, j ) in the transformed image gx(κ). The value associated to this pixel is defined by: 
+
+pi,j (κ) = Ix ◦ T −1 
+
+> κ
+
+(i, j ) (2) Where Ix is an interpolation function, and Tκ the geometric transform. Tκ may correspond to a rotation, a translation, a shearing, or a scaling, all of which have a unique inverse T −1 
+
+> κ
+
+. For simplicity and clarity, we provide detailed explanations for rotation, but the formulas for the other transformations can be found in Appendix A. Transformation compositions are not detailed but fall in the same mathematical framework. Let κ be a rotation angle θ ∈ R, the inverse transform T −1 
+
+> κ
+
+: N2 → R2 maps the coordinates of the transformed pixel back to the original image’s coordinates. It is represented by the matrix: 
+
+R−1 
+
+> θ
+
+(i, j ) = 
+
+ cos θ sin θ
+
+− sin θ cos θ
+
+  i − n
+
+> 2
+
+j − m
+
+> 2
+
+
+
++
+
+ n
+
+> 2
+> m
+> 2
+
+
+
+(3) 2The interpolation Ix : R2 → R takes as input non-integer pixels coordinates resulting from the rotation and outputs an interpolated pixel value. Among the many existing interpolation functions, we consider the most common [2, 21, 3], i.e. the standard bilinear interpolation: 
+
+Ix(i, j ) = 
+
+> n
+
+X
+
+> k=1
+> m
+
+X
+
+> l=1
+
+pk,l (0) · max(0 , 1 − | i − k|)
+
+· max(0 , 1 − | j − l|)(4) 
+
+## 2.2 Geometric Robustness Verification 
+
+Geometric robustness, derived from Equation (1), is to verify whether a neural network f satisfies the robustness property P for all transformed images gx(θ): 
+
+∀θ ∈ [θ, θ ], does f (gx(θ)) satisfy P? (5) Due to the highly non-linear nature of geometric transformations, computing the exact set gx([ θ, θ ]) is not tractable. To address this, we apply abstract interpretation [7, 9] and define an abstract domain C that over-approximates gx([ θ, θ ]). State-of-the art methods [2, 15, 21] compute linear bounds A, B, A, B ∈ Rn×m
+
+such that: A · θ + B ≤ gx(θ) ≤ A · θ + B, and define the abstract domain as: 
+
+C = x0 | A · θ + B ≤ x0 ≤ A · θ + B (6) Thus, instead of Equation (5), we address the problem: 
+
+∀x0 ∈ C ⊇ gx([ θ, θ ]) , does f (x0) satisfies P? (7) Interval Bound Propagation (IBP) can be seen as the special case where A = A = 0 in Equation (6). Finally, in this paper we focus on image classification. The function f : Rn×m → Rk denotes the classifier that computes the score fk associated to each of the k classes. For the input image x, with ground truth class c, we assume f is correct, meaning that fc(x) > f i(x) for all i̸ = c. Abstract interpretation techniques can be extended to the function f , yielding linear bounds f (x0) and f (x0) for each class. The standard classification robustness property P is expressed as: 
+
+P ≡ min 
+
+> i̸=c
+
+n
+
+fc(x0) − fi(x0)
+
+o
+
+> 0 (8) 
+
+# 3 Related Work 
+
+Formal verification methods such as Satisfiability Modulo Theory, MILP, and abstract interpretation are widely used for verifying neural network robustness [13, 19, 14]. Among these, abstract interpretation is particularly suitable for scaling up to large networks with high-dimensional inputs. The choice of the abstract domain impacts the precision and the computational efficiency. Tighter domains yield more precise abstractions at the price of increased computational cost. Linear relaxation based perturbation analysis (LiRPA), used in CROWN [23] and DeepPoly [18], propagates linear bound-based abstract domains (see Equation 6), improving precision with respect to IBP. FGV [21] and semantify-NN [15], have attempted to linearize geometric transformations by over-approximating each operator involved (e.g., cos, sin, max, abs in Equations (3,4)) to fit within existing verification frame-works. However, these over-approximations often lead to loose bounds. This imprecision is even worse when relying on less precise techniques like IBP, as done by FGV and semantify-NN. Consequently, these methods sacrifice precision for scalability and improved runtime performance. 3gx(·) DeepG PWL FGV Super-DeepG 
+
+Precise ✓ ✓✓ ✗ ✓
+
+Fast ✗ ✗ ✓✓ ✓
+
+Table 1: Tools implementing geometric abstract domains 
+
+DeepG [2] considers the geometric transformation as a single function when producing linear bounds. This approach yields very precise bounds upon which robustness verification can be built. However, its computational cost is high due to its reliance on a linear programming solver and its design, which is not optimized for GPUs. PWL [3] builds upon DeepG by defining the domain C as a convex polytope, and uses a MILP solver to verify the property, which has a hard time scaling up to large neural networks. From our review and experiments summarized in Table 1, we draw two conclusions. 1. The mathematical foundation of DeepG is the key to precise abstractions. Its efficiency can be improved without impacting its precision. 2. All approaches have a hyperparameter for splitting the interval [ θ, θ ] and making the verification per sub-interval. Increasing the number of sub-intervals is a very effective way to gain precision. FGV and Semantify-NN leverage their speed by relying heavily on this mechanism. In contrast, DeepG and PWL are relatively slow and refrain from splitting too much. These statements motivate our approach called Super-DeepG , that improves the mathematical foundation of DeepG and uses solutions that can be efficiently implemented on GPU architectures. Furthermore, in order to demonstrate that Super-DeepG outperforms other tools, it is imperative to be cautious in the choice of hyperparameters to produce fair and meaningful comparisons. Other techniques have been investigated for geometric robustness, such as randomized smoothing [8], [12] or unsound methods [24]. However, they fail to provide the deterministic and sound guarantees we require. 
+
+# 4 In-depth DeepG analysis 
+
+DeepG computes the abstract domain C with linear bounds as in Equation (6). It takes as input an image x,an interval of rotation angles [ θ, θ ], and it is tuned by two hyper-parameters P and ε. It produces as output the four matrices A, B, A and B that define C. Then, it uses the solver ERAN [17] to produce the linear bounds 
+
+f and f and verify property (8). DeepG decomposes the problem into three main steps. First, it computes initial bounds that hold for some sampled points, but may not generalize to the full domain. Second, it (over)estimates the Lipschitz constant for the transform. Finally, it derives sound bounds by applying a margin on the initial bounds. This margin is obtained by sampling and using Lipschitz certificates. 
+
+## Step 1: Unsound Linear Bounds using LP 
+
+DeepG first samples P points θp for p = 1 , . . . , P within the input domain [ θ, θ ] and computes the associated transformed images gx(θp). It computes a value of A, B, A, B with those empirical data as shown in Figure 1. To do so, we define the lower residual r(θp; A, B ) = gx(θp) − A · θp − B. A, B are the solutions of an optimization problem that minimizes the average residual while enforcing non-negativity for every sampled point. This is formulated as the following P optimization problem: min 
+
+> A,B
+
+(
+
+1
+
+P
+
+> P
+
+X
+
+> p=1
+
+r(θp; A, B )
+
+)
+
+subject to r(θp; A, B ) ≥ 0, ∀p = 1 , . . . , P 
+
+(9) Here, A, B, and the residual r are matrices. The min operation is therefore interpreted element-wise. In practice, DeepG solves Equation (9) as a linear programming problem with the Gurobi solver. A similar 4Figure 1: Initial lower linear bound for the sampled values of one pixel at varying transformation values. Left: the pixel value (dashed), sampled points (red) and a lower linear bound (blue) for the samples. Right: the residual function r(θp; A, B ), representing the difference between the real pixel value gx(θ) and the initial lower bound. process is applied to compute the upper bound. This step requires solving independent scalar optimization problems for each pixel and is computationally expensive. 
+
+## Step 2: Computing a Lipschitz constant 
+
+DeepG computes a valid Lipschitz constant L for the residual function, that provides an upper bound to how much the residual can vary between two sampled points. The tightest Lipschitz constant L∗ is defined as the supremum of the gradient norm of the residual function: 
+
+L∗ = sup 
+
+> θ∈
+
+[θ,θ ]
+
+∂r (θ)
+
+∂θ ∞
+
+DeepG computes an approximate upper-bound L ≥ L ∗. In addition to the constant L valid on all θ, θ ,
+
+DeepG can compute a Lipschitz constant L(θ1, θ 2) for any sub-interval [ θ1, θ 2]. 
+
+## Step 3: Correction of the approximation error 
+
+While the bound A · θ + B computed in Step 1 is a lower bound for the sampled points, it may fail to be a lower bound for the whole interval [ θ, θ ], as illustrated in grey in Figure 1. The goal of this step is to add a correction term δ ≤ 0, to obtain a valid lower bound over the entire domain: 
+
+∀θ ∈ [θ, θ ], g x(θ) ≥ A θ + B + δ
+
+The minimum value of δ that ensures a correct lower bound is given by δ∗ = min θ∈[θ,θ ] r(θ, A, B ). However, computing δ∗ is computationally hard due to the nonlinearity and nonconvexity of the function. Instead, 
+
+DeepG computes an approximate term δ ≤ δ∗ by applying a Lipschitz certificate. From the Liptschitz certificate property: min 
+
+> θ∈[θ,θ ]
+
+r(θ; A, B ) ≥ r
+
+ θ + θ
+
+2 ; A, B 
+
+
+
+− L θ − θ
+
+2 (10) Thus, the right-hand side of Equation (10) is a valid value for our correction term δ. Splitting the domain [θ, θ ] is a natural way to obtain tighter correction terms. DeepG partitions the input range into M intervals [θ, θ ] = S 
+
+> i=0 ...M
+
+[θi, θ i+1 ], and searches for a minimum in each partition: min 
+
+> θ∈[θ,θ ]
+
+r(θ; A, B ) = min  
+
+> i=0 ...M
+
+min  
+
+> θ∈[θi,θ i+1 ]
+
+r(θ; A, B )5Thus, applying the Lipschitz certificate to each partition yields the following: min 
+
+> θ∈[θ,θ ]
+
+r(θ; A, B ) ≥ min  
+
+> i=0 ,...,M
+
+r
+
+ θi + θi+1 
+
+2 ; A, B 
+
+
+
+− L (θi, θ i+1 ) θi+1 − θi
+
+2
+
+(11) The partition j, that contains the minimum, is further split, leading to: [ θ, θ ] = S 
+
+> i=0 ...j −1,j +1 ...M
+
+[θi, θ i+1 ] ∪
+
+h
+
+θj , θj +θj+1 
+
+> 2
+
+i
+
+∪
+
+h θj +θj+1  
+
+> 2
+
+, θ j+1 
+
+i
+
+. The iteration step is repeated as many times as needed. Doing so, DeepG 
+
+revisits the well-known DOO algorithm [16] which guarantees convergence to the exact minimum, given sufficient iterations, and ensures that the bounds remain valid throughout the optimization process. The 
+
+Figure 2: Illustration of the DOO algorithm used in DeepG . Left: Residual function with an initial partition (M = 3) and penalty-adjusted bounds. Right: Partition update by splitting the interval with the maximum penalty (in red). procedure terminates when the size of the sub-interval associated with the current minimum certificate satisfies: 
+
+|θi+1 − θi| < 2ε/ L(θi, θ i + 1) (12) where ε is an input hyperparameter. Let δ denote the resulting certified lower bound. A similar process is applied on the upper bound. The corrected bounds from Step 1 then satisfy: 
+
+A · θ + B + δ ≤ gx(θ) ≤ A · θ + B + δ (13) A major limitation of Step 3 is the iterative nature of the DOO implementation. As a result, the direct application of this approach in modern verification frameworks is not feasible as is. 
+
+# 5 From DeepG to Super-DeepG 
+
+Super-DeepG improves on DeepG in two ways. It removes iterative algorithms and replaces them with static meshed and tensorized formula compatible with GPU implementation. Super-DeepG has the same inputs x and [ θ, θ ], and the same outputs A, B, A, B as DeepG . It has the hyperparameter P for step 1 and N for step 3. 
+
+## 5.1 Step 1-bis: Analytical Unsound Bounds 
+
+This step also computes initial unsound linear bounds (with A, B, A, B). Like DeepG , we sample P points 
+
+θp for p = 1 , . . . , P within the input domain [ θ, θ ] and compute the associated images gx(θp). However, we solve the optimization problem P of Equation (9) differently. We have demonstrated in Appendix B.1 that any solution A, B of P satisfies ∃θp, Aθ p + B = gx(θp). Thus, adding the constraint r(θ1, A, B ) = 0 ∨ . . . ∨ r(θP , A, B ) = 0 to P transforms it into an equivalent 6problem. Solving this transformed problem is equivalent to solve P sub-problems Pp, each with the constraint 
+
+r(θp, A, B ) = 0 and take the optimal solution among the P sub-solutions. Let us denote by Ap, B p the solutions of Pp. Since they satisfy the constraint r(θp, A p, B p) = 0, there is a relation between them as 
+
+Bp = gx(θp) − Aθ p. The problem Pp thus only optimizes Ap, as Bp can be derived. The other constraint and the optimization criteria of Pp is on the residual, r(θ; Ap, B p) = gx(θ) − Ap · θ − Bp = gx(θ) − Ap · θ −
+
+gx(θp) + Apθp = ( gx(θ) − gx(θp)) − Ap · (θ − θp). We denote rp(θ; Ap) = r(θ; Ap, B p). The sub-problem Pp
+
+is thus defined by: min 
+
+> Ap
+
+(
+
+1
+
+P
+
+> P
+
+X
+
+> k=1
+
+rp(θk; Ap)
+
+)
+
+subject to: rp(θk; Ap) ≥ 0 for k = 1 , . . . , P 
+
+(14) To solve Pp, we consider the two sets K+ = {k ∈ 1, . . . , P | θk − θp > 0} and K− = {k ∈ 1, . . . , P |
+
+θk − θp < 0}. In order to satisfy constraint rp(θk; Ap) ≥ 0, Ap must lie within the interval: 
+
+Ap ∈
+
+
+
+max 
+
+> k∈K −
+
+gx(θp) − gx(θk)
+
+θp − θk , min 
+
+> k∈K +
+
+gx(θp) − gx(θk)
+
+θp − θk
+
+
+
+(15) Hence, an optimal Ap is given by: 
+
+Ap =
+
+
+
+min 
+
+> k∈K +
+
+gx(θp) − gx(θk)
+
+θp − θk if 
+
+
+
+θp − PP
+
+> k=1
+> θk
+> P
+
+
+
+≥ 0,
+
+max 
+
+> k∈K −
+
+gx(θp) − gx(θk)
+
+θp − θk otherwise .
+
+(16) The interval notation in Equation (15), as well as the max and min operations in Equation (15) and Equation (16), are to be interpreted element-wise. The optimal solution A, B of P is Apopt , B popt such that Apopt , B popt 
+
+is a solution of Ppopt and 1
+
+> P
+
+PPk=1 rp(θk; Apopt ) = min p=1 ,...,P 1
+
+> P
+
+PPk=1 rp(θk; Ap). Informally, Super-DeepG enumerates all cases in which the linear relaxation passes through at least one sample point (i.e., r(θp; A, B ) = 0). By solving all such subproblems and selecting the best solution, Super-DeepG effectively covers every candidate for an optimal solution in DeepG ’s Step 1. Consequently, both methods yield the same pair ( A∗, B ∗), ensuring that Step 1-bis of Super-DeepG is indeed equivalent to Step 1 of DeepG . This reasoning applies for any κ ∈ R, corresponding to a one-dimensional transformation such as rotation, scaling, and shearing. For the more general case κ ∈ Rd (e.g., d = 2 for a translation), detailed formulations are provided in Appendix B.3. The main contribution of our approach is that it supports GPU parallelization, which makes it possible to treat all pixels in parallel. In our experiments, we show empirically that the choice of bounds does not significantly depend on the number of samples: even with a small number of samples, the selected bounds are nearly identical to those chosen with more samples. As in DeepG , the bounds computed in this step are unsound, and we need to apply a Lipschitz-based margin to ensure they provide a true over-approximation. 
+
+## 5.2 Step 2-bis: Computing a Lipschitz constant 
+
+For this step, we reuse the efficient PyTorch implementation from PWL to obtain an upper bound L(θ1, θ 2)for the Lipschitz constant L∗(θ1, θ 2) over any sub-interval [ θ1, θ 2]. 
+
+## 5.3 Step 3-bis: Correction of the approximation error 
+
+As DeepG , Step 3-bis aims at computing δ and δ to correct A, B of Step 1-bis. Instead of applying an iterative strategy, we partition [ θ, θ ] in N sub-intervals [ θi, θ i+1 ]. Given a bound L for the Lipschitz 7Figure 3: Super-DeepG approach with N = 13 partitions. The correction term is in red. constant over [ θ, θ ], a subdivision number of N entails, by equation (10), that the correction term is δ =min i r( θi+θi+1  
+
+> 2
+
+, A, B ) − L| θ − θ|/2N . We obtain it in one pass as illustrated in Figure 3. All subdivisions are chosen with uniform width: |θi+1 − θi| = θ − θ /N . To ensure that the correction term is at least as precise as that the one computed by DeepG , the number of subdivisions N must be selected based on Equation (17) and the hyperparameter ε as follows: 
+
+N ≥ L θ − θ
+
+2ε (17) In practice, we further tighten the correction term δ by computing a bound for the Lipschitz constant for each sub-interval. This is efficiently done on GPUs. Inside the subdivisions, the δ and δ correction terms are computed and used the same way as in DeepG in Equations (10) and (13). The extension of Step 3-bis to multi-dimensional inputs is detailed in Appendix B.2. 
+
+# 6 Experimental Evaluation 
+
+Implementation Super-DeepG is an open-source implementation integrated within the auto LiRPA [20] framework. The computation of the abstract domain C (described in section 5) is encapsulated in a layer 
+
+of a special type called CustomOp . To verify the network’s robustness (as in Equation (5)), users adds this layer as the first layer to the neural network. This simplifies the verification process. The verification of the neural network is done with the CROWN or CROWN-IBP method. 
+
+Baseline We benchmark our method against state-of-the-art verifiers: DeepG , FGV, and PWL. For PWL, although its code is available, a dependency on a MILP verifier prevented us from running it, so our comparison uses published results. We excluded Semantify-NN, as it has been proven both less precise than 
+
+DeepG and slower than FGV [21]. 
+
+Experimental Setup FGV and Super-DeepG experiments were conducted on an NVIDIA Tesla V100 PCIe (32 GB), while DeepG , lacking GPU support, was run on an Intel Xeon E5-2660 v3 @ 2.60 GHz with 62 GB of RAM and 20 cores. The evaluation is done on three key datasets used in prior robustness studies [2, 21]. We use the neural networks provided by DeepG [2], referred to as PGD and by CGT [21], referred to as CGT . While the PGD and CGT networks use the same architecture, their weights differ as a 8Dataset/Clean acc. Transformation Config. number Range Interval size Certification method Certified (%) Time (s/image) 
+
+MNIST 98.0% Rotation n°1[−30 ◦, 30 ◦] 1◦ DeepG 98.0 210.72 Super-DeepG 98.0 0.40 [−30 ◦, 30 ◦] 6◦
+
+DeepG 86.0 48.38 Super-DeepG 86.0 1.14 Super-DeepG ∗ 86.0 0.13 CIFAR10 74.0% Rotation n °2 [−10 ◦, 10 ◦] 1◦
+
+DeepG 65.0 2389.70 Super-DeepG 65.0 7.58 Super-DeepG ∗ 65.0 1.90 MNIST 100.0% Scaling n °3 [−2, 2] 4
+
+DeepG 98.0 4.25 Super-DeepG 99.0 0.16 Super-DeepG ∗ 99.0 0.063 CIFAR10 79.0% Scaling n °4 [−1, 1] 1
+
+DeepG 69.0 248.13 Super-DeepG 75.0 0.83 Super-DeepG ∗ 75.0 0.20 MNIST 100.0% Shearing n °5 [−2, 2] 4
+
+DeepG 98.0 4.30 Super-DeepG 100.0 0.16 Super-DeepG ∗ 100.0 0.065 CIFAR10 72.0% Shearing n °6 [−2, 2] 2
+
+DeepG 69.0 278.29 Super-DeepG 69.0 0.71 Super-DeepG ∗ 69.0 0.18 MNIST 99.0% Translation n °7 [−1, 1] × [−1, 1] 0.2 DeepG 98.0 460.93 Super-DeepG 98.0 1.34 Table 2: Comparison of DeepG and Super-DeepG on PGD networks with equivalent parameters (see Table 7 Appendix C.2). ∗Results obtained with P = 10 samples. Interval size refers to the range split; time refers to the total certification duration. result of different training strategies (see their respective papers for training details). Detailed descriptions of network architectures are provided in Appendix C.1. To ensure our results are directly comparable to prior work, we adopt the evaluation protocols from the original papers: we evaluate the PGD networks on the first 100 test images, and the CGT networks on the first 10000 test images. For TinyImageNet, we use the pre-trained model [22] from the VNN-Comp’24 benchmark [6], which was not specialized with geometric-robust training. We evaluate this model on the first 100 test images. 
+
+Metrics We use the same metrics as most of the literature on neural network robustness verification [2, 21], namely the percentage of test samples guaranteed to be correctly classified under the specified transforma-tions denoted as Certified (%) , and the certification time per image. For reference, we compute the Clean accuracy (%) , that refers to the percentage of test samples correctly classified without any transformation applied. We evaluate it on the same set of images used in our experiments, as it provides an upper bound for the Certified (%) metric. For each network architecture and each verifier, we evaluate one range of transformation parameters. Each range is split into fixed-size intervals. For example, a rotation range of [−10 ◦, 10 ◦], denoted R(10 ◦), with a 2 ◦ interval size (IS) is divided into: [ −10 ◦, −8◦], [−8◦, −6◦], . . . , [8 ◦, 10 ◦]. 9Comparison with other methods First, we seek to determine whether Super-DeepG matches DeepG 
+
+in terms of certification rates ensuring that our reformulation performs similarly. Second, we want to reach competitive verification times with respect to the faster tool FGV. Third, we aim to demonstrate that our method outperforms PWL. The experimental validation is performed in two stages. First, to ensure our reformulation performs similarly, we compare DeepG and Super-DeepG using identical evaluation parameters. The results are detailed in Table 2. Note that DeepG could not be run on the CGT model for portability issues. Second, we adjust the interval size for each tool to compare runtimes at similar certification rates against FGV and PWL (see results in Tables 3 and 4 for FGV and Observation 4 for PWL). These results lead to five key observations. 
+
+Observation 1: Super-DeepG is faster than DeepG, with similar (or better) accuracy. To compare with DeepG , we use the smallest value of N that satisfies Equation (17) which relates the number of subdivisions to the precision hyperparameter ε. We also use a Lipschitz upper-bound that corresponds to the maximum value Lmax observed across all pixels in the test images. This setup guarantees that our certified accuracy will be at least as high as that of DeepG , which is confirmed by the experiments. Note that our CPU times are slower than those reported in the original paper (this is due to the use of a docker and a less performing CPU). In Table 2, DeepG takes 210 .72s per MNIST image at [ −30 ◦, 30 ◦] to certify 98%, whereas Super-DeepG achieves 98% in 0.40s/image, up to 526 × faster. This trend persists for CIFAR10 ([ −10 ◦, 10 ◦]) with interval size of 1 ◦, where DeepG takes 2389 .70s/image to certify 65% and Super-DeepG 
+
+only 7.58s/image with 65% certified images, making it approximately 315 × faster. Overall, our method consistently accelerates the computation time. 
+
+Observation 2: On CGT networks we match FGV’s certified accuracy. Table 3 compares Super-
+
+DeepG with FGV on CGT networks trained for FGV. To ensure fairness, we matched certified accuracy and compared runtimes (we adjust the interval size used by Super-DeepG so that its certified accuracy matches). On MNIST, both methods certify 94%, but FGV is significantly faster. On TinyImageNet, the runtime of Super-DeepG remains within a small factor of FGV. On CIFAR10, both reach 63% accuracy, and Super-DeepG is slightly faster, even though FGV is the fastest known method for geometric certification. This shows that while FGV performs best on networks tailored to it, Super-DeepG remains competitive in both certified accuracy and speed, while not relying on any specialized geometric training.                               
+
+> Dataset Transf. Clean acc. Interval size Certif. Method Cert. Acc. (%) Time (s/im)
+> MNIST R(30 °) 99.17% 0.25 ◦FGV 94.2 0.0020 2◦Ours 94.3 0.17 CIFAR10 R(10 °) 80.47% 0.0002 ◦FGV 63.2 1.04 0.0125 ◦Ours 63.1 0.97 TinyImageNet Sh(2) 27.28% 0.00002 FGV 18.7 0.17 0.001 Ours 19.4 0.54 TinyImageNet Sc(2) 26.12% 0.00002 FGV 15.2 0.16 0.001 Ours 15.9 0.48 TinyImageNet R(5 °) 26.01% 0.001 ◦FGV 13.1 0.79 0.08 ◦Ours 13.0 1.28
+
+Table 3: Super-DeepG performs effectively on models trained for the FGV certification method (CGT network). 10 Observation 3: On networks without geometric training, we achieve better precision and better runtime than FGV On networks not trained with CGT, FGV is slower and overall less accurate than Super-DeepG . Even with very small interval sizes, FGV still fails to match Super-DeepG certification levels. For example, for a rotation in [ −10 ◦, 10 ◦] on CIFAR10, FGV has a certification rate plateauing at 23% while Super-DeepG reaches 65% in 1.90s/image. A smaller interval size leads to slower performance for FGV. This is highlighted in Table 4 (highlighted column is the observed plateau). This trend is observed for other parameters and transformations (see Appendix C.4).                          
+
+> R(10 ◦)FGV Ours Interval size ( ◦)2·10 −32·10 −42·10 −52·10 −61Certified (%) 6.0 19.0 23.0 23.0 65.0
+> Time (s) 0.57 5.39 44.40 443.00 1.90
+
+Table 4: FGV plateaus on PGD networks, while Super-DeepG achieves significantly better certified accuracy. 
+
+Observation 4: Favorable comparison with PWL PWL is designed for high precision over a few wide sub-intervals, whereas our method leverages GPU parallelization to efficiently process many sub-intervals. As demonstrated in Table 5, when we run our method under PWL’s configuration (Interval size=6, P=1000, N=14500). PWL is more precise: 91% certified accuracy versus our 86% (aligning with the 92 .9% vs 87 .8% reported on 98 clean images in their paper). However, even in this non-optimal setting, our method is already faster (1.14s/image vs 28.3s/image). Our method’s advantage appears when we use finer splits. By splitting the domain into more sub-intervals (Interval size=1), our accuracy increases to 98%. This approach also lets us reduce other hyper-parameters ( N from 14500 to 250) while maintaining 98% accuracy. Using configuration (Interval size=1, P=10, N=250), our method achieves 98% certified accuracy in 0 .40s/image, thereby outperforming the reported PWL configuration in both accuracy and runtime.               
+
+> Tool Config (IS/P/N) Cert. (%) (98 clean im) Time (s/im) PWL 6 / 1000 / 14500 91.0 (92.9%=91/98) 28.30 Ours 6 / 1000 / 14500 86.0 (87.8%=86/98) 1.14 Ours 1 / 1000 / 14500 98.0 (100.0%=98/98) 8.54 Ours 1 / 10 / 250 98.0 (100.0%=98/98) 0.40
+
+Table 5: Comparison with PWL using different configuration hyperparameters. Rotation in [ −30 ◦, 30 ◦] on MNIST. 
+
+Observation 5: Super-DeepG achieves significant geometric certification results on TinyIma-geNet without training specifically for geometric robustness. While DeepG and PWL does not scale to TinyImageNet, Super-DeepG does. On models not trained for FGV, Super-DeepG achieves higher certified accuracy in significantly less time than FGV. For a [ −5◦, 5◦] rotation, our method certifies 18% of images in 3.73s/image, while FGV runs out of memory (OoM) attempting. This trend is observed for other transformations (see Appendix C.4). 
+
+Influence of the hyper-parameters P and interval size. Step 1(-bis) could be considered useless, since Step 3 can correct any inaccurate bounds. Experiments still show that performing Step 1(-bis) does significantly improve the precision. However, computing too many sample points is unnecessary as shown in Figure 4. We use a large interval (Interval size = 6 ◦) to reveal potential variation, but observe no major improvement beyond P = 10. For small intervals (Interval size = 0 .5◦), certified accuracy is constant from the start. 11 R(5 ◦) FGV Ours Interval size ( ◦) 4 · 10 −4 3 · 10 −4 2 · 10 −4 1 · 10 −4 0.04 0.02 Certified (%) 2.0 2.0 10.0 OoM 10.0 18.0       
+
+> Time (s) 5.06 6.78 10.90 –1.46 3.73
+
+Table 6: On TinyImageNet VNN-Comp’24 model, Super-DeepG achieves higher accuracy than FGV in less time. 
+
+Figure 4: Increasing P beyond 10 brings no significant gains (log scale). Rotation in [ −30 ◦, 30 ◦] on MNIST. 
+
+Influence of the hyper-parameters N and interval size Reducing the interval size improves certified accuracy significantly, reaching the clean accuracy baseline, as illustrated in Figure 5 with P =10 and rotations in [ −30 ◦, 30 ◦]. Increasing N from 250 to 25000 yields marginal benefits while increasing computation time. The optimal trade-off is reached at an interval size of 1, where N =250 gives the optimal certified accuracy with 0.40 s/image. 
+
+Figure 5: Smaller interval sizes improve certified accuracy more than increasing N (rotations in [ −30 ◦, 30 ◦]on MNIST shown), log scale. 
+
+# 7 Conclusion 
+
+We proposed Super-DeepG a method for computing linear constraints on geometric image transformations. Our work builds upon DeepG , which uses Lipschitz optimization to compute tight linear relaxations. How-12 ever, both DeepG and subsequent precision-focused methods like PWL rely on computationally expensive solvers that limit their scalability. Inspired by FGV, which achieve remarkable speed via GPU-optimization and simpler interval-based abstractions, we pursued a new direction. Instead of sacrificing precision for speed, we reformulated the core optimization problems of DeepG to be analytically solvable and fully tensorized .This redesign eliminates computational bottlenecks and enables massive GPU parallelization. Although this work currently focuses on classification, the next step for runway detection is to extend our method to object detection and its specific constraints. Future work will also extend this framework to certify a broader set of transformations and more complex safety properties. 
+
+# A Reminder of geometric transformations on image coordinates 
+
+The inverse formulas of the geometric transformations used in this paper applied to an image coordinate (x, y ) are: Rotation R−1 
+
+> θ
+
+(x, y ) Translation T −1 
+
+> v1,v 2
+
+(x, y )
+
+ cos θ sin θ
+
+− sin θ cos θ
+
+  xy
+
+ x − v1
+
+y − v2
+
+
+
+Scaling Sc −1 
+
+> λ
+
+(x, y ) Shearing Sh −1 
+
+> m
+
+(x, y )
+
+ 1 
+
+> λ
+
+00 1
+
+> λ
+
+  xy
+
+ 1 −m
+
+0 1
+
+  xy
+
+
+
+# B Supplementary details for Super-DeepG steps 
+
+## B.1 Proof by contradiction 
+
+Let us consider problem (9), and let us assume that it accepts an optimal solution ( A∗, B ∗) that passes by none of the points  θp, g x(θp) for p = 1 , . . . , P . This means that all residuals are strictly positive. Let δ
+
+denote the (strictly positive) value of the smallest residual: δ := min p=1 ,...,P r(θp; A∗, B ∗). We have: 
+
+r(θp; A∗, B ∗) ≥ δ > 0, for p = 1 , . . . , P 
+
+. Let us consider the candidate obtained by shifting the solution by δ/ 2: 
+
+A′ = A∗ B′ = B∗ + δ/ 2. All the residuals remain positive for ( A′, B ′), which means it satisfies the constraints: 
+
+r(θp; A′, B ′) = gx(θp) − A′ · θp − B′
+
+= gx(θp) − A∗ · θp − B∗ − δ/ 2= r(θp; A∗, B ∗) − δ/ 2
+
+≥ δ − δ/ 2 = δ/ 2The objective value of ( A′, B ′) is less than that of ( A∗, B ∗): 1
+
+P
+
+> P
+
+X
+
+> p=1
+
+r(θp; A′, B ′) = 1
+
+P
+
+> P
+
+X
+
+> p=1
+
+r(θp; A∗, B ∗) − δ/ 2This contradicts our assumption that ( A∗, B ∗) is optimal. This proves by contradiction that if ( A∗, B ∗) is an optimal solution, there exists at least one p∗ such that r(θp∗
+
+; A∗, B ∗) = 0. 13 B.2 Step 1-bis and 3-bis for multi-dimensional inputs 
+
+The two following sections extend the mathematical formulations to the general case where κ ∈ Rd. The main paper focused on the one-dimensional case κ = θ ∈ R, corresponding to transformations such as rotation, scaling, or shearing. Here, we provide details for higher-dimensional transformations, including translation (d = 2). 
+
+## B.3 Step 1-bis: Analytically unsound bounds for multi-dimensional inputs 
+
+Let κ ∈ Rd be a perturbation vector bounded by κ ≤ κ ≤ κ such that [ κ, κ ] = [ κ1, κ 1] × [κ2, κ 2] ×· · · × [κd, κ d]. The geometric transformation gx : Rd → Rn×m, obtained by composing the d-dimensional geometric transformations with an interpolation, associates an image to any parameter vector κ. We sample 
+
+P affinely independent vectors κ(p) = ( κ(p)1 , . . . , κ (p) 
+
+> d
+
+) p = 1 , . . . , P , from the domain [ κ, κ ] and compute the P associated images gx(κ(p)). The objective is to find the tightest pair of hyperplanes, a lower one with coefficients ( A, B ) ∈ (Rd×n×m, Rn×m) and an upper one with coefficients ( A, B ) ∈ (Rd×n×m, Rn×m), that encloses every sampled point ( κ(p), g x(κ(p))), i.e, ∀κ ∈ { κ(1) , ..., κ (P )}:
+
+> d
+
+X
+
+> i=1
+
+κiAi + B ≤ gx(κ) ≤
+
+> d
+
+X
+
+> i=1
+
+κiAi + B (18) To proceed, introduce the residual functions: 
+
+r(κ; A, B ) = gx(κ) −
+
+> d
+
+X
+
+> i=1
+
+κiAi + Br(κ; A, B ) = gx(κ) −
+
+> d
+
+X
+
+> i=1
+
+κiAi + B
+
+For the sampled points, the constraints from (18) become: 
+
+r(κ; A, B ) ≥ 0, r(κ; A, B ) ≤ 0 ∀κ ∈ { κ(1) , ..., κ (P )}
+
+To minimize the gap between the affine bound and the sampled values, the average residual should be as small as possible. Therefore, A, B are the solutions of an optimization problem that minimizes the average residual while enforcing negativity for every sample point. A similar process is applied to compute an upper bound. This is formulated as the following P optimization problem: min 
+
+> A,B
+
+(
+
+1
+
+P
+
+> P
+
+X
+
+> p=1
+
+r(κ(p); A, B )
+
+)
+
+subject to r(κ(p); A, B ) ≥ 0, ∀p = 1 , . . . , P 
+
+(P)
+
+Proposition 1. The optimization problem P accepts an optimal solution ( A, B ) such that there exists a subset of d + 1 affinely independent sample indices J = {p1, . . . , p d+1 } ⊂ { 1, . . . , P } that verify: 
+
+> d
+
+X
+
+> i=1
+
+κ(p) 
+
+> i
+
+Ai + B = gx
+
+ κ(p), ∀p ∈ J (19) 
+
+Proof of proposition 1. We consider the optimization problem P for a fixed pixel position ( u, v ), where the affine coefficients are denoted by ( a, b ) ∈ Rd × R. The residual constraint for sample p can be written 14 as: κ(p)⊤a + b ≤ pu,v (κ(p)), ∀p = 1 , . . . , P . Define the stacked variable z := ( a⊤, b )⊤ ∈ Rd+1 . Then the constraints define a polyhedron of the form: {z ∈ Rd+1 | Cz ≤ e} where each row of C ∈ RP ×(d+1) 
+
+is given by ( κ(p)⊤, 1), and e ∈ RP is such ep = pu,v (κ(p)). Any set of d + 1 linearly independent active constraints defines a unique basic solution of this polyhedron, at least one of which is optimal [10, 4, 1]. These correspond to a subset of d + 1 affinely independent sample points κ(p) for which the inequality holds with equality: κ(p)⊤a + b = pu,v (κ(p)), ∀p ∈ J , for some index set J = {p1, . . . , p d+1 } ⊂ { 1, . . . , P }, with 
+
+|J | = d + 1 and the {κ(p)}p∈J affinely independent. Applying the same reasoning to each pixel position (u, v ), we obtain equation (19). Based on proposition 1, we solve P by enumerating all   Pd+1 
+
+ subsets of d + 1 affinely independent samples, computing the corresponding ( A, B ), verifying feasibility with respect to the residual constraints, and retaining the feasible candidate that yields the smallest objective value. 
+
+B.3.1 Select d + 1 distinct parameters 
+
+In light of Proposition 1, we select a subset of d + 1 affinely independent parameter vectors κ(1) , . . . , κ (d+1) ∈
+
+Rd. We assume that the optimal affine lower bound passes through these points, i.e., they satisfy Equa-tion (19). 
+
+B.3.2 Eliminate B
+
+Subtract the equation at p = d + 1 from Equation (19) for p = 1 , . . . , d :
+
+> d
+
+X
+
+> i=1
+
+(κ(p) 
+
+> i
+
+− κ(d+1)  
+
+> i
+
+)Ai = gx
+
+ κ(p) − gx
+
+ κ(d+1) 
+
+B.3.3 Solving the d × d system 
+
+Collect the d equations obtained above into matrix form. Write p = 1 , . . . , d i = 1 , . . . , d :
+
+Kpi := ( κ(p) 
+
+> i
+
+− κ(d+1)  
+
+> i
+
+) ∈ Rd×d
+
+Gp := gx
+
+ κ(p) − gx
+
+ κ(d+1)  ∈ Rd×n×m
+
+The problem reduces to a linear system where the unknown is the slope tensor A ∈ Rd×n×m: KA = G.Because the d + 1 selected points are affinely independent, the matrix K has full rank and is therefore invertible. We obtain a unique vector: A = K−1G. With A known, the bias is recovered from any point, for 
+
+k = 1: B = gx
+
+ κ(1)  − Pni=1 Ai κ(1) 
+
+> i
+
+B.3.4 Feasible candidates 
+
+If ∃p ∈ 1, . . . , P such that r(κ(p); A, B ) ≤ 0. The chosen candidate must be discarded. 
+
+B.3.5 Enumerating candidates 
+
+We repeat this procedure for all subsets of d + 1 points among the P possible parameter combinations. For each subset, we retain the pair ( A, B ), and finally select the one that yields the lowest value for the optimi-sation problem (9). A similar process is applied for the upper bound ( A, B ). In practice, this enumeration is not a computational bottleneck, as experiments confirm that a very small number of sample points P is sufficient (see Figure 4), while the dimension d of the geometric transformations is low. 15 B.4 Step 3-bis: Correction of the approximation error for multi-dimensional inputs 
+
+The bounds computed in the previous step hold for the sampled points, but they may fail to bound gx(κ)from below over the full domain [ κ, κ ]. The goal of this step is to add a correction term δ∗ in order to have a valid lower bound over the entire domain: 
+
+∀κ ∈ [κ, κ ]
+
+> d
+
+X
+
+> i=1
+
+κiAi + B − gx(κ) + δ∗ ≤ 0where δ∗ = min  
+
+> κ∈[κ,κ ]
+
+r(κ, A, B ). Hovewer, computing the exact minimum of r(κ, A, B ) is computationally hard due to the nonlinearity and nonconvexity of the function. To do so, we compute an approximation δ ≤ δ∗
+
+by partitioning the domain and applying the Lipschitz continuity (with a Lipschitz constant per dimension) on each partition. The residual r is evaluated over the hyper-rectangle: [κ, κ ] = [ κ1, κ 1] × [κ2, κ 2] × · · · × [κd, κ d]We subdivide each dimension interval into N equal parts, so that for each i = 1 , . . . , d we have: [ κi, κ i] = 
+
+SN −1
+
+> ℓ=0
+
+κ(ℓ) 
+
+> i
+
+, κ (ℓ+1) 
+
+> i
+
+. This defines the uniform spacing between consecutive subdivision points: 
+
+κ(ℓ+1)  
+
+> i
+
+− κ(ℓ) 
+
+> i
+
+= κi − κi
+
+N (20) Let us denote by c(ℓ) 
+
+> i
+
+= ( κ(ℓ+1)  
+
+> i
+
++ κ(ℓ) 
+
+> i
+
+)/2 ∈ R the center of one such partition. The maximum distance between any point in a sub-interval and its center equals half the sub-interval width, using (20): max   
+
+> κi∈[κ(ℓ)
+> i, κ (ℓ+1)
+> i]
+
+κi − c(ℓ) 
+
+> i
+
+= κi − κi
+
+2N
+
+Each of the d dimensions is divided into N equal parts, yielding N d total cells. Let Ch ∈ Rd denote the center of the h-th cell. Evaluating the residual at these centers, we define: 
+
+m = min  
+
+> h=0 ,...,N d
+
+r Ch; A, B 
+
+Finally, using Lipschitz continuity (with a Lipschitz constant per dimension), we obtain the correction term: 
+
+m −
+
+> d
+
+X
+
+> i=1
+
+max κ ∂ir(κ) κi − κi
+
+2N ≤ min  
+
+> κ∈[κ,κ ]
+
+r(κ, A, B )And we use this bound as a correction term: 
+
+δ = m −
+
+> d
+
+X
+
+> i=1
+
+max κ ∂ir(κ) κi − κi
+
+2N
+
+The same process is applied for the upper bound. Finally, we have: 
+
+∀κ ∈ [κ, κ ],
+
+> d
+
+X
+
+> i=1
+
+κiAi + B + δ ≤ gx(κ) ≤
+
+> d
+
+X
+
+> i=1
+
+κiAi + B + δ
+
+16 C Supplementary details for the experiments section 
+
+## C.1 Neural network architectures 
+
+We describe the network architectures for each dataset below, representing a convolutional layer as a 4-tuple consisting of (number of filters, kernel size, stride, and padding) as presented in [21]: 
+
+• MNIST: 2 conv layers {(32 , 4, 2, 1) , (64 , 4, 2, 1) } followed by 2 linear layers with {200 , 10 } neurons. All layers are followed by a ReLU activation, except for the final output layer. 
+
+• CIFAR10: 3 conv layers {(32 , 3, 1, 1), (32 , 4, 2, 1), (64 , 4, 2, 1) } followed by 2 linear layers with {150 , 10 }
+
+neurons. All layers are followed by a ReLU activation, except for the final output layer. 
+
+• TinyImageNet: 5 conv layers {(64 , 3,1, 1), (64 , 3, 1, 1), (128 , 3, 2, 1), (128, 3, 1, 1), (128 , 3, 2, 1) }
+
+followed by 2 linear layers with {512 , 200 } neurons. Each conv layer is followed by a batch norm layer then a ReLU activation. The first linear layer is followed by a ReLU activation. For the architectures described above, the network weights are sourced from the PGD-trained models pre-sented in [2] and the CGT-trained models from [21]. 
+
+## C.2 Table of hyper-parameters linking DeepG and Super-DeepG 
+
+Table 7 lists the hyper-parameter configurations used to align Super-DeepG with DeepG for fair comparison. N° Lmax 
+
+Interval size ε Nmax P1A 29.00 1° 0.001 247 10 1B 29.00 6° 0.0001 14500 1000 2 22.20 1° 0.0001 1887 1000 3 29.41 0.040 0.006 98 1000 4 50.67 0.010 0.001 254 1000 5 19.12 0.040 0.006 64 1000 6 26.31 0.020 0.0001 2631 100 Table 7: Parameter selection for comparison with DeepG . Configuration numbers appear in the first column (Table 2). 
+
+## C.3 Parameter configurations for experiments 
+
+The hyperparameter configurations for our experiments are available in Experiment/specification . In Table 2 we selected parameters equivalent to those of DeepG , while the parameters in Table 3 were chosen to ensure identical certified accuracy for both FGV and Super-DeepG .
+
+## C.4 Comparison with FGV on networks without geometric training 
+
+Table 8 shows the certification rates of FGV and Super-DeepG on PGD-trained and VNNComp’24 networks. For FGV, the percentage of certified images slightly increases as the interval size decreases, but we observe that it would not be interesting to reduce the interval size any further, since the calculation time grows rapidly and the certification percentage reaches a plateau. Meanwhile, Super-DeepG achieves significantly better certified accuracy. Here, R, Sc, Sh, and T stand for rotations, scaling, shearing, and translations, respectively. 17 References 
+
+[1] K. M. Ashish Goel, Benjamin Van Roy. Introduction to Optimization. https://web.stanford.edu/ ~ashishg/msande111/notes/chapter3.pdf , 2008. [2] M. Balunovic, M. Baader, G. Singh, T. Gehr, and M. Vechev. Certifying geometric robustness of neural networks. Advances in Neural Information Processing Systems , 32, 2019. [3] B. Batten, Y. Zheng, A. De Palma, P. Kouvaros, and A. Lomuscio. Verification of geometric robustness of neural networks via piecewise linear approximation and lipschitz optimisation. In ECAI 2024 , pages 2362–2369. IOS Press, 2024. [4] D. Bertsimas and J. N. Tsitsiklis. Introduction to linear optimization , volume 6. Athena scientific Belmont, MA, 1997. [5] Y. Bougacha, G. Delhomme, M. Ducoffe, A. Fuchs, J.-B. Ginestet, J. Girard, S. Kraiem, F. Mamalet, V. Mussot, C. Pagetti, et al. Lard 2.0: Enhanced datasets and benchmarking for autonomous landing systems. In 13th European Congress of Embedded Real Time Systems (ERTS) , 2026. [6] C. Brix, S. Bak, T. T. Johnson, and H. Wu. The fifth international verification of neural networks competition (vnn-comp 2024): Summary and results. arXiv preprint arXiv:2412.19985 , 2024. [7] P. Cousot and R. Cousot. Abstract interpretation: a unified lattice model for static analysis of programs by construction or approximation of fixpoints. In Proceedings of the 4th ACM SIGACT-SIGPLAN symposium on Principles of programming languages , pages 238–252, 1977. [8] M. Fischer, M. Baader, and M. Vechev. Scalable certified segmentation via randomized smoothing. In 
+
+International Conference on Machine Learning , pages 3340–3351. PMLR, 2021. [9] T. Gehr, M. Mirman, D. Drachsler-Cohen, P. Tsankov, S. Chaudhuri, and M. Vechev. Ai2: Safety and robustness certification of neural networks with abstract interpretation. In 2018 IEEE symposium on security and privacy (SP) , pages 3–18. IEEE, 2018. [10] F. S. Hillier and G. J. Lieberman. Introduction to operations research . McGraw-Hill, 2015. [11] G. Katz, D. A. Huang, D. Ibeling, K. Julian, C. Lazarus, R. Lim, P. Shah, S. Thakoor, H. Wu, A. Zelji´ c, et al. The marabou framework for verification and analysis of deep neural networks. In Computer Aided Verification: 31st International Conference, CAV 2019, New York City, NY, USA, July 15-18, 2019, Proceedings, Part I 31 , pages 443–452. Springer, 2019. [12] L. Li, M. Weber, X. Xu, L. Rimanic, B. Kailkhura, T. Xie, C. Zhang, and B. Li. Tss: Transformation-specific smoothing for robustness certification. In Proceedings of the 2021 ACM SIGSAC Conference on Computer and Communications Security , pages 535–557, 2021. [13] C. Liu, T. Arnon, C. Lazarus, C. Strong, C. Barrett, M. J. Kochenderfer, et al. Algorithms for verifying deep neural networks. Foundations and Trends ® in Optimization , 4(3-4):244–404, 2021. [14] M. H. Meng, G. Bai, S. G. Teo, Z. Hou, Y. Xiao, Y. Lin, and J. S. Dong. Adversarial robustness of deep neural networks: A survey from a formal verification perspective. IEEE Transactions on Dependable and Secure Computing , 2022. [15] J. Mohapatra, T.-W. Weng, P.-Y. Chen, S. Liu, and L. Daniel. Towards verifying robustness of neural networks against a family of semantic perturbations. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 244–252, 2020. 18 [16] R. Munos. Optimistic optimization of a deterministic function without the knowledge of its smoothness. 
+
+Advances in neural information processing systems , 24, 2011. [17] G. Singh, M. Balunovic, A. Ruoss, C. M¨ uller, J. Maurer, A. Hoffmann, M. Baader, M. Mirman, T. Gehr, P. Tsankov, et al. Eran user manual. ETH Z¨ urich , 2020. [18] G. Singh, T. Gehr, M. P¨ uschel, and M. Vechev. An abstract domain for certifying neural networks. 
+
+Proceedings of the ACM on Programming Languages , 3(POPL):1–30, 2019. [19] C. Urban and A. Min´ e. A review of formal methods applied to machine learning. arXiv preprint arXiv:2104.02466 , 2021. [20] K. Xu, Z. Shi, H. Zhang, Y. Wang, K.-W. Chang, M. Huang, B. Kailkhura, X. Lin, and C.-J. Hsieh. Automatic perturbation analysis for scalable certified robustness and beyond. Advances in Neural Information Processing Systems , 33:1129–1141, 2020. [21] R. Yang, J. Laurel, S. Misailovic, and G. Singh. Provable defense against geometric transformations. 
+
+arXiv preprint arXiv:2207.11177 , 2022. [22] H. Zhang. VNN-COMP 2024 TinyImageNet Benchmark. https://github.com/huanzhang12/ vnncomp2024_tinyimagenet_benchmark , 2024. [23] H. Zhang, T.-W. Weng, P.-Y. Chen, C.-J. Hsieh, and L. Daniel. Efficient neural network robustness certification with general activation functions. Advances in neural information processing systems , 31, 2018. [24] Y. Zhang, P. Kouvaros, and A. Lomuscio. Scalable neural network geometric robustness validation via h¨ older optimisation. In The Thirty-ninth Annual Conference on Neural Information Processing Systems ,2025. 19 Transf. Dataset Clean acc. Tool Interval size Cert. (%) Time per im (s) 
+
+R(10) CIFAR10 PGD (74.0%) FGV 2 × 10 −3 6.0 0.57 2 × 10 −4 19.0 5.39 2 × 10 −5 23.0 44.40 2 × 10 −6 23.0 443 ours 1 65.0 1.90 Sc(1) CIFAR10 PGD (79.0%) FGV 5 × 10 −5 5.0 0.044 5 × 10 −6 19.0 0.23 5 × 10 −7 24.0 2.02 5 × 10 −8 24.0 19.70 5 × 10 −9 24.0 166 ours 0.01 75.0 0.20 Sh(2) CIFAR10 PGD (72.0%) FGV 2.5 × 10 −4 3.0 0.034 2.5 × 10 −5 20.0 0.10 2.5 × 10 −6 22.0 0.80 2.5 × 10 −7 23.0 7.54 2.5 × 10 −8 23.0 67.50 ours 0.02 69.0 0.18 R(30) MNIST PGD (98.0%) FGV 2.5 × 10 −1 0.0 0.033 2.5 × 10 −2 58.0 0.30 2.5 × 10 −3 70.0 2.81 2.5 × 10 −4 70.0 28.00 ours 1 98.0 0.40 R(5) TinyImageNet VNNComp’24 (59.0%) FGV 5 × 10 −4 1.0 4.05 4 × 10 −4 2.0 5.06 3 × 10 −4 2.0 6.78 2 × 10 −4 10.0 10.09 1 × 10 −4 / OOM Ours 0.02 18.0 3.73 Sc(2) TinyImageNet VNNComp’24 (59.0%) FGV 5 × 10 −6 7.0 1.80 1 × 10 −6 30.0 9.08 7 × 10 −7 35.0 12.96 6 × 10 −7 35.0 24.04 5 × 10 −7 / OOM Ours 0.0002 36.0 4.34 Sh(2) TinyImageNet VNNComp’24 (59.0%) FGV 3 × 10 −6 38.0 2.99 2 × 10 −6 41.0 4.48 1 × 10 −6 47.0 8.96 9 × 10 −7 47.0 9.95 8 × 10 −7 47.0 11.23 Ours 0.0003 48.0 3.16 
+
+Table 8: On networks without geometric training, Super-DeepG achieves significantly better results than FGV. 20
