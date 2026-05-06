@@ -6,88 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-05-05
-- 运行时间：2026-05-05 20:33:21 UTC
+- 最新运行日期：2026-05-06
+- 运行时间：2026-05-06 20:43:07 UTC
 - 运行状态：成功
-- 本次总论文数：22
-- 精读区：10
+- 本次总论文数：19
+- 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读10篇、速读12篇论文，聚焦AI安全与合成媒体检测前沿  
-2) 高分论文集中于对抗性隐藏提示防御和合成图像检测技术突破  
-3) 建议关注AI安全防御与合成媒体检测技术，可优先阅读9分以上论文了解核心进展
-- 详情：[/202605/05/README](/202605/05/README)
+今日精读7篇、速读12篇论文，聚焦多轮对话与深度伪造技术等前沿领域  
+高分论文探讨多轮对话中用户意图澄清机制及深度伪造模型动态防御策略  
+建议关注多轮对话意图识别与深度伪造检测技术的最新进展
+- 详情：[/202605/06/README](/202605/06/README)
 
 ### 精读区论文标签
-1. [SafeReview: Defending LLM-based Review Systems Against Adversarial Hidden Prompts](/202605/05/2604.26506v1-safereview-defending-llm-based-review-systems-against-adversarial-hidden-prompts)  
+1. [Useless but Safe? Benchmarking Utility Recovery with User Intent Clarification in Multi-Turn Conversations](/202605/06/2604.27093v1-useless-but-safe-benchmarking-utility-recovery-with-user-intent-clarification-in-multi-turn-conversations)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击防御策略
-2. [HiMix: Hierarchical Artifact-aware Mixup for Generalized Synthetic Image Detection](/202605/05/2604.27903v1-himix-hierarchical-artifact-aware-mixup-for-generalized-synthetic-image-detection)  
+   evidence：研究对抗扰动对生成模型的影响
+2. [Adaptive Equilibrium: Dynamic Weighting Framework for Generalized Interruption of DeepFake Models](/202605/06/2605.00443v1-adaptive-equilibrium-dynamic-weighting-framework-for-generalized-interruption-of-deepfake-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的合成图像检测方法
-3. [End-to-End Autoregressive Image Generation with 1D Semantic Tokenizer](/202605/05/2605.00503v2-end-to-end-autoregressive-image-generation-with-1d-semantic-tokenizer)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：端到端自回归图像生成方法
-4. [STARE: Step-wise Temporal Alignment and Red-teaming Engine for Multi-modal Toxicity Attack](/202605/05/2605.00699v1-stare-step-wise-temporal-alignment-and-red-teaming-engine-for-multi-modal-toxicity-attack)  
+   evidence：对抗攻击防御框架
+3. [Manifold-Constrained Adversarial Training for Long-Tailed Robustness via Geometric Alignment](/202605/06/2605.02183v1-manifold-constrained-adversarial-training-for-long-tailed-robustness-via-geometric-alignment)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗训练与几何对齐
+4. [ARGUS: Policy-Adaptive Ad Governance via Evolving Reinforcement with Adversarial Umpiring](/202605/06/2605.02200v1-argus-policy-adaptive-ad-governance-via-evolving-reinforcement-with-adversarial-umpiring)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-5. [Almost for Free: Crafting Adversarial Examples with Convolutional Image Filters](/202605/05/2605.01098v1-almost-for-free-crafting-adversarial-examples-with-convolutional-image-filters)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击生成方法
-6. [Disciplined Diffusion: Text-to-Image Diffusion Model against NSFW Generation](/202605/05/2605.01113v1-disciplined-diffusion-text-to-image-diffusion-model-against-nsfw-generation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击下的扩散模型安全防护
-7. [Certified vs. Empirical Adversarial Robust-ness via Hybrid Convolutions with Attention Stochasticity](/202605/05/2605.01519v1-certified-vs-empirical-adversarial-robust-ness-via-hybrid-convolutions-with-attention-stochasticity)  
+5. [WorldJen: An End-to-End Multi-Dimensional Benchmark for Generative Video Models](/202605/06/2605.03475v1-worldjen-an-end-to-end-multi-dimensional-benchmark-for-generative-video-models)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：与对抗攻击的图像防御策略相关
-8. [Cross-Domain Adversarial Augmentation: Stabilizing GANs for Medical and Handwriting Data Scarcity](/202605/05/2605.01815v1-cross-domain-adversarial-augmentation-stabilizing-gans-for-medical-and-handwriting-data-scarcity)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-9. [Detecting Adversarial Data via Provable Adversarial Noise Amplification](/202605/05/2605.02109v1-detecting-adversarial-data-via-provable-adversarial-noise-amplification)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：提出检测对抗数据的方法以提升模型鲁棒性
-10. [Heterogeneous Model Fusion for Privacy-Aware Multi-Camera Surveillance via Synthetic Domain Adaptation](/202605/05/2605.02169v1-heterogeneous-model-fusion-for-privacy-aware-multi-camera-surveillance-via-synthetic-domain-adaptation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：使用扩散模型生成对抗扰动
+6. [CARD: Non-Uniform Quantization of Visual Semantic Unit for Generative Recommendation](/202605/06/2604.26427v1-card-non-uniform-quantization-of-visual-semantic-unit-for-generative-recommendation)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动生成方法
+7. [Towards High Fidelity Face Swapping: A Comprehensive Survey and New Benchmark](/202605/06/2605.00883v1-towards-high-fidelity-face-swapping-a-comprehensive-survey-and-new-benchmark)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：人脸交换的生成模型综述
 
 ### 速读区论文标签
-1. [Beyond Fidelity: Semantic Similarity Assessment in Low-Level Image Processing](/202605/05/2604.25408v1-beyond-fidelity-semantic-similarity-assessment-in-low-level-image-processing)  
+1. [VAE-Inf: A statistically interpretable generative paradigm for imbalanced classification](/202605/06/2604.25334v1-vae-inf-a-statistically-interpretable-generative-paradigm-for-imbalanced-classification)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+2. [GPT-Image-2 in the Wild: A Twitter Dataset of Self-Reported AI-Generated Images from the First Week of Deployment](/202605/06/2604.25370v1-gpt-image-2-in-the-wild-a-twitter-dataset-of-self-reported-ai-generated-images-from-the-first-week-of-deployment)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+3. [Attribution-Guided Multimodal Deepfake Detection via Cross-Modal Forensic Fingerprints](/202605/06/2604.26453v1-attribution-guided-multimodal-deepfake-detection-via-cross-modal-forensic-fingerprints)  
    标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击检测与生成方法
+4. [TwinGate: Stateful Defense against Decompositional Jailbreaks in Untraceable Traffic via Asymmetric Contrastive Learning](/202605/06/2604.27861v1-twingate-stateful-defense-against-decompositional-jailbreaks-in-untraceable-traffic-via-asymmetric-contrastive-learning)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击防御方法
+5. [Refinement via Regeneration: Enlarging Modification Space Boosts Image Refinement in Unified Multimodal Models](/202605/06/2604.25636v1-refinement-via-regeneration-enlarging-modification-space-boosts-image-refinement-in-unified-multimodal-models)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击生成方法
+6. [Taming Noise-Induced Prototype Degradation for Privacy-Preserving Personalized Federated Fine-Tuning](/202605/06/2604.27833v1-taming-noise-induced-prototype-degradation-for-privacy-preserving-personalized-federated-fine-tuning)  
+   标签：评分：7.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-2. [Improving Diversity in Black-box Few-shot Knowledge Distillation](/202605/05/2604.25795v1-improving-diversity-in-black-box-few-shot-knowledge-distillation)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像模型保护
-3. [Diffusion Reconstruction towards Generalizable Audio Deepfake Detection](/202605/05/2604.26465v1-diffusion-reconstruction-towards-generalizable-audio-deepfake-detection)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：使用扩散模型生成对抗样本
-4. [GIFGuard: Proactive Forensics against Deepfakes in Facial GIFs via Spatiotemporal Watermarking](/202605/05/2604.26519v1-gifguard-proactive-forensics-against-deepfakes-in-facial-gifs-via-spatiotemporal-watermarking)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-5. [VibeToken: Scaling 1D Image Tokenizers and Autoregressive Models for Dynamic Resolution Generations](/202605/05/2604.24885v1-vibetoken-scaling-1d-image-tokenizers-and-autoregressive-models-for-dynamic-resolution-generations)  
+7. [Beyond Pixel Fidelity: Minimizing Perceptual Distortion and Color Bias in Night Photography Rendering](/202605/06/2604.28136v1-beyond-pixel-fidelity-minimizing-perceptual-distortion-and-color-bias-in-night-photography-rendering)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性提升
-6. [ViPO: Visual Preference Optimization at Scale](/202605/05/2604.24953v1-vipo-visual-preference-optimization-at-scale)  
+   evidence：对抗扰动下的图像模型保护
+8. [AEGIS: A Holistic Benchmark for Evaluating Forensic Analysis of AI-Generated Academic Images](/202605/06/2604.28177v1-aegis-a-holistic-benchmark-for-evaluating-forensic-analysis-of-ai-generated-academic-images)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：视觉生成模型偏好优化方法
-7. [Enabling High Error Tolerance in Satellite Video Transmissions by Generative Semantic Communication](/202605/05/2604.25184v1-enabling-high-error-tolerance-in-satellite-video-transmissions-by-generative-semantic-communication)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：图像生成技术进展
-8. [Recommending Usability Improvements with Multimodal Large Language Models](/202605/05/2604.25420v1-recommending-usability-improvements-with-multimodal-large-language-models)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：图像生成质量的评估方法
-9. [The Kerimov-Alekberli Model: An Information-Geometric Framework for Real-Time System Stability](/202605/05/2604.24083v1-the-kerimov-alekberli-model-an-information-geometric-framework-for-real-time-system-stability)  
+   evidence：对抗扰动对生成模型的影响
+9. [GeoSearch: Augmenting Worldwide Geolocalization with Web-Scale Reverse Image Search and Image Matching](/202605/06/2604.25390v1-geosearch-augmenting-worldwide-geolocalization-with-web-scale-reverse-image-search-and-image-matching)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：信息几何对抗扰动模型
-10. [6thGrid-Net: Unified Remote Sensing Image Dehazing Based on Color Restoration and Edge-Preserving](/202605/05/2604.24149v1-6thgrid-net-unified-remote-sensing-image-dehazing-based-on-color-restoration-and-edge-preserving)  
+   evidence：图像对抗扰动
+10. [GramSR: Visual Feature Conditioning for Diffusion-Based Super-Resolution](/202605/06/2604.25457v1-gramsr-visual-feature-conditioning-for-diffusion-based-super-resolution)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗攻击防御
-11. [POCA: Pareto-Optimal Curriculum Alignment for Visual Text Generation](/202605/05/2604.24171v1-poca-pareto-optimal-curriculum-alignment-for-visual-text-generation)  
+   evidence：对抗扰动下的图像修复
+11. [DDA-Thinker: Decoupled Dual-Atomic Reinforcement Learning for Reasoning-Driven Image Editing](/202605/06/2604.25477v1-dda-thinker-decoupled-dual-atomic-reinforcement-learning-for-reasoning-driven-image-editing)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的视觉文本生成
-12. [Point-MF: One-step Point Cloud Generation from a Single Image via Mean Flows](/202605/05/2604.24586v1-point-mf-one-step-point-cloud-generation-from-a-single-image-via-mean-flows)  
+   evidence：与生成式图像对抗鲁棒性相关
+12. [Federated Medical Image Classification under Class and Domain Imbalance exploiting Synthetic Sample Generation](/202605/06/2604.26324v1-federated-medical-image-classification-under-class-and-domain-imbalance-exploiting-synthetic-sample-generation)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：单图像点云生成方法
+   evidence：对抗攻击的图像防御策略
 
 
 ### ⚡ 这个站点能做什么
