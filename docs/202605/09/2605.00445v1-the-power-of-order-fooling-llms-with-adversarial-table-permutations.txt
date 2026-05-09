@@ -1,0 +1,666 @@
+Title: The Power of Order: Fooling LLMs with Adversarial Table Permutations
+
+URL Source: https://arxiv.org/pdf/2605.00445v1
+
+Published Time: Mon, 04 May 2026 00:34:24 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# The Power of Order: Fooling LLMs with Adversarial Table Permutations 
+
+Xinshuai Dong 
+
+CMU & NEC Labs 
+
+Haifeng Chen 
+
+NEC Labs 
+
+Xuyuan Liu 
+
+Dartmouth College & NEC Labs 
+
+Shengyu Chen 
+
+NEC Labs 
+
+Haoyu Wang 
+
+NEC Labs 
+
+Shaoan Xie 
+
+CMU 
+
+Kun Zhang 
+
+CMU 
+
+Zhengzhang Chen 
+
+NEC Labs 
+
+Abstract 
+
+Large Language Models (LLMs) have achieved remarkable success and are increas-ingly deployed in critical applications involving tabular data, such as Table Question Answering (TQA). However, their robustness to the structure of this input remains a critical, unaddressed question. This paper demonstrates that modern LLMs exhibit a significant vulnerability to the layout of tabular data. Specifically, we show that semantically-invariant permutations of rows and columns—rearrangements that do not alter the table’s underlying information—are sometimes sufficient to cause incorrect or inconsistent model outputs. To systematically probe this vulnerability, we introduce Adversarial Table Permutation (ATP) , a novel, gradient-based attack that efficiently identifies worst-case permutations designed to maximally disrupt model performance. Our extensive experiments demonstrate that ATP significantly degrades the performance of a wide range of LLMs. This reveals a pervasive vulnerability across different model sizes and architectures, including the most recent and popular models. Our findings expose a fundamental weakness in how current LLMs process structured data, underscoring the urgent need to develop permutation-robust models for reliable, real-world applications. 
+
+1 Introduction 
+
+Large language models (LLMs) have demonstrated powerful reasoning capabilities, leading to significant advancements in tasks involving structured data. A key area of progress is table question answering (TQA) , where models interpret and extract information from tables to answer natural-language questions [ 9, 25 ]. The dominant paradigm for this task involves linearizing the table— converting its rows and columns into a serialized text format—and including it directly in the model’s prompt [ 49 , 18 , 45 ]. This approach effectively leverages the native text-processing power of LLMs, allowing them to achieve state-of-the-art performance on some TQA benchmarks without needing specialized architectural modifications. Despite its practical effectiveness, this linearization strategy introduces a fundamental semantic-structural mismatch . Tables are inherently permutation-invariant ; their underlying relational information remains unchanged regardless of the order of their rows or columns. In stark contrast, the transformer-based architectures of LLMs are fundamentally order-sensitive [22 ], processing input as a strict sequence of tokens [ 36 , 42 ]. This discrepancy creates a critical vulnerability. Because the model’s understanding is tied to a superficial textual order, two tables containing identical information but presented in different layouts can elicit inconsistent and potentially incorrect outputs. This fragility undermines the reliability of LLMs in high-stakes applications and motivates a deeper investigation into their structural robustness.                         
+
+> Preprint.
+> arXiv:2605.00445v1 [cs.LG] 1 May 2026 [Question]: Which had the largest
+> average match attendance?
+> A legal permutation reorders the rows and columns, except that
+> the header row is always the first row
+> Competition Avg Match Attendance Year
+> A-League 12,707 2012/2013
+> Rugby Championship 44,511 2012
+> State of Origin series 62,202 2011
+> Before permutation:
+> After permutation:
+> [Response]: Rugby Championship.
+> [Response]: State of Origin series.
+> LLMs are not robust to table permutations, though the permutations do not
+> change the input information
+> Rows
+> permuted
+> Columns permuted
+> Year Competition Avg Match Attendance
+> 2011 State of Origin series 62,202
+> 2012/2013 A-League 12,707
+> 2012 Rugby Championship 44,511
+> [Question]: Which had the largest
+> average match attendance?
+
+Figure 1: An illustration of the attack space for tabular inputs. A legal permutation reorders the rows and columns, except that the header row is always the first row. Such seemingly simple permutations do not change the information of the table, but are sometimes sufficient to fool modern LLMs. Although previous work [ 43 , 40 ] demonstrated that row and column order can influence model predictions, its analysis has key limitations that restrict its applicability to modern systems. The methodology was primarily empirical, relying on random permutations to observe output changes without providing a systematic understanding of how specific layouts affect model reasoning. Furthermore, this research concentrated on BERT-style models for representation learning, a paradigm fundamentally different from the now-prevalent decoder-only LLM setting, where tables are processed generatively as part of an in-context prompt. This focus on older architectures offers limited guidance on the robustness of the large-scale models used in today’s applications. In this work, we present a more rigorous investigation. We first demonstrate the susceptibility of modern LLMs to row and column permutations and then formalize this permutation sensitivity for TQA. Building on this, we introduce Adversarial Table Permutation (ATP) , a gradient-based attack that finds worst-case permutations by relaxing the discrete search problem into a continuous space. Across a range of instruction-tuned LLMs, ATP consistently uncovers worst-case permutations that significantly degrade prediction consistency and task performance (an example can be found in Section A.3). These adversarial layouts are transferable across model families and prompting styles and remain effective under commonly used prompting strategies. Our findings reveal a fundamental structural vulnerability in the prevailing “linearize-then-prompt” paradigm, underscoring the urgent need for more robust table reasoning techniques with LLMs. We summarize our contributions as follows: • We formalize the vulnerability of modern LLMs to permutations in tabular inputs, demonstrat-ing that even random shuffling of rows and columns is sometimes sufficient to degrade model performance. • To systematically expose this weakness, we propose the Adversarial Table Permutation (ATP) attack, a novel, gradient-based method that efficiently finds the worst-case permutations that cause a target model to fail. Our method is quite general and serves as a module that works for any open source LLM that takes embeddings, position ids, and attention masks as input. • We conduct extensive experiments showing that ATP attack successfully degrades the performance of a wide range of LLMs, including those of various sizes and architectures. These findings reveal a critical design flaw in how current models handle structured data, underscoring the need for more robust architectures for real-world tabular applications. 
+
+2 Problem Setting 
+
+2.1 Attack Space for Tabular Input: Row and Column Permutations 
+
+Given tabular data as input, a robust model is expected to produce outputs that are invariant to row and column permutations that preserve the table’s semantic meaning. Specifically, given a table with n + 1 rows and m columns where the first is a header row, one can arbitrarily permute the remaining n data rows and all m columns without changing the underlying relational information. An example of such a semantically equivalent permutation can be seen in Figure 1, where the original and permuted tables contain the exact same information. Formally, we define this attack space in the context of Table Question Answering (TQA) tasks, where we have i.i.d. samples of an input table T, a question Q, and an answer A from a given data 2Competition  Avg Match Attendance  Year         
+
+> A-League 12,707 2012/2013
+> Rugby Championship 44,511 2012
+> State of Origin series 62,202 2011
+> Embeddings
+> Position ids
+> Attention masks
+> Permuted
+> Embeddings
+> Permuted
+> Position ids
+> Permuted
+> Attention masks
+> Soft Permutation
+> Hard Permutation
+> Maximize
+> Cross Entropy
+> Hungarian Algorithm
+> [Question]: Which had the largest
+> average match attendance?
+> [Response]: State of Origin series.
+> Gradient -based Optimization with Entropy Regularization
+> Computation flow
+> Gradient flow
+> Learnable
+> Parameters
+> Sinkhorn Algorithm
+
+Figure 2: An illustration of the procedure of ATP attack, where soft permutations (doubly stochastic matrices) and hard permutations are parameterized by learnable parameters, and then used to permute embeddings of the input table and position ids and attention masks of the table, respectively. The permuted input is fed to LLM together with the question and correct response to calculate cross entropy. Finally the gradients are employed to update the learnable parameters for maximizing the cross entropy and thus fooling the victim model. distribution. Here, Q and A are both sequences of words, while T is represented as an (n + 1) × m
+
+matrix where each cell contains a sequence of words. Let Πk be the set of all k × k permutation matrices. Then the attack space for the input table T is defined as: 
+
+Pr TPc, s.t., Pr ∈ ˆΠn+1 , Pc ∈ Πm, (1) where ˆΠn+1 := {P ∈ Πn+1 : P[0 ,0]=1 }. (2) In Equation (1), the matrix Pr permutes the rows of T and Pc permutes the columns. The constraint 
+
+P[0 ,0] = 1 in the definition of ˆΠn+1 ensures that the header row is always the first row. Given this formulation, we next discuss the key research problems this work aims to address. 
+
+2.2 Are LLMs Robust Against Table Permutations? 
+
+The key motivation of this work is to investigate to what extent current LLMs are robust against row and column permutations of the input table. This can be decomposed into three key research questions: (i) Are current LLMs robust to random table permutations? (ii) How to generate the worst-case table permutation to fool a LLM? (iii) To what extent current LLMs are robust to the worst-case table permutations? We will first formalize (i) and (ii) in the rest of this section and then address (ii) in Section 3 by proposing a novel attack method, and finally answer (i) and (iii) in our experiments in Section 5. Consider a LLM that parametrizes a probability mass function over the natural language space, as 
+
+Pmodel (·). To employ the LLM for TQA tasks, we generate the model response by sampling from the parameterized conditional distribution, as ˆA ∼ Pmodel (·| T, Q). Then we evaluate to what extent ˆA
+
+is semantically aligned with the ground truth A, by some evaluation metrics M(A, ˆA) (the bigger the better alignment). Thus, the research problem (i) can be formulated as the calculation of the following 
+
+E ˆA∼Pmodel (·| Pr TPc,Q), Pr ∼U r , Pc∼U c M(A, ˆA), (3) where Ur and Uc are uniform distribution over ˆΠn+1 and Πm, respectively. As for (ii), it can be formulated as finding the worst case combination of row and column permutations 
+
+(P ∗
+
+r , P ∗
+
+c ) to fool a victim model Pmodel , as, 
+
+(P ∗
+
+r , P ∗
+
+c ) = arg min 
+
+Pr ∈ ˆΠn+1 ,Pc∈Πm
+
+E ˆA∼Pmodel (·| Pr TPc,Q) M(A, ˆA), (4) and then evaluate the performance under such worst case permutations, as 
+
+E ˆA∗∼Pmodel (·| P ∗ 
+
+> r
+
+TP ∗ 
+
+> c
+
+,Q) M(A, ˆA∗). (5) 3By Equation (3), it is straightforward to evaluate the robustness of a LLM against random table permutations. As a contrast, the optimization problem in Equation (4) is highly nontrivial. Solving the combinatorial optimization problem in Equation (4) directly in the permutation space ˆΠn+1 and 
+
+Πm is NP-hard. The computation complexity grows exponentially with the shape of the input table. For example, when n = m = 8 , there are around 1.6 × 10 9 different kinds of combinations of row and column permutations, and this number increases to 1.3 × 10 11 when n and m are increased by only 1. Therefore, it is crucial to have a more effective way to find the worst case permutation, and we propose our novel method in what follows. 
+
+3 Adversarial Table Permutation Attack 
+
+The core challenge in finding the worst-case permutation, as formulated in Equation (4), is that it requires optimizing over a vast and discrete space of permutation matrices, which is computationally intractable for tables of non-trivial size. To overcome this hurdle, our proposed Adversarial Table Permutation (ATP) attack reframes this discrete problem into a continuous one that can be solved efficiently with gradient-based methods. This is achieved through two key relaxations, which are detailed below. An illustration of the overall process can be found in Figure 2. 
+
+3.1 Relaxing Discrete Problem into a Differentiable One From a Non-Differentiable Metric to a Differentiable Loss. Our first step is to transform the optimization objective into a continuous, differentiable form. Specifically, the evaluation metric 
+
+M(A, ˆA) is often non-differentiable and requires sampling model outputs ˆA, leading to noisy and unstable gradients. We replace this objective with the maximization of the cross-entropy loss LCE of the ground-truth answer A. This provides a differentiable proxy that directly measures the alignment of model output with the ground truth. The optimization problem thus becomes 
+
+(P ∗ 
+
+> r
+
+, P ∗ 
+
+> c
+
+) = arg max   
+
+> Pr∈ˆΠn+1 ,Pc∈Πm
+
+LCE (Pmodel , Pr TPc, Q, A), (6) where the cross-entropy loss is as follows: 
+
+LCE (·) = −
+
+> |A|− 1
+
+X
+
+> t=0
+
+log Pmodel (A[t]|Pr TPc, Q, A[: t]). (7) Here LCE is the sum of the cross-entropy for each token A[t] conditioned on the correct context. It provides a stable, gradient-friendly objective without the need for sampling. 
+
+From Permutation Matrices to Doubly Stochastic Matrices. While the objective is now differ-entiable, the search space of permutation matrices ( ˆΠn+1 and Πm) remains discrete. To create a continuous search space, we perform a convex relaxation to relax the set of permutation matrices to its convex hull. The reasons to consider convex hull lies in that the convex hull is the minimal convex and continuous superset of the original discrete space, which facilitates efficient optimization. 
+
+Lemma 3.1 (Birkhoff-von Neumann [ 4]) . The convex hull of the set of n × n permutation matrices, 
+
+Πn, is the set of n × n doubly stochastic matrices, Dn.
+
+By Lemma 3.1, the convex hull of Πm is the set of all m × m doubly stochastic matrices, Dm.As for relaxing ˆΠn+1 , we further define ˆDn+1 = {D ∈ Dn+1 : D[0 ,0] = 1 }, the set of all n × n
+
+doubly stochastic matrices whose upper-left entry is always 1. As such we can now optimize over the continuous and convex sets of doubly stochastic matrices ˆDn+1 and Dm.Specifically, we first parametrize two unconstrained real matrices θr ∈ Rn×n and θc ∈ Rm×m, and then transform they to two "soft" permutation matrices Dr and Dc, by leveraging the differentiable log-Sinkhorn algorithm [37, 1, 27], as 
+
+S0(θ) = θ, Si+1 (θ) = Nc(Nr (Si(θ))) , (8) 
+
+S(θ) = exp( lim  
+
+> i→∞
+
+Si(θ)) , (9) where Nr and Nc are row normalization and column normalization, respectively, as 4Nr (θ)[i, :] = θ[i, :] − X 
+
+> j
+
+θ[i,j ], (10) 
+
+Nc(θ)[: ,j ] = θ[: ,j ] − X 
+
+> i
+
+θ[i,j ]. (11) By the theorem in [ 37 ], we have S(θr ) ∈ Dn and S(θc) ∈ Dm, and then we define the soft permutation matrices Dr and Dc, as 
+
+Dr [1: ,1:] = S(θr ), Dr [0 ,0] = 1 , (12) 
+
+Dr [0 ,1:] = Dr [1: ,0] = 0 , and Dc = S(θc), (13) where Dr is designed to ensure the header row remains fixed, and thus we have Dr ∈ ˆDn+1 and 
+
+Dc ∈ Dm. This allows us to search for the optimal permutation in a continuous space using gradients with respect to θr and θc.
+
+3.2 Projecting Back to the Permutation Space 
+
+The relaxation in Section 3.1 allows for gradient-based optimization, but it introduces a new challenge: the optimized matrices Dr and Dc are "soft" permutations, not the hard, discrete permutations required for a valid attack. Furthermore, an LLM’s input for table T consists of multiple components: continuous token embeddings Temb and discrete position ids Tpos and attention masks Tatt . While soft permutations can be applied to continuous embeddings, they cannot be applied to discrete inputs. To address this, we apply the permutations differently based on the input type. We use the soft doubly stochastic matrices for the embeddings and project them back to the nearest permutation matrices for the discrete components. Such a projection is captured by a maximum weight matching problem that can be solved by the Hungarian algorithm [20, 21], as Proj n(D) = arg max  
+
+> P∈Πn
+
+⟨P , D⟩F , D ∈ Dn, (14) where ⟨· , ·⟩ F is the Frobenius inner product and the subscript n in Proj n(·) is dropped when the context is clear. The input table to the model is thus permuted in a hybrid mode, as 
+
+Pmodel (·| Dr Temb Dc, Proj (Dr )Tpos Proj (Dc),
+
+Proj (Dr )Tatt Proj (Dc), Q). (15) In Eq. 15 we use soft permutations to permute the embeddings and the hard permutations to permute positional ids and attention masks, as illustrated in Figure 2. This hybrid approach allows us to maintain a differentiable optimization pipeline while ensuring the final generated attack is valid and correctly manipulates all aspects of the model’s input. 
+
+3.3 Regularization: Information Entropy-based Over Temperature-based 
+
+Another key challenge in our relaxed optimization is to ensure that the resulting doubly stochastic matrices, Dr and Dc, are close to actual permutation matrices. Without this constraint, the soft permutations during optimization could converge to solutions far from any single permutation (e.g., a uniform matrix), creating a significant gap between the loss measured during optimization and the attack’s true effectiveness. Thus, we must encourage the soft matrices to be "sharp" and structurally similar to a hard permutation. A classic strategy is to follow Gumbel-Softmax [ 17 , 26 ] to introduce temperature τ into the Sinkhorn algorithm, as S(θ/τ ). Lowering τ is analogous to pushing the optimization towards low-entropy solutions and thus closer to a hard permutation. However, in practice, we found that to encourage 
+
+S(θ/τ ) to be sufficiently close to a hard permutation, it relies on a pretty small temperature τ (e.g., 
+
+τ ≤ 0.05 ); such a small τ introduces significant computational instability. This issue is exacerbated when using low-precision floating-point formats like float16 or bfloat16, which are however very common for LLMs, especially in memory-constrained scenarios. To circumvent this instability while still achieving the same goal, we incorporate the information entropy H(·) as an explicit regularization term in our final objective, as follows: 
+
+H(D) = −Xni=1 
+
+Xnj=1 Dij log( Dij ), (16) where the input D is a n × n doubly stochastic matrix. This approach, partly inspired by [ 10 ], directly encourages the soft matrices to be close to permutation matrices without the numerical issues associated with a small temperature τ . We also empirically validate this point by our ablation study in Section 5.3. 5Table 1: Alignment scores by LLM-as-judge based on Gemini 2.5 between the responses of different LLMs and the ground truth response, on WTQ dataset, under (i) Vanilla: vanilla input, (ii) Rand Perm: randomly permuted table as input, and (iii) ATP Attack: table permuted by ATP attack as input. The higher score, the better alignment between the model response with the ground truth. 
+
+WTQ Dataset LLMs Training Set Evaluation Set Vanilla Rand Perm ATP Attack Vanilla Rand Perm ATP Attack 
+
+LLAMA -3.1-8B 0.26 0.19 0.13 0.26 0.17 0.13 
+
+LLAMA -3.1-8B-I NST 0.43 0.29 0.21 0.47 0.31 0.22 
+
+TABLE LLM-8B 0.29 0.20 0.14 0.33 0.23 0.16 
+
+QWEN 2.5-7B-I NST 0.26 0.21 0.14 0.29 0.21 0.12 
+
+QWEN 2.5-14B-I NST 0.44 0.33 0.24 0.47 0.33 0.26 
+
+CODE LLAMA -7B-I NST 0.20 0.15 0.08 0.18 0.16 0.09 
+
+DS-R1-D IST -L LAMA -8B 0.26 0.18 0.12 0.23 0.15 0.09 
+
+DS-R1-D IST -Q WEN -7B 0.16 0.11 0.07 0.14 0.12 0.06 
+
+Table 2: Alignment scores of the responses of different LLMs on TATQA dataset under attack. 
+
+TATQA Dataset LLMs Training Set Evaluation Set Vanilla Rand Perm ATP Attack Vanilla Rand Perm ATP Attack 
+
+LLAMA -3.1-8B 0.23 0.15 0.08 0.28 0.15 0.11 
+
+LLAMA -3.1-8B-INST 0.50 0.28 0.19 0.49 0.28 0.20 
+
+TABLE LLM-8B 0.30 0.17 0.11 0.25 0.18 0.12 
+
+QWEN 2.5-7B-I NST 0.28 0.15 0.11 0.28 0.20 0.13 
+
+QWEN 2.5-14B-I NST 0.45 0.24 0.17 0.47 0.30 0.24 
+
+CODE LLAMA -7 B-I NST 0.08 0.06 0.03 0.07 0.05 0.03 
+
+DS-R1-D IST -L LAMA -8B 0.28 0.17 0.12 0.27 0.17 0.12 
+
+DS-R1-D IST -Q WEN -7B 0.11 0.08 0.04 0.11 0.08 0.05 3.4 Final Objective 
+
+Thus, by adding the entropy term to the optimization objective, combining the differentiable loss and the hybrid permutation strategy, our final optimization objective is to find the parameters (θ∗ 
+
+> r
+
+, θ∗ 
+
+> c
+
+)
+
+that maximizes the weighted sum of cross-entropy loss and entropy regularization terms: 
+
+(θ∗ 
+
+> r
+
+, θ∗ 
+
+> c
+
+) = arg max  
+
+> θr∈Rn×n,θc∈Rm×m
+
+LCE (Pmodel , Dr Temb Dc,
+
+Proj (Dr )Tpos Proj (Dc), Proj (Dr )Tatt Proj (Dc), Q, A)+ λ1H(Dr ) + λ2H(Dc), (17) where λ1 and λ2 are hyper-parameters controlling the weight of the entropy terms. Once the solution (θ∗ 
+
+> r
+
+, θ∗ 
+
+> c
+
+) are found, the resulting optimal soft matrices (D∗ 
+
+> r
+
+, D∗ 
+
+> c
+
+) are projected via Proj (·) to obtain the final adversarial permutation matrices (P ∗ 
+
+> r
+
+, P ∗ 
+
+> c
+
+) used to attack the LLM. We solve the optimization in Equation (17) by Adam [ 19 ], where the number of iterations Nattack 
+
+serves as a hyper-parameter (ablation study on Nattack in Section 5.3). We also summarize the whole algorithm procedure of the proposed ATP attack in Algorithm 1. 
+
+4 Related Work 
+
+Adversarial Attacks and Robustness for LLM. LLMs remain vulnerable to adversarial manipula-tions that bypass predefined safety mechanisms and induce harmful or undesired outputs [ 14 , 33 , 15 ]. Token- and sentence-level perturbations can reliably elicit such outputs [ 10 , 11 , 50 , 44 , 16 ], and audits of ChatGPT have revealed substantial susceptibility [ 39 ]. Beyond input-level perturbations, black-box jailbreak frameworks have been proposed to automate the discovery of exploit templates [ 47 ]. Moreover, even a small number of harmful instruction–response exemplars can serve as few-shot triggers that compromise model alignment [ 33 ]. [ 48 ] further applies a persuasion taxonomy to 6Algorithm 1 Adversarial Table Permutation (ATP) Attack  
+
+> 1:
+
+Input: Pmodel , T, Q, A, Nattack , λ1, λ2; 
+
+> 2:
+
+Output: Worst case row permutation P ∗ 
+
+> r
+
+and column permutation P ∗ 
+
+> c
+
+; 
+
+> 3:
+
+Initialize θr , θc and get Temb , Tpos , Tatt ; 
+
+> 4:
+
+for i = 1 to Nattack do  
+
+> 5:
+
+Calculate S(θr ) and S(θc) by Equation (8);  
+
+> 6:
+
+Calculate Dr and Dc by Equation (12) and H(Dr ) and H(Dc) by Equation (16) ;  
+
+> 7:
+
+Calculate Proj (Dr ) and Proj (Dc) by the Hungarian algorithm [20];  
+
+> 8:
+
+Calculate LCE (Pmodel , Dr Temb Dc, Proj (Dr )Tpos Proj (Dc), Proj (Dr )Tatt Proj (Dc), Q, A)+ 
+
+λ1H(Dr ) + λ2H(Dc); 
+
+> 9:
+
+Calculate the gradient of LCE with respect to θr and θc; 
+
+> 10:
+
+Update θr and θc by Adam [19];  
+
+> 11:
+
+Let θ∗ 
+
+> r
+
+, θ∗ 
+
+> c
+
+= θr , θc, calculate D∗ 
+
+> r
+
+, D∗ 
+
+> c
+
+given θ∗ 
+
+> r
+
+, θ∗ 
+
+> c
+
+by Equation (12);  
+
+> 12:
+
+Calculate P ∗ 
+
+> r
+
+= Proj (D∗ 
+
+> r
+
+) and P ∗ 
+
+> c
+
+= Proj (D∗ 
+
+> c
+
+) 
+
+> 13:
+
+return P ∗ 
+
+> r
+
+, P ∗
+
+> c
+
+generate adversarial prompts that effectively jailbreak LLMs. These findings underscore the need for principled robustness and defense analyses. 
+
+Comparison with PEARL [ 22 ]. Our work is also related to PEARL, which reorders options / ex-amples in prompt to attack LLMs, but ATP differs significantly in both attack space and optimization methodology. (i) While PEARL focuses on one-dimensional permutations of options or examples within a prompt, ATP operates on the two-dimensional structure of tabular data, necessitating a more complex permutation space that keeps the header row fixed while reordering all other rows and columns. (ii) The optimization strategies diverge in stability and execution; whereas PEARL utilizes the Sinkhorn operator with a temperature parameter and the Gumbel-max trick to sample hard permutations, ATP avoids the computational instability of low-temperature Sinkhorn operations by using information entropy regularization. This approach forces soft permutations to converge toward hard ones without sacrificing numerical stability, especially in the low-precision formats common to LLMs. (iii) Instead of stochastic sampling, ATP employs the Hungarian algorithm to project soft permutations onto a discrete space. To maintain end-to-end differentiability while ensuring validity, ATP uses a hybrid application: soft permutations are applied to continuous token embeddings, while hard permutations are used for discrete positional IDs and attention masks. This makes ATP a more stable and targeted tool for exposing the structural vulnerabilities of LLMs in tabular data reasoning. 
+
+LLM for TQA. Table-based reasoning has advanced significantly with LLMs and their emergent reasoning capabilities [ 9, 25 , 38 , 41 ]. To utilize their capability, table contents are typically linearized into a textual sequence and included in the prompt as part of the model input. [ 34 ] use in-context examples for SQL generation, while [ 7 ] prompt LLMs to produce executable programs via SQL APIs. [ 24 ] extracts sub-tables containing the most relevant information, and [ 46 ] enhances end-to-end reasoning by decomposing table contexts and questions using few-shot prompting, while [ 29 ]decomposes the query into atomic steps for interpretable answers. 
+
+Robustness Evaluation for TQA. Several studies have highlighted the robustness limitations of TQA systems. For instance, [ 5] introduces permutation-invariant table representations, while [ 40 ]extends this approach to multi-table scenarios. [ 3 ] investigates the robustness of LLMs for TQA under domain shift, and [ 43 ] demonstrates that row and column order can significantly influence model predictions. In related work, [ 53 ] prompt LLMs to generate adversarial examples to improve model robustness during training. However, these investigations are largely empirical—typically involving random permutations of table structures followed by performance observation—thus failing to system-atically characterize the worst-case effects of structural perturbations under in-context LLM inference. 
+
+5 Experiments 
+
+In this section we focus on answering the two previous mentioned research questions: to what extent are current LLMs robust to random table permutations and the worst case table permutations, respectively? In addition, we also conduct ablation study to investigate the effectiveness of each design of the proposed ATP attack. We begin with the experimental settings. 7Table 3: Alignment scores of the responses of different LLMs on FeTaQA dataset under attack. 
+
+FeTaQA Dataset LLMs Training Set Evaluation Set Vanilla Rand Perm ATP Attack Vanilla Rand Perm ATP Attack 
+
+LLAMA -3.1-8B 0.38 0.28 0.21 0.36 0.25 0.20 
+
+LLAMA -3.1-8B-INST 0.50 0.41 0.30 0.48 0.37 0.31 
+
+TABLE LLM-8B 0.29 0.24 0.16 0.34 0.27 0.20 
+
+QWEN 2.5-7B-I NST 0.30 0.23 0.17 0.30 0.25 0.14 
+
+QWEN 2.5-14B-I NST 0.48 0.39 0.28 0.47 0.40 0.29 
+
+CODE LLAMA -7 B-I NST 0.20 0.15 0.09 0.23 0.19 0.13 
+
+DS-R1-D IST -L LAMA -8B 0.29 0.22 0.13 0.28 0.21 0.13 
+
+DS-R1-D IST -Q WEN -7B 0.14 0.11 0.05 0.14 0.11 0.06 
+
+Table 4: Ablation study on hyper-parameters λ1 and λ2 by the alignment score by LLM-as-judge, where λ1 = λ2 = 10 performs the best.                                                                
+
+> WTQ Dataset LLMs Evaluation Set Against ATP Attack with different values of λ1, λ 2
+> λ1, λ 2= 0 .0λ1, λ 2= 0 .1λ1, λ 2= 1 λ1, λ 2= 10 λ1, λ 2= 20
+> LLAMA -3.1-8B-INST 0.24 0.24 0.23 0.22 0.24 QWEN 2.5-7B-I NST 0.15 0.14 0.13 0.12 0.14
+> TATQA Dataset LLMs Evaluation Set Against ATP Attack with different values of λ1, λ 2
+> λ1, λ 2= 0 .0λ1, λ 2= 0 .1λ1, λ 2= 1 λ1, λ 2= 10 λ1, λ 2= 20
+> LLAMA -3.1-8B-INST 0.22 0.22 0.19 0.20 0.22 QWEN 2.5-7B-I NST 0.15 0.15 0.14 0.13 0.15
+> FeTaQA Dataset LLMs Evaluation Set Against ATP Attack with different values of λ1, λ 2
+> λ1, λ 2= 0 .0λ1, λ 2= 0 .1λ1, λ 2= 1 λ1, λ 2= 10 λ1, λ 2= 20
+> LLAMA -3.1-8B-INST 0.33 0.33 0.32 0.31 0.33 QWEN 2.5-7B-I NST 0.18 0.16 0.15 0.14 0.17
+
+5.1 Experimental Settings Datasets. We focus on TQA tasks to evaluate the robustness of LLMs. Specifically, we use three famous document-embedded TQA datasets, WikiTQ [ 32 ], and TATQA [ 52 ], and FeTaQA [ 28 ], following [ 49 ]. For each dataset, 1000 random samples from the training set and all the samples from the evaluation set are used. 
+
+Evaluation Metric. In the literature of TQA, various evaluation metrics have been considered, such as exact match, BLEU [ 31 ], ROUGE-L [ 23 ], and LLM-as-judge [ 51 ]. Similar to [ 49 ], we also found that the LLM-as-judge works the best in terms of evaluating whether the model response is aligned with the reference response. Thus, we mainly focus on using LLM-as-judge based on Gemini-2.5 [8 ]. To further support our choice, we conduct human evaluation and calculate the rank correlation between the score by human and the score by each metric. We found that the LLM-as-judge achieves the highest rank correlation (around 0.85) with human rating, and it surpasses the runner-up with a clear margin. More detailed discussion about the metric and rank correlation can be found in Sec. A.2. 
+
+Victim LLMs. We consider several popular open-source LLMs. These are Llama family [ 12 ]including Llama-3.1-8B and Llama-3.1-8B-Instruct, Qwen family [ 2 ] including Qwen2.5-7B-Instruct and Qwen2.5-14B-Instruct, DeepSeek family [ 13 ] including DeepSeek-R1-Distill-Llama-8B and DeepSeek-R1-Distill-Qwen-7B (due to memory limit we consider distilled models for DeepSeek fam-ily), CodeLlama-7B-Instruct [ 35 ], and TableLLM-8B that is specifically finetuned for TQA tasks [ 49 ]. 
+
+5.2 Main Results Robustness of Victim LLMs Against Random Permutations. The result for WTQ, TATQA, and FeTaQA datasets can be found in Tables 1 to 3 respectively. As we can see, none of the considered LLMs is robust to even random permutations. E.g., on WTQ training set, the best performing LLM given vanilla input is Qwen2.5-14B-Instruct, which achieves an average of 0.44 alignment score. When attacked by random permutations, the performance of Qwen2.5-14B-Instruct drops from 0.44 to 0.33. As for TATQA training set, the best performing LLM given vanilla input is Llama-3.1-8B-80 5 10 15 20    
+
+> Number of Attack Iterations Nattack
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> Alignment Score
+> Ablation Study on Nattack using Llama-3.1-8B-Instruct on WTQ dataset
+> Vanilla Input
+> Random Permutation
+> Attacked by ATP
+
+(a) Llama-3.1-8B-Inst as victim on WTQ dataset. 0 5 10 15 20    
+
+> Number of Attack Iterations Nattack
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> Alignment Score
+> Ablation Study on Nattack using Qwen2.5-7B-Instruct on WTQ dataset
+> Vanilla Input
+> Random Permutation
+> Attacked by ATP
+
+(b) Qwen2.5-7B-Inst as victim on WTQ dataset. 0 5 10 15 20    
+
+> Number of Attack Iterations Nattack
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> Alignment Score
+> Ablation Study on Nattack using Llama-3.1-8B-Instruct on TATQA dataset
+> Vanilla Input
+> Random Permutation
+> Attacked by ATP
+
+(c) Llama-3.1-8B-Inst as victim on TATQA dataset. 0 5 10 15 20    
+
+> Number of Attack Iterations Nattack
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> Alignment Score
+> Ablation Study on Nattack using Qwen2.5-7B-Instruct on TATQA dataset
+> Vanilla Input
+> Random Permutation
+> Attacked by ATP
+
+(d) Qwen2.5-7B-Inst as victim on TATQA dataset. 
+
+Figure 3: Ablation on different values of the attack iterations, Nattack , on the attack power of ATP, where Nattack = 20 generally suffices. Instruct, which achieves 0.50 alignment score. The performance decreases to 0.28 given random permutations. On FeTaQA training set, the best one given vanilla input is also Llama-3.1-8B-Instruct. Yet, this performance decreases from 0.50 to 0.41 given randomly permuted tables. 
+
+Robustness of Victim LLMs Against ATP Attack. Here we are interest in the robustness of modern LLMs against the worst case table permutations. As the exact worst-case solution requires solving a combinatorial optimization in Equation (4) that is NP-hard, we use our proposed ATP attack method (as in Equation (17)) to approximates the worst case scenario. The result for WTQ, TATQA, and FeTaQA datasets is shown in Table 1, Table 2, and Table 3 respectively. We found that, current LLMs are very vulnerable to these adversarially permuted input tables. For example, on WTQ evaluation set, the best performing LLM against ATP attack is Qwen2.5-14B-Instruct, which achieves an average of 0.26 alignment score under ATP attack. However, it still suffers from a significant drop of 0.21 as its performance given vanilla data is 0.47. These two main empirical results reveal a fundamental defect in the current LLMs when handling tabular data: they are not robust given randomly permuted tables, and are very vulnerable against adversarially permuted input. 
+
+5.3 Ablation Study 
+
+Here we conduct ablation studies to investigate (i) the effectiveness of the entropy regularization term, and (ii) how the number of attack iterations Nattack influence the attack performance. The ablation study on the entropy term can be found in Table 4, where having λ1 = λ2 = 10 consistently achieves better attack performance than λ1 = λ2 = 0 (i.e., without the entropy regularization terms). For example, on FeTaQa evaluation set, without the entropy term the ATP attack can only decrease the performance of Qwen2.5-7B-Inst from 0.30 to 0.18, while with λ1 = λ2 = 10 , ATP attack can further degrade the performance of Qwen2.5-7B-Inst to 0.14. At the same time, we notice that a too big λ1, λ 2 cannot achieve the best attack power either. The reason lies in that with too big λ1, λ 2, the optimization focuses too much on “hardening” the soft permutations, instead of fooling the victim model. As shown in the table, λ1 = λ2 = 10 generally works the best, and thus it is used for ATP attack in our main result in Section 5.2. As for Nattack , the result showing the influence of Nattack on the power of the ATP attack is in Figure 3. We found that ATP with 5 iterations are enough to fool LLMs better than random permutations. For example, as shown in (a) Figure 3, ATP with Nattack = 5 degrades the performance of Llama-3.1-8B-Inst from 0.47 to 0.26 while random permutation can only decrease it to 0.31. At the same time, a bigger Nattack generally results in better attack power, which starts to converge around Nattack = 20 . Thus Nattack = 20 is used in our main result in Section 5.2. 95.4 Runtime Analysis and Discussions on Attacking Closed Source LLMs 
+
+The computation complexity of ATP attack largely depends on the hyper-parameter Nattack . In our implementation with a single A100 GPU, it takes around 10 seconds for ATP with Nattack = 20 to attack a data point. We can also trade some attack power off by decreasing Nattack to 5, which can still fool modern LLMs to a considerable extent and takes only around 3 seconds per sample. We note that ATP attack is a gradient-based attack and requires the access of gradients of a victim model. Thus, for those closed source LLMs such as Gemini and ChatGPT, ATP cannot be directly deployed. However, as long as we can query the model, methods such as zero-order optimization [ 30 , 6] can be employed to enable ATP to work in such a black-box attack scenario. We leave it for future explorations. 
+
+6 Conclusion 
+
+We demonstrated the susceptibility of LLMs to table permutations and then formalize this vulnerability for TQA. We introduced ATP attack, which finds worst-case permutations to fool a victim LLM and show that ATP significantly degrade the performance of various LLMs. 
+
+References 
+
+[1] Ryan Prescott Adams and Richard S Zemel. Ranking via sinkhorn propagation. arXiv preprint arXiv:1106.1925 , 2011. [2] Jinze Bai, Shuai Bai, Yunfei Chu, Zeyu Cui, Kai Dang, Xiaodong Deng, Yang Fan, Wenbin Ge, Yu Han, Fei Huang, et al. Qwen technical report. arXiv preprint arXiv:2309.16609 , 2023. [3] Kushal Raj Bhandari, Sixue Xing, Soham Dan, and Jianxi Gao. Exploring the robustness of language models for tabular question answering via attention analysis. Trans. Mach. Learn. Res. , 2025. [4] Garrett Birkhoff. Tres observaciones sobre el algebra lineal. Univ. Nac. Tucuman, Ser. A ,5:147–154, 1946. [5] Pei Chen, Soumajyoti Sarkar, Leonard Lausen, Balasubramaniam Srinivasan, Sheng Zha, Ruihong Huang, and George Karypis. Hytrel: Hypergraph-enhanced tabular data representation learning. In Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 , 2023. [6] Pin-Yu Chen, Huan Zhang, Yash Sharma, Jinfeng Yi, and Cho-Jui Hsieh. Zoo: Zeroth order optimization based black-box attacks to deep neural networks without training substitute models. In Proceedings of the 10th ACM workshop on artificial intelligence and security , pages 15–26, 2017. [7] Zhoujun Cheng, Tianbao Xie, Peng Shi, Chengzu Li, Rahul Nadkarni, Yushi Hu, Caiming Xiong, Dragomir Radev, Mari Ostendorf, Luke Zettlemoyer, Noah A. Smith, and Tao Yu. Binding language models in symbolic languages. In The Eleventh International Conference on Learning Representations, ICLR 2023, Kigali, Rwanda, May 1-5, 2023 . OpenReview.net, 2023. [8] Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al. Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. arXiv preprint arXiv:2507.06261 , 2025. [9] Naihao Deng, Zhenjie Sun, Ruiqi He, Aman Sikka, Yulong Chen, Lin Ma, Yue Zhang, and Rada Mihalcea. Tables as texts or images: Evaluating the table reasoning ability of llms and mllms. In Findings of the Association for Computational Linguistics, ACL 2024, Bangkok, Thailand and virtual meeting, August 11-16, 2024 . Association for Computational Linguistics, 2024. [10] Xinshuai Dong, Anh Tuan Luu, Rongrong Ji, and Hong Liu. Towards robustness against natural language word substitutions. In ICLR , 2021. 10 [11] Xinshuai Dong, Anh Tuan Luu, Min Lin, Shuicheng Yan, and Hanwang Zhang. How should pre-trained language models be fine-tuned towards adversarial robustness? Advances in Neural Information Processing Systems , 34:4356–4369, 2021. [12] Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models. arXiv e-prints , pages arXiv–2407, 2024. [13] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu, Shirong Ma, Peiyi Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 , 2025. [14] Luxi He, Mengzhou Xia, and Peter Henderson. What is in your safe data? identifying benign data that breaks safety. arXiv preprint arXiv:2404.01099 , 2024. [15] Lei Hsiung, Tianyu Pang, Yung-Chen Tang, Linyue Song, Tsung-Yi Ho, Pin-Yu Chen, and Yaoqing Yang. Why llm safety guardrails collapse after fine-tuning: A similarity analysis between alignment and fine-tuning datasets. arXiv preprint arXiv:2506.05346 , 2025. [16] Kuan-Hao Huang and Kai-Wei Chang. Generating syntactically controlled paraphrases without using annotated parallel pairs. In Proceedings of the 16th Conference of the European Chapter of the Association for Computational Linguistics: Main Volume, EACL 2021, Online, April 19 -23, 2021 , pages 1022–1033. Association for Computational Linguistics, 2021. [17] Eric Jang, Shixiang Gu, and Ben Poole. Categorical reparameterization with gumbel-softmax. 
+
+arXiv preprint arXiv:1611.01144 , 2016. [18] Jinhao Jiang, Kun Zhou, Zican Dong, Keming Ye, Xin Zhao, and Ji-Rong Wen. Structgpt: A general framework for large language model to reason over structured data. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing, EMNLP 2023, Singapore, December 6-10, 2023 . Association for Computational Linguistics, 2023. [19] Diederik P Kingma. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 , 2014. [20] Harold W Kuhn. The hungarian method for the assignment problem. Naval research logistics quarterly , 2(1-2):83–97, 1955. [21] Harold W Kuhn. Variants of the hungarian method for assignment problems. Naval research logistics quarterly , 3(4):253–258, 1956. [22] CHEN Liang, Li Shen, Yang Deng, Xiaoyan Zhao, Bin Liang, and Kam-Fai Wong. Pearl: Towards permutation-resilient llms. In The Thirteenth International Conference on Learning Representations , 2025. [23] Chin-Yew Lin. Rouge: A package for automatic evaluation of summaries. In Text summarization branches out , pages 74–81, 2004. [24] Weizhe Lin, Rexhina Blloshmi, Bill Byrne, Adria de Gispert, and Gonzalo Iglesias. An inner table retriever for robust table question answering. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , 2023. [25] Tianyang Liu, Fei Wang, and Muhao Chen. Rethinking tabular data understanding with large language models. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers), NAACL 2024, Mexico City, Mexico, June 16-21, 2024 , pages 450–482. Association for Computational Linguistics, 2024. [26] Chris J Maddison, Andriy Mnih, and Yee Whye Teh. The concrete distribution: A continuous relaxation of discrete random variables. arXiv preprint arXiv:1611.00712 , 2016. [27] Gonzalo Mena, David Belanger, Scott Linderman, and Jasper Snoek. Learning latent permuta-tions with gumbel-sinkhorn networks. arXiv preprint arXiv:1802.08665 , 2018. 11 [28] Linyong Nan, Chiachun Hsieh, Ziming Mao, Xi Victoria Lin, Neha Verma, Rui Zhang, Wojciech Kry´ sci´ nski, Hailey Schoelkopf, Riley Kong, Xiangru Tang, et al. Fetaqa: Free-form table question answering. Transactions of the Association for Computational Linguistics , 10:35–49, 2022. [29] Giang Nguyen, Ivan Brugere, Shubham Sharma, Sanjay Kariyappa, Anh Totti Nguyen, and Freddy Lécué. Interpretable llm-based table question answering. Trans. Mach. Learn. Res. ,2025. [30] Nicolas Papernot, Patrick McDaniel, Ian Goodfellow, Somesh Jha, Z Berkay Celik, and Anan-thram Swami. Practical black-box attacks against machine learning. In Proceedings of the 2017 ACM on Asia conference on computer and communications security , pages 506–519, 2017. [31] Kishore Papineni, Salim Roukos, Todd Ward, and Wei-Jing Zhu. Bleu: a method for automatic evaluation of machine translation. In Proceedings of the 40th annual meeting of the Association for Computational Linguistics , pages 311–318, 2002. [32] Panupong Pasupat and Percy Liang. Compositional semantic parsing on semi-structured tables. 
+
+arXiv preprint arXiv:1508.00305 , 2015. [33] Xiangyu Qi, Yi Zeng, Tinghao Xie, Pin-Yu Chen, Ruoxi Jia, Prateek Mittal, and Peter Henderson. Fine-tuning aligned language models compromises safety, even when users do not intend to! In 
+
+The Twelfth International Conference on Learning Representations, ICLR 2024, Vienna, Austria, May 7-11, 2024 . OpenReview.net, 2024. [34] Nitarshan Rajkumar, Raymond Li, and Dzmitry Bahdanau. Evaluating the text-to-sql capabilities of large language models. arXiv preprint arXiv:2204.00498 , 2022. [35] Baptiste Roziere, Jonas Gehring, Fabian Gloeckle, Sten Sootla, Itai Gat, Xiaoqing Ellen Tan, Yossi Adi, Jingyu Liu, Romain Sauvestre, Tal Remez, et al. Code llama: Open foundation models for code. arXiv preprint arXiv:2308.12950 , 2023. [36] Lin Shi, Chiyu Ma, Wenhua Liang, Weicheng Ma, and Soroush Vosoughi. Judging the judges: A systematic investigation of position bias in pairwise comparative assessments by LLMs, 2024. [37] Richard Sinkhorn. A relationship between arbitrary positive matrices and doubly stochastic matrices. The annals of mathematical statistics , 35(2):876–879, 1964. [38] Aofeng Su, Aowen Wang, Chao Ye, Chen Zhou, Ga Zhang, Gang Chen, Guangcheng Zhu, Haobo Wang, Haokai Xu, Hao Chen, et al. Tablegpt2: A large multimodal model with tabular data integration. arXiv preprint arXiv:2411.02059 , 2024. [39] Jindong Wang, Xixu Hu, Wenxin Hou, Hao Chen, Runkai Zheng, Yidong Wang, Linyi Yang, Haojun Huang, Wei Ye, Xiubo Geng, et al. On the robustness of chatgpt: An adversarial and out-of-distribution perspective. arXiv preprint arXiv:2302.12095 , 2023. [40] Zifeng Wang and Jimeng Sun. Transtab: Learning transferable tabular transformers across tables. In Advances in Neural Information Processing Systems 35: Annual Conference on Neural Information Processing Systems 2022, NeurIPS 2022, New Orleans, LA, USA, November 28 - December 9, 2022 , 2022. [41] Zilong Wang, Hao Zhang, Chun-Liang Li, Julian Martin Eisenschlos, Vincent Perot, Zifeng Wang, Lesly Miculicich, Yasuhisa Fujii, Jingbo Shang, Chen-Yu Lee, et al. Chain-of-table: Evolving tables in the reasoning chain for table understanding. arXiv preprint arXiv:2401.04398 ,2024. [42] Ziqi Wang, Hanlin Zhang, Xiner Li, Kuan-Hao Huang, Chi Han, Shuiwang Ji, Sham M. Kakade, Hao Peng, and Heng Ji. Eliminating position bias of language models: A mechanistic approach. In The Thirteenth International Conference on Learning Representations , 2025. [43] Jingfeng Yang, Aditya Gupta, Shyam Upadhyay, Luheng He, Rahul Goel, and Shachi Paul. Tableformer: Robust transformer modeling for table-text encoding. In Smaranda Muresan, Preslav Nakov, and Aline Villavicencio, editors, Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), ACL 2022, Dublin, Ireland, May 22-27, 2022 , 2022. 12 [44] Muchao Ye, Chenglin Miao, Ting Wang, and Fenglong Ma. Texthoaxer: Budgeted hard-label adversarial attacks on text. In Thirty-Sixth AAAI Conference on Artificial Intelligence . AAAI Press, 2022. [45] Yunhu Ye, Binyuan Hui, Min Yang, Binhua Li, Fei Huang, and Yongbin Li. Large language models are versatile decomposers: Decomposing evidence and questions for table-based rea-soning. In Proceedings of the 46th international ACM SIGIR conference on research and development in information retrieval , pages 174–184, 2023. [46] Yunhu Ye, Binyuan Hui, Min Yang, Binhua Li, Fei Huang, and Yongbin Li. Large language models are versatile decomposers: Decomposing evidence and questions for table-based rea-soning. In Proceedings of the 46th International ACM SIGIR Conference on Research and Development in Information Retrieval, SIGIR 2023, Taipei, Taiwan, July 23-27, 2023 . ACM, 2023. [47] Jiahao Yu, Xingwei Lin, Zheng Yu, and Xinyu Xing. Gptfuzzer: Red teaming large language models with auto-generated jailbreak prompts. arXiv preprint arXiv:2309.10253 , 2023. [48] Yi Zeng, Hongpeng Lin, Jingwen Zhang, Diyi Yang, Ruoxi Jia, and Weiyan Shi. How johnny can persuade llms to jailbreak them: Rethinking persuasion to challenge AI safety by humanizing llms. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), ACL 2024, Bangkok, Thailand, August 11-16, 2024 , 2024. [49] Xiaokang Zhang, Sijia Luo, Bohan Zhang, Zeyao Ma, Jing Zhang, Li Yang, Guanlin Li, Zijun Yao, Kangli Xu, Jinchang Zhou, Daniel Zhang-Li, et al. Tablellm: Enabling tabular data manipulation by llms in real office usage scenarios. arXiv preprint arXiv:2403.19318 , 2024. [50] Haiteng Zhao, Chang Ma, Xinshuai Dong, Anh Tuan Luu, Zhi-Hong Deng, and Hanwang Zhang. Certified robustness against natural language attacks by causal intervention. In International Conference on Machine Learning , pages 26958–26970. PMLR, 2022. [51] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica. Judging llm-as-a-judge with mt-bench and chatbot arena. In Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 , 2023. [52] Fengbin Zhu, Wenqiang Lei, Youcheng Huang, Chao Wang, Shuo Zhang, Jiancheng Lv, Fuli Feng, and Tat-Seng Chua. Tat-qa: A question answering benchmark on a hybrid of tabular and textual content in finance. arXiv preprint arXiv:2105.07624 , 2021. [53] Yongshuo Zong, Tingyang Yu, Ruchika Chavhan, Bingchen Zhao, and Timothy Hospedales. Fool your (vision and) language model with embarrassingly simple permutations. arXiv preprint arXiv:2310.01651 , 2023. 13 A Appendix 
+
+A.1 Usage of LLM 
+
+We employed LLMs as an auxiliary tool to polish the grammar and clarity of our manuscript. This usage was limited to improving readability and presentation; all conceptual contributions, analyses, and interpretations were developed by the authors. 
+
+A.2 Metric Used for Alignment Scores 
+
+We further illustrate the effect of the ATP attack by contrasting model outputs generated from the original table input with those obtained from its adversarially permuted counterpart, thereby validating the effectiveness of our evaluation metrics. For each instance, we generate outputs under both conditions and compute example-level alignment scores with respect to the reference answer. We report three metrics to assess the similarity between generated and reference outputs: • ROUGE-L [ 23 ]: lexical similarity via longest common subsequence between generated and reference answers. • LLM-as-judge [ 51 ]: a held-out LLM (Gemini 2.5 [ 8]) scores the semantic similarity between the model’s output and the ground truth. • Human annotation : human raters assess semantic similarity relative to the ground truth answer. 
+
+Method. We uniformly sample TQA instances in the dataset. For each instance, we construct two prompts (original vs. ATP-permuted table), prompt the model to generate outputs, and score them with ROUGE-L, the LLM-as-judge, and human raters. To assess agreement among metrics, we compute Spearman’s rank correlation over example-level scores for each metric pair. The resulting correlations are summarized in Figure 4. Human Score LLM-as-Judge ROUGE-L       
+
+> Human Score LLM-as-Judge ROUGE-L
+> 1.000 0.847 0.120
+> 0.847 1.000 0.188
+> 0.120 0.188 1.000
+> Rank Correlation Between Different Metric
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Spearman Correlation Coefficient
+
+Figure 4: Spearman’s Rank Correlation between different metrics. The LLM-as-judge method showed strong alignment with the human rater. 
+
+Based on these results, we observe that the LLM-as-judge metric exhibits strong alignment with human judgments, whereas ROUGE-L fails to capture such alignment. This finding supports the effectiveness of our LLM-as-judge as an evaluation metric for measuring alignment score between LLM-generated responses and ground-truth answers. In con-trast, metrics like ROUGE-L, which rely on lexical overlap, are limited to token-level similarity and thus fall short in evaluating semantic equivalence, especially in tasks involv-ing long-form reasoning in TQA task. We further illustrate this limitation with an example in which the adversarially perturbed (ATP-attacked) table input flips the model’s orig-inally correct prediction(see Section A.3). Although the perturbed output achieves a higher ROUGE-L score due to surface-level overlap, it no longer preserves the correct se-mantics. Conversely, the LLM-as-judge metric successfully detects this change in prediction, validating its suitability for robust evaluation in such scenarios. We also provide an illustrative example below to show how ATP permutes the input table to fool a victim LLM. In the example we can also see that the LLM-as-judge works better than Rouge-L. More specifically, given original input, the model gives a correct response of “Desmond Trufant” while with permuted input, the model outputs an incorrect answer of “Robert Alford”, Note that the ground truth is “Desmond Trufant”. Rouge-L gives a score of 0.37 for the correct response but gives 0.39 to the incorrect response, which is not ideal. As a contrast, LLM-as-judge gives 0.8 to the correct one and gives 0.1 to the incorrect response, which aligns well with human rating. 14 A.3 An Illustrative Example for ATP Attacked Input 
+
+Example of ATP Attack Result (by Qwen2.5-14B-Instruct) 
+
+Instruction. Offer a thorough and accurate solution that directly addresses the Question outlined in the [Question]. 
+
+[Table] 
+
+Round|Selection|Player|Position|College| 1|22|Desmond Trufant|CB|Washington| 2|60|Robert Alford|CB|Southeastern Louisiana| 4|127|Malliciah Goodman|DE|Clemson| 4|133|Levine Toilolo|TE|Stanford| 5|153|Stansly Maponga|DE|TCU| 7|243|Kemal Ishmael|S|Central Florida| 7|244|Zeke Motta|S|Notre Dame| 7|249|Sean Renfree|QB|Duke| 
+
+[Table Description] 
+
+This table summarizes an NFL draft class drawn from college programs. For each pick, it lists the round, overall selection number, player name, position, and college. 
+
+[Question] 
+
+Who is the top listed player? 
+
+Original Answer (Rouge-L: 0.37, LLM-as-judge Score: 0.8) [Solution] Among the athletes listed in the draft class table, the first corresponds to Desmond Trufant , who was selected in the opening round of the draft, holding the 22nd overall position. 
+
+Attacked Instruction. Offer a thorough and accurate solution that directly addresses the Question outlined in the [Question]. 
+
+[Table] (Permuted by ATP Attack) 
+
+College|Round|Player|Selection|Position| Clemson|4|Malliciah Goodman|127|DE| Stanford|4|Levine Toilolo|133|TE| Duke|7|Sean Renfree|249|QB| Central Florida|7|Kemal Ishmael|243|S| Washington|1|Desmond Trufant|22|CB| Notre Dame|7|Zeke Motta|244|S| TCU|5|Stansly Maponga|153|DE| Southeastern Louisiana|2|Robert Alford|60|CB| 
+
+[Table Description] 
+
+This table summarizes an NFL draft class drawn from college programs. For each pick, it lists the round, overall selection number, player name, position, and college. 
+
+[Question] 
+
+Who is the top listed player? 
+
+Attacked Answer (Rouge-L: 0.39, LLM-as-judge Score: 0.1) [Solution] The top-listed player in your table is Robert Alford from Southeastern Louisiana, where he played as a Cornerback. He was selected the 2nd pick 60th in Round 2. 
+
+[Ground Truth] 
+
+The top listed player is Desmond Trufant , who was selected in Round 1 with the 22nd pick. He played as a cornerback and attended the University of Washington. 
+
+15
