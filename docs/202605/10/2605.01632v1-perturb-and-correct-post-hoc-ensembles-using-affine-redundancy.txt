@@ -1,0 +1,1980 @@
+Title: Perturb and Correct: Post-Hoc Ensembles using Affine Redundancy
+
+URL Source: https://arxiv.org/pdf/2605.01632v1
+
+Published Time: Tue, 05 May 2026 00:53:47 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+# Perturb and Correct: Post-Hoc Ensembles using Affine Redundancy 
+
+Eleanor Quint 
+
+Department of Computing University of Nebraska–Lincoln Lincoln, NE 68508, USA 
+
+equint@cse.unl.edu 
+
+## Abstract 
+
+Models that are indistinguishable on in-distribution data can behave very differ-ently under distribution shift. We introduce Perturb-and-Correct (P&C), a post-hoc method for constructing epistemically diverse predictors from a single pretrained network. P&C applies random hidden layer perturbations with a least-squares cor-rection in the subsequent affine layer, producing predictors that agree on calibration data while remaining free to disagree away from it. We analyze this mechanism through the post-correction residual and its first-order sensitivity: the residual is controlled near the calibration distribution by a leverage term, while corrected sensitivity grows as inputs deviate from the calibration geometry. Empirically, P&C achieves a strong ID/OOD tradeoff across MuJoCo dynamics prediction and CIFAR-10 OOD detection, matching or outperforming standard post-hoc baselines while requiring only a single pretrained model. Our findings highlight the potential in further exploiting overparameterization as a strength of deep learning models. 
+
+## 1 Introduction 
+
+Modern neural networks are massively overparameterized. Many distinct parameter values can realize models that are nearly indistinguishable on the data on which they are trained [D’Amour et al., 2022]. This flexibility forms a foundation of the modern deep learning regime, supporting effective first-order optimization [Dauphin et al., 2014, Choromanska et al., 2015] and generalization phenomena distinct from less parameterized models, such as double descent [Belkin et al., 2019]. At the same time, it contributes to a broader problem of underspecification , where a training pipeline can return many predictors with essentially identical in-distribution (ID) performance, even though those predictors may behave very differently under distribution shift [D’Amour et al., 2022] or adversarial attack [Goodfellow et al., 2015]. In such settings, the training data do not fully determine model behavior away from their support, making epistemic uncertainty and out-of-distribution detection central to the deployment of reliable models. In this work, we introduce Perturb-and-Correct (P&C), a post-hoc ensemble construction that turns underspecification into a usable source of epistemic diversity (Figure 1). P&C samples random parameter perturbations and then fits a compensating correction in the following affine layer, yielding predictors that remain nearly indistinguishable on in-distribution (ID) data while becoming free to disagree away from the data distribution. This gives P&C a natural connection to adversarial optimization: rather than finding perturbations that maximally change a model’s predictions subject to an input-space perturbation constraint, P&C uses parameter perturbations that produce distinct downstream predictions subject to an ID-preservation constraint. In this sense, P&C is philosophically closer to approaches such as Epistemic Neural Networks [Osband et al., 2023] than to explicitly Bayesian methods: rather than committing to a posterior over parameters, it seeks to represent epistemic uncertainty through a family of predictors that agree where the data constrain behavior and diverge where they do not. 
+
+> Preprint.
+> arXiv:2605.01632v1 [cs.LG] 2 May 2026
+
+Perturb-and-Correct (P&C)    
+
+> Input
+> x
+> Original layer
+> Perturbed layer
+> +perturb
+> Following affine layer
+> + 1
+> Corrected affine layer
+> + 1 +correct
+> Prediction
+> y
+> Prediction
+> ynew
+
++ LS        
+
+> parameter perturbation least-squares correction
+> ID OOD
+> y/h
+> ID OOD
+> y/h
+
+Figure 1: P&C perturbs a hidden layer and corrects in the following affine layer. Output ˆynew stays close to the original output ˆy on in-distribution data, while differing more under shift. Right: schematic relative output sensitivity, || ∆y|| /|| ∆h|| , i.e., output change per unit hidden layer perturbation. Our theory formalizes this intuition by analyzing what remains after a hidden layer perturbation is corrected by refitting the following affine layer. To do so, we study a projected residual view of the correction and the resulting corrected sensitivity operator, which together give a geometric explanation for why P&C can preserve ID behavior while still separating under shift. Near the calibration distribution, the effect of a perturbation can remain effectively suppressed, but away from that geometry the residual can re-emerge. This perspective also clarifies why random perturbations are effective in practice. Rather than relying on selected directions, random perturbations act as an unbiased sketch of the corrected sensitivity, probing directions along which calibration leaves behavior unresolved. More broadly, this aligns with work suggesting that behaviors often treated as pathologies of modern neural networks may instead reflect genuine structural properties of learned solutions [Ilyas et al., 2019]. In this way, P&C does not treat underspecification as a pathology to be eliminated, but uses degrees of freedom unresolved by the data as a source of epistemic uncertainty. A common strategy in post-hoc uncertainty estimation is to place substantial structure on the source of model variation, for example by sampling an approximate posterior, restricting variation to an SGD-derived subspace, or modifying the model to expose epistemic degrees of freedom. P&C instead places the structure on the correction. The perturbations are random and low-dimensional; the least-squares repair enforces agreement on calibration data, a representative subset of the training data, and lets disagreement emerge only where that correction no longer transfers. Figure 2 previews this mechanism empirically: corrected P&C achieves a favorable ID/OOD frontier while maintaining large hidden perturbations whose output effect is suppressed on ID data and re-emerges under shift. This work makes three contributions. First, we show that useful post-hoc epistemic ensembles can be constructed without carefully estimating a posterior or selecting specialized perturbation directions: random low-dimensional hidden layer perturbations become effective when paired with local affine correction on calibration data. Second, we analyze post-correction residuals and corrected sensitivity, explaining why agreement can persist near calibration geometry but fail away from it, and why random perturbations can effectively probe the resulting epistemic directions. Third, we provide empirical evidence supporting the theoretical analysis and demonstrate that P&C yields a strong training cost/quality tradeoff relative to standard post-hoc baselines across MuJoCo dynamics prediction and CIFAR-10 OOD detection. 
+
+## 2 Related Work 
+
+Ensembles and approximate posterior sampling. A standard approach to epistemic uncertainty estimation is to aggregate predictions across multiple plausible predictors. Deep Ensembles remain a strong empirical baseline for predictive calibration and out-of-distribution (OOD) detection, with diversity arising from independent training runs [Lakshminarayanan et al., 2017]. MC Dropout instead modifies the training procedure to obtain ensemble-like predictions from a single model by sampling stochastic subnetworks at test time, with an interpretation as approximate Bayesian inference [Gal and Ghahramani, 2016]. Other post-training approaches construct approximate posterior distributions around a trained solution. The Laplace approximation fits a local Gaussian approximation using curvature information [Ritter et al., 2018], while SWAG constructs a Gaussian approximation from the trajectory of stochastic gradient descent [Maddox et al., 2019]. P&C also 20.3 0.4 0.5 0.6    
+
+> ID RMSE ↓
+> 10 0
+> 10 1
+> Far NLL ↓
+> Sub.
+> SWAG
+> Lapl.
+> P&C
+> w/o
+> Corr P&C
+> (A) ID / OOD frontier
+> Sub.
+> SWAG
+> Lapl.
+> P&C w/o Corr
+> P&C
+> 10 0
+> 10 1
+> Magnitude
+> (B) ID: ‖Δ h‖ vs ‖Δ y‖
+> ‖Δ h‖
+> ‖Δ y‖
+> Sub.
+> SWAG
+> Lapl.
+> P&C w/o Corr
+> P&C
+> 10 0
+> 10 1
+> Magnitude
+> (C) OOD: ‖Δ h‖ vs ‖Δ y‖
+
+Figure 2: P&C improves ID/OOD tradeoff on Ant-v5 by preserving large hidden perturbations while reducing their effect on ID data. (A) ID/OOD frontier for perturbation-based methods: Subspace ( Sub. ), SWAG, Laplace ( Lapl. ), P&C without correction ( P&C w/o Corr ), and P&C with least-squares correction ( P&C ). Horizontal axis is in-distribution root mean squared error (ID RMSE, lower is better) and the vertical axis is far-OOD negative log-likelihood (Far NLL, lower is better). 
+
+(B) On ID data, the two bars for each method show the mean hidden layer perturbation magnitude 
+
+∥∆h∥ and the mean output change ∥∆y∥, respectively. (C) The same quantities on far-OOD data. represents uncertainty through an ensemble of plausible predictors, but differs in that the ensemble is constructed entirely post hoc from a single pretrained model using random hidden layer perturbations followed by corrections. 
+
+Low-loss geometry and structured parameter-space uncertainty. A related line of work studies the geometry of high-performing regions in neural network parameter space. SWAG takes a trajectory-based view to uncertainty estimation by fitting a Gaussian approximation to SGD iterates [Maddox et al., 2019], while Subspace Inference performs Bayesian inference in a low-dimensional parameter subspace, often derived from the SGD trajectory, that contains diverse high-performing models [Iz-mailov et al., 2020]. These methods show that useful variation can often be found in structured low-dimensional regions of parameter space. P&C shares the goal of obtaining uncertainty from low-dimensional parameter variation, but reverses the design emphasis. Rather than identifying a specific perturbation, it samples randomly and uses least-squares correction to suppress the effects on ID calibration representations while allowing them to re-emerge away from the calibration geometry. 
+
+Single-model and explicitly epistemic predictors. Several methods seek uncertainty estimates without training a full independent ensemble. SNGP combines spectral normalization with a Gaussian-process output layer to produce a deterministic predictor whose uncertainty depends explicitly on distance from the training data [Liu et al., 2020a]. Epistemic Neural Networks provide a broader interface for representing joint predictions and epistemic variation through explicit epistemic indexing, but require changes to the model and training pipeline [Osband et al., 2023]. P&C is philosophically close to these methods in that it aims to represent epistemic uncertainty as variation among predictors rather than merely as marginal predictive noise. However, P&C does not require training an epistemic architecture, modifying the loss, or changing the base model. 
+
+Adversarial sensitivity and constrained variation. The motivation underlying P&C is also informed by the adversarial example literature. Adversarial attacks expose the fact that small perturbations can be nearly invisible under one set of constraints while producing large predictive effects under another [Goodfellow et al., 2015, Fawzi et al., 2018]. Robust optimization formulations make this asymmetry explicit by casting robustness in terms of worst-case perturbations under a constraint set [Madry et al., 2018]. P&C is neither an attack nor a defense method, but it uses a related constrained variation perspective in parameter space rather than input space. Further, P&C shifts the key constraint from the perturbation to the corrected predictor. Random perturbations are allowed, but their ID-visible effects are kept small by affine repair. The classic goal of changing output values is restricted to OOD data. 33 Perturb-and-Correct 
+
+P&C constructs an ensemble from a single trained network by perturbing one or more hidden layer parameters and refitting a compensating correction in the following affine layer on calibration data. We treat the resulting predictors as a uniformly-weighted mixture and combine predictions as in Lakshminarayanan et al. [2017]. Throughout, let 
+
+fθ = gL ◦ ϕ ◦ gL−1 ◦ · · · ◦ ϕ ◦ g1,
+
+where each gℓ(h) = Wℓh + bℓ is affine and ϕ is any fixed nonlinearity. 1 Let Dcal = {xi}Ni=1 denote an in-distribution calibration set, which may be the training data. 
+
+Single-layer P&C. Fix a target hidden layer ℓ, ensemble size M , perturbation scale σ > 0, and perturbation rank K. Draw a random orthonormal basis Uℓ ∈ Rdℓ×K once and share it across members. 2 For each member m = 1 , . . . , M , sample coefficients z(m) ∼ N (0 , I K ) and form 
+
+∆W (m) 
+
+> ℓ
+
+= σ · reshape( Uℓz(m)), fW (m) 
+
+> ℓ
+
+= Wℓ + ∆ W (m) 
+
+> ℓ
+
+.
+
+Applying fW (m) 
+
+> ℓ
+
+changes the hidden activation at layer ℓ, which would otherwise propagate unchecked through the rest of the network. P&C compensates locally by replacing the next affine layer 
+
+(Wℓ+1 , b ℓ+1 ) with a corrected pair (fW (m) 
+
+> ℓ+1
+
+, eb(m)
+
+> ℓ+1
+
+) fit on calibration activations. Let hℓ(x) and eh(m) 
+
+> ℓ
+
+(x)
+
+denote the original and perturbed post-activations at layer ℓ, and let Sm ⊆ D cal denote the correction subset for member m. The correction solves 
+
+ fW (m) 
+
+> ℓ+1
+
+, eb(m)
+
+> ℓ+1
+
+ = arg min 
+
+> W,b
+
+X
+
+> x∈Sm
+
+W eh(m) 
+
+> ℓ
+
+(x)+ b− Wℓ+1 hℓ(x)+ bℓ+1 
+
+ 22
+
++λ∥W −Wℓ+1 ∥2 
+
+> F
+
++λ∥b−bℓ+1 ∥22,
+
+(1) with λ ≥ 0 an optional ridge parameter. The correction fits the original pre-activations of layer ℓ + 1 
+
+on the correction subset; in the notation of Section 4 with y(x) = hℓ(x) and Θ = [ bℓ+1 , W ℓ+1 ],Eq. (1) is exactly the affine repair of Eq. (3) . Each member shares all other parameters with the base model, and evaluation runs a standard forward pass with (fW (m) 
+
+> ℓ
+
+, fW (m) 
+
+> ℓ+1
+
+, eb(m)
+
+> ℓ+1
+
+) substituted. 
+
+Multi-layer P&C. When perturbing a sequence of layers ℓ1 < · · · < ℓ r , P&C applies the perturb-and-correct step sequentially: after perturbing layer ℓj , it fits a local correction in layer ℓj + 1 against the original pre-activations of that layer before perturbing ℓj+1 . This yields a chain of local repairs rather than a single end-of-network correction. We perturb hidden layers only; output heads are left unperturbed, concentrating ensemble diversity in intermediate representations. 
+
+Bootstrapped correction. The correction subsets {Sm}Mm=1 need not be shared across members. P&C introduces a second source of ensemble diversity by drawing each Sm as an independent bootstrap sample of Dcal , so that different members solve (1) on different correction geometries. When a sampled subset is well-conditioned and representative near an ID point, the ID bound of Theorem 2 applies memberwise; changing subsets can also decorrelate correction failures and increase the effective rank of the ensemble covariance, as formalized structurally in Theorem 6. The bootstrap fraction is a single additional hyperparameter; sampling with replacement at the full calibration size recovers nontrivial decorrelation while reusing Dcal in expectation. 
+
+## 4 Theory 
+
+We analyze P&C as a randomized post-hoc ensemble mechanism. The central object is the post-correction residual : the output change at a test point that remains after the perturbed representation has been repaired by refitting the following affine layer on calibration data. We show (i) that the residual is small at calibration-like points, governed by a leverage factor; (ii) that the first-order             
+
+> 1We present P&C for a fully connected fθfor notational simplicity; Section 5 applies it to convolutional networks and Appendix B gives the corresponding algorithmic details.
+> 2dℓdenotes the number of parameters in Wℓ; the reshape below maps a flat direction in Rdℓback to the shape of Wℓ.Using a random low-rank basis rather than full-dimensional Gaussian noise bounds solve cost in Krather than dℓand leaves the OOD variance analysis of Section 4 unchanged up to a K-dependent constant.
+
+4sensitivity of the residual decomposes into a Jacobian at x minus its calibration-predicted counterpart, which grows precisely where x extrapolates; and (iii) that random perturbations act as an unbiased sketch of this sensitivity, with bootstrapped calibration subsets further raising the effective rank of the ensemble covariance. 
+
+4.1 Setup 
+
+Fix a trained network and a hidden layer whose post-activation representation is y(x) ∈ Rd. Write the following affine layer in augmented form as 
+
+z(x) = Θ y(x), y(x) := 
+
+ 1
+
+y(x)
+
+
+
+∈ Rd+1 , Θ := [ b, W ] ∈ Rq×(d+1) . (2) A hidden layer parameter perturbation v ∈ RT (T = K for the low-rank basis of Section 3) replaces 
+
+y with yv and y with yv . Let S = {xi}Bi=1 denote a calibration subset, with augmented design matrices Y S , Y v,S ∈ RB×(d+1) stacking y(xi)⊤ and yv (xi)⊤ in rows. P&C fits the corrected affine layer by ridge-regularized least squares, 
+
+bΘS (v) := arg min 
+
+> Θ′∈Rq×(d+1)
+
+Y v,S Θ′⊤ − Y S Θ⊤ 2 
+
+> F
+
++ λ∥Θ′ − Θ∥2 
+
+> F
+
+, (3) with λ ≥ 0. The post-correction residual at a test point x and its magnitude are 
+
+rS (x; v) := bΘS (v) yv (x) − Θ y(x), ρS (x; v) := ∥rS (x; v)∥2. (4) The first-order corrected sensitivity is AS (x) := ∂v rS (x; v) v=0 ∈ Rq×T . Within any local regime on which v 7 → yv (x) and v 7 → yv (xi) are twice differentiable, 
+
+rS (x; v) = AS (x)v + εS (x; v), ∥εS (x; v)∥2 ≤ L2(x, S ) ∥v∥22 for ∥v∥2 ≤ r. (5) This first-order expansion is valid for ∥v∥2 ≤ r, and is informative as a structural decomposition only when the quadratic remainder is small relative to the linear term. We therefore treat the sensitivity analysis as a mechanism-level account rather than a quantitative bound at the perturbation scales used in Section 5. Theorem 2 provides a complementary magnitude bound on ρS (x; v) that holds pointwise for each ∥v∥2 ≤ r in the regime of Assumption 1. 
+
+Lemma 1 (Closed form and orthogonality) . If Gv,S := Y ⊤ 
+
+> v,S
+
+Y v,S + λI is nonsingular, (3) is strictly convex and has the unique minimizer 
+
+bΘS (v) = Θ 
+
+
+
+Y ⊤ 
+
+> S
+
+Y v,S + λI 
+
+
+
+G−1 
+
+> v,S
+
+. (6) 
+
+When λ = 0 and Y v,S has full column rank, the calibration residual ES (v) := Y v,S bΘS (v)⊤−Y S Θ⊤
+
+is orthogonal to col( Y v,S ).
+
+P&C therefore removes exactly the component of the perturbation effect that can be absorbed by the next affine layer on the calibration representation; the residual is what survives. 
+
+4.2 ID preservation near the correction geometry 
+
+Define the ridge leverage hλS (x) := y(x)⊤(Y ⊤ 
+
+> S
+
+Y S + λI )−1y(x) and the calibration- and test-side perturbation magnitudes 
+
+∆S (v) := ∥Y v,S − Y S ∥F , δx(v) := ∥yv (x) − y(x)∥2.
+
+The ridge leverage is standard in ridge regression: it measures how well the calibration representations 
+
+Y S cover y(x), small on calibration-like x and growing where x extrapolates beyond the calibration support. Its appearance in Theorem 2 is what gives the bound its ID/OOD asymmetry—tight where 
+
+hλS (x) is small, slack where Section 4.3 will show that corrected sensitivity re-emerges. 
+
+Assumption 1 (Local regularity and conditioning) . For ∥v∥2 ≤ r: (i) ∆S (v) ≤ LS ∥v∥2 and 
+
+δx(v) ≤ Lx∥v∥2; (ii) σmin (Gv,S ) ≥ γS > 0; (iii) ∥Θ∥op ≤ MΘ.
+
+5Condition (ii) is automatically satisfied with γS ≥ λ whenever λ > 0; in the λ = 0 case it requires the perturbed calibration representation to retain full column rank, which holds when the calibration set is diverse relative to the representation dimension. Conditions (i) and (iii) are standard local regularity: (i) holds for smooth activations in a neighborhood of v = 0 , with the admissible radius r
+
+shrinking as the product of per-layer Lipschitz constants grows, and (iii) is immediate for any trained network with bounded weights. 
+
+Theorem 2 (ID residual upper bound) . Under Assumption 1, there exist constants C1, C 2, C 3 ≥ 0
+
+depending on MΘ, γS , ∥Y S ∥op , ∥G−1∥op , LS r, and the local Lipschitz constants such that, for every x and every ∥v∥2 ≤ r,
+
+ρS (x; v) ≤ C1
+
+q
+
+hλS (x) ∆ S (v) + C2 δx(v) + C3
+
+q
+
+hλS (x) ∆ S (v)2. (7) 
+
+In particular, for calibration-like points with bounded leverage hλS (x) and perturbations that move calibration activations only mildly, ρS (x; v) = O(∥v∥2). If x ∈ S and λ = 0 , the actual residual 
+
+rS (x; v) is the corresponding row of the least-squares training residual, and hence vanishes whenever the affine repair interpolates the calibration targets; the coarse upper bound in (7) need not itself vanish. 
+
+The same bound applies memberwise to bootstrap subsets on a conditional basis: if a sampled subset 
+
+Sm satisfies Assumption 1 and yields hλSm (x) ≤ H at an ID validation point x, then Theorem 2 applies to Sm with constants depending on H. We therefore use Theorem 2 as a conditional guarantee and evaluate the resulting ID preservation empirically in Section 5, rather than proving high-probability conditioning of bootstrap subsets. 
+
+4.3 Corrected sensitivity grows off the correction geometry 
+
+Theorem 2 only tells half of the story: it bounds the residual where x is calibration-like. Useful ensemble disagreement additionally requires that ρS be large where x is not. We establish this through the structure of AS (x) itself. Let 
+
+Jx := ∂v ¯yv (x) v=0 ∈ R(d+1) ×T
+
+be the augmented representation Jacobian at x, and let {Jxi }Bi=1 be the corresponding augmented calibration Jacobians. Since the first coordinate of ¯yv (x) is the constant bias coordinate, the first row of each Jx is zero. Define the ridge hat-weight vector 
+
+wλS (x) := Y S
+
+ Y ⊤ 
+
+> S
+
+Y S + λI −1y(x) ∈ RB , (8) and the associated calibration-predicted Jacobian 
+
+T λS (x) := 
+
+> B
+
+X
+
+> i=1
+
+ wλS (x) 
+
+> i
+
+Jxi ∈ R(d+1) ×T . (9) 
+
+Proposition 3 (Decomposition of corrected sensitivity) . Suppose G := Y ⊤ 
+
+> S
+
+Y S + λI is nonsingular (automatic for λ > 0; requires Y S of full column rank when λ = 0 ). Then 
+
+AS (x) = Θ  Jx − T λS (x). (10) The proposition connects directly to the leverage-based analysis of Theorem 2. The hat weights reconstruct y(x) from the calibration design (exactly at λ = 0 , up to ridge shrinkage otherwise), 
+
+Y ⊤ 
+
+> S
+
+wλS (x) = y(x) − λ G −1y(x), (11) and their norm is controlled by ridge leverage: 
+
+∥wλS (x)∥22 = hλS (x) − λ ∥G−1y(x)∥22 ≤ hλS (x), (12) with equality at λ = 0 . When x lies near the calibration support, hλS (x) is small, so wλS (x) has small norm and places smooth mass on the calibration points; any regularity of the Jacobian map 
+
+x 7 → Jx over the calibration manifold then propagates through T λS (x) to approximate Jx, keeping the discrepancy Jx − T λS (x) small and AS (x) with it. When x extrapolates, hλS (x) grows, wλS (x) no longer admits a bounded-norm representation on the calibration rows, and there is no mechanism forcing linear combinations of {Jxi } to track Jx; the discrepancy survives, and AS (x) grows with it. Corrected sensitivity is therefore concentrated exactly in the regime where Theorem 2 no longer binds. 610.4 0.6 0.8        
+
+> ID RMSE ↓
+> 10 0
+> 10 1
+> Far NLL ↓
+> ps=4
+> ps=8
+> ps=16
+> ps=32
+> ps=4
+> ps=8
+> ps=16
+> ps=32
+> (A) Correction frontier
+> No correction
+> LS correction
+> 10 110 2
+> Mahalanobis distance to calibration (hidden)
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> Prediction disagreement to base
+> (B) Disagreement vs distance
+> ID
+> Near
+> Mid
+> Far
+> ρs= + 0.97
+> β1= + 1.03±0.01
+> 10 3
+> Random-probe sketch ̂ s(x)
+> 10 2
+> 10 3
+> Finite P&C disagreement  D(x)
+> (C) Probes predict disagreement
+> ID
+> Near
+> Mid
+> Far
+> ρs= + 0.73
+> β1= + 0.83±0.01
+> t= + 117.7
+> Ant-v5
+
+Figure 3: Mechanism-level diagnostics for P&C on Ant-v5. (A) Least-squares correction improves the ID/OOD frontier: uncorrected random perturbations degrade ID RMSE, while corrected P&C achieves lower far-OOD NLL at comparable ID error. (B) Prediction disagreement increases with Mahalanobis distance from the ID calibration activations in the perturbed hidden space. (C) The random-probe sensitivity sketch predicts finite-ensemble P&C disagreement. Together, these di-agnostics support the mechanism in Section 4: correction suppresses perturbation effects near the calibration geometry, while residual sensitivity re-emerges under shift. 
+
+4.4 Random perturbations sketch corrected sensitivity 
+
+For a linear map A, define the covariance effective rank 
+
+reff (A) := ∥A∥4
+
+> F
+
+∥A⊤A∥2
+
+> F
+
+.
+
+For a PSD covariance matrix C, define 
+
+reff (C) := tr( C)2
+
+∥C∥2
+
+> F
+
+.
+
+These definitions agree when C = AA ⊤, since tr( AA ⊤) = ∥A∥2 
+
+> F
+
+and ∥AA ⊤∥2 
+
+> F
+
+= ∥A⊤A∥2 
+
+> F
+
+. This quantity is the participation ratio of the covariance eigenvalues; we use reff to distinguish it from the standard stable rank ∥A∥2 
+
+> F
+
+/∥A∥2op .
+
+Theorem 4 (Random sensitivity sketch) . Let v ∼ N (0 , σ 2IT ) and fix x and S. Then 
+
+Ev ∥AS (x)v∥22 = σ2∥AS (x)∥2 
+
+> F
+
+, (13) 
+
+and for n i.i.d. draws, let bVn(x; S) := 1
+
+> n
+
+Pnm=1 ∥AS (x)vm∥22,
+
+E bVn = σ2∥AS (x)∥2 
+
+> F
+
+, Var( bVn)
+
+ E bVn
+
+2 = 2
+
+n r eff (AS (x)) . (14) 
+
+Proposition 5 (Local residual lower bound) . Let v ∼ N (0 , σ 2Ip) truncated to ∥v∥2 ≤ r, so that (5) 
+
+applies, and let σ2tr ≤ σ2 denote the isotropic covariance scale of the truncated law. Then 
+
+Ev ρS (x; v)2 ≥ σ2tr  
+
+> 2
+
+∥AS (x)∥2 
+
+> F
+
+− C4, (15) 
+
+where C4 = L22 Ev ∥v∥42 depends on the truncated fourth moment (and is bounded above by L22 r4). 
+
+Together, Proposition 3, Theorem 4, and Proposition 5 give the full P&C story: at extrapolative x,
+
+∥AS (x)∥F grows because Jx − TS (x) is not small; the expected squared residual therefore grows with it (Proposition 5); and isotropic sampling is a low-variance estimator of ∥AS (x)∥2 
+
+> F
+
+whenever 
+
+AS (x) spreads its energy across several directions (Theorem 4). This is the sense in which Random P&C probes the epistemic degrees of freedom left unresolved by calibration—it samples directly in the domain of AS (x) without requiring knowledge of the test-time shift. 7Table 1: Cross-environment summary across 11 MuJoCo environments and 10 seeds. Entries report mean rank ± stddev and win counts; lower rank is better. Header arrows indicate the preferred direction of the underlying metric; superscript arrows indicate Wilcoxon-Holm comparisons against P&C at α = 0 .05 : ↑ means P&C significantly outperforms the baseline, and ↓ means the reverse.                                                                                                                
+
+> Method ID RMSE ↓Far NLL ↓Far AUROC ↑Far Spearman ↑
+> mean rank wins mean rank wins mean rank wins mean rank wins Deep Ensemble 3.27 ±1.56 2 / 11 3.00 ±1.18 1 / 11 2.64 ±1.36 ↑1 / 11 2.27 ±1.35 4 / 11 MC Dropout 3.82 ±1.40 0 / 11 3.45 ±1.13 0 / 11 3.18 ±1.72 ↑1 / 11 4.18 ±1.40 ↑0 / 11 SWAG 4.55 ±1.44 0 / 11 4.00 ±1.55 1 / 11 4.64 ±1.21 ↑0 / 11 4.91 ±0.70 ↑0 / 11 Laplace 3.18 ±1.47 1 / 11 3.09 ±1.14 1 / 11 4.18 ±0.87 ↑0 / 11 2.91 ±0.83 ↑0 / 11 Subspace 3.00 ±1.73 3 / 11 5.91 ±0.30 ↑0 / 11 5.09 ±0.83 ↑0 / 11 5.09 ±1.38 ↑0 / 11 P&C 3.18 ±2.40 5 / 11 1.55 ±1.21 8 / 11 1.27 ±0.65 9 / 11 1.64 ±1.03 7 / 11
+
+## 5 Experiments 
+
+5.1 Experimental setup 
+
+We evaluate Perturb-and-Correct (P&C) in two settings: probabilistic dynamics prediction under behavioral distribution shift in MuJoCo [Todorov et al., 2012, Towers et al., 2024], and out-of-distribution (OOD) detection on CIFAR-10 [Krizhevsky and Hinton, 2009] under the OpenOOD v1.5 protocol [Zhang et al., 2023]. Across both settings, P&C is constructed post hoc from a single pretrained model, and all hyperparameters and post-hoc calibration choices are selected using in-distribution (ID) validation data only. We compare against MC Dropout, Deep Ensembles, Subspace Inference, SWAG, and Laplace in the MuJoCo experiments, and against standard OOD scoring rules and single-model uncertainty baselines on CIFAR-10. All methods use the same base architectures and training pipelines within each benchmark. Further details on architectures, training, calibration, hyperparameter grids, compute, and per-environment results are provided in the appendix. 
+
+5.2 Validating the Perturb-and-Correct mechanism 
+
+Before turning to aggregate benchmarks, we validate the mechanism predicted by Section 4. The theory suggests that least-squares correction should suppress perturbation effects near the calibration geometry, while residual disagreement should re-emerge as inputs move away from it. Figure 3 tests this behavior on Ant-v5. Figure 3(A) compares random perturbations with and without least-squares correction across per-turbation scales. Without correction, perturbations degrade ID performance and do not yield a favorable far-OOD likelihood tradeoff. Adding the correction step shifts the frontier: P&C maintains substantially better ID behavior while achieving lower far-OOD NLL. Thus, the correction is not merely a stabilizing detail; it is the step that turns random hidden-layer perturbations into useful epistemic variation. Figure 3(B) shows that P&C disagreement grows with Mahalanobis distance from the calibration activations in the perturbed hidden space. This matches the geometric account in Section 4: near the calibration support, perturbation effects are absorbed by the affine repair, while farther away the corrected residual is no longer constrained to remain small. Finally, Figure 3(C) connects the finite ensemble to the random-sketch analysis. Random-probe sensitivity is strongly predictive of the disagreement produced by finite P&C ensembles, supporting the claim that random perturbations can probe corrected sensitivity without needing to know the test-time shift in advance. 
+
+5.3 MuJoCo: uncertainty under behavioral shift 
+
+We evaluate multi-block P&C on dynamics prediction across 11 MuJoCo environments. Models are trained on expert data and evaluated on held-out expert transitions (ID) and three levels of behavioral shift (Near, Mid, Far). ID, Near, and Mid transitions are drawn from the Minari MuJoCo/env/level-v0 
+
+datasets [Younis et al., 2024]; Far transitions are collected online by running uniform-random actions, 8Table 2: CIFAR-10 OOD detection over 5 seeds. Method Acc% ↑ Near AUROC ↑ Near FPR95 ↓ Far AUROC ↑ Far FPR95 ↓
+
+Mahalanobis 95 .74 ± 0.14 87 .98 ± 0.11 66 .30 ± 0.88 93 .25 ± 0.26 38 .30 ± 5.44 
+
+ReAct+Energy 95 .77 ± 0.16 88 .63 ± 0.15 54 .39 ± 1.28 92 .50 ± 1.20 29 .78 ± 5.26 
+
+LLLA 95 .77 ± 0.20 88 .97 ± 0.69 54 .12 ± 5.70 93 .04 ± 0.95 28 .44 ± 6.72 
+
+Epinet 95 .76 ± 0.18 88 .07 ± 0.04 63 .37 ± 1.40 92 .16 ± 1.02 35 .10 ± 5.57 
+
+SWAG 95 .37 ± 0.05 90 .03 ± 0.15 44 .71 ± 0.79 94 .19 ± 1.03 22 .09 ± 4.91 
+
+P&C 95 .59 ± 0.20 91 .55 ± 0.13 33 .08 ± 0.63 95 .09 ± 0.50 18 .15 ± 1.07 
+
+Deep Ensemble 96 .56 ± 0.04 91 .10 ± 0.03 40 .39 ± 0.38 94 .63 ± 0.14 19 .49 ± 0.26 
+
+since Minari has no random-policy dataset. No OOD data was used for construction, selection, or calibration. Full per-environment results and hyperparameter details are in Appendix C. Table 1 summarizes results by cross-environment rank. P&C is competitive on ID RMSE, achieving mean rank 3.18 ± 2.40 and the most ID wins ( 5/11 ). Under far-OOD shift it obtains the best mean rank on Far NLL ( 1.55 ± 1.21 ), Far AUROC ( 1.27 ± 0.65 ), and Far Spearman ( 1.64 ± 1.03 ), with 
+
+8/11 , 9/11 , and 7/11 wins respectively. Compared with Deep Ensembles, P&C obtains stronger cross-environment OOD ranks while con-structing its members post hoc from a single pretrained model. This supports the central claim that corrected random perturbations recover useful epistemic diversity without independent models. 
+
+5.4 CIFAR-10: OOD detection 
+
+We next evaluate single block P&C on CIFAR-10 [Krizhevsky and Hinton, 2009] OOD detection using the OpenOOD v1.5 protocol [Zhang et al., 2023]. All methods use pre-activation ResNet-18 [He et al., 2016] as a base model; no OOD validation data is used for selection or calibration. We compare against standard OOD scores including Mahalanobis [Lee et al., 2018] and ReAct+Energy [Sun et al., 2021, Liu et al., 2020b], as well as post-hoc and single-model uncertainty baselines including LLLA [Ritter et al., 2018, Immer et al., 2021], Epistemic Neural Network [Osband et al., 2023], SWAG [Maddox et al., 2019], and Deep Ensembles [Lakshminarayanan et al., 2017]. P&C is applied to ResNet-18 by perturbing residual-block convolutions and fitting local convolutional least-squares corrections. Full implementation details and hyperparameter sweeps are given in Appendix B. Table 2 shows that P&C achieves the best OOD detection results among the reported methods. It improves over the strongest single-model uncertainty baseline, SWAG, on both Near-OOD and Far-OOD AUROC, and substantially reduces FPR95. P&C also compares favorably to the higher-cost Deep Ensemble reference: it obtains higher Near AUROC, lower Near FPR95, higher Far AUROC, and essentially matched Far FPR95, while the ensemble retains the highest ID accuracy. These CIFAR results mirror the MuJoCo pattern. P&C is not primarily an ID accuracy improvement method; instead, it preserves ID performance while inducing disagreement that becomes useful under distribution shift. Together with the mechanism diagnostics, the results support the view that local correction can turn simple random perturbations into effective post-hoc epistemic ensembles. 
+
+## 6 Conclusion 
+
+We introduced Perturb-and-Correct (P&C), a post-hoc method for constructing epistemically diverse ensembles from a single pretrained network. By pairing random hidden-layer perturbations with least-squares affine correction, P&C preserves in-distribution behavior while inducing disagreement under shift. Our analysis explains this effect geometrically: correction suppresses perturbation effects near the calibration distribution, while residual sensitivity re-emerges away from it. Across MuJoCo dynamics prediction and CIFAR-10 OOD detection, P&C achieves a favorable ID/OOD tradeoff without retraining independent models or estimating a full posterior. These results suggest that degrees of freedom left unresolved by calibration data can be exposed post hoc and constrained locally to obtain practical epistemic uncertainty estimates. 9References 
+
+Mikhail Belkin, Daniel Hsu, Siyuan Ma, and Soumik Mandal. Reconciling modern machine-learning practice and the classical bias–variance trade-off. Proceedings of the National Academy of Sciences ,116(32):15849–15854, 2019. Anna Choromanska, Mikael Henaff, Michael Mathieu, Gérard Ben Arous, and Yann LeCun. The loss surfaces of multilayer networks. In Artificial intelligence and statistics , pages 192–204. PMLR, 2015. Alexander D’Amour, Katherine Heller, Dan Moldovan, Ben Adlam, Babak Alipanahi, Alex Beutel, Christina Chen, Jonathan Deaton, Jacob Eisenstein, Matthew D Hoffman, et al. Underspecification presents challenges for credibility in modern machine learning. Journal of Machine Learning Research , 23(226):1–61, 2022. Yann N Dauphin, Razvan Pascanu, Caglar Gulcehre, Kyunghyun Cho, Surya Ganguli, and Yoshua Bengio. Identifying and attacking the saddle point problem in high-dimensional non-convex optimization. Advances in neural information processing systems , 27, 2014. Alhussein Fawzi, Hamza Fawzi, and Omar Fawzi. Adversarial vulnerability for any classifier. 
+
+Advances in neural information processing systems , 31, 2018. Yarin Gal and Zoubin Ghahramani. Dropout as a bayesian approximation: Representing model uncertainty in deep learning. In international conference on machine learning , pages 1050–1059. PMLR, 2016. Ian J. Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial examples. In International Conference on Learning Representations , 2015. Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Identity mappings in deep residual networks. In European conference on computer vision , pages 630–645. Springer, 2016. Andrew Ilyas, Shibani Santurkar, Dimitris Tsipras, Logan Engstrom, Brandon Tran, and Aleksander Madry. Adversarial examples are not bugs, they are features. Advances in neural information processing systems , 32, 2019. Alexander Immer, Maciej Korzepa, and Matthias Bauer. Improving predictions of bayesian neural nets via local linearization. In International conference on artificial intelligence and statistics ,pages 703–711. PMLR, 2021. Pavel Izmailov, Wesley J Maddox, Polina Kirichenko, Timur Garipov, Dmitry Vetrov, and An-drew Gordon Wilson. Subspace inference for bayesian deep learning. In Uncertainty in Artificial Intelligence , pages 1169–1179. PMLR, 2020. Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images. Technical report, Computer Science Department, University of Toronto, Toronto, Ontario, Canada, 2009. Balaji Lakshminarayanan, Alexander Pritzel, and Charles Blundell. Simple and scalable predictive uncertainty estimation using deep ensembles. Advances in neural information processing systems ,30, 2017. Kimin Lee, Kibok Lee, Honglak Lee, and Jinwoo Shin. A simple unified framework for detecting out-of-distribution samples and adversarial attacks. Advances in neural information processing systems , 31, 2018. Jeremiah Liu, Zi Lin, Shreyas Padhy, Dustin Tran, Tania Bedrax Weiss, and Balaji Lakshminarayanan. Simple and principled uncertainty estimation with deterministic deep learning via distance aware-ness. Advances in neural information processing systems , 33:7498–7512, 2020a. Weitang Liu, Xiaoyun Wang, John Owens, and Yixuan Li. Energy-based out-of-distribution detection. 
+
+Advances in neural information processing systems , 33:21464–21475, 2020b. 10 Wesley J Maddox, Pavel Izmailov, Timur Garipov, Dmitry P Vetrov, and Andrew Gordon Wilson. A simple baseline for bayesian uncertainty in deep learning. Advances in neural information processing systems , 32, 2019. Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards deep learning models resistant to adversarial attacks. In International Conference on Learning Representations , 2018. Ian Osband, Zheng Wen, Seyed Mohammad Asghari, Vikranth Dwaracherla, Morteza Ibrahimi, Xiuyuan Lu, and Benjamin Van Roy. Epistemic neural networks. Advances in Neural Information Processing Systems , 36:2795–2823, 2023. Hippolyt Ritter, Aleksandar Botev, and David Barber. A scalable laplace approximation for neural networks. In International conference on learning representations , 2018. Yiyou Sun, Chuan Guo, and Yixuan Li. React: Out-of-distribution detection with rectified activations. 
+
+Advances in neural information processing systems , 34:144–157, 2021. Emanuel Todorov, Tom Erez, and Yuval Tassa. Mujoco: A physics engine for model-based control. In 2012 IEEE/RSJ international conference on intelligent robots and systems , pages 5026–5033. IEEE, 2012. Mark Towers, Ariel Kwiatkowski, Jordan Terry, John U Balis, Gianluca De Cola, Tristan Deleu, Manuel Goulão, Andreas Kallinteris, Markus Krimmel, Arjun KG, et al. Gymnasium: A standard interface for reinforcement learning environments. arXiv preprint arXiv:2407.17032 , 2024. Roman Vershynin. High-Dimensional Probability: An Introduction with Applications in Data Science . Cambridge Series in Statistical and Probabilistic Mathematics. Cambridge University Press, Cambridge, 2018. ISBN 978-1-108-41519-4. doi: 10.1017/9781108231596. Omar G. Younis, Rodrigo Perez-Vicente, John U. Balis, Will Dudley, Alex Davey, and Jordan K. Terry. Minari, September 2024. URL https://doi.org/10.5281/zenodo.13767625 .Jingyang Zhang, Jingkang Yang, Pengyun Wang, Haoqi Wang, Yueqian Lin, Haoran Zhang, Yiyou Sun, Xuefeng Du, Yixuan Li, Ziwei Liu, et al. OpenOOD v1.5: Enhanced benchmark for out-of-distribution detection. arXiv preprint arXiv:2306.09301 , 2023. 11 A Proofs for Section 4 
+
+Throughout the appendix we abbreviate 
+
+X := Y S , Xv := Y v,S , ∆X := Xv −X, a := y(x), av := yv (x), ∆a := av −a, 
+
+and 
+
+G := X⊤X + λI, Gv := X⊤ 
+
+> v
+
+Xv + λI. 
+
+With this notation, ∆S (v) = ∥∆X∥F , δx(v) = ∥∆a∥2, and hλS (x) = a⊤G−1a.
+
+A.1 Proof of Lemma 1 
+
+Writing B′ := Θ ′⊤ ∈ R(d+1) ×q and T := X Θ⊤ ∈ RB×q , the objective (3) is 
+
+min  
+
+> B′
+
+∥Xv B′ − T ∥2 
+
+> F
+
++ λ ∥B′ − Θ⊤∥2 
+
+> F
+
+.
+
+Setting the gradient with respect to B′ to zero gives 
+
+2 X⊤ 
+
+> v
+
+(Xv B′ − T ) + 2 λ(B′ − Θ⊤) = 0 ,
+
+i.e. 
+
+Gv B′ = X⊤ 
+
+> v
+
+T + λ Θ⊤.
+
+Substituting T = XΘ⊤ gives X⊤ 
+
+> v
+
+T + λΘ⊤ = ( X⊤ 
+
+> v
+
+X + λI )Θ ⊤.When Gv is nonsingular, the unique minimizer is 
+
+bB := arg min 
+
+> B′∈R(d+1) ×q
+
+∥Xv B′ − T ∥2 
+
+> F
+
++ λ∥B′ − Θ⊤∥2 
+
+> F
+
+= G−1 
+
+> v
+
+(X⊤ 
+
+> v
+
+X + λI )Θ ⊤.
+
+Equivalently, bB = bΘS (v)⊤. Transposing and using (X⊤ 
+
+> v
+
+X + λI )⊤ = X⊤Xv + λI gives 
+
+bΘS (v) = Θ( X⊤Xv + λI )G−1 
+
+> v
+
+,
+
+which is (6) . The Hessian with respect to the vectorization of B′ is 2 ( Gv ⊗ Iq ), which is positive definite whenever Gv is nonsingular, so the minimizer is unique. When λ = 0 and Xv has full column rank, the normal equations reduce to 
+
+X⊤
+
+> v
+
+ Xv bB − T  = 0 ,
+
+so the calibration residual ES (v) = Xv bΘS (v)⊤ − X Θ⊤ = Xv bB − T satisfies X⊤ 
+
+> v
+
+ES (v) = 0 , i.e. 
+
+ES (v) is orthogonal to col( Xv ).
+
+A.2 Proof of Theorem 2 Closed form for bΘS (v) − Θ. From Lemma 1, 
+
+bΘS (v) − Θ = Θ (X⊤Xv + λI ) G−1 
+
+> v
+
+− I = Θ (X⊤Xv + λI ) − Gv
+
+ G−1 
+
+> v
+
+.
+
+Since Gv = X⊤ 
+
+> v
+
+Xv + λI ,
+
+(X⊤Xv + λI ) − Gv = X⊤Xv − X⊤ 
+
+> v
+
+Xv = −∆X⊤Xv ,
+
+and therefore bΘS (v) − Θ = − Θ ∆ X⊤ Xv G−1 
+
+> v
+
+. (16) Shrinking toward Θ in (3) makes bΘS (v) − Θ driven entirely by the calibration perturbation ∆X; no 
+
+λΘ ridge-bias term appears. 
+
+Residual split. Writing rS (x; v) = bΘS (v)av − Θa and adding and subtracting bΘS (v)a,
+
+ρS (x; v) ≤ ( bΘS (v) − Θ) a 2
+
+| {z }
+
+> (I)
+
++ bΘS (v) ∆ a 2
+
+| {z }
+
+> (II)
+
+. (17) 12 Term (I): calibration-side. From (16) and submultiplicativity of the operator / Frobenius norms, (I) ≤ ∥ Θ∥op ∥∆X∥F Xv G−1 
+
+> v
+
+a 2 ≤ MΘ ∥∆X∥F Xv G−1 
+
+> v
+
+a 2.
+
+We bound ∥Xv G−1 
+
+> v
+
+a∥2 by comparing to the unperturbed object ∥XG −1a∥2. Split 
+
+Xv G−1 
+
+> v
+
+= X G −1 + ∆ X G −1 
+
+> v
+
++ X (G−1 
+
+> v
+
+− G−1), (18) so 
+
+Xv G−1 
+
+> v
+
+a 2 ≤ X G −1 a 2 + ∥∆X∥F ∥G−1 
+
+> v
+
+a∥2 + ∥X∥op (G−1 
+
+> v
+
+− G−1) a 2.
+
+For the first term, using X⊤X = G − λI ⪯ G,
+
+X G −1 a 22 = a⊤G−1(G − λI )G−1a ≤ a⊤G−1a = hλS (x),
+
+hence ∥XG −1a∥2 ≤
+
+q
+
+hλS (x).For the other two terms, use the inverse-perturbation identity 
+
+G−1 
+
+> v
+
+− G−1 = G−1 
+
+> v
+
+(G − Gv ) G−1, Gv − G = X⊤∆X + ∆ X⊤X + ∆ X⊤∆X, 
+
+which gives ∥Gv − G∥op ≤ 2∥X∥op ∥∆X∥F + ∥∆X∥2 
+
+> F
+
+. Combined with Assumption 1(ii), 
+
+∥G−1 
+
+> v
+
+∥op ≤ γ−1 
+
+> S
+
+, and ∥G−1a∥2 ≤ ∥ G−1/2∥op 
+
+q
+
+hλS (x),
+
+(G−1 
+
+> v
+
+− G−1) a 2 ≤ Ca
+
+ ∥∆X∥F + ∥∆X∥2
+
+> F
+
+q
+
+hλS (x),
+
+and analogously ∥G−1 
+
+> v
+
+a∥2 ≤ ∥ G−1a∥2 + ∥(G−1 
+
+> v
+
+− G−1)a∥2 ≤ Cb
+
+q
+
+hλS (x), with Ca, C b depending on γS , ∥X∥op , ∥G−1∥op , and the assumed upper bound ∥∆X∥F ≤ LS r.Collecting, 
+
+Xv G−1 
+
+> v
+
+a 2 ≤  1 + C′ (∥∆X∥F + ∥∆X∥2 
+
+> F
+
+)q
+
+hλS (x),
+
+for a constant C′ depending on the quantities listed in the theorem. Multiplying by MΘ∥∆X∥F
+
+yields (I) ≤ MΘ
+
+q
+
+hλS (x) ∥∆X∥F + MΘC′
+
+q
+
+hλS (x) ∥∆X∥2 
+
+> F
+
++ ∥∆X∥3
+
+> F
+
+.
+
+Under Assumption 1, ∥∆X∥F ≤ LS r is bounded, so ∥∆X∥3 
+
+> F
+
+≤ LS r ∥∆X∥2 
+
+> F
+
+is absorbed into the quadratic term, giving (I) ≤ C1
+
+q
+
+hλS (x) ∥∆X∥F + C3
+
+q
+
+hλS (x) ∥∆X∥2 
+
+> F
+
+(19) with C1 = MΘ and C3 = MΘC′(1 + LS r). The leverage factor 
+
+q
+
+hλS (x) multiplies both the linear and quadratic calibration-side terms and is not absorbed into the constants. 
+
+Term (II): test-side. We have ∥ bΘS (v)∥op ≤ ∥ Θ∥op + ∥ bΘS (v) − Θ∥op , and from (16), 
+
+∥ bΘS (v) − Θ∥op ≤ MΘ ∥∆X∥F ∥Xv ∥op ∥G−1 
+
+> v
+
+∥op ≤ MΘ ∥Xv ∥op ∥∆X∥F 
+
+> γS
+
+.
+
+Since ∥Xv ∥op ≤ ∥ X∥op + ∥∆X∥F , this is O(∥∆X∥F ) under Assumption 1, so ∥ bΘS (v)∥op ≤ C2
+
+for a constant C2 depending on MΘ, γS , ∥X∥op , and LS r. Thus (II) ≤ C2 ∥∆a∥2. (20) 
+
+Combining. Substituting (19) and (20) into (17) , and using ∥∆X∥F = ∆ S (v) and ∥∆a∥2 = δx(v),we obtain 
+
+ρS (x; v) ≤ C1
+
+q
+
+hλS (x) ∆ S (v) + C2 δx(v) + C3
+
+q
+
+hλS (x) ∆ S (v)2,
+
+which is (7). 13 Interpolation at calibration points. If x = xi ∈ S and λ = 0 , then rS (xi; v) is the i-th row of the calibration residual matrix ES (v) = Xv bΘS (v)⊤ − X Θ⊤, whose norm is bounded by ∥ES (v)∥F .In particular, ρS (xi; v) = 0 whenever the affine repair interpolates the calibration targets. 
+
+A.3 Proof of Proposition 3 
+
+Let 
+
+X := Y S , Xv := Y v,S , a := y(x), av := yv (x),
+
+and define 
+
+G := X⊤X + λI, Gv := X⊤ 
+
+> v
+
+Xv + λI. 
+
+Assume G is nonsingular, as in Proposition 3. By Lemma 1, the ridge-corrected affine layer has the closed form bΘS (v) = Θ  X⊤Xv + λI  G−1 
+
+> v
+
+.
+
+At v = 0 , we have Xv = X, Gv = G, and therefore bΘS (0) = Θ .By the chain rule, 
+
+∂v rS (x; v) v=0 =  ∂v bΘS (v) v=0 
+
+ a + bΘS (0) ∂v av v=0 .
+
+Since bΘS (0) = Θ and ∂v av |v=0 = Jx, the second term equals ΘJx. It remains to compute the first term. 
+
+Jacobian of the closed form at v = 0 . Let 
+
+JS,k := ∂vk Xv v=0 ∈ RB×(d+1) 
+
+the i-th row of JS,k equals  ∂vk ¯yv (xi) v=0 
+
+⊤. Differentiating 
+
+bΘS (v) = Θ  X⊤Xv + λI  G−1
+
+> v
+
+with respect to vk and evaluating at v = 0 gives 
+
+∂vk
+
+bΘS v=0 = Θ 
+
+h
+
+X⊤JS,k G−1 + G ∂ vk G−1 
+
+> vv=0
+
+i
+
+. (21) Using ∂M −1 = −M −1(∂M )M −1 and 
+
+∂vk Gv v=0 = ∂vk (X⊤ 
+
+> v
+
+Xv ) v=0 = J⊤
+
+> S,k
+
+X + X⊤JS,k ,
+
+we obtain 
+
+∂vk G−1  
+
+> vv=0
+
+= −G−1 J⊤
+
+> S,k
+
+X + X⊤JS,k 
+
+G−1.
+
+Substituting into (21), 
+
+∂vk
+
+bΘS v=0 = Θ 
+
+h
+
+X⊤JS,k G−1 − GG −1 J⊤
+
+> S,k
+
+X + X⊤JS,k 
+
+G−1i
+
+= Θ 
+
+h
+
+X⊤JS,k G−1 −  J⊤
+
+> S,k
+
+X + X⊤JS,k 
+
+G−1i
+
+= −Θ J⊤
+
+> S,k
+
+XG −1,
+
+where the two X⊤JS,k G−1 terms cancel. 
+
+Identification with T λS (x). Applying this derivative to a = y(x) gives 
+
+ ∂vk
+
+bΘS v=0 
+
+a = −Θ J⊤
+
+> S,k
+
+XG −1y(x).
+
+By definition of the ridge hat-weight vector, 
+
+wλS (x) = XG −1y(x),
+
+and hence  ∂vk
+
+bΘS v=0 
+
+a = −Θ J⊤
+
+> S,k
+
+wλS (x).
+
+14 Now J⊤ 
+
+> S,k
+
+∈ R(d+1) ×B has i-th column equal to 
+
+∂vk yv (xi) v=0 ,
+
+which is the k-th column of the augmented Jacobian Jxi . Therefore 
+
+J⊤
+
+> S,k
+
+wλS (x) = 
+
+> B
+
+X
+
+> i=1
+
+ wλS (x)
+
+> i
+
+ Jxi
+
+ 
+
+> ·,k
+
+=  T λS (x)
+
+> ·,k
+
+.
+
+Thus  ∂vk
+
+bΘS v=0 
+
+a = −Θ  T λS (x)
+
+> ·,k
+
+.
+
+Combining this with the second chain-rule term Θ( Jx)·,k yields 
+
+ AS (x) 
+
+> ·,k
+
+= ∂vk rS (x; v) v=0 = Θ  Jx − T λS (x)
+
+> ·,k
+
+.
+
+Since this holds for every k = 1 , . . . , T ,
+
+AS (x) = Θ  Jx − T λS (x).
+
+A.4 Proof of Theorem 4 and Proposition 5 
+
+Let A := AS (x) throughout. 
+
+Theorem 4, linear variance (untruncated v). For v ∼ N (0 , σ 2IT ), linearity of trace and expecta-tion give 
+
+Ev ∥Av ∥22 = Ev tr( Avv ⊤A⊤) = tr  A Ev [vv ⊤] A⊤ = σ2 ∥A∥2 
+
+> F
+
+,
+
+using E[vv ⊤] = σ2IT for the untruncated Gaussian, which proves (13). 
+
+Theorem 4, sketch mean and relative variance (untruncated v). Let Qm := ∥Av m∥22 = v⊤
+
+> m
+
+Bv m
+
+with B := A⊤A. The linear-variance calculation gives EQm = σ2∥A∥2 
+
+> F
+
+, and by independence of the vm,
+
+E bVn = 1
+
+n
+
+> n
+
+X
+
+> m=1
+
+EQm = σ2∥A∥2 
+
+> F
+
+.
+
+For the variance, the standard Gaussian quadratic-form identity (e.g. Vershynin 2018) yields 
+
+Var( v⊤Bv ) = 2 σ4 tr( B2) for symmetric B and v ∼ N (0 , σ 2IT ). Since B = A⊤A, tr( B2) = tr( A⊤AA ⊤A) = ∥A⊤A∥2 
+
+> F
+
+, so by independence 
+
+Var( bVn) = 1
+
+n2
+
+> n
+
+X
+
+> m=1
+
+Var( Qm) = 2σ4 ∥A⊤A∥2
+
+> F
+
+n .
+
+Dividing by (E bVn)2 = σ4∥A∥4 
+
+> F
+
+and using reff (A) = ∥A∥4 
+
+> F
+
+/∥A⊤A∥2 
+
+> F
+
+,
+
+Var( bVn)(E bVn)2 = 2
+
+n · ∥A⊤A∥2
+
+> F
+
+∥A∥4
+
+> F
+
+= 2
+
+n r eff (A) ,
+
+which is (14) This completes the proof of Theorem 4. 
+
+Proposition 5 (truncated v). Let v ∼ N (0 , σ 2IT ) truncated to ∥v∥2 ≤ r so that (5) applies. The truncated law is spherically symmetric on the ball, so Ev [vv ⊤] = σ2tr IT for some σ2tr ≤ σ2.Proceeding as in the linear-variance step but with E[vv ⊤] = σ2tr IT gives Ev ∥Av ∥22 = σ2tr ∥A∥2 
+
+> F
+
+.Write rS (x; v) = Av + ε(v) with ∥ε(v)∥2 ≤ L2∥v∥22. The pointwise inequality 
+
+∥a + b∥22 ≥ 12 ∥a∥22 − ∥ b∥22, (22) which follows from 2⟨a, b ⟩ ≥ − 12 ∥a∥22 − 2∥b∥22 (AM–GM applied to (a/ √2) and (√2 b)), gives 
+
+∥rS (x; v)∥22 ≥ 12 ∥Av ∥22 − ∥ ε(v)∥22.
+
+Taking expectations under the truncated law, 
+
+Ev ρS (x; v)2 ≥ σ2tr  
+
+> 2
+
+∥A∥2 
+
+> F
+
+− L22 Ev ∥v∥42.
+
+Setting C4 := L22 Ev ∥v∥42 (which is finite and bounded above by L22 r4 on the truncation ball) yields (15). 15 A.5 Bootstrapped correction decorrelates failure modes 
+
+Standard Random P&C shares one calibration subset across members, so the first-order ensemble covariance is the fixed σ2AS0 (x)AS0 (x)⊤. Bootstrapped P&C draws a subset Sm per member, replacing this single covariance with a mixture σ2 ES [AS (x)AS (x)⊤].
+
+Theorem 6 (Mixture rank vs. covariance alignment) . Let C1, . . . , C M ∈ Rq×q be PSD matrices with 
+
+tr( Cj ) = τ and ∥Cj ∥F = ν for all j. Define C := 1
+
+> M
+
+P 
+
+> j
+
+Cj and the average pairwise covariance alignment 
+
+α := 1
+
+M (M − 1) 
+
+X
+
+> i̸=j
+
+⟨Ci, C j ⟩F
+
+∥Ci∥F ∥Cj ∥F
+
+. (23) 
+
+Then 
+
+reff (C) = tr( C)2
+
+∥C∥2
+
+> F
+
+= τ 2
+
+ν2 · M
+
+1 + ( M − 1) α , (24) 
+
+which is monotonically decreasing in α.
+
+Direction randomness samples perturbations within a fixed correction geometry; bootstrapping changes the correction geometry itself. Theorem 6 is a structural identity about PSD mixtures: if afamily of covariance contributions has equal trace and Frobenius norm and low pairwise alignment α,
+
+then the mixture has strictly higher effective rank than any single member. In our application, the contributions Cj = ASj (x)ASj (x)⊤ need not satisfy the equal-trace, equal-norm conditions exactly, so the result should be read as a structural explanation of how changing correction geometry can increase effective rank, not as a distribution-free guarantee for bootstrap sampling. 
+
+A.6 Proof of Theorem 6 
+
+Write C = 1
+
+> M
+
+PMj=1 Cj . Linearity of trace gives 
+
+tr( C) = 1
+
+M
+
+> M
+
+X
+
+> j=1
+
+tr( Cj ) = τ. 
+
+For the squared Frobenius norm, 
+
+∥C∥2 
+
+> F
+
+= C, C F = 1
+
+M 2
+
+> M
+
+X
+
+> i=1
+> M
+
+X
+
+> j=1
+
+⟨Ci, C j ⟩F .
+
+Separating diagonal from off-diagonal and using ∥Cj ∥F = ν and the definition of α,
+
+∥C∥2 
+
+> F
+
+= 1
+
+M 2
+
+ MX
+
+> i=1
+
+∥Ci∥2 
+
+> F
+
++X
+
+> i̸=j
+
+⟨Ci, C j ⟩F
+
+
+
+= 1
+
+M 2
+
+ M ν 2+M (M −1) α ν 2 = ν2
+
+M
+
+ 1+( M −1) α.
+
+Since C is PSD, 
+
+reff (C) = tr( C)2
+
+∥C∥2
+
+> F
+
+= τ 2 
+
+> ν2
+> M
+
+(1 + ( M − 1) α) = τ 2
+
+ν2 · M
+
+1 + ( M − 1) α ,
+
+which is (24) . The right-hand side is monotonically decreasing in α because the denominator is increasing in α.
+
+## B Algorithmic details for convolutional networks 
+
+Section 3 stated P&C for a fully connected network. This appendix gives the corresponding algorithm for a convolutional residual network with batch normalization, the architecture used in the CIFAR-10 experiments of Section 5. The key observation is that, after rewriting a 2-D convolution as a patchwise linear map, the local correction step is again an ordinary ridge regression: only the design matrix and target tensor change. The projected residual analysis of Section 4 therefore applies verbatim, with 
+
+¯YS and Θ reinterpreted as the patchwise design matrix and the (kernel, bias) pair of the corrected convolution. 16 B.1 Convolutions as patchwise linear maps 
+
+Let X ∈ RN ×H×W ×Cin denote a batch of feature maps in NHWC layout. Let the second convolution have kernel side length k, stride s, and Cout output channels. For the patchwise linear view, we write its kernel in OIHW order as 
+
+WOIHW ∈ RCout ×Cin ×k×k.
+
+If the implementation stores kernels in HWIO order, this is obtained by a fixed axis permutation before forming the least-squares system, and the solved correction is permuted back afterward. Denote by 
+
+Ps : RN ×H×W ×Cin → R(N H ′W ′)×(Cin k2)
+
+the unfolding operator that gathers the k × k receptive field around each output position (n, h ′, w ′)
+
+and stores it as a row vector ordered as (cin , u, v ), with the input-channel axis varying slow-est and the spatial axes varying fastest. This ordering matches the OIHW convention used by 
+
+conv_general_dilated_patches with dimension_numbers=(’NHWC’,’OIHW’,’NHWC’) .Let 
+
+mat( WOIHW ) ∈ R(Cin k2)×Cout 
+
+be the matrix whose column for output channel cout is the flattened slice WOIHW [cout , :, :, :] in the same (cin , u, v ) order as the rows of Ps(X). Then the convolution satisfies 
+
+flat(Conv( X, W )) = Ps(X) mat( WOIHW ),
+
+where flat( ·) flattens the leading (N, H ′, W ′) axes. A bias term b ∈ RCout broadcast across spatial positions is absorbed by augmenting Ps(X) with a column of ones, in direct analogy to ¯y in Section 4. 
+
+B.2 Pre-activation residual blocks as perturb–correct units 
+
+Our experiments use the standard pre-activation ResNet-18 architecture adapted for CIFAR (a 3×3
+
+stride-1 stem, no max-pool, four stages of two basic blocks each, channel widths 64 , 128 , 256 , 512 ). The basic block is the BN–ReLU–Conv–BN–ReLU–Conv pattern 
+
+y(x) = Conv 1(ReLU(BN 1(x)) ; W1) , (25) 
+
+z(x) = Conv 2(ReLU(BN 2(y(x))) ; W2) , (26) 
+
+Block( x) = z(x) + Shortcut( x), (27) where Shortcut( ·) is the identity in most blocks and a 1×1 projection at the first block of stages 2–4. Both Conv 1 and Conv 2 are 3×3 kernels and carry no learned bias in the base model. At P&C construction time and at inference time, both batch-normalization layers are evaluated in inference mode using the running statistics fitted during training; P&C modifies only (W1, W 2) and adds a learned bias to the second convolution. For each target block in the perturbation set, we perturb W1 and refit (W2, b 2) on the calibration set. Two structural facts make this analogous to the FC case of Section 3: 1. Conv 2 is the next affine layer after the perturbed Conv 1. The intervening BN 2 ◦ ReLU com-position is a fixed (running-statistics) affine map followed by a fixed nonlinearity, exactly the role played by the activation ϕ in the FC presentation. The patchwise reformulation (B.1) then makes the W2 refit an ordinary linear ridge regression. 2. The shortcut is independent of the perturbed branch. Because Block( x) = z(x) + Shortcut( x),fitting z(x) to its unperturbed value is equivalent (up to a fixed additive shift) to fitting Block( x)
+
+to its unperturbed value. The shortcut parameters need not be touched, and per-member targets can be stored as Conv 2 outputs rather than block outputs. 
+
+B.3 Single-block P&C for a residual block 
+
+Fix a target block, an ensemble size M , a perturbation scale σ > 0, and a perturbation rank K. Sample a random orthonormal basis U ∈ R(k2Cin Cout 1 )×K in the flat parameter space of W1 once and share it across members (see Appendix B.5 for projected residual variants). For member m = 1 , . . . , M ,draw z(m) ∼ N (0 , I K ) and form the perturbed first kernel 
+
+∆W (m)1 = σ · reshape 
+
+
+
+U z (m)
+
+, fW (m)1 = W1 + ∆ W (m)1 , (28) 17 where reshape( ·) unflattens to the implementation kernel layout, with the fixed permutation to OIHW used only when forming the least-squares system. Let 
+
+U (x; W1) := ReLU(BN 2(Conv(ReLU(BN 1(x)); W1))) (29) denote the input tensor to Conv 2 as a function of (perturbed or unperturbed) W1, and let T orig  
+
+> i
+
+be the 
+
+Conv 2 output of the unperturbed base model on xi ∈ S m. Writing Y (m) 
+
+> i
+
+:= Ps2
+
+
+
+U (xi; fW (m)1 )
+
+
+
+for the patchwise design matrix at member m and example i, and ¯Y (m) 
+
+> i
+
+:= [ 1, Y (m) 
+
+> i
+
+] for the bias-augmented design, the local correction solves 
+
+ eb(m)2 , fW (m)2
+
+ = arg min  
+
+> (b, W )
+
+X
+
+> i∈S m
+
+¯Y (m) 
+
+> i
+
+Θ − T orig ,flat 
+
+> i
+> 2
+> F
+
++ λ∥Θ − Θ0∥2 
+
+> F
+
+, (30) where Θ := [ b, vec( W )⊤]⊤ stacks bias and kernel into a single matrix and Θ0 := [ 0, vec( W2)⊤]⊤
+
+is the unperturbed kernel augmented with a zero bias. The ridge term shrinks Θ toward Θ0 rather than toward zero, exactly mirroring the shrinkage toward (Wℓ+1 , b ℓ+1 ) in the FC correction (3) , so 
+
+λ → ∞ recovers the unperturbed branch. The minimizer of (30) is obtained in closed form by stacking design rows over the calibration subset. With ¯Y (m) 
+
+> Sm
+
+∈ R(BH ′   
+
+> 2W′
+> 2)×(1+ k22Cin ,2)
+
+the member-m row-stacked bias-augmented perturbed design, 
+
+Y (m) 
+
+> Sm
+
+the same design without the bias column, and T orig  
+
+> Sm
+
+∈ R(BH ′  
+
+> 2W′
+> 2)×Cout ,2
+
+the row-stacked targets, define 
+
+H(m) := ¯Y (m)⊤
+
+> Sm
+
+¯Y (m) 
+
+> Sm
+
+, β(m) := ¯Y (m)⊤
+
+> Sm
+
+
+
+T orig  
+
+> Sm
+
+− Y (m) 
+
+> Sm
+
+vec( W2)
+
+
+
+. (31) The closed-form solution is 
+
+Θ(m) − Θ0 =
+
+
+
+H(m) + λI 
+
+−1
+
+β(m). (32) 
+
+Three remarks. (i) Targets are conv outputs, not block outputs. Because the shortcut passes unmodified through the perturbed branch, fitting Conv 2 outputs is equivalent to fitting block outputs; storing targets at the conv-output position avoids carrying around the shortcut tensor. (ii) BN 2
+
+statistics are not refit. The design matrix in (30) is built using the perturbed fW (m)1 but the original 
+
+BN 2 running statistics from the base model. Strictly speaking, BN 2 statistics are functions of the perturbed Conv 1 output and would shift slightly under the perturbation. The conv 2 ridge solve absorbs this discrepancy through the new bias and through a small change in the kernel; we found that explicitly refitting BN 2 on the calibration subset did not improve OOD detection in initial experiments and adds an additional per-channel hyperparameter, so we keep BN 2 frozen. (iii) Adding a bias to 
+
+Conv 2 matters. Since the base model has no bias on Conv 2, the column of ones in ¯Y has nothing to absorb without it, and any constant mean shift induced by the perturbation would have to be compensated by spatially-varying kernel adjustments that the ridge term penalizes. The augmented bias is what makes (30) the patchwise analog of the FC repair in Theorem 2 rather than a kernel-only restriction of it. 
+
+B.4 Chunked accumulation of the normal equations 
+
+The Gram matrix H ∈ RDM ×DM with DM := 1 + k22 Cin 2 and the cross-product matrix β ∈
+
+RDM ×Cout 2 in (31) are small enough to hold in GPU memory ( DM ≤ 4,610 for the largest CIFAR block, with Cin 2 ≤ 512 and k2 = 3 ). The design matrix ¯YSm itself has BH ′
+
+> 2
+
+W ′ 
+
+> 2
+
+rows, however, which exceeds memory for the calibration subset sizes used in our experiments. We therefore accumulate H and β in chunks: the calibration subset Sm is partitioned into mini-batches of size 
+
+bchunk (we use bchunk = 256 for CIFAR), and on each chunk S(c) 
+
+> m
+
+we compute the patchwise design 
+
+¯Y (m)
+
+> S(c)
+> m
+
+, evaluate the incremental contributions 
+
+H(m) ← H(m) + ¯Y (m)⊤
+
+> S(c)
+> m
+
+¯Y (m)
+
+> S(c)
+> m
+
+, β(m) ← β(m) + ¯Y (m)⊤
+
+> S(c)
+> m
+
+
+
+T orig 
+
+> S(c)
+> m
+
+− Y (m)
+
+> S(c)
+> m
+
+vec( W2)
+
+
+
+. (33) and discard ¯Y (m)
+
+> S(c)
+> m
+
+before processing the next chunk. After all chunks are accumulated, the dense ridge solve (32) is applied once. Both updates in (33) are JIT-compiled and executed inside a 18 jax.lax.scan over a stacked, mask-padded chunk axis, which amortizes compilation across the calibration subset. The dominant per-member cost is the chunked accumulation, whose runtime is linear in |S m| and dominated by the perturbed Conv 1 forward and the formation of patches. The base-model T orig 
+
+> i
+
+tensors are computed once per calibration subset and reused across all M members. 
+
+B.5 Subspace selection in conv kernel space 
+
+The single-layer P&C sketch in Section 3 samples perturbations from a random orthonormal basis Uℓ
+
+in flat parameter space. For convolutional layers the same construction applies once we identify the parameter space with Rk2Cin Cout and reshape sampled flat directions to kernel shape after sampling. We draw a Gaussian matrix V ∈ RK×d1 with d1 = k2Cin Cout 1 , form an orthonormal basis Uℓ as the QR factorization of V ⊤, and reshape each column of Uℓ back to a 3×3 kernel-shaped direction. The basis is shared across members, and only the per-member coefficient vector z(m) ∼ N (0 , I K )
+
+varies. The per-member sampling and ridge solve in (30)–(32) are unchanged. 
+
+B.6 Multi-block (chained) P&C 
+
+Multi-block P&C perturbs more than one residual block in the same network. Because residual blocks are connected serially, the construction reduces to applying the single-block recipe of Appendix B.3 to each selected block in turn: the chosen blocks b1 < b 2 < · · · < b R are processed in network order, each block’s ridge solve constructs its calibration design matrix ¯Y (br ) 
+
+> Sm
+
+from the unperturbed upstream activations, and each block’s targets T orig ,(br ) 
+
+> Sm
+
+are taken from the base model. Both the upstream activations and the per-block targets are computed once on a single base-model forward pass and cached for reuse across all members and all perturbation scales. At inference time, every selected block substitutes its (fW (m)1 , fW (m)2 , eb(m)2 ) triple while non-selected blocks use the base parameters; the residual sums combine perturbed and unperturbed branches as usual. This is the convolutional analog of the multi-layer FC recipe of Section 3, with one substantive difference. In the FC case, perturbing earlier layers shifts the inputs that downstream corrections see, and our recipe constructs each correction against the original pre-activations of the next layer so that perturbed upstream effects are repaired as if absent. The convolutional analog does the same — every per-block ridge solve targets the unperturbed T orig  
+
+> i
+
+— but the residual-network topology means that an unrepaired residual at an earlier block enters a later block additively through the shortcut rather than multiplicatively through the activation pathway, so per-block residuals do not chain through the nonlinear branch in the same way they would in a strictly serial FC network. We did not observe an empirical benefit from re-targeting later blocks against the perturbed upstream activations. The bootstrapped-correction option of Section 3 extends to the multi-block setting verbatim by drawing per-member, per-block calibration subsets S(br ) 
+
+> m
+
+instead of sharing a single subset across blocks. 
+
+## C Expanded MuJoCo Experimental Details 
+
+C.1 Compute Details 
+
+Experiments were run on a single machine with an Intel i7-12700KF CPU, 32 GB RAM, and an Nvidia GTX 1080ti GPU with 8GB of VRAM. 
+
+C.2 MuJoCo experiment hyperparameters 
+
+Every method reported in the headline gym table (Table 1) exposes a candidate hyperparameter grid that is selected per (env , method ) by minimum validation NLL, falling back to ID NLL when the older runs do not include nll_val . Validation data is the held-out training-split slice xva , y va 
+
+produced by the data loader; final test metrics are computed exclusively on the disjoint id_eval split. The selection protocol is symmetric across methods: every sweepable baseline carries the same val-NLL selection step. 19 Table 3: Selected hyperparameter configuration per (env, method), chosen by lowest mean validation NLL across the seeds used in the main-paper tables. n: ensemble members; dr : dropout rate; sws :SWAG schedule weight scale; prior : Laplace prior precision; T: subspace temperature; lreg , bf ,
+
+ps : P&C Tikhonov regulariser, per-member bootstrap fraction, and perturbation size.                                                                         
+
+> Env DE MCD SWAG Lap. Sub. P&C Ant-v5 n=5 dr=0.05 sws=1.0 prior=10000.0 T=1.0 lreg=0.0001, bf=0.1, ps=8.0 HalfCheetah-v5 n=5 dr=0.05 sws=0.3 prior=10000.0 T=1.0 lreg=0.0001, bf=0.3, ps=32.0 Hopper-v5 n=5 dr=0.05 sws=0.1 prior=10000.0 T=1.0 lreg=0.0001, bf=0.3, ps=32.0 Walker2d-v5 n=5 dr=0.05 sws=0.1 prior=10000.0 T=1.0 lreg=0.01, bf=0.3, ps=16.0 Swimmer-v5 n=5 dr=0.05 sws=0.1 prior=10000.0 T=1.0 lreg=0.0001, bf=0.05, ps=8.0 Humanoid-v5 n=5 default sws=3.0 prior=10000.0 T=10.0 lreg=0.01, bf=0.3, ps=32.0 HumanoidStandup-v5 n=5 default sws=3.0 prior=1000.0 T=10.0 lreg=0.01, bf=0.2, ps=8.0 Reacher-v5 n=5 dr=0.05 sws=0.1 prior=10000.0 T=1.0 lreg=0.0001, bf=0.05, ps=8.0 Pusher-v5 n=5 dr=0.05 sws=1.0 prior=10000.0 T=10.0 lreg=0.0001, bf=0.1, ps=8.0 InvertedPendulum-v5 n=5 dr=0.05 sws=0.1 prior=10000.0 T=1.0 lreg=0.0001, bf=0.05, ps=16.0 InvertedDoublePendulum-v5 n=5 dr=0.2 sws=0.3 prior=10000.0 T=10.0 lreg=0.0001, bf=0.05, ps=16.0
+
+Shared protocol. Architecture 4 × 200 MLP with ReLU activations. 
+
+Training 5,000 optimizer steps, batch size 64 .
+
+Ensemble size ( n) 100 for the variance-based methods (MC Dropout, SWAG, Subspace, Laplace). P&C used n = 50 as early experiments found that it performs no worse than n = 100 .
+
+Per-method candidate grids. Deep Ensemble Used an ensemble size of M = 5 .
+
+MC Dropout Sweep dropout_prob ∈ { 0.05 , 0.10 , 0.20 , 0.30 , 0.50 }. Dropout rate is a training parameter, so each value is a separately trained task. 
+
+SWAG Sweep scale ∈ { 0.1, 0.3, 1.0, 3.0, 10 .0} on the diagonal-plus-low-rank Gaussian sampler. Scale is a sampling parameter, so a single SWAG training emits multiple results by scale. 
+
+Subspace Inference Sweep T ∈ { 1.0, 10 .0, 100 .0, 1,000 .0, 10 ,000 .0} with same single-training, multi-sample pattern as SWAG. 
+
+Laplace Sweep prior precision ∈ { 10 , 100 , 1,000 , 10 ,000 , 100 ,000 } over the KFAC posterior. 
+
+P&C Headline configuration locks K = 20 , The candidate grid is the cross prod-uct perturbation_size ∈ {8, 16 , 32 } × bootstrap_frac ∈ {0.05 , 0.10 , 0.20 , 0.30 } × 
+
+ridge_regulariser ∈ { 0.0001 , 0.01 }.
+
+C.3 Full Experimental Results 
+
+Details are given in three tables: 3 contains the hyperparameters selected from the sweep for each env, 4 contains per-env results for the ID RMSE, Far NLL, and Far AUROC, and 5 contains the Spearman value between prediction variance and prediction error for Near, Mid, and Far per env. Table 4: Per-environment headline metrics on MuJoCo. Cells report mean ± stddev across seeds for the validation-NLL-selected configuration. Header arrows indicate the preferred direction. Within each environment, the best value(s) in each metric column are shown in bold .
+
+Method ID RMSE ↓ Far NLL ↓ Far AUROC ↑
+
+Ant-v5 (n = 10 seeds) Deep Ensemble 0.601 ± 0.022 14.361 ± 10.155 0.579 ± 0.075 MC Dropout 0.571 ± 0.076 1374.124 ± 980.958 0.379 ± 0.120 SWAG 0.674 ± 0.049 1.186 ± 0.358 0.476 ± 0.152 Laplace 0.590 ± 0.093 6.438 ± 3.907 0.401 ± 0.167 Subspace 0.552 ± 0.013 30.496 ± 24.740 0.302 ± 0.106 P&C 0.289 ± 0.151 1.544 ± 0.348 0.993 ± 0.003 
+
+HalfCheetah-v5 (n = 10 seeds) 
+
+Continued on next page 
+
+20 Table 4: Per-environment headline metrics on MuJoCo (continued) 
+
+Method ID RMSE ↓ Far NLL ↓ Far AUROC ↑
+
+Deep Ensemble 1.323 ± 0.073 9.665 ± 5.843 0.969 ± 0.017 MC Dropout 1.463 ± 0.103 6.087 ± 4.379 0.939 ± 0.026 SWAG 1.493 ± 0.083 7.663 ± 5.000 0.964 ± 0.022 Laplace 1.291 ± 0.088 5.568 ± 3.110 0.945 ± 0.024 Subspace 1.641 ± 0.078 19.917 ± 34.424 0.955 ± 0.032 P&C 1.779 ± 0.800 3.735 ± 0.456 0.986 ± 0.010 
+
+Hopper-v5 (n = 10 seeds) Deep Ensemble 0.167 ± 0.010 2.637 ± 0.467 0.903 ± 0.019 MC Dropout 0.210 ± 0.018 2.115 ± 0.683 0.624 ± 0.046 SWAG 0.180 ± 0.009 4.579 ± 2.421 0.792 ± 0.048 Laplace 0.175 ± 0.016 2.757 ± 0.823 0.641 ± 0.081 Subspace 0.194 ± 0.008 5.443 ± 2.539 0.782 ± 0.055 P&C 0.219 ± 0.012 0.825 ± 0.080 0.979 ± 0.007 
+
+Walker2d-v5 (n = 10 seeds) Deep Ensemble 0.591 ± 0.023 9.450 ± 2.146 0.972 ± 0.005 MC Dropout 0.566 ± 0.026 15.869 ± 3.836 0.945 ± 0.013 SWAG 0.661 ± 0.016 28.842 ± 10.908 0.909 ± 0.030 Laplace 0.579 ± 0.019 9.913 ± 2.415 0.897 ± 0.023 Subspace 0.729 ± 0.016 36.106 ± 15.215 0.904 ± 0.030 P&C 0.551 ± 0.019 1.839 ± 0.029 0.991 ± 0.001 
+
+Swimmer-v5 (n = 10 seeds) Deep Ensemble 0.027 ± 0.012 3.498 ± 0.492 0.998 ± 0.005 
+
+MC Dropout 0.058 ± 0.004 4.829 ± 0.645 0.992 ± 0.002 SWAG 0.056 ± 0.086 38.232 ± 20.216 0.923 ± 0.076 Laplace 0.035 ± 0.014 11.051 ± 2.425 0.988 ± 0.008 Subspace 0.026 ± 0.006 76.561 ± 42.428 0.956 ± 0.024 P&C 0.051 ± 0.003 1.696 ± 0.439 0.990 ± 0.003 
+
+Humanoid-v5 (n = 10 seeds) Deep Ensemble 51.815 ± 6.334 4.234 ± 0.235 0.285 ± 0.053 MC Dropout 44.184 ± 2.090 3.791 ± 0.385 0.288 ± 0.055 SWAG 46.966 ± 8.429 3.745 ± 0.288 0.187 ± 0.027 Laplace 64.620 ± 53.173 4.298 ± 1.239 0.251 ± 0.072 Subspace 43.199 ± 2.519 4.377 ± 0.534 0.173 ± 0.024 P&C 27.215 ± 0.586 3.274 ± 0.090 0.837 ± 0.029 
+
+HumanoidStandup-v5 (n = 10 seeds) Deep Ensemble 33.783 ± 7.675 7.065 ± 0.546 0.543 ± 0.113 MC Dropout 23.264 ± 3.640 6.258 ± 1.261 0.726 ± 0.072 SWAG 23.211 ± 3.301 5.836 ± 0.638 0.575 ± 0.143 Laplace 39.908 ± 26.810 5.614 ± 0.871 0.650 ± 0.122 Subspace 21.107 ± 1.290 25.971 ± 22.086 0.577 ± 0.135 P&C 25.13 ± 5.226 5.757 ± 0.153 0.977 ± 0.017 
+
+Reacher-v5 (n = 10 seeds) Deep Ensemble 0.087 ± 0.009 2.587 ± 0.423 0.971 ± 0.004 MC Dropout 0.111 ± 0.009 7.940 ± 0.930 0.929 ± 0.004 SWAG 0.089 ± 0.011 190.001 ± 53.046 0.816 ± 0.055 Laplace 0.088 ± 0.011 1.974 ± 0.404 0.926 ± 0.008 Subspace 0.090 ± 0.009 1015.748 ± 653.260 0.771 ± 0.058 P&C 0.120 ± 0.021 0.917 ± 0.106 0.983 ± 0.003 
+
+Pusher-v5 (n = 10 seeds) Deep Ensemble 0.054 ± 0.009 5.899 ± 1.033 0.997 ± 0.006 MC Dropout 0.057 ± 0.001 20.634 ± 4.510 0.972 ± 0.005 SWAG 0.094 ± 0.051 28.527 ± 18.351 0.625 ± 0.309 Laplace 0.054 ± 0.009 17.909 ± 2.376 0.900 ± 0.076 Subspace 0.053 ± 0.002 2268.085 ± 1140.032 0.253 ± 0.091 P&C 0.054 ± 0.002 2.012 ± 0.227 1.000 ± 0.000 
+
+InvertedPendulum-v5 (n = 10 seeds) 
+
+Continued on next page 
+
+21 Table 4: Per-environment headline metrics on MuJoCo (continued) 
+
+Method ID RMSE ↓ Far NLL ↓ Far AUROC ↑
+
+Deep Ensemble 0.017 ± 0.008 -0.059 ± 0.811 0.832 ± 0.096 MC Dropout 0.010 ± 0.002 -0.508 ± 0.452 0.934 ± 0.010 SWAG 0.052 ± 0.048 94.165 ± 65.723 0.488 ± 0.061 Laplace 0.014 ± 0.014 1.178 ± 1.002 0.867 ± 0.148 Subspace 0.015 ± 0.004 316.721 ± 181.217 0.559 ± 0.086 P&C 0.006 ± 0.002 -1.334 ± 0.447 0.956 ± 0.006 
+
+InvertedDoublePendulum-v5 (n = 10 seeds) Deep Ensemble 0.028 ± 0.013 4.230 ± 1.265 0.994 ± 0.004 MC Dropout 0.030 ± 0.006 108.931 ± 75.299 0.997 ± 0.001 
+
+SWAG 0.095 ± 0.057 124.220 ± 54.583 0.398 ± 0.289 Laplace 0.023 ± 0.011 18.250 ± 4.784 0.951 ± 0.092 Subspace 0.025 ± 0.005 2933.610 ± 2712.973 0.650 ± 0.215 P&C 0.020 ± 0.004 4.942 ± 0.542 0.995 ± 0.001 
+
+22 Table 5: Spearman rank correlation between predicted variance and squared error, computed per seed and reported as mean ± stddev across seeds. Header arrows indicate that higher is better. Within each environment, the best value(s) in each split column are shown in bold . Negative correlations are italicized to indicate anti-informative uncertainty signals. 
+
+Method ID ↑ Near ↑ Mid ↑ Far ↑
+
+Ant-v5 
+
+Deep Ensemble 0.32 ± 0.04 0.23 ± 0.04 0.08 ± 0.05 0.09 ± 0.04 
+
+MC Dropout 0.38 ± 0.15 0.23 ± 0.13 −0.02 ± 0.11 0.06 ± 0.07 
+
+SWAG 0.46 ± 0.11 0.25 ± 0.07 −0.08 ± 0.06 0.07 ± 0.06 
+
+Laplace 0.44 ± 0.09 0.28 ± 0.08 0.04 ± 0.11 0.20 ± 0.12 
+
+Subspace 0.30 ± 0.04 0.21 ± 0.06 0.01 ± 0.05 0.22 ± 0.09 
+
+P&C 0.72 ± 0.05 0.53 ± 0.09 0.59 ± 0.08 0.31 ± 0.13 
+
+HalfCheetah-v5 
+
+Deep Ensemble 0.39 ± 0.04 0.61 ± 0.06 −0.09 ± 0.09 0.10 ± 0.04 
+
+MC Dropout 0.39 ± 0.08 0.56 ± 0.09 −0.12 ± 0.14 0.08 ± 0.05 
+
+SWAG 0.40 ± 0.05 0.42 ± 0.10 −0.09 ± 0.15 0.11 ± 0.05 
+
+Laplace 0.47 ± 0.04 0.57 ± 0.09 −0.12 ± 0.19 0.16 ± 0.07 
+
+Subspace 0.37 ± 0.06 0.33 ± 0.10 −0.07 ± 0.13 0.13 ± 0.05 
+
+P&C 0.44 ± 0.08 0.78 ± 0.05 0.69 ± 0.14 0.85 ± 0.09 
+
+Hopper-v5 
+
+Deep Ensemble 0.65 ± 0.02 0.64 ± 0.02 0.59 ± 0.04 0.52 ± 0.05 
+
+MC Dropout 0.61 ± 0.03 0.35 ± 0.06 0.37 ± 0.10 0.55 ± 0.07 
+
+SWAG 0.67 ± 0.03 0.61 ± 0.06 0.05 ± 0.18 0.24 ± 0.13 
+
+Laplace 0.66 ± 0.06 0.60 ± 0.05 0.49 ± 0.09 0.38 ± 0.11 
+
+Subspace 0.64 ± 0.03 0.60 ± 0.06 0.09 ± 0.19 0.23 ± 0.12 
+
+P&C 0.49 ± 0.07 0.61 ± 0.05 0.60 ± 0.07 0.73 ± 0.07 
+
+Walker2d-v5 
+
+Deep Ensemble 0.46 ± 0.01 0.45 ± 0.03 0.33 ± 0.04 0.26 ± 0.03 
+
+MC Dropout 0.51 ± 0.03 0.45 ± 0.05 0.35 ± 0.08 0.09 ± 0.08 
+
+SWAG 0.47 ± 0.02 0.30 ± 0.08 0.34 ± 0.05 0.12 ± 0.07 
+
+Laplace 0.51 ± 0.03 0.39 ± 0.05 0.35 ± 0.07 0.20 ± 0.08 
+
+Subspace 0.43 ± 0.03 0.26 ± 0.07 0.33 ± 0.04 0.09 ± 0.05 
+
+P&C 0.51 ± 0.02 0.50 ± 0.05 0.36 ± 0.02 0.36 ± 0.04 
+
+Swimmer-v5 
+
+Deep Ensemble 0.53 ± 0.14 0.76 ± 0.05 – 0.48 ± 0.05 
+
+MC Dropout 0.46 ± 0.09 0.45 ± 0.08 – 0.26 ± 0.12 
+
+SWAG 0.59 ± 0.16 −0.19 ± 0.23 – −0.33 ± 0.06 
+
+Laplace 0.41 ± 0.25 0.39 ± 0.13 – −0.21 ± 0.08 
+
+Subspace 0.52 ± 0.06 −0.20 ± 0.09 – −0.29 ± 0.07 
+
+P&C 0.65 ± 0.09 0.80 ± 0.04 – 0.64 ± 0.05 
+
+Humanoid-v5 
+
+Deep Ensemble 0.91 ± 0.01 0.64 ± 0.03 0.42 ± 0.10 0.76 ± 0.03 
+
+MC Dropout 0.86 ± 0.03 0.56 ± 0.06 0.22 ± 0.05 0.62 ± 0.04 
+
+SWAG 0.88 ± 0.04 0.57 ± 0.07 0.28 ± 0.15 0.69 ± 0.07 
+
+Laplace 0.92 ± 0.02 0.65 ± 0.11 0.41 ± 0.24 0.76 ± 0.07 
+
+Subspace 0.84 ± 0.05 0.51 ± 0.07 0.17 ± 0.08 0.64 ± 0.04 
+
+P&C 0.83 ± 0.02 0.65 ± 0.03 0.42 ± 0.05 0.71 ± 0.03 
+
+HumanoidStandup-v5 
+
+Deep Ensemble 0.65 ± 0.18 0.71 ± 0.12 0.84 ± 0.08 0.73 ± 0.11 
+
+MC Dropout 0.18 ± 0.14 0.68 ± 0.16 0.82 ± 0.09 0.67 ± 0.12 
+
+SWAG 0.30 ± 0.17 0.60 ± 0.20 0.78 ± 0.12 0.55 ± 0.12 
+
+Laplace 0.61 ± 0.26 0.79 ± 0.17 0.90 ± 0.07 0.79 ± 0.14 
+
+Subspace 0.18 ± 0.11 0.53 ± 0.22 0.74 ± 0.11 0.51 ± 0.10 
+
+P&C 0.81 ± 0.07 0.99 ± 0.01 0.99 ± 0.01 0.99 ± 0.01 
+
+Reacher-v5 
+
+Deep Ensemble 0.60 ± 0.08 0.48 ± 0.08 – 0.85 ± 0.02 
+
+MC Dropout 0.63 ± 0.05 0.55 ± 0.07 – 0.73 ± 0.03 
+
+SWAG 0.59 ± 0.06 0.39 ± 0.12 – 0.43 ± 0.20 
+
+Continued on next page 
+
+23 Table 5: Spearman rank correlation between predicted variance and squared error (continued) 
+
+Method ID ↑ Near ↑ Mid ↑ Far ↑
+
+Laplace 0.58 ± 0.13 0.43 ± 0.11 – 0.79 ± 0.02 
+
+Subspace 0.58 ± 0.04 0.46 ± 0.06 – 0.34 ± 0.20 
+
+P&C 0.69 ± 0.06 0.63 ± 0.08 – 0.70 ± 0.04 
+
+Pusher-v5 
+
+Deep Ensemble 0.59 ± 0.06 0.74 ± 0.08 – 0.78 ± 0.02 
+
+MC Dropout 0.65 ± 0.03 0.70 ± 0.02 – 0.45 ± 0.05 
+
+SWAG 0.33 ± 0.15 0.14 ± 0.33 – 0.24 ± 0.35 
+
+Laplace 0.62 ± 0.05 0.58 ± 0.19 – 0.62 ± 0.09 
+
+Subspace 0.58 ± 0.03 0.31 ± 0.09 – −0.47 ± 0.09 
+
+P&C 0.61 ± 0.05 0.85 ± 0.04 – 0.77 ± 0.02 
+
+InvertedPendulum-v5 
+
+Deep Ensemble 0.76 ± 0.14 0.76 ± 0.10 – 0.69 ± 0.08 
+
+MC Dropout 0.50 ± 0.10 0.59 ± 0.06 – 0.54 ± 0.08 
+
+SWAG 0.61 ± 0.20 −0.24 ± 0.22 – −0.57 ± 0.25 
+
+Laplace 0.46 ± 0.22 0.41 ± 0.34 – 0.49 ± 0.41 
+
+Subspace 0.46 ± 0.09 −0.01 ± 0.13 – −0.58 ± 0.22 
+
+P&C 0.41 ± 0.18 0.90 ± 0.02 – 0.86 ± 0.03 
+
+InvertedDoublePendulum-v5 
+
+Deep Ensemble 0.57 ± 0.17 0.44 ± 0.12 – 0.88 ± 0.02 
+
+MC Dropout 0.35 ± 0.10 0.45 ± 0.10 – 0.44 ± 0.08 
+
+SWAG 0.31 ± 0.45 0.12 ± 0.33 – −0.52 ± 0.16 
+
+Laplace 0.36 ± 0.21 0.27 ± 0.18 – 0.68 ± 0.17 
+
+Subspace 0.18 ± 0.10 0.10 ± 0.13 – −0.39 ± 0.25 
+
+P&C 0.60 ± 0.15 0.78 ± 0.07 – 0.85 ± 0.03 
+
+24 D CIFAR-10 Hyperparameter Sweeps 
+
+D.1 Selection Protocol 
+
+All hyperparameters were selected per-method on a 10% in-distribution validation split held out from the CIFAR-10 training set. The remaining 90% (45,000 images) is used for training. Selection is by validation NLL after post-hoc temperature scaling, with the temperature T fit on the same 10% split (one T per hyperparameter configuration). No OOD data is used for any tuning decision. The shared training recipe across all methods using the PreAct ResNet-18 base is: SGD with momentum 0.9 (Nesterov), initial lr 0.1 with cosine decay and 5-epoch warmup, weight decay 
+
+5 · 10 −4, batch size 128, 300 epochs, augmentation flipcrop+cutout(8) , label smoothing 0. 
+
+D.2 Per-Method Sweep Grids 
+
+Table 6 enumerates the swept hyperparameters per method, the values explored, and the selected value (bold). Fixed = held constant, never swept; secondary settings without a sweep were taken from defaults / literature. Table 6: CIFAR-10 hyperparameter sweep grids per method. Selected value bold. 
+
+Method Hyperparameter Values Selected PreActResNet-18 — — —MSP — (derived) — —Energy — (derived) — —Mahalanobis — (derived) — —ReAct+Energy — (derived) — —MC Dropout dropout_rate {0.1, 0.2, 0.3, 0.5} 0.2
+
+n_perturbations (fixed) 50 50 
+
+LLLA prior_precision {0.01 , 0.1, 1.0, 10 .0, 100 , 1000 } 10 .0
+
+n_perturbations (fixed) 50 50 
+
+SWAG swag_start_epoch {160 , 240 } 240 
+
+swag_collect_freq (fixed) 1 1
+
+swag_max_rank (fixed) 20 20 
+
+n_perturbations (fixed) 50 50 
+
+bn_refresh_subset (fixed) 2048 2048 
+
+Epinet prior_scale {0.5, 1.0, 3.0} 3.0
+
+index_dim (fixed) 8 8
+
+epinet_hiddens (fixed) [50 , 50] [50 , 50] 
+
+epinet_epochs (fixed) 100 100 
+
+epinet_lr (fixed) 10 −3 10 −3
+
+epinet_wd (fixed) 10 −4 10 −4
+
+n_perturbations (fixed) 50 50 
+
+Standard Ensemble n_models (fixed) 5 5
+
+P&C (single-block) target (stage, block) {1, 2, 3} × { 0, 1} (6 positions) (3, 0)
+
+perturbation scale σ {25 , 50 , 100 } 25 
+
+bootstrap fraction fboot {0.05 , 0.1, 0.2} 0.05 
+
+ridge regulariser λ (fixed) 10 −3 10 −3
+
+n_directions K (fixed) 20 20 
+
+n_perturbations (fixed) 50 50 
+
+subset_size (fixed) 1024 1024 
+
+chunk_size (fixed) 64 (memory-only) 64 
+
+Coverage notes: • LLLA, MC Dropout, Epinet, SWAG: only the headline hyperparameter was swept; secondary settings (e.g. SWAG max_rank , Epinet index_dim ) were taken from defaults or the originating paper. • The full cross product of hyperparameters was not explored for P&C. Rather, coordinate descent was used in the order that rows are listed in Table 6. 25 • P&C lambda_reg was confirmed to have no measurable effect on validation NLL across five orders of magnitude, so it is not a useful knob and was not re-explored beyond a small initial sweep. • P&C chunk_size affects only memory footprint, not the validation objective; it is set per-position to fit on an 8 GB GPU. 26
