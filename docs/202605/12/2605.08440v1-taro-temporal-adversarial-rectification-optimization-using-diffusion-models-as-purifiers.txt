@@ -1,0 +1,744 @@
+Title: TARO: Temporal Adversarial Rectification Optimization Using Diffusion Models as Purifiers
+
+URL Source: https://arxiv.org/pdf/2605.08440v1
+
+Published Time: Tue, 12 May 2026 00:16:10 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# TARO: Temporal Adversarial Rectification Optimization Using Diffusion Models as Purifiers 
+
+Daniel Wesego 
+
+Department of Computer Science University of Illinois Chicago Chicago, IL 60607 
+
+dweseg2@uic.edu 
+
+Pedram Rooshenas 
+
+Department of Computer Science University of Illinois Chicago Chicago, IL 60607 
+
+pedram@uic.edu 
+
+# Abstract 
+
+Adversarial purification with diffusion models seeks to project adversarial examples back toward the data manifold, but balancing semantic preservation and robustness against adaptive attacks remains challenging. Recent work shows that standard diffusion purification can fail under adaptive evaluation, while test-time score-based optimization is more resilient. Existing optimization defenses, however, typically rely on a single diffusion noise regime or treat timesteps uniformly, overlooking the distinct roles of coarse and fine denoising scales. We propose Temporal Adversarial Rectification Optimization (TARO), an inference-time purification method that builds a temporally guided score prior from multiple denoising views along the diffusion trajectory. TARO forms a coarse-to-fine residual target: high-noise experts provide globally smoothed structure with reduced adversarial sensitivity, while low-noise experts restore image-specific, class-relevant details. A guidance strength controls this temporal correction, allowing TARO to balance robust global rectification with semantic preservation. Empirically, TARO improves robust accuracy across datasets and adaptive threat models in a zero-shot setting, while remaining compatible with complementary adversarial-likelihood objectives for further robustness gains. 
+
+# 1 Introduction 
+
+Deep neural networks remain highly susceptible to adversarial examples, where small, often imper-ceptible perturbations induce erroneous predictions under norm-bounded input changes [Szegedy et al., 2013, Goodfellow et al., 2015]. Adversarial training is the dominant empirical defense, but its robustness is typically tied to the perturbation family used during training, it substantially increases training cost, and it often induces a clean-accuracy tradeoff [Madry et al., 2018, Schlarmann et al., 2024]. These limitations have motivated adversarial purification, an inference-time defense that preprocesses a potentially adversarial input before classification by mapping it back toward the natural-image manifold. Diffusion models provide a natural prior for adversarial purification because their denoising dynamics encode image structure across a continuum of noise scales. Standard diffusion purifiers inject Gaussian noise into the input to attenuate adversarial structure and then reconstruct the image through a pretrained reverse process [Song et al., 2021, Ho et al., 2020, Nie et al., 2022]. This strategy is attractive because the purifier can be used with a fixed downstream classifier. However, the diffusion time axis introduces an intrinsic robustness–fidelity tension. Low-noise denoising preserves local image content but may retain adversarial artifacts, while high-noise denoising suppresses stronger perturbations but may discard class-relevant details or drift toward an incorrect semantic mode. Prior guided purification methods attempt to steer this reverse process using auxiliary classifiers, distance metrics, or other guidance objectives [Wang et al., 2022]. Yet recent adaptive evaluations have shown 
+
+> Preprint.
+> arXiv:2605.08440v1 [cs.LG] 8 May 2026
+
+that robustness claims for stochastic purification can be substantially overstated when attacks fail to differentiate through the purification process or fail to account for stochasticity [Lee and Kim, 2023, Kassis et al., 2025]. A recent alternative is to cast purification as test-time optimization. Rather than relying only on a fixed reverse diffusion trajectory, these methods directly update the input by optimizing an objective induced by a diffusion prior [Zhang et al., 2023, Chen et al., 2024]. Adversary-aware optimization further strengthens this paradigm by augmenting the clean-image prior with an explicit likelihood model for adversarial residuals [Wesego and Rooshenas, 2025]. Despite their empirical strength, existing optimization-based purifiers still leave two structural limitations. First, they typically use a single diffusion noise level at each update, collapsing the multi-scale information encoded by the diffusion model into a single local estimate. Second, adversary-aware variants require an auxiliary perturbation model trained from generated adversarial examples, making the defense dependent on the attack distribution used during training. We propose Temporal Adversarial Rectification Optimization (TARO), a test-time purification frame-work that treats diffusion timesteps as scale-dependent denoising experts. Different noise regimes provide complementary information: higher-noise denoisers recover globally smoothed structure with reduced sensitivity to fragile adversarial components, while lower-noise denoisers preserve image-specific, class-relevant details. Motivated by a temporal product-of-experts view of diffusion scores, TARO constructs an affine coarse-to-fine target from multiple denoising views, allowing the purifier to combine robust global structure with fine semantic detail instead of committing to a single point on the robustness–fidelity spectrum. This temporal construction gives TARO a zero-shot rectification signal from the pretrained clean-image diffusion model itself. Empirically, this zero-shot setting is particularly effective under ℓ∞
+
+adaptive attacks, where TARO improves over prior diffusion purification and test-time optimization baselines while preserving high clean accuracy. At the same time, our results show that ℓ2 pertur-bations are more challenging for raw zero-shot temporal rectification: smoother or more spatially distributed distortions can benefit from additional residual information or stronger stabilization. TARO is therefore complementary to adversary-aware likelihood models such as AAOpt [Wesego and Rooshenas, 2025]: when an adversarial residual model is available, replacing the single-scale diffusion prior with TARO’s temporal prior further improves robustness. Reliable evaluation is equally important for this class of defenses. Optimization-based purifiers contain inner optimization loops, and attacks that remove these loops, omit higher-order gradient tracking, or fail to account for stochasticity may evaluate an easier surrogate defense rather than the actual purifier. We therefore use an optimization-aware evaluation protocol that attacks the full purifier–classifier composition, accounts for stochasticity through expectation over transformation, and preserves gradient flow through the inner loop when the optimization is evaluated. This protocol also reveals that improperly differentiated optimization-based purification can produce severely inflated robustness estimates, motivating our use of strong and properly applied adaptive attacks throughout the paper. Our contributions are: • We introduce TARO, a test-time purifier that aggregates multiple diffusion noise regimes into an affine coarse-to-fine denoising target, combining robust high-noise structure with fine-scale semantic preservation. • We interpret TARO as an affine extension of temporal product-of-experts aggregation, with a correction strength controlling the fine-to-coarse balance, and provide risk and local Gaussian interpretations. • We evaluate TARO under PGD-EOT, BPDA-EOT, AutoAttack-EOT, and DiffBreak. TARO im-proves zero-shot ℓ∞ robustness and further improves robustness with adversary-aware likelihoods or consistency regularization. • We provide a optimization-aware evaluation study showing that reliable adaptive evaluation of optimization-based purifiers requires preserving higher-order gradients. 22 Related Work 
+
+Adversarial purification is an inference-time defense motivated by the cost and threat-model specificity of adversarial training. It preprocesses a potentially corrupted input before classification by mapping it back toward the clean data manifold. Diffusion purification methods, such as DiffPure [Nie et al., 2022], inject noise and solve a reverse denoising process to remove adversarial structure. While effective against some attacks, standard reverse-sampling purification faces a robustness–fidelity tradeoff: low-noise denoising may preserve adversarial artifacts, whereas high-noise denoising can distort class-relevant semantics. Test-time optimization methods address this issue by directly updating the input using a pretrained diffusion prior. Score-Opt [Zhang et al., 2023] and LM [Chen et al., 2024] optimize score-induced objectives that move adversarially perturbed input xadv toward high-density regions of the clean data distribution. AAOpt [Wesego and Rooshenas, 2025] strengthens this MAP view by adding a learned adversarial likelihood log pϕ(xadv | x), allowing the purifier to model structured residual artifacts. However, these methods typically use a single score or noise scale at each update, and adversary-aware variants require a dedicated perturbation model trained on generated attacks. TARO instead uses multiple diffusion noise regimes at test time and can be used either as a zero-shot temporal prior or combined with adversary-aware likelihoods. Robust evaluation of purification defenses is challenging because stochastic and optimization-based purifiers can lead to misleading gradients. Prior work has shown that diffusion purification robustness can be overestimated when attacks are weak, non-adaptive, or fail to account for stochasticity and differentiability through the defense [Lee and Kim, 2023, Kang et al., 2023, Kassis et al., 2025]. DiffBreak [Kassis et al., 2025] further showed that low-frequency, perceptually guided perturbations can collapse standard diffusion purification. We follow adaptive evaluation best practices, including EOT, attacks on the full purifier–classifier composition, and graph-consistent evaluation for optimization-based purifiers whose inner loops must remain exposed to the attacker. Diffusion guidance provides a related algebraic perspective. Classifier guidance modifies the score using an auxiliary classifier [Dhariwal and Nichol, 2021], while classifier-free guidance combines conditional and unconditional denoising estimates [Ho and Salimans, 2022]. Self-Guidance [Epstein et al., 2023] and Auto-Guidance [Karras et al., 2024] derive guidance from internal representations or contrasts between denoisers. These methods primarily target controllability or sample quality in generation. In contrast, TARO uses multi-scale denoising estimates from different diffusion noise regimes as temporal experts for adversarial posterior rectification. 
+
+# 3 Method 
+
+Let xadv ∈ Rd be an adversarially perturbed input and let x denote the unknown clean image we aim to recover. We pose purification as explicit posterior inference: 
+
+arg max  
+
+> x
+
+log p(x | xadv ) = arg min  
+
+> x
+
+Lfid (x, xadv )
+
+| {z }
+
+> fidelity / corruption model
+
++λ R(x)
+
+| {z } 
+
+> image prior
+
+. (1) In the simplest setting, we use a Gaussian corruption model, Lfid (x, xadv ) = 12σ2fid 
+
+∥x−xadv ∥22. More generally, Lfid can be any differentiable negative log-likelihood, including data-driven corruption models that learn pϕ(xadv | x) [Wesego and Rooshenas, 2025]. In that case, we set Lfid (x, xadv ) = 
+
+− log pϕ(xadv | x).
+
+The MAP objective in Eq. (1) follows the standard inverse-problem view of purification. RED replaces an explicit prior with a denoiser-induced regularizer RRED (x) = 12 ∥x − D(x)∥22. For a diffusion denoiser, Tweedie’s formula gives Dθ (y, σ t) = y + σ2 
+
+> t
+
+∇y log pσt (y), linking denoising to score ascent. We use this connection to build a temporal product-of-experts prior over multiple noise levels. 33.1 Temporal PoE and Affine Temporal Aggregation 
+
+Let {pt(x)}t∈T denote the diffusion-induced smoothed data distributions indexed by timesteps 
+
+T = [ tmin , t max ]. We define a continuous-time temporal product-of-experts prior: 
+
+log pTARO (x) = 
+
+Z
+
+> T
+
+w(t) log pt(x) dt − log Z. (2) The function w(t) controls how much each noise regime contributes to the effective prior. For example, placing more mass on small t emphasizes fine-scale fidelity, while placing more mass on large t emphasizes stronger global correction and robustness. By Tweedie’s formula, the score of the continuous-time PoE prior can be written as 
+
+∇x log pTARO (x) = R 
+
+> T
+
+w(t) Dθ (x,σ t)−x
+
+> σ2
+> t
+
+dt. Defining the variance-corrected weight ˜w(t) =
+
+w(t)/σ 2 
+
+> t
+
+, this becomes ∇x log pTARO (x) = R 
+
+> T
+
+˜w(t) ( Dθ (x, σ t) − x) dt. We approximate the con-tinuous temporal prior using a sparse K-expert quadrature: ˜w(t) dt ≈ PKk=1 ˆγkδ(t − tk). This gives 
+
+∇x log pTARO (x) ≈ PKk=1 ˆγk (Dθ (x, σ tk ) − x) . Letting Λ = PKk=1 ˆγk and αk = ˆγk 
+
+> Λ
+
+, we obtain 
+
+∇x log pTARO (x) ≈ Λ
+
+> K
+
+X
+
+> k=1
+
+αkDθ (x, σ tk ) − x
+
+!
+
+= Λ( ¯Dα(x) − x), (3) where we define the temporal consensus denoiser ¯Dα(x) ≜ PKk=1 αkDθ (x, σ tk ).
+
+Standard PoE requires nonnegative expert weights, which yields a convex interpolation of the temporal denoisers. TARO relaxes this convexity constraint by allowing the effective aggregation weights to be negative while preserving P 
+
+> k
+
+αk = 1 . When some αk < 0, the temporal target becomes an affine extrapolation of the experts, enabling coarse-to-fine corrections beyond standard convex aggregation while retaining the same denoiser-aggregation form, ¯Dα(x). A local Gaussian interpretation of this affine temporal aggregation is provided in Appendix A.1. 
+
+Choice of temporal experts. The discrete experts {tk}Kk=1 are interpreted as a sparse quadrature of the continuous temporal prior. The theory only requires ordered timesteps tmin ≤ t1 < · · · <tK ≤ tmax , which may be chosen by any monotone schedule tk = ψ(k; tmin , t max , K ), such as linear, logarithmic, or problem-specific spacing. In our sampled-time implementation, we generate effective timesteps by tk = clip( √t κ k, t min , t max ), with κ1 < · · · < κ K . We evaluate both K = 2 
+
+and K = 3 : K = 2 uses fine and coarse experts, while K = 3 adds a middle expert to stabilize the coarse-to-fine transition. 
+
+3.2 Optimization Algorithm 
+
+Algorithm 1 gives the score-prior-only TARO update. At each iteration, we sample a base timestep, construct K effective timesteps, and evaluate the denoiser at each scale. TARO anchors the target at the coarsest expert uK and adds lower-noise residual corrections, xtarget = uK + PK−1 
+
+> j=1
+
+γK−j (uj −
+
+uj+1 ), where uj − uj+1 transfers information from a finer expert to the next coarser one. The image is updated toward this target with the RED-style fixed-target loss: ℓ = ∥sg( xtarget ) − xi∥22. Here, 
+
+sg( ·) treats xtarget as fixed only during the purifier update and makes the optimization efficient similar to Wesego and Rooshenas [2025]. But to show that are our improvements are not coming from the effects this, we have added additional ablations in Section 4.5. Fidelity or adversary-aware likelihood terms can be added to recover the full MAP objective. 
+
+3.3 Guidance Interpretation of Affine Temporal Extrapolation 
+
+The affine temporal aggregation used by TARO admits a guidance-style interpretation [Ho and Salimans, 2022, Karras et al., 2024]. Let tf < t c, where tf denotes a lower-noise fine scale and 
+
+tc denotes a higher-noise coarse scale. We write uf = Dθ (xtf , σ tf ) and uc = Dθ (xtc , σ tc ). The coarse expert uc provides a stronger global projection and tends to suppress adversarial artifacts, but may introduce semantic drift or remove fine details. The fine expert uf is more input-grounded and better preserves details, but may retain part of the adversarial structure. TARO uses the temporal discrepancy uf − uc as a correction direction. 4Algorithm 1 Test-time Optimization Algorithm with TARO 
+
+Input: Input image xadv ; pretrained score denoiser Dθ ; guidance strength γ; iterations M ;timestep range [tmin , t max ]; timestep sampling schedule; noise-level schedule {σt}Tt=1 ; ordered scale multipliers [κ1, . . . , κ K ]
+
+x0 ← xadv 
+
+for i = 0 to M − 1 do 
+
+Sample base timestep t from the predefined timestep schedule 
+
+for j = 1 to K do 
+
+tj ← clip( √t κ j , t min , t max ) ▷ Set effective timestep Sample ϵj ∼ N (0, I)
+
+uj ← Dθ
+
+ xi + σtj ϵj , σ tj
+
+ ▷ Compute temporal expert 
+
+end for 
+
+xtarget ← uK + PK−1 
+
+> j=1
+
+γK−j (uj − uj+1 ) ▷ Form TARO target 
+
+ℓ ← ∥ sg( xtarget ) − xi∥22 ▷ Calculate score-prior loss 
+
+xi+1 ← OptimizerUpdate( xi, ℓ ) ▷ Update image 
+
+end for Return: Final image xM
+
+For K = 2 , the TARO target is uγ = uc + γ(uf − uc) = γu f + (1 − γ)uc. When 0 ≤ γ ≤ 1, this is a convex interpolation between fine and coarse experts. When γ > 1, it becomes a guidance-style extrapolation that amplifies the fine-minus-coarse correction. This has the same algebraic form as guidance methods such as CFG and Auto-Guidance, which also scale a discrepancy between two predictions. However, the source and purpose of the discrepancy are different: in TARO, both predictions are produced by the same diffusion denoiser at different temporal noise regimes, and the extrapolated target is used for test-time MAP adversarial purification rather than conditional sample generation. Thus, TARO should be viewed as a temporal affine extrapolation with a guidance-style form: the resemblance to guidance is algebraic, while the correction direction is defined by fine-to-coarse denoising disagreement for adversarial rectification. 
+
+3.4 Risk Interpretation of Temporal Consensus 
+
+The PoE derivation motivates aggregating temporal denoising experts. Our implemented TARO target uses a residual coarse-to-fine correction controlled by γ. We therefore analyze the risk of the guided fine-to-coarse target directly, which makes the role of γ explicit. 
+
+Proposition 1 (Risk of the guided fine-to-coarse target) . Let xtf = x+σtf ϵf and xtc = x+σtc ϵc. We use uf = Dθ (xtf , σ tf ) and uc = Dθ (xtc , σ tc ) to denote the fine and coarse temporal experts, where 
+
+tf < t c. Suppose uf = x⋆ +bf (x⋆)+ ξf and uc = x⋆ +bc(x⋆)+ ξc with E[ξf | x⋆] = E[ξc | x⋆] = 0 .Define the TARO guided target uγ = uc + γ(uf − uc). Then 
+
+uγ = x⋆ + bc + γ(bf − bc)
+
+| {z }
+
+> bγ
+
++ ξc + γ(ξf − ξc)
+
+| {z }
+
+> ξγ
+
+, and 
+
+E[∥uγ − x⋆∥22 | x⋆] = ∥bc + γ(bf − bc)∥22 + E[∥ξc + γ(ξf − ξc)∥22 | x⋆].
+
+Proof of Proposition 1 is provided in Appendix A.2. Proposition 1 shows that the correction strength γ changes both the effective bias bγ and the residual variation ξγ of the temporal target. Small γ keeps uγ close to the coarse expert uc, which can inherit oversmoothing bias and remove class-relevant details. Larger γ increases the influence of the fine expert uf through the correction uf −uc, restoring image-specific structure but potentially amplifying cross-timestep residual variation. This motivates selecting γ on validation data and using expert consistency regularization when stronger fine-expert correction becomes unstable. This interpretation also helps explain the attack-dependent behavior observed in our ablations. For ℓ∞
+
+attacks, moderate fine-to-coarse correction is effective, but overly large γ can over-amplify temporal residuals and reduce robustness. For ℓ2 attacks, smoother and more spatially distributed distortions are less fully corrected by the coarse expert alone, so stronger fine-expert correction is beneficial. In this regime, consistency regularization becomes especially useful because it stabilizes the amplified cross-timestep discrepancy. 5Expert consistency regularization. Because larger γ amplifies the temporal correction uf − uc, it can also amplify unstable cross-timestep disagreement. To stabilize the guided target, we augment the score-prior objective with an expert-consistency regularizer: Lcons = P 
+
+> i<j
+
+∥ui − uj ∥22, where 
+
+ui and uj are denoised outputs from different temporal experts. The full TARO prior loss becomes 
+
+Lprior = ∥sg( xtarget ) − x∥22 + λcons Lcons . The first term moves the current image toward the guided temporal target, while Lcons encourages temporal experts to agree on the purified estimate. From the risk view above, this regularizer is intended to control unstable residual variation while preserving the bias-correction benefit of stronger fine-scale guidance. This is particularly useful for ℓ2 attacks, where the fine expert remains important but the raw cross-timestep residual benefits from stabilization. For ℓ∞ attacks, where temporal discrepancy may already provide a useful correction signal, excessive consistency can dampen that signal and provide less or no benefit. See Appendix 4.1 for the effect of consistency loss on purification against ℓ2 attacks. 
+
+3.5 Using Data-Driven Adversarial Models 
+
+The risk interpretation above suggests that purification can benefit from both temporal correction and attack-specific residual modeling. Adversary-aware methods such as AAOpt [Wesego and Rooshenas, 2025] address the latter by explicitly modeling the residual between the adversarial input and the purified estimate. In particular, AAOpt augments the diffusion prior with a learned perturbation likelihood by minimizing an objective of the form LAAOpt (x) = − log pθ (x)−λ log ppert (x−xadv ).
+
+Here, ppert (x − xadv ) models the likelihood of the residual between the current purified estimate and the adversarial input. TARO is complementary: it uses the zero-shot discrepancy ∆u = uf − uc between fine and coarse temporal experts as an internal proxy for scale-sensitive adversarial structure. Thus, AAOpt provides an external learned residual model, while TARO provides an internal temporal rectification signal from the pre-trained diffusion model itself. The two can be combined by replacing the single-scale diffusion prior in AAOpt with the TARO temporal consensus prior (see Appendix A.3). 
+
+# 4 Experiments 
+
+Setup. We evaluate TARO on CIFAR-10, CIFAR-100, CIFAR-10-C, and Imagenette. CIFAR-10-C, Imagenette, and extended hyperparameter details are discussed in Appendix. We report clean accuracy on benign inputs and robust accuracy under adaptive attacks. Unless otherwise stated, TARO results are averaged over independent trials. We compare against adversarial training (AT) baselines, including Pang et al. [2022], Gowal et al. [2020], Gowal et al. [2021], and Wang et al. [2023]; standard adversarial purification (AP) methods, including Nie et al. [2022], Yoon et al. [2021], Lin et al. [2025], and Li et al. [2025]; and test-time optimization baselines, including LM [Chen et al., 2024], Score-Opt [Zhang et al., 2023], and AAOpt [Wesego and Rooshenas, 2025]. For direct comparisons, we reimplement AAOpt using the same classifier, diffusion checkpoint, and attack settings as TARO. We use pretrained EDM denoisers that predict the clean estimate ˆx0 = Dθ (xt; σ), together with clean-trained WRN-28-10 and WRN-70-16 classifiers. Thus, robustness improvements for AP methods come from purification rather than adversarially trained classifiers. TARO-K denotes aggregation over K diffusion noise scales, and TARO-K-AA denotes the hybrid variant by updating AAOpt with the multi-scale temporal property of TARO. 
+
+Evaluation protocol. Because TARO is an optimization-based purifier, attacks must target the full purifier–classifier composition and account for stochasticity with EOT. We use PGD-EOT, BPDA-EOT, AutoAttack-EOT, and DiffBreak-style adaptive attacks. We also provide an optimization-aware evaluation study in Appendix A.4, A.5, showing that ignoring higher-order gradients in optimization based purification can lead to severely inflated robustness estimates. 
+
+4.1 Guidance Strength and Consistency Ablation 
+
+We first study the temporal correction strength γ in TARO-2. Small γ keeps the target closer to the high-noise coarse expert, while larger γ increases the contribution of the low-noise fine expert. We also evaluate an expert-consistency regularizer that penalizes disagreement among denoised timestep 6outputs, stabilizing the amplified temporal correction. Table 1 reports results on CIFAR-10 with WRN-28-10 under PGD-EOT-20 for both ℓ∞ (ϵ = 8 /255) and ℓ2 (ϵ = 0 .5) .Table 1 shows that the fine expert plays an important role in both clean and robust accuracy. When 
+
+γ < 1, clean accuracy and robust accuracy both drop, which is consistent with the target remaining too close to the coarse expert and losing class-relevant detail. Without consistency, ℓ∞ robustness peaks at γ = 1 .5, while larger values reduce robustness, suggesting that excessive correction can over-amplify unstable temporal residuals. In contrast, ℓ2 robustness improves with stronger correction up to γ = 2 .0.Consistency regularization is especially important for ℓ2: at γ = 1 .5, it improves robust accuracy from 69 .33% to 89 .05% . This indicates that the fine-to-coarse correction is useful for ℓ2 attacks, but the raw cross-timestep discrepancy benefits from stabilization. For ℓ∞, consistency has a smaller effect near the best γ, mainly stabilizing the large-γ regime. Table 1: Guidance-strength and consistency ablation for TARO-2 on CIFAR-10 using WRN-28-10 under PGD-EOT-20. We report clean accuracy and robust accuracy under ℓ∞ and ℓ2 attacks. 
+
+γ Consistency Clean Acc. ℓ∞ Robust Acc. ℓ2 Robust Acc. 0.5 No 82.28 ±0.7 73.56 ±2.2 57.48 ±0.6
+
+0.5 Yes 81.83 ±1.3 73.82 ±1.4 75.51 ±1.5
+
+0.75 No 85.73 ±0.7 79.55 ±0.5 61.00 ±1.0
+
+0.75 Yes 84.50 ±0.9 78.51 ±0.8 79.42 ±0.6
+
+1.0 No 91.46 ±0.1 85.93 ±0.4 63.40 ±1.5
+
+1.0 Yes 89.71 ±0.5 84.43 ±0.3 85.28 ±0.4
+
+1.5 No 93.09 ±0.4 87.04 ±1.8 69.33 ±1.2
+
+1.5 Yes 92.77 ±0.7 87.82 ±1.4 89.05 ±0.5
+
+2.0 No 92.96 ±0.6 79.68 ±2.3 72.91 ±2.3
+
+2.0 Yes 92.83 ±0.8 80.90 ±1.9 86.39 ±1.5
+
+3.0 No 91.46 ±0.9 55.79 ±1.1 66.27 ±0.8
+
+3.0 Yes 91.40 ±1.3 58.13 ±0.7 74.86 ±0.7
+
+4.2 Adaptive PGD-EOT Attacks 
+
+We evaluate end-to-end robustness against adaptive Projected Gradient Descent with Expectation over Transformation (PGD-EOT) [Athalye et al., 2018]. The attack targets the full purifier–classifier composition and estimates gradients through the stochastic purification process. We consider both 
+
+ℓ∞ and ℓ2 perturbations with budgets ϵ = 8 /255 and ϵ = 0 .5, respectively. Following Wesego and Rooshenas [2025], we use 20 attack iterations and a one-step gradient approximation through the recurrent purification trajectory. Unlike the original AAOpt evaluation, which uses 20 EOT samples for the attack and a larger number of EOT samples for the defense, we use 20 EOT samples for both attack and defense across TARO and all directly reimplemented baselines. This gives a matched and computationally comparable evaluation setting. Table 2 reports CIFAR-10 results under ℓ∞ and ℓ2 PGD-EOT using a WRN-28-10 classifier. Under 
+
+ℓ∞, TARO achieves the strongest robustness among the evaluated purification methods while main-taining clean accuracy close to the undefended classifier. Appendix A.6 reports the corresponding WRN-70-16 results, where TARO remains strong: TARO-2 achieves the best robust accuracy at 
+
+88 .56% , and TARO-3 obtains a comparable robust accuracy of 88 .37% .Under ℓ2, raw zero-shot TARO is weaker, but both TARO-AA and consistency-regularized TARO recover strong robustness. In particular, TARO-2 + Cons. achieves the best ℓ2 robustness in Table 2, suggesting that stabilizing the temporal correction can be competitive with adding an adversary-aware likelihood in this setting. 
+
+4.3 BPDA-EOT Attacks 
+
+We next evaluate robustness against Backward Pass Differentiable Approximation with EOT (BPDA-EOT) [Athalye et al., 2018]. BPDA-EOT tests defenses with non-differentiable, stochastic, or approximate components by replacing the backward pass with a differentiable surrogate while averaging gradients over stochastic transformations. We use 50 BPDA iterations and 15 EOT samples 7Table 2: Standard and robust accuracy on CIFAR-10 using WRN-28-10 under PGD-EOT-20. Base-lines include adversarial training (AT), adversarial purification, and test-time optimization purification. 
+
+ℓ∞ (ϵ = 8 /255 )
+
+Type Method Clean Robust Default 94.78 0.0 AT Pang et al. [2022] 88.62 64.95 Gowal et al. [2020] 88.54 65.10 Gowal et al. [2021] 87.51 66.01 AP Yoon et al. [2021] 85.66 37.27 Nie et al. [2022] 91.41 51.25 Score-Opt-O 91.21 64.96 Score-Opt-N 94.43 65.62 Lin et al. [2025] 90.42 64.06 AAOpt 91.53 ±0.9 85.12 ±0.7
+
+TARO-2 93.41 ±1.1 88.27 ±1.6
+
+TARO-3 93.45 ±0.9 88.57 ±0.9
+
+TARO-2-AA 92.61 ±0.7 86.91 ±0.9
+
+TARO-3-AA 93.45 ±0.9 87.46 ±0.7
+
+ℓ2 (ϵ = 0 .5)
+
+Type Method Clean Robust Default 94.78 0.0 AT Rebuffi et al. [2021] 91.79 85.05 Augustin et al. [2020] 93.96 86.14 AP Nie et al. [2022] 91.41 82.11 Score-Opt-O 91.21 79.09 Score-Opt-N 94.43 84.86 Lin et al. [2025] 90.42 85.55 AAOpt 91.48 ±0.7 86.40 ±0.4
+
+TARO-2 93.43 ±0.6 69.21 ±0.7
+
+TARO-3 93.55 ±1.1 68.86 ±1.1
+
+TARO-2-AA 92.61 ±0.7 88.19 ±1.2
+
+TARO-3-AA 93.47 ±0.9 88.39 ±1.0
+
+TARO-2 + Cons. 93.43 ±0.8 88.99 ±1.2
+
+TARO-3 + Cons. 91.27 ±0.3 86.97 ±0.3
+
+under an ℓ∞ perturbation budget of ϵ = 8 /255 . This setting tests whether TARO remains robust when the attack accounts for randomized purification and approximate gradients. Tables 3 and 4 summarize the BPDA-EOT results on CIFAR-10 and CIFAR-100. On CIFAR-10, TARO-3-AA achieves the strongest robust accuracy while maintaining high clean accuracy. On CIFAR-100, where classification is more challenging and the data manifold is more complex, TARO-3-AA again improves over AAOpt and Score-Opt baselines. These results support the claim that temporal multi-scale purification provides a stronger optimization signal than single-scale score guidance. Table 3: BPDA+EOT attack on CIFAR-10 under 
+
+ℓ∞ perturbations ( ϵ = 8 /255 ), WRN-28-10. 
+
+Method Clean Robust Default 94.78 0.0 Wang et al. [2022] 93.50 79.83 Yoon et al. [2021] 86.14 70.01 Nie et al. [2022] 89.02 81.40 Score-Opt-O 90.23 81.36 Score-Opt-N 93.94 90.07 ADBM 91.93 70.51 AAOpt 92.10 ±0.7 91.36 ±0.8
+
+TARO-2 90.62 ±0.6 88.90 ±0.6
+
+TARO-3 89.40 ±0.4 86.87 ±0.6
+
+TARO-2-AA 92.88 ±0.8 92.49 ±0.8
+
+TARO-3-AA 93.59 ±0.7 93.04 ±0.8
+
+Table 4: BPDA+EOT attack on CIFAR-100 un-der ℓ∞ perturbations ( ϵ = 8 /255 ), WRN-28-10. 
+
+Method Clean Robust Default 81.55 0.0 Yoon et al. [2021] 60.66 39.72 Hill et al. [2021] 51.66 26.10 Score-Opt-O 70.53 66.11 Score-Opt-N 74.18 60.21 AAOpt 69.68 ±1.6 66.20 ±1.8
+
+TARO-2 73.78 ±1.5 66.71 ±1.9
+
+TARO-3 72.61 ±1.8 68.66 ±2.2
+
+TARO-2-AA 72.76 ±1.9 70.65 ±2.0
+
+TARO-3-AA 74.72 ±1.5 72.41 ±1.7
+
+4.4 DiffBreak Low-Frequency Attacks 
+
+Recently, Kassis et al. [2025] introduced DiffBreak, an adaptive attack designed specifically to bypass diffusion-based purification defenses. Unlike standard ℓp-bounded attacks, DiffBreak uses a low-frequency (LF) perturbation strategy guided by perceptual similarity objectives such as LPIPS. These perturbations remain closer to natural image statistics, making them difficult for standard diffusion denoisers to remove. As shown in Table 5, the evaluated standard diffusion purification baselines collapse under this attack: both one-step denoising and DiffPure-EDM achieve 0.0% robust accuracy. In contrast, AAOpt and TARO-2-AA remain substantially more robust, with TARO-2-AA improving over AAOpt. 8Table 5: Robust accuracy on CIFAR-10 under the DiffBreak low-frequency (LF) attack with WRN-28-10 and EOT=20.      
+
+> Model Robust Accuracy 1-step Denoise 0.0 ±0.0
+> DiffPure-EDM 0.0 ±0.0
+> AAOpt 85.41 ±4.4
+> TARO-2-AA 90.10 ±1.5
+
+Table 6: Robust accuracy on CIFAR-10 under transfer-DiffBreak low-frequency (LF) attack with similar setup as Table 5     
+
+> Model Robust Accuracy DiffPure-EDM 0.0 ±0.0
+> AAOpt 93.2 ±2.9
+> TARO-2-AA 94.7 ±1.4
+
+As an additional sanity check, we also evaluate a transfer-DiffBreak setting. We generate low-frequency adversarial examples against DiffPure-EDM using the same diffusion model and evaluate the resulting examples on TARO with matched seed settings. Table 6 shows that TARO-2-AA remains robust under transfer, again outperforming AAOpt. For the direct LF attack, we use 20 EOT samples; due to the high computational overhead of sequential EOT execution and 100 attack steps, we evaluate 64 samples averaged over 3 trials. 
+
+4.5 Gradient-Flow Sanity Check 
+
+Because TARO uses a fixed-target loss with sg( ·), we verify that its robustness does not rely on gradient obstruction. Table 7 reports an ablation that removes the stop-gradient operation from the temporal target. TARO remains robust without this detachment: for example, TARO-3 achieves 
+
+87 .13% robust accuracy without stop-gradient compared with 88 .57% with stop-gradient under CIFAR-10 ℓ∞ PGD-EOT. This suggests that the gains come from temporal multi-scale rectification rather than broken gradients. Table 7: Stop-gradient ablation on CIFAR-10 under PGD-EOT-20 (ℓ∞, ϵ = 8 /255) , WRN-28-10.           
+
+> Model Stop-grad No stop-grad TARO-2 88.27 ±1.686.51 ±1.9
+> TARO-3 88.57 ±0.987.13 ±1.1
+> TARO-2-AA 86.91 ±0.985.86 ±1.2
+> TARO-3-AA 87.46 ±0.786.19 ±1.1
+
+4.6 Full-Reverse AutoAttack-EOT 
+
+We further evaluate TARO with AutoAttack-EOT by considering the full reverse purification trajectory, rather than using the one-step approximation from the main PGD-EOT evaluation. This provides a stronger adaptive sanity check against incomplete-gradient effects. The attack targets the full purifier–classifier pipeline and averages gradients over stochastic purification samples. To reduce cost, we evaluate 128 samples. Table 8 reports the results. TARO-2-AA achieves the strongest robustness under this stricter unrolled attack, improving over AAOpt while preserving clean accuracy. These results indicate that TARO’s temporal prior remains effective under full adaptive evaluation when integrated with adversary-aware optimization. Table 8: AutoAttack-EOT with full reverse optimization on CIFAR-10, WRN-28-10.             
+
+> Model Clean Acc. Robust Acc. Default 94.78 0.0 Score-Opt-O 89.84 74.22 AAOpt 89.06 85.54 TARO-2 90.62 71.09 TARO-2-AA 91.01 87.50
+
+95 Conclusion 
+
+We proposed TARO, a test-time purification framework that treats diffusion timesteps as comple-mentary denoising experts. TARO builds an affine coarse-to-fine target that combines robust global structure from high-noise experts with class-relevant detail from low-noise experts. Empirically, TARO improves robustness under strong adaptive attacks while maintaining high clean accuracy. Zero-shot TARO is especially effective under ℓ∞ attacks, while ℓ2 robustness benefits from consis-tency regularization or adversary-aware likelihoods. We also highlight the need for graph-consistent adaptive evaluation of optimization-based purifiers. 
+
+Limitations. TARO increases inference latency due to iterative multi-scale optimization, and its correction strength and stabilization regularization must be selected carefully for each threat model; see Appendix A.12 for a detailed discussion. 
+
+# References 
+
+Anish Athalye, Nicholas Carlini, and David Wagner. Obfuscated gradients give a false sense of security: Circumventing defenses to adversarial examples. In International conference on machine learning , pages 274–283. PMLR, 2018. Maximilian Augustin, Alexander Meinke, and Matthias Hein. Adversarial robustness on in-and out-distribution improves explainability. arXiv preprint arXiv:2003.09461 , 2020. Huanran Chen, Yinpeng Dong, Zhengyi Wang, Xiao Yang, Chengqi Duan, Hang Su, and Jun Zhu. Robust classification via a single diffusion model. In Proceedings of the 41st International Conference on Machine Learning , volume 235 of Proceedings of Machine Learning Research ,pages 6643–6665. PMLR, 21–27 Jul 2024. URL https://proceedings.mlr.press/v235/ chen24k.html .Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. Advances in neural information processing systems , 34:8780–8794, 2021. Dave Epstein, Allan Jabri, Ben Poole, Alexei Efros, and Aleksander Holynski. Diffusion self-guidance for controllable image generation. Advances in Neural Information Processing Systems ,36:16222–16239, 2023. Ian J. Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial examples. In 3rd International Conference on Learning Representations, ICLR 2015, San Diego, CA, USA, May 7-9, 2015, Conference Track Proceedings , 2015. URL http://arxiv.org/abs/ 1412.6572 .Sven Gowal, Chongli Qin, Jonathan Uesato, Timothy Mann, and Pushmeet Kohli. Uncovering the limits of adversarial training against norm-bounded adversarial examples. arXiv preprint arXiv:2010.03593 , 2020. Sven Gowal, Sylvestre-Alvise Rebuffi, Olivia Wiles, Florian Stimberg, Dan Andrei Calian, and Timothy A Mann. Improving robustness using generated data. Advances in neural information processing systems , 34:4218–4233, 2021. Mitch Hill, Jonathan Craig Mitchell, and Song-Chun Zhu. Stochastic security: Adversarial defense using long-run dynamics of energy-based models. In International Conference on Learning Representations , 2021. Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. arXiv preprint arXiv:2207.12598 ,2022. Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in neural information processing systems , 33:6840–6851, 2020. Mintong Kang, Dawn Song, and Bo Li. Diffattack: Evasion attacks against diffusion-based adversarial purification. In Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 , 2023. 10 Tero Karras, Miika Aittala, Tuomas Kynkäänniemi, Jaakko Lehtinen, Timo Aila, and Samuli Laine. Guiding a diffusion model with a bad version of itself. Advances in Neural Information Processing Systems , 37:52996–53021, 2024. Andre Kassis, Urs Hengartner, and Yaoliang Yu. Diffbreak: Is diffusion-based purification robust? In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. URL 
+
+https://openreview.net/forum?id=Z7eXOBcxE9 .Minjong Lee and Dongwoo Kim. Robust evaluation of diffusion-based adversarial purification. In 
+
+IEEE/CVF International Conference on Computer Vision, ICCV 2023, Paris, France, October 1-6, 2023 , pages 134–144. IEEE, 2023. Xiao Li, Wenxuan Sun, Huanran Chen, Qiongxiu Li, Yingzhe He, Jie Shi, and Xiaolin Hu. ADBM: Adversarial diffusion bridge model for reliable adversarial purification. In The Thirteenth In-ternational Conference on Learning Representations , 2025. URL https://openreview.net/ forum?id=g0rnZeBguq .Guang Lin, Zerui Tao, Jianhai Zhang, Toshihisa Tanaka, and Qibin Zhao. Adversarial guided diffusion models for adversarial purification. Neural Networks , 191:107705, 2025. Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards deep learning models resistant to adversarial attacks. In 6th International Conference on Learning Representations, ICLR 2018, Vancouver, BC, Canada, April 30 - May 3, 2018, Confer-ence Track Proceedings . OpenReview.net, 2018. URL https://openreview.net/forum?id= rJzIBfZAb .Weili Nie, Brandon Guo, Yujia Huang, Chaowei Xiao, Arash Vahdat, and Anima Anandkumar. Diffusion models for adversarial purification. In International Conference on Machine Learning ,2022. URL https://api.semanticscholar.org/CorpusID:248811081 .Tianyu Pang, Min Lin, Xiao Yang, Jun Zhu, and Shuicheng Yan. Robustness and accuracy could be reconcilable by (proper) definition. In International conference on machine learning , pages 17258–17277. PMLR, 2022. Sylvestre-Alvise Rebuffi, Sven Gowal, Dan A Calian, Florian Stimberg, Olivia Wiles, and Tim-othy Mann. Fixing data augmentation to improve adversarial robustness. arXiv preprint arXiv:2103.01946 , 2021. Christian Schlarmann, Naman Deep Singh, Francesco Croce, and Matthias Hein. Robust clip: Unsupervised adversarial fine-tuning of vision embeddings for robust large vision-language models. 
+
+arXiv preprint arXiv:2402.12336 , 2024. Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In 9th International Conference on Learning Representations, ICLR 2021, Virtual Event, Austria, May 3-7, 2021 . OpenReview.net, 2021. URL https://openreview.net/forum?id=PxTIG12RRHS .Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan, Ian Goodfellow, and Rob Fergus. Intriguing properties of neural networks. arXiv preprint arXiv:1312.6199 , 2013. Jinyi Wang, Zhaoyang Lyu, Dahua Lin, Bo Dai, and Hongfei Fu. Guided diffusion model for adversarial purification. arXiv preprint arXiv:2205.14969 , 2022. Zekai Wang, Tianyu Pang, Chao Du, Min Lin, Weiwei Liu, and Shuicheng Yan. Better diffusion models further improve adversarial training. In International conference on machine learning ,pages 36246–36263. PMLR, 2023. Daniel Wesego and Pedram Rooshenas. Adversary aware optimization for robust defense. In 
+
+The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. URL 
+
+https://openreview.net/forum?id=VNbvk5pMS7 .Jongmin Yoon, Sung Ju Hwang, and Juho Lee. Adversarial purification with score-based generative models. In International Conference on Machine Learning , pages 12062–12072. PMLR, 2021. 11 Boya Zhang, Weijian Luo, and Zhihua Zhang. Enhancing adversarial robustness via score-based optimization. In Advances in Neural Information Processing Systems 36 (NeurIPS 2023) , pages 11547–11561, 2023. URL https://arxiv.org/pdf/2307.04333 .Mingkun Zhang, Keping Bi, Wei Chen, Jiafeng Guo, and Xueqi Cheng. CLIPure: Purification in latent space via CLIP for adversarially robust zero-shot classification. In The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview.net/forum?id= TQ2ZOy6miT .12 A Appendix 
+
+This appendix provides additional algorithmic, evaluation, and experimental details omitted from the main text due to space constraints. Appendix A.1 provides a local Gaussian interpretation of affine temporal extrapolation. Appendix A.2 shows proof of proposition 1, then Appendix A.3 describes the hybrid TARO-AA variant that combines temporal multi-scale purification with the adversary-aware perturbation likelihood of AAOpt. Appendix A.4 formalizes the evaluation protocol used for optimization-based purifiers, and Appendix A.5 presents a corrected-evaluation case study showing that improperly differentiated optimization loops can lead to severely inflated robustness estimates. Appendix A.6 reports additional results using the WRN-70-16 classifier, and Appendix A.7 reports results using the Imagenette dataset. Appendix A.8 includes additional ablations on time scales, Appendix A.9 reports the results against common corruptions using the CIFAR-10-C dataset, Appendix A.10 discusses the computation requirement and compares the wall clock time the algorithm takes, Appendix A.11 lists the hyperparameters used in our experiments, and finally, Appendix A.12 discusses the limitation in detail. 
+
+A.1 Local Gaussian View of Affine Temporal Extrapolation 
+
+Positive-weight temporal PoE motivates aggregating diffusion experts, but it only yields interpolation. TARO uses a more general affine log-density combination, 
+
+log paff (x) = 
+
+> K
+
+X
+
+> k=1
+
+γk log ptk (x) − log Z, 
+
+> K
+
+X
+
+> k=1
+
+γk = 1 ,
+
+where the coefficients need not be nonnegative. When all γk ≥ 0, this reduces to standard PoE interpolation. When some coefficients are negative, it becomes a contrastive or ratio-of-experts prior. For K = 2 ,
+
+log pγ (x) = γ log pf (x) + (1 − γ) log pc(x),
+
+and for γ > 1,
+
+pγ (x) ∝ pf (x)γ
+
+pc(x)γ−1 .
+
+Thus, affine temporal extrapolation emphasizes structures supported by the fine expert relative to the coarse expert. Under a local Gaussian approximation ptk (x) ≈ N (μtk , Σtk ), the affine log-density has local precision 
+
+Λaff =
+
+> K
+
+X
+
+> k=1
+
+γkΛtk ,
+
+provided this matrix is positive definite. If the fine expert has larger local precision than the coarse experts, and the affine weights place extrapolative positive mass on the fine expert while subtracting coarser experts, then 
+
+Λaff = Λ f + X
+
+> k> 1
+
+ak(Λ f − Λtk ) ⪰ Λf .
+
+This gives local intuition for why emphasizing the fine expert can sharpen the target and restore class-relevant structure. However, excessive sharpening may also amplify unstable cross-scale residuals, motivating validation-based selection of γ and the consistency regularizer used in our ablations. It should be noted that unlike positive-weight PoE, affine extrapolation does not automatically preserve positive definiteness. The local Gaussian interpretation is valid only when Λaff ≻ 0. In the two-expert case with γ > 1, a sufficient condition is Λf ⪰ Λc, in which case 
+
+Λaff = Λ f + ( γ − 1)(Λ f − Λc) ⪰ Λf ≻ 0.
+
+A.2 Proof of Proposition 1 
+
+Proof. By assumption, the fine and coarse temporal experts admit the decompositions 
+
+uf = x⋆ + bf (x⋆) + ξf , uc = x⋆ + bc(x⋆) + ξc,
+
+13 with E[ξf | x⋆] = E[ξc | x⋆] = 0 . The TARO guided target is 
+
+uγ = uc + γ(uf − uc).
+
+Substituting the decompositions of uf and uc, we obtain 
+
+uf − uc = bf (x⋆) − bc(x⋆) + ξf − ξc.
+
+Therefore, 
+
+uγ = x⋆ + bc(x⋆) + ξc + γ (bf (x⋆) − bc(x⋆) + ξf − ξc) .
+
+Rearranging terms gives 
+
+uγ = x⋆ + bc(x⋆) + γ bf (x⋆) − bc(x⋆)| {z } 
+
+> bγ(x⋆)
+
++ ξc + γ(ξf − ξc)
+
+| {z }
+
+> ξγ
+
+.
+
+Thus, 
+
+uγ − x⋆ = bγ (x⋆) + ξγ .
+
+Taking the squared norm, 
+
+∥uγ − x⋆∥22 = ∥bγ (x⋆) + ξγ ∥22.
+
+Expanding, 
+
+∥uγ − x⋆∥22 = ∥bγ (x⋆)∥22 + 2 bγ (x⋆)⊤ξγ + ∥ξγ ∥22.
+
+Now take conditional expectation given x⋆. Since 
+
+ξγ = ξc + γ(ξf − ξc),
+
+and both ξf and ξc have zero conditional mean, we have 
+
+E[ξγ | x⋆] = E[ξc | x⋆] + γ (E[ξf | x⋆] − E[ξc | x⋆]) = 0 .
+
+Therefore, the cross term vanishes: 
+
+E[2 bγ (x⋆)⊤ξγ | x⋆] = 2 bγ (x⋆)⊤E[ξγ | x⋆] = 0 .
+
+Hence, 
+
+E[∥uγ − x⋆∥22 | x⋆] = ∥bγ (x⋆)∥22 + E[∥ξγ ∥22 | x⋆].
+
+Substituting the definitions of bγ and ξγ , we obtain 
+
+E[∥uγ − x⋆∥22 | x⋆] = ∥bc + γ(bf − bc)∥22 + E[∥ξc + γ(ξf − ξc)∥22 | x⋆],
+
+where we suppress the explicit dependence of bf and bc on x⋆ for readability. This proves the proposition. 
+
+A.3 TARO with Adversary-Aware Optimization 
+
+TARO is compatible with existing optimization-based purification objectives. In this section, we describe TARO-AA, a hybrid variant that integrates the temporal Product-of-Experts prior with the adversarial perturbation likelihood introduced by AAOpt [Wesego and Rooshenas, 2025]. Standard AAOpt optimizes a single-scale diffusion prior together with an auxiliary perturbation model trained on adversarial residuals. TARO-AA replaces the single-scale prior with a multi-scale temporal consensus while retaining the perturbation likelihood. This allows the optimization to exploit two complementary sources of information: the pretrained clean-image diffusion model supplies scale-consistent image structure, while the perturbation model supplies an adversary-aware likelihood over residual artifacts. Let [k1, . . . , k K ] denote the stream factors used to construct K effective diffusion timescales. At each optimization step, TARO-AA evaluates the denoiser at these K scales, aggregates the noisy states, injected noises, and denoised predictions using a recursive temporal weighting rule, and uses the resulting multi-scale estimate to define the diffusion prior loss. The perturbation loss is computed as in AAOpt from the residual δ = x − xadv . Algorithm 2 summarizes the full procedure. 14 Algorithm 2 Test-time Optimization with AAOpt + TARO 
+
+Input: Input image xadv ; pretrained score denoiser Dθ ; perturbation network dϕ; guidance strength γ; perturbation weight λpert ; iterations M ; timestep range [tmin , t max ]; timestep sampling schedule; noise-level schedule {σt}Tt=1 ; perturbation model noise-level schedule {α}Tt=1 ;ordered scale multipliers [κ1, . . . , κ K ]
+
+x0 ← xadv 
+
+for i = 0 to M − 1 do 
+
+Sample base timestep t from the predefined timestep schedule 
+
+for j = 1 to K do 
+
+tj ← clip( √t κ j , t min , t max ) ▷ Set effective timestep Sample ϵj ∼ N (0, I)
+
+nj ← σtj ϵj
+
+xt,j ← xi + nj
+
+uj ← Dθ
+
+ xt,j , σ tj
+
+ ▷ Compute temporal expert 
+
+end for 
+
+xt, TARO ← xt,K + PK−1 
+
+> j=1
+
+γK−j (xt,j − xt,j +1 ) ▷ Form aggregated xt
+
+ϵTARO ← nK + PK−1 
+
+> j=1
+
+γK−j (nj − nj+1 ) ▷ Form aggregated noise 
+
+uTARO ← uK + PK−1 
+
+> j=1
+
+γK−j (uj − uj+1 ) ▷ Form TARO prediction 
+
+ˆϵ ← (xt, TARO − uTARO )/σ t ▷ Estimate prior noise 
+
+ℓprior ←  sg(ˆ ϵ) − ϵTARO 
+
+⊤xi ▷ Calculate prior loss 
+
+δ ← xi − xadv 
+
+Sample ϵ′ ∼ N (0, I)
+
+δt ← √αtδ + √1 − αtϵ′
+
+ℓpert ←  sg( dϕ(δt, t )) − ϵ′⊤xi ▷ Calculate perturbation loss 
+
+ℓ ← ℓprior + λpert ℓpert ▷ Combine losses 
+
+xi+1 ← OptimizerUpdate( xi, ℓ ) ▷ Update image 
+
+end for Return: Final image xM
+
+A.4 Proper Evaluation of Purification with Optimization 
+
+Optimization-based purification requires a stricter evaluation protocol than standard reverse-sampling diffusion defenses because the purifier is itself an inner optimization procedure. Let f : Rd → RK
+
+be the classifier and let P : Rd → Rd be an optimization-based purifier. Given a clean image x and perturbation δ with ∥δ∥p ≤ ϵ, the adversarial input is xadv = x + δ. A correct white-box adversary should optimize the complete purifier–classifier composition: 
+
+max  
+
+> ∥δ∥p≤ϵ
+
+Lcls (f (P (x + δ)) , y ) . (4) Thus, the relevant attack gradient is 
+
+gadv = ∇xadv Lcls (f (P (xadv )) , y ) , (5) rather than the classifier gradient after purification. For test-time optimization purifiers, P (xadv ) is not a single forward pass. The purifier initializes 
+
+z0 = xadv and performs T inner updates using a guidance objective Lguide :
+
+zt+1 = zt − η∇zt Lguide (zt; ϕ), t = 0 , . . . , T − 1, (6) where ϕ denotes the parameters of the guidance model, such as a diffusion denoiser, score model, CLIP model, or adversarial perturbation model. The final purified image is x⋆ = P (xadv ) = zT .A correct attack must differentiate through the full dependence of zT on z0 = xadv . Applying the chain rule gives 
+
+∂Lcls 
+
+∂xadv 
+
+= ∂Lcls 
+
+∂f ∂f ∂zT
+
+∂zT
+
+∂z0
+
+. (7) The final factor is the trajectory Jacobian of the inner purification process. For the gradient-descent update above, each local Jacobian satisfies 
+
+∂zt+1 
+
+∂zt
+
+= I − η∇2 
+
+> zt
+
+Lguide (zt; ϕ). (8) 15 Therefore, differentiating through an optimization-based purifier requires preserving second-order information from the inner guidance gradient. More generally, if the purifier uses an optimizer update 
+
+zt+1 = Ut(zt, gt), gt = ∇zt Lguide (zt; ϕ), (9) then the chain rule gives 
+
+∂zt+1 
+
+∂zt
+
+= ∂U t
+
+∂zt
+
++ ∂U t
+
+∂gt
+
+∇2 
+
+> zt
+
+Lguide (zt; ϕ). (10) Thus, when the inner guidance gradient is treated as a constant, the attack omits the Hessian-dependent term and no longer corresponds to a true white-box attack on the optimization-based purifier. This failure mode is easy to introduce in PyTorch. If the guidance gradient is computed inside the purification loop with the default setting, 
+
+torch.autograd.grad (Lguide , zt) , (11) then create_graph=False by default, and the returned gradient is detached from the graph needed by the outer attack. The inner update still changes the purified image, but the outer adversary cannot differentiate through how this update changes as xadv changes. In effect, the attacker sees an incomplete surrogate of the purifier. A graph-consistent unrolled evaluation must instead preserve the higher-order path: 
+
+torch.autograd.grad (Lguide , zt, create_graph=True , retain_graph=True ) . (12) Here, create_graph=True is the essential flag because it keeps the gradient computation differ-entiable; retain_graph=True is needed when the same graph is reused for additional backward passes. This graph-break issue is distinct from stochastic gradient masking. Diffusion purifiers often contain stochastic denoising steps, so expectation over transformation (EOT) is required to average gradients over noise realizations. However, EOT alone does not repair a detached inner optimization graph. A defense may use many EOT samples and still be mis-evaluated if the attacker cannot differentiate through the optimization trajectory that produced each purified sample. Therefore, optimization-based purification requires both stochasticity-aware evaluation and graph-consistent differentiation. Our evaluation follows this principle. PGD-EOT attacks the full purifier–classifier composition, while full reverse-optimization AutoAttack-EOT in Appendix 4.6 provides an additional check in which the attack differentiates through the complete optimization trajectory. The corrected CLIPure Zhang et al. [2025] case study below illustrates why this requirement is essential. 
+
+A.5 Corrected Evaluation Case Study: CLIPure 
+
+We revisit CLIPure Zhang et al. [2025] as a case study in graph-consistent evaluation. CLIPure performs purification through test-time optimization using either a cosine-similarity objective in CLIP space or a diffusion-based objective. Since the purified image is produced by an inner optimization loop, a white-box attack must differentiate through that loop. If the inner guidance gradient is computed without preserving higher-order dependencies, the purification update becomes partially detached from the adversarial input, and the attack receives an incomplete gradient. This produces accidental gradient masking. The defense appears robust not because the purified image is invariant to adversarial perturbations, but because the attacker is unable to observe how the purification trajectory changes as xadv changes. Restoring the computational graph through the inner loop exposes the true bilevel structure of the attack. Table 9 compares the originally reported CLIPure robust accuracies with corrected graph-consistent evaluation on CIFAR-10 under AutoAttack with ℓ∞ perturbations and ϵ = 8 /255 . Under corrected evaluation, CLIPure-Cos drops from 91.1% to 0.0%, and CLIPure-Diff drops from 88.0% to 0.0%. These results show that optimization-based purification can be severely mis-evaluated when higher-order gradient flow is not preserved. They do not imply that test-time optimization defenses are inherently ineffective; rather, they show that robustness must be established under graph-consistent attacks. In the next section, we therefore report AutoAttack-EOT with full reverse optimization for TARO and the strongest optimization baselines, providing a stricter adaptive evaluation beyond the one-step gradient approximation used in the main PGD-EOT experiments. 16 Table 9: Reported versus corrected robust accuracy for CLIPure variants on CIFAR-10 under AutoAttack ( ℓ∞, ϵ = 8 /255 ). Corrected evaluation preserves the computational graph through the inner optimization loop.       
+
+> Method Reported Robust Acc. Corrected Robust Acc. CLIPure-Cos 91.1% 0.0% CLIPure-Diff 88.0% 0.0%
+
+Table 10: Standard and robust accuracy on CIFAR-10 using WRN-70-16 ( ℓ∞, ϵ = 8 /255 ) under PGD-EOT-20. Baselines include adversarial training (AT), adversarial purification, and test-time optimization purification.                                 
+
+> Type Method Clean Robust Default 95.19 0.0 AT Gowal et al. [2021] 88.75 69.03 Wang et al. [2023] 92.97 72.46 AP Yoon et al. [2021] 86.76 41.02 Nie et al. [2022] 92.15 57.03 Chen et al. [2024] 87.89 71.68 Score-Opt-O 92.61 68.86 Score-Opt-N 95.11 70.20 Lin et al. [2025] 90.42 66.41 AAOpt 91.66 ±1.285.05 ±0.8
+> TARO-2 93.84 ±1.488.56 ±1.3
+> TARO-3 93.55 ±1.188.37 ±1.1
+> TARO-2-AA 92.80 ±0.986.91 ±1.1
+> TARO-3-AA 93.84 ±1.087.59 ±1.1
+
+A.6 Additional Results on CIFAR-10 Attack Using WRN-70-16 Classifier 
+
+In addition to the main WRN-28-10 evaluation, we report results using a second classifier architecture in this section. Table 10 evaluates CIFAR-10 under PGD-EOT-20 with a WRN-70-16 classifier, providing an additional check that TARO’s gains are not tied to a single backbone. TARO remains strong under this larger classifier: TARO-2 achieves the best robust accuracy at 88 .56% while maintaining high clean accuracy, and TARO-3 obtains a comparable robust accuracy of 88 .37% . Both variants substantially improve over AAOpt and prior purification baselines, and they also exceed the robust accuracy of adversarially trained WRN-70-16 classifiers listed in the table. The hybrid TARO-AA variants remain competitive, but the zero-shot TARO variants perform best in this ℓ∞
+
+setting. Overall, the WRN-70-16 results confirm that temporal multi-scale purification transfers across classifier backbones and remains competitive with both adversarial training and prior purification methods. 
+
+A.7 Imagenette Results 
+
+In addition to the CIFAR datasets, we evaluate TARO on Imagenette, a higher-resolution subset of ImageNet. Table 11 shows that TARO remains effective on a more complex image distribution. TARO-2 achieves the highest robust accuracy, while maintaining clean accuracy close to the undefended classifier and improving substantially over Score-Opt-O. TARO-2-AA also improves over AAOpt in clean accuracy and remains competitive in robustness. These results indicate that temporal rectification is not limited to low-resolution CIFAR images and can scale to more challenging image distributions without severe clean-accuracy degradation. 
+
+A.8 Time-Scale Scheduling Ablation 
+
+We further evaluate the generality of TARO across different time-scale scheduling choices. The core mechanism of TARO is multi-scale temporal aggregation: the purifier combines complementary denoising experts evaluated at different noise regimes. This mechanism should not depend on a 17 Table 11: PGD-EOT attack on Imagenette ( ℓ∞, ϵ = 8 /255 ), WRN-28-10.             
+
+> Method Clean Robust Default 82.9 0.0 Score-Opt-O 76.4 ±1.269.5 ±1.7
+> AAOpt 80.4 ±1.466.4 ±1.9
+> TARO-2 81.6 ±1.472.3 ±2.2
+> TARO-2-AA 81.2 ±1.667.3 ±1.5
+
+single hand-designed schedule for selecting the noisier expert. In the main experiments, we use the square-root schedule τ = √2t, which scales the variance-like diffusion parameter by a factor of 2.To test whether TARO remains effective under an alternative parameterization, we also evaluate a linear schedule that directly scales the diffusion time as τ = 2 t for the noisier expert. Table 12 shows that TARO remains robust under both schedules, with the linear schedule achieving comparable clean accuracy and slightly higher robust accuracy. These results indicate that TARO’s gains arise from temporal multi-scale rectification rather than a brittle dependence on a particular time-scaling rule. Table 12: Time-scale scheduling ablation on CIFAR-10 under PGD-EOT-20 ( ℓ∞, ϵ = 8 /255 ), WRN-28-10. The square-root schedule uses τ = √2t for the noisy expert, while the linear schedule uses 
+
+τ = 2 t.           
+
+> Time-Scale Schedule Clean Accuracy Robust Accuracy Square-root scaling: τ=√2t93.41 ±1.188.27 ±1.6
+> Linear scaling: τ= 2 t93.87 ±1.089.05 ±1.4
+
+A.9 Robustness Against Common Corruptions 
+
+We evaluate robustness to natural distribution shifts using CIFAR-10-C. Unlike adversarial attacks, these corruptions are not optimized against the classifier or purifier, but they test whether the multi-scale prior also improves robustness to common image degradations. Table 13 reports accuracy on five corruption types using WRN-70-16. TARO-2 achieves the highest mean accuracy, outperforming Score-Opt-O and AAOpt. The improvement is especially strong on Gaussian noise, where TARO-2 reaches 92.0% accuracy. The pure TARO-2 variant also slightly outperforms TARO-2-AA, suggesting that the unconstrained multi-scale consensus is particularly effective for non-adversarial corruptions where an adversarial residual likelihood is unnecessary. Table 13: Robustness against common corruptions on CIFAR-10-C (WRN-70-16). The Mean column averages across the five corruption types.                                     
+
+> Method Gaussian Elastic JPEG Snow Brightness Mean
+> Default 45.6 82.9 75.8 83.5 93.8 76.3 Score-Opt-O 79.8 78.5 86.1 82.7 89.6 83.3 AAOpt 85.3 84.8 89.5 85.3 90.5 87.1 TARO-2 92.0 84.3 90.5 87.3 91.3 89.1
+> TARO-2-AA 91.3 81.1 88.6 86.5 89.4 87.4
+
+A.10 Computational Resources and Runtime 
+
+Our experiments were conducted on NVIDIA A100 GPUs. Table 14 reports the wall-clock time required to complete a 5-step purification trajectory on CIFAR-10 with batch size 128. TARO introduces a modest increase in runtime relative to single-scale baselines because it evaluates multiple denoising experts per optimization step. However, this additional cost remains practical and is substantially smaller than the cost of increasing defense EOT or repeatedly extending a single-scale optimization trajectory. 18 Table 14: Runtime of purification optimization on CIFAR-10 using an NVIDIA A100 GPU.             
+
+> Model Batch Size Time Score-Opt-O 128 1.16 sec. Score-Opt-N 128 1.26 sec. AAOpt 128 1.05 sec. TARO-2 128 1.38 sec. TARO-2-AA 128 1.45 sec.
+
+A.11 Experiment Details 
+
+We use 512 samples for each trial unless otherwise stated and report mean and standard deviation over trials. The DiffBreak LF evaluation is run on 64 samples averaged over 3 trials due to the cost of sequential EOT and 100 attack steps. For the main PGD-EOT experiments, we use 20 EOT samples for both attack and defense across TARO and directly reimplemented baselines. This differs from the original AAOpt evaluation, which uses 20 EOT samples for attack but a larger number of defense EOT samples. For TARO-K, we use stream factors [t, 2] for K = 2 and [t, 1, 2] for K = 3 . Tables 15, 16, and 17 summarize the main hyperparameters used in our experiments. Additional implementation details are included in the supplementary code. Table 15: Hyperparameters used for TARO-2.                                                  
+
+> Attack Type Budget LR Iter. γTimesteps
+> CIFAR-10
+> PGD+EOT ℓ∞(ϵ= 8 /255) 0.02 20 1.4 [0 .25 , . . . , 0]
+> PGD+EOT ℓ2(ϵ= 0 .5) 0.02 20 1.4 [0 .25 , . . . , 0]
+> BPDA+EOT ℓ∞(ϵ= 8 /255) 0.02 20 1.4 [0 .5, . . . , 0]
+> LF+EOT –0.02 20 1.4 [0 .25 , . . . , 0]
+> CIFAR-100
+> BPDA+EOT ℓ∞(ϵ= 8 /255) 0.1 31.4 [0 .25 , . . . , 0]
+> CIFAR-10-C
+> Corruptions –0.02 20 1.4 [0 .25 , . . . , 0]
+
+Table 16: Hyperparameters used for TARO-3.                                      
+
+> Attack Type Budget LR Iter. γTimesteps
+> CIFAR-10
+> PGD+EOT ℓ∞(ϵ= 8 /255) 0.02 20 1.1 [0 .25 , . . . , 0]
+> PGD+EOT ℓ2(ϵ= 0 .5) 0.02 20 1.1 [0 .25 , . . . , 0]
+> BPDA+EOT ℓ∞(ϵ= 8 /255) 0.02 20 1.1 [0 .5, . . . , 0]
+> CIFAR-100
+> BPDA+EOT ℓ∞(ϵ= 8 /255) 0.1 31.1 [0 .25 , . . . , 0]
+
+A.12 Limitations and Discussion 
+
+TARO improves diffusion-based test-time purification by aggregating denoising estimates across multiple temporal regimes, but it has several limitations. First, TARO is an empirical defense and does not provide certified robustness. The temporal PoE and affine aggregation interpretations provide intuition for why multi-scale denoising can improve purification, but the local Gaussian view is only a conditional explanation: it relies on assumptions such as approximate local Gaussianity, positive definiteness of the signed precision, and suitable ordering between fine and coarse experts. These 19 Table 17: Hyperparameters used for TARO-2-AA and TARO-3-AA.                                                         
+
+> Attack Type Budget LR Iter. γλpert Timesteps
+> CIFAR-10
+> PGD+EOT ℓ∞(ϵ= 8 /255) 0.1 20 1.1 0.25 Uniform (0 .15 ,0.35)
+> PGD+EOT ℓ2(ϵ= 0 .5) 0.1 20 1.1 0.25 Uniform (0 .15 ,0.35)
+> BPDA+EOT ℓ∞(ϵ= 8 /255) 0.02 20 1.1 0.25 [0 .25 , . . . , 0]
+> LF+EOT –0.02 20 1.1 0.25 [0 .25 , . . . , 0]
+> CIFAR-100
+> BPDA+EOT ℓ∞(ϵ= 8 /255) 0.02 20 1.1 0.4 [0 .15 , . . . , 0]
+> CIFAR-10-C
+> Corruptions –0.02 20 1.1 0.1 [0 .25 , . . . , 0]
+
+arguments should therefore be viewed as explanations of the optimization behavior rather than formal robustness guarantees. Second, TARO increases inference cost relative to single-scale purification methods because each optimization step evaluates multiple denoising experts. Our runtime ablations suggest that this additional cost is moderate. Nevertheless, TARO remains more expensive than a standard classifier forward pass or a single denoising trajectory. This cost becomes more significant under stronger adaptive evaluations such as full-reverse AutoAttack-EOT and DiffBreak, where repeated stochastic evaluations are required. Third, TARO’s performance depends on the quality of the pretrained diffusion prior, the downstream classifier, and the choice of optimization hyperparameters. In particular, the correction strength γ and the use of consistency regularization can depend on the threat model: our experiments show different behavior under ℓ∞ and ℓ2 attacks. This suggests that automatic selection of temporal weights and stabilization strengths is an important direction for future work. Finally, TARO is designed and evaluated as a test-time image purification method for classification. Extending the temporal multi-expert prior to other modalities, detection, segmentation, inverse problems, or certified defenses remains an important direction for future work. 
+
+Societal impact. TARO contributes to the development of more reliable machine learning systems by improving robustness against adversarial manipulation at inference time, which is important for safety-critical applications where models may be exposed to malicious inputs. The proposed proper and reliable evaluation protocol also has a positive societal impact by discouraging misleading robustness claims and promoting more reliable security evaluation. At the same time, stronger purification defenses may increase the computational cost and energy use of deployed systems, especially when repeated stochastic evaluations are required. We view TARO as part of a broader effort toward transparent, reproducible, and carefully evaluated defense rather than as a complete solution to adversarial risk. 20
