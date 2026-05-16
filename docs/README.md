@@ -6,94 +6,88 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-05-15
-- 运行时间：2026-05-15 20:33:45 UTC
+- 最新运行日期：2026-05-16
+- 运行时间：2026-05-16 20:17:18 UTC
 - 运行状态：成功
-- 本次总论文数：24
-- 精读区：12
+- 本次总论文数：22
+- 精读区：10
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读12篇高分论文，速读12篇前沿研究，聚焦AI生成与图像检测领域突破。  
-高分论文揭示神经网络插值优化与训练-free生成技术进展，速读内容涵盖对抗鲁棒性提升及图像伪造检测新方法。  
-建议关注生成模型稳定性增强方案及迁移学习在图像真实性评估中的实际应用价值。
-- 详情：[/202605/15/README](/202605/15/README)
+1) 今日完成22篇AI图像与视频质量评估相关论文的精读速读，聚焦前沿技术与应用  
+2) 高分论文集中于无假设图像质量评估指标（APEX）与3D生成技术（DVD），速读内容覆盖多模态图像融合、AI视频伪造检测及对抗攻击防御  
+3) 建议对图像质量评估方法感兴趣的读者优先精读APEX与DVD，普通读者可关注多模态融合技术在红外-可见图像处理中的实际应用
+- 详情：[/202605/16/README](/202605/16/README)
 
 ### 精读区论文标签
-1. [Supersampling Stable Diffusion and More: An Approach for Interpolating Neural Networks Using Common Interpolation Methods](/202605/15/2605.08698v1-supersampling-stable-diffusion-and-more-an-approach-for-interpolating-neural-networks-using-common-interpolation-methods)  
+1. [APEX: Assumption-free Projection-based Embedding eXamination Metric for Image Quality Assessment](/202605/16/2605.07786v2-apex-assumption-free-projection-based-embedding-examination-metric-for-image-quality-assessment)  
    标签：评分：9.0/10、query:image-generation
-   evidence：图像生成方法改进
-2. [When Few Steps Are Enough: Training-Free Acceleration of Identity-Preserved Generation](/202605/15/2605.09460v1-when-few-steps-are-enough-training-free-acceleration-of-identity-preserved-generation)  
+   evidence：图像生成质量的评估方法
+2. [DVD: Discrete Voxel Diffusion for 3D Generation and Editing](/202605/16/2605.07971v1-dvd-discrete-voxel-diffusion-for-3d-generation-and-editing)  
    标签：评分：9.0/10、query:image-generation
-   evidence：身份保留生成加速
-3. [On the Generation and Mitigation of Harmful Geometry in Image-to-3D Models](/202605/15/2605.09606v1-on-the-generation-and-mitigation-of-harmful-geometry-in-image-to-3d-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动生成与防御技术
-4. ["Training robust watermarking model may hurt authentication!'' Exploring and Mitigating the Identity Leakage in Robust Watermarking](/202605/15/2605.09646v1-training-robust-watermarking-model-may-hurt-authentication-exploring-and-mitigating-the-identity-leakage-in-robust-watermarking)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：水印模型对抗攻击的鲁棒性研究
-5. [Adversarial Attacks Against MLLMs via Progressive Resolution Processing and Adaptive Feature Alignment](/202605/15/2605.09902v1-adversarial-attacks-against-mllms-via-progressive-resolution-processing-and-adaptive-feature-alignment)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击对生成模型影响
-6. [Not Blind but Silenced: Rebalancing Vision and Language via Adversarial Counter-Commonsense Equilibrium](/202605/15/2605.10676v1-not-blind-but-silenced-rebalancing-vision-and-language-via-adversarial-counter-commonsense-equilibrium)  
+   evidence：研究扩散模型在图像生成中的应用
+3. [Enhancing Adversarial Robustness in Network Intrusion Detection: A Layer-wise Adaptive Regularization Approach](/202605/16/2605.08910v1-enhancing-adversarial-robustness-in-network-intrusion-detection-a-layer-wise-adaptive-regularization-approach)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-7. [Qwen-Image-2.0 Technical Report](/202605/15/2605.10730v1-qwen-image-20-technical-report)  
+4. [What Concepts Lie Within? Detecting and Suppressing Risky Content in Diffusion Transformers](/202605/16/2605.10180v1-what-concepts-lie-within-detecting-and-suppressing-risky-content-in-diffusion-transformers)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：扩散模型内容过滤技术
+5. [RevealLayer: Disentangling Hidden and Visible Layers via Occlusion-Aware Image Decomposition](/202605/16/2605.11818v1-reveallayer-disentangling-hidden-and-visible-layers-via-occlusion-aware-image-decomposition)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：基于扩散模型的图像分层分解
+6. [Assessment of cloud and associated radiation fields from a GAN stochastic cloud subcolumn generator](/202605/16/2605.11968v1-assessment-of-cloud-and-associated-radiation-fields-from-a-gan-stochastic-cloud-subcolumn-generator)  
    标签：评分：9.0/10、query:image-generation
-   evidence：图像生成基础模型
-8. [HiDream-O1-Image: A Natively Unified Image Generative Foundation Model with Pixel-level Unified Transformer](/202605/15/2605.11061v1-hidream-o1-image-a-natively-unified-image-generative-foundation-model-with-pixel-level-unified-transformer)  
+   evidence：生成对抗网络在图像生成中的应用
+7. [Systematic Discovery of Semantic Attacks in Online Map Construction through Conditional Diffusion](/202605/16/2605.14396v1-systematic-discovery-of-semantic-attacks-in-online-map-construction-through-conditional-diffusion)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性相关
-9. [Certified Robustness under Heterogeneous Perturbations via Hybrid Randomized Smoothing](/202605/15/2605.12876v1-certified-robustness-under-heterogeneous-perturbations-via-hybrid-randomized-smoothing)  
+   evidence：语义攻击发现与防御
+8. [Reduce the Artifacts Bias for More Generalizable AI-Generated Image Detection](/202605/16/2605.14486v1-reduce-the-artifacts-bias-for-more-generalizable-ai-generated-image-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的鲁棒性认证
-10. [DiffusionHijack: Supply-Chain PRNG Backdoor Attack on Diffusion Models and Quantum Random Number Defense](/202605/15/2605.13115v1-diffusionhijack-supply-chain-prng-backdoor-attack-on-diffusion-models-and-quantum-random-number-defense)  
+   evidence：对抗扰动对生成模型的影响
+9. [Unlocking Complex Visual Generation via Closed-Loop Verified Reasoning](/202605/16/2605.14876v1-unlocking-complex-visual-generation-via-closed-loop-verified-reasoning)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击生成方法
-11. [D2-CDIG: Controlled Diffusion Remote Sensing Image Generation with Dual Priors of DEM and Cloud-Fog](/202605/15/2605.14326v1-d2-cdig-controlled-diffusion-remote-sensing-image-generation-with-dual-priors-of-dem-and-cloud-fog)  
+   evidence：基于闭环验证的复杂视觉生成
+10. [Does Synthetic Layered Design Data Benefit Layered Design Decomposition?](/202605/16/2605.15167v1-does-synthetic-layered-design-data-benefit-layered-design-decomposition)  
    标签：评分：9.0/10、query:image-generation
-   evidence：遥感图像生成方法
-12. [Fast Adversarial Attacks with Gradient Prediction](/202605/15/2605.14868v1-fast-adversarial-attacks-with-gradient-prediction)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对图像篡改的影响
+   evidence：研究图像生成技术的最新进展
 
 ### 速读区论文标签
-1. [Streaming Adversarial Robustness in Fuzzy ARTMAP: Mechanism-Aligned Evaluation, Progressive Training, and Interpretable Diagnostics](/202605/15/2605.06902v1-streaming-adversarial-robustness-in-fuzzy-artmap-mechanism-aligned-evaluation-progressive-training-and-interpretable-diagnostics)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：针对流式模型的对抗鲁棒性评估
-2. [APEX: Assumption-free Projection-based Embedding eXamination Metric for Image Quality Assessment](/202605/15/2605.07786v1-apex-assumption-free-projection-based-embedding-examination-metric-for-image-quality-assessment)  
+1. [Bringing Multimodal Large Language Models to Infrared-Visible Image Fusion Quality Assessment](/202605/16/2605.06969v2-bringing-multimodal-large-language-models-to-infrared-visible-image-fusion-quality-assessment)  
    标签：评分：8.0/10、query:image-generation
    evidence：图像生成质量的评估方法
-3. [Digital Image Forgery Detection Using Transfer Learning](/202605/15/2605.08167v1-digital-image-forgery-detection-using-transfer-learning)  
+2. [Towards multi-modal forgery representation learning for AI-generated video detection and localization](/202605/16/2605.07232v1-towards-multi-modal-forgery-representation-learning-for-ai-generated-video-detection-and-localization)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对图像篡改的影响
-4. [Beyond the False Trade-off: Adaptive EWC for Stealthy and Generalizable T2I Backdoors](/202605/15/2605.08280v1-beyond-the-false-trade-off-adaptive-ewc-for-stealthy-and-generalizable-t2i-backdoors)  
+   evidence：研究对抗扰动对生成模型的影响
+3. [Sparse Autoencoders as Plug-and-Play Firewalls for Adversarial Attack Detection in VLMs](/202605/16/2605.07447v1-sparse-autoencoders-as-plug-and-play-firewalls-for-adversarial-attack-detection-in-vlms)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-5. [SwiftI2V: Efficient High-Resolution Image-to-Video Generation via Conditional Segment-wise Generation](/202605/15/2605.06356v1-swifti2v-efficient-high-resolution-image-to-video-generation-via-conditional-segment-wise-generation)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：图像生成技术的最新进展
-6. [SwiftI2V: Efficient High-Resolution Image-to-Video Generation via Conditional Segment-wise Generation](/202605/15/2605.06356v2-swifti2v-efficient-high-resolution-image-to-video-generation-via-conditional-segment-wise-generation)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：高效图像生成方法
-7. [GlazyBench: A Benchmark for Ceramic Glaze Property Prediction and Image Generation](/202605/15/2605.06641v1-glazybench-a-benchmark-for-ceramic-glaze-property-prediction-and-image-generation)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：图像生成模型的基准数据集
-8. [From Clouds to Hallucinations: Atmospheric Retrieval Hijacking in Remote Sensing Vision-Language RAG](/202605/15/2605.07273v1-from-clouds-to-hallucinations-atmospheric-retrieval-hijacking-in-remote-sensing-vision-language-rag)  
+   evidence：图像对抗攻击防御技术
+4. [STARFlow2: Bridging Language Models and Normalizing Flows for Unified Multimodal Generation](/202605/16/2605.08029v1-starflow2-bridging-language-models-and-normalizing-flows-for-unified-multimodal-generation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：图像生成质量的评估方法
+5. [Normalizing Trajectory Models](/202605/16/2605.08078v1-normalizing-trajectory-models)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-9. [LeakDojo: Decoding the Leakage Threats of RAG Systems](/202605/15/2605.05818v1-leakdojo-decoding-the-leakage-threats-of-rag-systems)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-10. [DBMSolver: A Training-free Diffusion Bridge Sampler for High-Quality Image-to-Image Translation](/202605/15/2605.05889v1-dbmsolver-a-training-free-diffusion-bridge-sampler-for-high-quality-image-to-image-translation)  
-   标签：评分：6.0/10、query:image-adversarial
    evidence：图像对抗扰动生成方法
-11. [Band Together: Untargeted Adversarial Training with Multimodal Coordination against Evasion-based Promotion Attacks](/202605/15/2605.06238v1-band-together-untargeted-adversarial-training-with-multimodal-coordination-against-evasion-based-promotion-attacks)  
+6. [A Paired Point-of-Care Ultrasound Dataset for Image Quality Enhancement and Benchmarking via a cGAN Baseline](/202605/16/2605.08282v1-a-paired-point-of-care-ultrasound-dataset-for-image-quality-enhancement-and-benchmarking-via-a-cgan-baseline)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动提升图像质量
+7. [Post-hoc Selective Classification for Reliable Synthetic Image Detection](/202605/16/2605.08574v1-post-hoc-selective-classification-for-reliable-synthetic-image-detection)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：图像生成模型的鲁棒性检测
+8. [Improving Generative Adversarial Networks with Self-Distillation](/202605/16/2605.08577v1-improving-generative-adversarial-networks-with-self-distillation)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动生成技术
+9. [A Systematic Investigation of The RL-Jailbreaker in LLMs](/202605/16/2605.07032v1-a-systematic-investigation-of-the-rl-jailbreaker-in-llms)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗训练用于多模态推荐系统
-12. [Eulerian Motion Guidance: Robust Image Animation via Bidirectional Geometric Consistency](/202605/15/2605.06280v3-eulerian-motion-guidance-robust-image-animation-via-bidirectional-geometric-consistency)  
+   evidence：对抗攻击下的模型安全
+10. [Uncovering Hidden Systematics in Neural Network Models for High Energy Physics](/202605/16/2605.07470v1-uncovering-hidden-systematics-in-neural-network-models-for-high-energy-physics)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
+   evidence：图像对抗攻击与防御
+11. [AI-Driven Security Alert Screening and Alert Fatigue Mitigation in Security Operations Centers: A Comprehensive Survey](/202605/16/2605.08316v1-ai-driven-security-alert-screening-and-alert-fatigue-mitigation-in-security-operations-centers-a-comprehensive-survey)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：安全防护与对抗攻击
+12. [ReST-KV: Robust KV Cache Eviction with Layer-wise Output Reconstruction and Spatial-Temporal Smoothing](/202605/16/2605.08840v1-rest-kv-robust-kv-cache-eviction-with-layer-wise-output-reconstruction-and-spatial-temporal-smoothing)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗攻击的防御策略
 
 
 ### ⚡ 这个站点能做什么
