@@ -6,91 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-05-19
-- 运行时间：2026-05-19 20:54:27 UTC
+- 最新运行日期：2026-05-20
+- 运行时间：2026-05-20 21:03:26 UTC
 - 运行状态：成功
-- 本次总论文数：23
-- 精读区：11
+- 本次总论文数：19
+- 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-今日完成23篇论文阅读，其中11篇精读聚焦多智能体通信安全与生成模型优化方向  
-多智能体对抗攻击防御及多奖励对齐技术获最高评分，生成模型领域三篇速读论文均涉及多模态条件应用  
-建议对多智能体系统或生成模型优化感兴趣的读者优先阅读精读篇目，以获取更深入的技术洞察
-- 详情：[/202605/19/README](/202605/19/README)
+1) 今日精读7篇、速读12篇论文，聚焦扩散模型与安全机制优化  
+2) 高分论文集中于扩散模型在降水预测中的应用及LLM安全防护技术，揭示了模型优化与风险控制的关键突破  
+3) 建议关注扩散模型在气象预测中的创新应用及LLM安全增强方法，以了解前沿技术如何提升模型可靠性与实用性
+- 详情：[/202605/20/README](/202605/20/README)
 
 ### 精读区论文标签
-1. [Pareto-Guided Optimal Transport for Multi-Reward Alignment](/202605/19/2605.13155v1-pareto-guided-optimal-transport-for-multi-reward-alignment)  
+1. [Guided Diffusion Sampling for Precipitation Forecast Interventions](/202605/20/2605.14317v1-guided-diffusion-sampling-for-precipitation-forecast-interventions)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-2. [Finding the Weakest Link: Adversarial Attack against Multi-Agent Communications](/202605/19/2605.13170v1-finding-the-weakest-link-adversarial-attack-against-multi-agent-communications)  
+   evidence：对抗攻击的图像防御策略
+2. [Drift Flow Matching](/202605/20/2605.17244v1-drift-flow-matching)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗攻击对图像生成模型的影响
-3. [Does Engram Do Memory Retrieval in Autoregressive Image Generation?](/202605/19/2605.13179v1-does-engram-do-memory-retrieval-in-autoregressive-image-generation)  
+   evidence：对抗扰动生成方法
+3. [Position: Weight Space Should Be a First-Class Generative AI Modality](/202605/20/2605.18632v1-position-weight-space-should-be-a-first-class-generative-ai-modality)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗攻击对图像生成模型的影响
-4. [One Step to the Side: Why Defenses Against Malicious Finetuning Fail Under Adaptive Adversaries](/202605/19/2605.14605v1-one-step-to-the-side-why-defenses-against-malicious-finetuning-fail-under-adaptive-adversaries)  
+   evidence：讨论对抗扰动对生成模型的影响
+4. [DarkLLM: Learning Language-Driven Adversarial Attacks with Large Language Models](/202605/20/2605.18868v1-darkllm-learning-language-driven-adversarial-attacks-with-large-language-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击下的防御机制
-5. [Semantic Smoothing via Novel View Synthesis for Robust SAR Image Classification](/202605/19/2605.16440v1-semantic-smoothing-via-novel-view-synthesis-for-robust-sar-image-classification)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像分类防御
-6. [Compositional Adversarial Training for Robust Visual Watermarking](/202605/19/2605.16720v1-compositional-adversarial-training-for-robust-visual-watermarking)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击下的水印鲁棒性训练方法
-7. [Adversarial Fragility and Language Vulnerability in Clinical AI: A Systematic Audit of Diagnostic Collapse Under Imperceptible Perturbations and Cross-Lingual Drift in Low-Resource Healthcare Settings](/202605/19/2605.16993v1-adversarial-fragility-and-language-vulnerability-in-clinical-ai-a-systematic-audit-of-diagnostic-collapse-under-imperceptible-perturbations-and-cross-lingual-drift-in-low-resource-healthcare-settings)  
-   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+5. [Knowledge Poisoning Attacks on Medical Multi-Modal Retrieval-Augmented Generation](/202605/20/2605.10253v1-knowledge-poisoning-attacks-on-medical-multi-modal-retrieval-augmented-generation)  
+   标签：评分：8.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-8. [Image-to-Video Diffusion: From Foundations to Open Frontiers](/202605/19/2605.17248v1-image-to-video-diffusion-from-foundations-to-open-frontiers)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：图像生成技术的最新进展
-9. [Attention Hijacking: Response Manipulation Across Queries in Vision-Language Models](/202605/19/2605.17310v1-attention-hijacking-response-manipulation-across-queries-in-vision-language-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-10. [TAME: Test-Time Adversarial Prompt Tuning via Mixture-of-Experts for Vision-Language Models](/202605/19/2605.17577v1-tame-test-time-adversarial-prompt-tuning-via-mixture-of-experts-for-vision-language-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-11. [Towards Universal Physical Adversarial Attacks via a Joint Multi-Objective and Multi-Model Optimization Framework](/202605/19/2605.17772v1-towards-universal-physical-adversarial-attacks-via-a-joint-multi-objective-and-multi-model-optimization-framework)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
+6. [Beyond Text Prompts: Visual-to-Visual Generation as A Unified Paradigm](/202605/20/2605.12271v1-beyond-text-prompts-visual-to-visual-generation-as-a-unified-paradigm)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：提出视觉到视觉生成方法
+7. [Unlocking Complex Visual Generation via Closed-Loop Verified Reasoning](/202605/20/2605.14876v2-unlocking-complex-visual-generation-via-closed-loop-verified-reasoning)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：通过闭环验证推理解锁复杂视觉生成
 
 ### 速读区论文标签
-1. [Learning to Align Generative Appearance Priors for Fine-grained Image Retrieval](/202605/19/2605.09859v1-learning-to-align-generative-appearance-priors-for-fine-grained-image-retrieval)  
+1. [Re-Triggering Safeguards within LLMs for Jailbreak Detection](/202605/20/2605.10611v1-re-triggering-safeguards-within-llms-for-jailbreak-detection)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击防御策略用于LLM
+2. [Reinforce Adjoint Matching: Scaling RL Post-Training of Diffusion and Flow-Matching Models](/202605/20/2605.10759v2-reinforce-adjoint-matching-scaling-rl-post-training-of-diffusion-and-flow-matching-models)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：扩散模型对抗攻击鲁棒性
+3. [FeatMap: Understanding image manipulation in the feature space and its implications for feature space geometry](/202605/20/2605.11203v1-featmap-understanding-image-manipulation-in-the-feature-space-and-its-implications-for-feature-space-geometry)  
    标签：评分：8.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-2. [Evidence-based Decision Modeling for Synthetic Face Detection with Uncertainty-driven Active Learning](/202605/19/2605.09935v2-evidence-based-decision-modeling-for-synthetic-face-detection-with-uncertainty-driven-active-learning)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：生成模型的不确定性处理
-3. [Fashion130K: An E-commerce Fashion Dataset for Outfit Generation with Unified Multi-modal Condition](/202605/19/2605.10127v2-fashion130k-an-e-commerce-fashion-dataset-for-outfit-generation-with-unified-multi-modal-condition)  
+4. [Fast Image Super-Resolution via Consistency Rectified Flow](/202605/20/2605.12377v1-fast-image-super-resolution-via-consistency-rectified-flow)  
    标签：评分：8.0/10、query:image-generation
-   evidence：多模态条件下的服装生成数据集
-4. [MARGIN: Margin-Aware Regularized Geometry for Imbalanced Vulnerability Detection](/202605/19/2605.10240v1-margin-margin-aware-regularized-geometry-for-imbalanced-vulnerability-detection)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的防御策略
-5. [DuetFair: Coupling Inter- and Intra-Subgroup Robustness for Fair Medical Image Segmentation](/202605/19/2605.10521v1-duetfair-coupling-inter--and-intra-subgroup-robustness-for-fair-medical-image-segmentation)  
+   evidence：图像生成技术
+5. [Robust Multi-Agent Path Finding under Observation Attacks: A Principled Adversarial-Plus-Smoothing Training Recipe](/202605/20/2605.11469v1-robust-multi-agent-path-finding-under-observation-attacks-a-principled-adversarial-plus-smoothing-training-recipe)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的子组鲁棒性
-6. [STRIDE: Training-Free Diversity Guidance via PCA-Directed Feature Perturbation in Single-Step Diffusion Models](/202605/19/2605.11494v1-stride-training-free-diversity-guidance-via-pca-directed-feature-perturbation-in-single-step-diffusion-models)  
+   evidence：对抗攻击下的鲁棒性研究
+6. [MULTI: Disentangling Camera Lens, Sensor, View, and Domain for Novel Image Generation](/202605/20/2605.12134v1-multi-disentangling-camera-lens-sensor-view-and-domain-for-novel-image-generation)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：图像生成中多因素解耦方法
+7. [Images in Sentences: Scaling Interleaved Instructions for Unified Visual Generation](/202605/20/2605.12305v1-images-in-sentences-scaling-interleaved-instructions-for-unified-visual-generation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-7. [A Comparative Study of Controlled Text Generation Systems Using Level-Playing-Field Evaluation Principles](/202605/19/2605.12395v1-a-comparative-study-of-controlled-text-generation-systems-using-level-playing-field-evaluation-principles)  
+   evidence：对抗攻击下的图像模型保护
+8. [Persona-Conditioned Adversarial Prompting (PCAP): Multi-Identity Red-Teaming for Enhanced Adversarial Prompt Discovery](/202605/20/2605.12565v1-persona-conditioned-adversarial-prompting-pcap-multi-identity-red-teaming-for-enhanced-adversarial-prompt-discovery)  
    标签：评分：7.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-8. [Still Camouflage, Moving Illusion: View-Induced Trajectory Manipulation in Autonomous Driving](/202605/19/2605.12743v1-still-camouflage-moving-illusion-view-induced-trajectory-manipulation-in-autonomous-driving)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的轨迹预测
-9. [Operationalizing Cybersecurity Governance for Mitigation Planning with Attack-Path Modeling and Reinforcement Learning](/202605/19/2605.09792v1-operationalizing-cybersecurity-governance-for-mitigation-planning-with-attack-path-modeling-and-reinforcement-learning)  
+9. [EDGER: EDge-Guided with HEatmap Refinement for Generalizable Image Forgery Localization](/202605/20/2605.12002v1-edger-edge-guided-with-heatmap-refinement-for-generalizable-image-forgery-localization)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-10. [Scalable Design of Attack-Resilient Controllers for Positive Systems](/202605/19/2605.10078v1-scalable-design-of-attack-resilient-controllers-for-positive-systems)  
+   evidence：对抗攻击下的图像模型保护
+10. [Robust Promptable Video Object Segmentation](/202605/20/2605.12006v1-robust-promptable-video-object-segmentation)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击防御策略
-11. [Fashion130K: An E-commerce Fashion Dataset for Outfit Generation with Unified Multi-modal Condition](/202605/19/2605.10127v1-fashion130k-an-e-commerce-fashion-dataset-for-outfit-generation-with-unified-multi-modal-condition)  
+   evidence：对抗攻击下视频分割模型鲁棒性研究
+11. [SkillSafetyBench: Evaluating Agent Safety under Skill-Facing Attack Surfaces](/202605/20/2605.12015v1-skillsafetybench-evaluating-agent-safety-under-skill-facing-attack-surfaces)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-12. [A Generative AI-Enhanced Digital Twin Framework for Proactive Interference Management in Hybrid Near/Far-Field Wireless Systems](/202605/19/2605.10145v1-a-generative-ai-enhanced-digital-twin-framework-for-proactive-interference-management-in-hybrid-nearfar-field-wireless-systems)  
+   evidence：对抗攻击下的模型安全评估
+12. [Machine Learning for neutron source distributions](/202605/20/2605.12165v1-machine-learning-for-neutron-source-distributions)  
    标签：评分：6.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
+   evidence：使用生成对抗网络进行图像生成分布估计
 
 
 ### ⚡ 这个站点能做什么
