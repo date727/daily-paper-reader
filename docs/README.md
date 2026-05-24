@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-05-23
-- 运行时间：2026-05-23 20:16:54 UTC
+- 最新运行日期：2026-05-24
+- 运行时间：2026-05-24 20:14:59 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读7篇、速读12篇论文，聚焦3D编辑安全与多模态数据保护等前沿方向  
-高分论文集中探讨3D编辑防御、单视角场景重建及多模态数据防护技术  
-建议对AI生成内容安全感兴趣的读者优先阅读精读论文，了解技术可靠性提升方案
-- 详情：[/202605/23/README](/202605/23/README)
+1) 今日精读7篇、速读12篇，共推荐19篇论文  
+2) 聚焦AI安全与生成技术，两篇精读论文分别探讨红外目标检测对抗攻击及高效图像视频生成方法  
+3) 建议关注高分论文中Fourier Shapes与Spectral Progressive Diffusion技术，了解其在对抗攻击与生成效率上的创新应用
+- 详情：[/202605/24/README](/202605/24/README)
 
 ### 精读区论文标签
-1. [3DEditSafe: Defending 3D Editing Pipelines from Unsafe Generation](/202605/23/2605.15398v1-3deditsafe-defending-3d-editing-pipelines-from-unsafe-generation)  
+1. [Unleashing the Representational Power of Fourier Shapes for Attacking Infrared Object Detection](/202605/24/2605.17822v1-unleashing-the-representational-power-of-fourier-shapes-for-attacking-infrared-object-detection)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：红外目标检测对抗攻击
+2. [Spectral Progressive Diffusion for Efficient Image and Video Generation](/202605/24/2605.18736v1-spectral-progressive-diffusion-for-efficient-image-and-video-generation)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：频谱渐进扩散生成方法
+3. [FlowErase-RL: Rethinking Concept Erasure as Reward Optimization in Flow Matching Models](/202605/24/2605.19739v1-flowerase-rl-rethinking-concept-erasure-as-reward-optimization-in-flow-matching-models)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动下的图像生成模型保护
+4. [PixVerve: Advancing Native UHR Image Generation to 100MP with a Large-Scale High-Quality Dataset](/202605/24/2605.20147v1-pixverve-advancing-native-uhr-image-generation-to-100mp-with-a-large-scale-high-quality-dataset)  
    标签：评分：9.0/10、query:image-generation
-   evidence：扩散模型用于图像生成研究
-2. [DecoRec: Decomposed 3D Scene Reconstruction from Single-View Images via Object-Level Diffusion](/202605/23/2605.16807v1-decorec-decomposed-3d-scene-reconstruction-from-single-view-images-via-object-level-diffusion)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-3. [Threats to Arabic Handwriting Recognition: Investigating Black-Box Adversarial Attacks on embedded ConvNet models](/202605/23/2605.18058v1-threats-to-arabic-handwriting-recognition-investigating-black-box-adversarial-attacks-on-embedded-convnet-models)  
+   evidence：图像生成技术进展
+5. [Findings of the Counter Turing Test: AI-Generated Image Detection](/202605/24/2605.20787v2-findings-of-the-counter-turing-test-ai-generated-image-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-4. [MetaEarth-MM: Unified Multimodal Remote Sensing Image Generation with Scene-centered Joint Modeling](/202605/23/2605.20090v1-metaearth-mm-unified-multimodal-remote-sensing-image-generation-with-scene-centered-joint-modeling)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-5. [PGC: Peak-Guided Calibration for Generalizable AI-Generated Image Detection](/202605/23/2605.21207v1-pgc-peak-guided-calibration-for-generalizable-ai-generated-image-detection)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-6. [StormShield: Fingerprint-Based Detection and Mitigation of RRC Signaling Storms in O-RAN 5G RANs](/202605/23/2605.14032v1-stormshield-fingerprint-based-detection-and-mitigation-of-rrc-signaling-storms-in-o-ran-5g-rans)  
+   evidence：AI生成图像检测
+6. [Sparse Autoencoders enable Robust and Interpretable Fine-tuning of CLIP models](/202605/24/2605.15961v1-sparse-autoencoders-enable-robust-and-interpretable-fine-tuning-of-clip-models)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击检测与防御
-7. [EntropyScan: Towards Model-level Backdoor Detection in LVLMs via Visual Attention Entropy](/202605/23/2605.15711v1-entropyscan-towards-model-level-backdoor-detection-in-lvlms-via-visual-attention-entropy)  
+   evidence：提升CLIP模型的鲁棒性与可解释性
+7. [Venom: A PyTorch Generative Modeling Toolkit](/202605/24/2605.17605v1-venom-a-pytorch-generative-modeling-toolkit)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
+   evidence：提供生成对抗模型的实现工具
 
 ### 速读区论文标签
-1. [Venus-DeFakerOne: Unified Fake Image Detection & Localization](/202605/23/2605.14091v1-venus-defakerone-unified-fake-image-detection--localization)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对图像篡改的影响
-2. [To See is Not to Learn: Protecting Multimodal Data from Unauthorized Fine-Tuning of Large Vision-Language Model](/202605/23/2605.14291v1-to-see-is-not-to-learn-protecting-multimodal-data-from-unauthorized-fine-tuning-of-large-vision-language-model)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：针对图像对抗攻击防御技术
-3. [Sat3DGen: Comprehensive Street-Level 3D Scene Generation from Single Satellite Image](/202605/23/2605.14984v1-sat3dgen-comprehensive-street-level-3d-scene-generation-from-single-satellite-image)  
+1. [Evaluating Design Video Generation: Metrics for Compositional Fidelity](/202605/24/2605.16223v1-evaluating-design-video-generation-metrics-for-compositional-fidelity)  
    标签：评分：8.0/10、query:image-generation
-   evidence：图像合成方法与技术
-4. [From Weight Perturbation to Feature Attribution for Explaining Fully Connected Neural Networks](/202605/23/2605.15328v1-from-weight-perturbation-to-feature-attribution-for-explaining-fully-connected-neural-networks)  
+   evidence：视频生成评估方法
+2. [LymphNode: A Plug-and-Play Access Control Method for Deep Neural Networks](/202605/24/2605.16227v1-lymphnode-a-plug-and-play-access-control-method-for-deep-neural-networks)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-5. [When and Why Adversarial Training Improves PINNs: A Neural Tangent Kernel Perspective](/202605/23/2605.15959v1-when-and-why-adversarial-training-improves-pinns-a-neural-tangent-kernel-perspective)  
+   evidence：对抗攻击防御方法
+3. [Flow Matching with Optimized Subclass Priors for Medical Image Augmentation](/202605/24/2605.16469v1-flow-matching-with-optimized-subclass-priors-for-medical-image-augmentation)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：图像对抗扰动生成方法
+4. [STRIDE-AI: A Threat Modeling Framework for Generative AI Security Assessment](/202605/24/2605.17163v1-stride-ai-a-threat-modeling-framework-for-generative-ai-security-assessment)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：生成式AI安全评估框架
+5. [Temporal Aware Pruning for Efficient Diffusion-based Video Generation](/202605/24/2605.17837v2-temporal-aware-pruning-for-efficient-diffusion-based-video-generation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗训练在PINN中的应用
-6. [DiRotQ: Rotation-Aware Quantization for 4-bit Diffusion Transformers](/202605/23/2605.16732v1-dirotq-rotation-aware-quantization-for-4-bit-diffusion-transformers)  
+   evidence：生成式图像对抗鲁棒性
+6. [Spectral Progressive Diffusion for Efficient Image and Video Generation](/202605/24/2605.18736v2-spectral-progressive-diffusion-for-efficient-image-and-video-generation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动量化方法
-7. [Towards Generalized Image Manipulation Localization via Score-based Model](/202605/23/2605.16879v1-towards-generalized-image-manipulation-localization-via-score-based-model)  
+   evidence：生成式图像对抗鲁棒性
+7. [Personalized Face Privacy Protection From a Single Image](/202605/24/2605.19032v1-personalized-face-privacy-protection-from-a-single-image)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：基于分数模型的图像篡改定位
-8. [AIM: Adversarial Information Masking for Faithfulness Evaluation of Saliency Maps](/202605/23/2605.16905v1-aim-adversarial-information-masking-for-faithfulness-evaluation-of-saliency-maps)  
+   evidence：人脸隐私保护与对抗扰动
+8. [The Evaluation Game: Beyond Static LLM Benchmarking](/202605/24/2605.19377v1-the-evaluation-game-beyond-static-llm-benchmarking)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-9. [Efficient Image Synthesis with Sphere Latent Encoder](/202605/23/2605.15592v1-efficient-image-synthesis-with-sphere-latent-encoder)  
-   标签：评分：6.0/10、query:image-generation
-   evidence：高效图像合成方法
-10. [PCASim: Promptable Closed-loop Adversarial Simulation for Urban Traffic Environment](/202605/23/2605.15654v1-pcasim-promptable-closed-loop-adversarial-simulation-for-urban-traffic-environment)  
+   evidence：对抗攻击下的模型评估框架
+9. [Adversarially Robust Approximate Furthest Neighbor](/202605/24/2605.16618v1-adversarially-robust-approximate-furthest-neighbor)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗场景生成与闭环测试
-11. [DreamSR: Towards Ultra-High-Resolution Image Super-Resolution via a Receptive-Field Enhanced Diffusion Transformer](/202605/23/2605.15682v1-dreamsr-towards-ultra-high-resolution-image-super-resolution-via-a-receptive-field-enhanced-diffusion-transformer)  
+   evidence：对抗攻击的鲁棒性研究
+10. [Face inpainting with Identity Preserving Latent Diffusion Models](/202605/24/2605.16696v1-face-inpainting-with-identity-preserving-latent-diffusion-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动与超分辨率生成
-12. [ALSO: Adversarial Online Strategy Optimization for Social Agents](/202605/23/2605.15768v1-also-adversarial-online-strategy-optimization-for-social-agents)  
+   evidence：关注图像修复中的身份保持
+11. [Genflow Ad Studio: A Compound AI Architecture for Brand-Aligned, Self-Correcting Video Generation](/202605/24/2605.16748v1-genflow-ad-studio-a-compound-ai-architecture-for-brand-aligned-self-correcting-video-generation)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击与防御策略
+   evidence：提出对抗攻击下的防御策略
+12. [Universal Graph Backdoor Defense: A Feature-based Homophily Perspective](/202605/24/2605.16815v1-universal-graph-backdoor-defense-a-feature-based-homophily-perspective)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：与图像对抗攻击防御技术相关
 
 
 ### ⚡ 这个站点能做什么
