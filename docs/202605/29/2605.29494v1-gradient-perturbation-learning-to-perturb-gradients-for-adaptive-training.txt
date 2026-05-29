@@ -1,0 +1,752 @@
+Title: Gradient Perturbation: Learning to Perturb Gradients for Adaptive Training
+
+URL Source: https://arxiv.org/pdf/2605.29494v1
+
+Published Time: Fri, 29 May 2026 00:46:34 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Gradient Perturbation: Learning to Perturb Gradients for Adaptive Training 
+
+## Hua Li Henan University 
+
+## lihuahenu@163.com 
+
+## May 29, 2026 
+
+Abstract 
+
+Deep neural network training involves both forward propagation (from features through logits to loss) and backward propagation (from loss through gradients to parameter updates). While perturbations along the forward chain, including feature perturbation, logit perturbation, and label perturbation, have been extensively studied, the backward chain’s gradient perturbation has received little systematic investigation. In this paper, we establish a unified framework for gradient perturbation, revealing that existing methods such as Sharpness-Aware Minimization (SAM), gradient clipping, and gradient noise injection can all be interpreted as imposing specific forms of gradient perturbation. Analogous to the recently proposed Logit Perturbation Learning (LPL), we conjecture that amplifying the gra-dient norm for a class acts as positive augmentation (enhancing learning), while dampening it acts as negative augmentation (suppressing overfitting). Based on these observations, we propose Learning to Perturb Gradients (LPG), which adaptively perturbs logit-level gradients at the class level to achieve category-aware training. We also establish theoretical connections between gradient perturbation bounds and generalization guarantees via PAC-Bayesian analysis. Experiments on balanced classification, long-tail classification, and noisy label learning demonstrate that LPG consistently outperforms existing methods and can be combined with them as a plug-in module. 
+
+# 1 Introduction 
+
+Training deep neural networks (DNNs) involves two fundamental computational chains: the forward pass, where inputs are transformed through layers into predictions and losses, and the backward pass, where gradients propagate from the loss back through the network to update parameters. The quality of training depends critically on both chains, yet they have received vastly unequal attention in terms of systematic perturbation analysis. 1
+
+> arXiv:2605.29494v1 [cs.LG] 28 May 2026
+
+Along the forward chain, perturbations have been studied at three levels: 
+
+feature perturbation (e.g., data augmentation [Zhang et al., 2018], adversarial training [Madry et al., 2018]), logit perturbation (e.g., label smoothing [Szegedy et al., 2016], Logit Adjustment [Menon et al., 2021], and the recent Logit Pertur-bation Learning (LPL) [Li et al., 2022b, 2025, 2023]), and label perturbation (e.g., Mixup [Zhang et al., 2018], label smoothing). These works have demonstrated that carefully designed perturbations at each level can significantly improve generalization, robustness, and calibration. However, the backward chain, where gradients serve as the central quantity, has not been examined through the lens of systematic perturbation. Gradients directly determine the parameter update trajectory and thus the final model behavior, yet several methods that implicitly perturb gradients during training have been proposed independently, motivated by different objectives, without a unified understanding. Specifically, we identify that several methods all implicitly implement gradient perturbation. Sharpness-Aware Minimization (SAM) [Foret et al., 2021] per-turbs parameters before computing gradients, which is equivalent to modifying the gradient direction based on the local loss landscape curvature. Gradient clipping [Pascanu et al., 2013] truncates the gradient norm, effectively applying a norm-dependent perturbation that preferentially affects samples with large gradients. Gradient noise injection [Neelakantan et al., 2015] adds Gaussian noise to gradients, providing isotropic perturbation. Gradient projection methods [Yu et al., 2020] project conflicting gradients in multi-task learning, which reshapes the gradient direction. These methods share the common structure of replacing the original gradient 
+
+g with a perturbed version ˜g = g + δg , yet they are studied in isolation without a unified framework. As illustrated in Figure 1, these methods exhibit different perturbation patterns across classes: SAM perturbs all classes approximately uniformly, gradient clipping primarily affects classes with large gradients (typi-cally head classes in imbalanced settings), and gradient noise applies uniform isotropic perturbation. None of these methods adapt the perturbation to the characteristics of each class. Inspired by LPL [Li et al., 2022b], which establishes the connection between logit perturbation and positive/negative augmentation, we observe an analogous relationship for gradient perturbation: the change in gradient norm directly controls the effective learning intensity for each category. Amplifying the gradient norm for a class increases its contribution to parameter updates, acting as positive augmentation that enhances learning for that class. Dampening the gradient norm for a class decreases its contribution, acting as negative augmentation that suppresses overfitting. Rotating the gradient direction changes the optimization trajectory, potentially leading to flatter minima with better generalization. Based on these observations, we propose Learning to Perturb Gradients (LPG), a method that adaptively learns class-level gradient perturbations in the logit gradient space. By operating in the low-dimensional logit gradient space (of dimension C, the number of classes) rather than the high-dimensional parameter space, LPG remains computationally efficient while providing fine-grained control 2over the training dynamics. Our main contributions are: 
+
+• We establish a unified framework for gradient perturbation, showing that SAM, gradient clipping, gradient noise injection, and gradient projection methods can all be understood as specific instantiations. 
+
+• We propose LPG , which adaptively perturbs logit-level gradients at the class level to achieve category-aware training, with theoretical justification from PAC-Bayesian generalization bounds. 
+
+• We establish the duality between logit perturbation (forward) and gradient perturbation (backward): under first-order approximation, LPL can be viewed as a special case of LPG with a specific perturbation structure, but LPG is strictly more expressive as it can perturb gradient directions that LPL cannot. 
+
+• We conduct experiments on three scenarios (balanced classification, long-tail classification, and noisy label learning), demonstrating that LPG consistently improves upon existing methods and serves as an effective plug-in module. 
+
+# 2 Related Work 
+
+## 2.1 Gradient-based Training Techniques 
+
+Gradient manipulation has been a cornerstone of modern DNN training. Gradient clipping [Pascanu et al., 2013] was introduced to prevent gradient explosion in recurrent networks, truncating gradients whose norm exceeds a threshold. 
+
+Gradient normalization [You et al., 2017] scales gradients to a fixed norm to stabilize training across varying loss landscapes. More recently, Sharpness-Aware Minimization (SAM) [Foret et al., 2021] seeks flat minima by minimizing the loss at the worst-case perturbation in parameter space, which implicitly modifies the gradient direction. Variants such as ASAM [Kwon et al., 2021] and GSAM [Zhuang et al., 2022] further adapt the perturbation to parameter geometry or stabilize the training trajectory. 
+
+Gradient noise injection [Neelakantan et al., 2015] adds isotropic Gaussian noise to gradients, which can be interpreted as stochastic Langevin dynamics that helps escape sharp minima. In multi-task learning, PCGrad [Yu et al., 2020] projects conflicting task gradients, and GradDrop masks gradient dimensions to align multi-task updates. While these methods all manipulate gradients, they are developed independently without a unifying perspective. 
+
+## 2.2 Data Perturbation in Training 
+
+Perturbation along the forward chain has been studied at three levels. Feature perturbation is exemplified by data augmentation [Zhang et al., 2018, Cubuk 31 5 10 15 20      
+
+> Class Index
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> Relative Gradient Variation  gc gc / gc
+> (a) Balanced CIFAR-100
+> SAM
+> Grad Clip
+> Grad Noise
+> LPG
+> 1510 15 20
+> Class Index (Head Tail)
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> Relative Gradient Variation  (b) CIFAR-100-LT (Ratio 100)
+> SAM
+> Grad Clip
+> Grad Noise
+> LPG
+
+Figure 1: Relative gradient variation ∥˜gc − ¯gc∥/∥¯gc∥ across classes. (a) On balanced data, LPG applies larger perturbation to lower-accuracy classes. (b) On long-tail data, LPG adaptively amplifies tail class gradients and dampens head class gradients, while SAM, gradient clipping, and gradient noise fail to provide class-adaptive perturbation. et al., 2019] and adversarial training [Madry et al., 2018], which modify the input or intermediate representations. Logit perturbation includes Label Smooth-ing [Szegedy et al., 2016], Implicit Semantic Data Augmentation (ISDA) [Wang et al., 2019b], and Logit Adjustment (LA) [Menon et al., 2021]. Most recently, LPL [Li et al., 2022b] unifies these methods and proposes learning the perturba-tion direction and magnitude. Label perturbation includes Mixup [Zhang et al., 2018] and its variants, which interpolate between training samples and their labels. 
+
+## 2.3 Long-tail Classification and Noisy Label Learning 
+
+Long-tail classification addresses the severe class imbalance common in real-world datasets. Representative methods include re-sampling [Byrd and Lipton, 2019], re-weighting [Cui et al., 2019], logit adjustment [Menon et al., 2021], and decoupled training [Kang et al., 2020]. Recent works such as RIDE [Wang et al., 2021], GCL [Li et al., 2022a], and PaCo [Cui et al., 2021] combine multiple expert models or contrastive objectives. Noisy label learning aims to train robust models when training labels contain errors. Approaches include loss correction [Patrini et al., 2017], sample selec-tion [Jiang et al., 2018], semi-supervised methods [Li et al., 2020], and robust loss functions such as GCE [Zhang and Sabuncu, 2018] and SCE [Wang et al., 2019a]. 
+
+# 3 Methodology 
+
+## 3.1 Preliminaries and Notation 
+
+Consider a C-class classification problem with training set D = {(xi, y i)}Ni=1 ,where xi is the input and yi ∈ { 1, . . . , C } is the label. Let Sc = {xi : yi = c}
+
+4denote the set of samples in class c with Nc = |Sc|.A DNN parameterized by W maps input xi to logits ui = f (xi; W ) ∈ RC , and the cross-entropy loss is l(ui, y i) = − log pyi where pyi = exp (ui,y i )/ PCj=1 exp (ui,j ).We define the following key quantities. The parameter gradient gi =
+
+∇W l(f (xi; W ), y i) ∈ R|W | is the gradient of the loss w.r.t. parameters for sample 
+
+xi. The class average gradient ¯gc = 1
+
+> Nc
+
+P 
+
+> xi∈Sc
+
+gi averages the gradient over class c. The logit gradient hi = ∂l ∂u i ∈ RC is the gradient of the loss w.r.t. the logit vector, and the class average logit gradient is ¯hc = 1
+
+> Nc
+
+P 
+
+> xi∈Sc
+
+hi. The Jacobian Ji = ∂u i 
+
+> ∂W
+
+∈ R|W |× C maps the logit vector to the parameter space. By the chain rule, the parameter gradient decomposes as gi = Ji hi. This decomposition is central to our method, as it allows us to perturb the low-dimensional logit gradient hi and propagate the perturbation to the parameter gradient. 
+
+## 3.2 A Unified View of Gradient Perturbation 
+
+We observe that existing gradient-based methods can be uniformly expressed as replacing the original gradient g with a perturbed version ˜g = g + δg , where δg
+
+is the gradient perturbation. We analyze each method below. 
+
+Sharpness-Aware Minimization (SAM). Standard SGD updates param-eters as W ← W − ηg . SAM instead computes the gradient at a perturbed parameter: 
+
+W ← W − η∇W l(f (x; W + ρˆg), y ), (1) where ˆg = g/ ∥g∥ and ρ is the perturbation radius. By Taylor expansion, the SAM gradient can be written as: 
+
+∇W l(f (x; W + ρˆg), y ) ≈ g + ρ∇2 
+
+> W
+
+l · ˆg = g + δSAM  
+
+> g
+
+, (2) where δSAM  
+
+> g
+
+= ρ∇2 
+
+> W
+
+l · ˆg is a curvature-dependent gradient perturbation. This reveals that SAM implicitly perturbs the gradient in a direction determined by the Hessian. 
+
+Gradient clipping. Gradient clipping with threshold τ produces: 
+
+˜g = g · min 
+
+
+
+1, τ
+
+∥g∥
+
+
+
+= g + g
+
+
+
+min 
+
+
+
+1, τ
+
+∥g∥
+
+
+
+− 1
+
+| {z }
+
+> δclip
+> g
+
+. (3) The perturbation δclip  
+
+> g
+
+is non-zero only when ∥g∥ > τ , and it shrinks the gradient along its original direction. In long-tail settings, head classes typically produce larger gradients, so clipping preferentially dampens head class learning. 5Gradient noise injection. Adding Gaussian noise yields: 
+
+˜g = g + N (0 , σ 2I) = g + δnoise  
+
+> g
+
+, (4) an isotropic, sample-agnostic perturbation that applies the same expected per-turbation magnitude to all classes. 
+
+Key observation. These methods exhibit different perturbation patterns across classes. As illustrated in Figure 1, SAM perturbs all classes approximately uniformly, gradient clipping primarily affects classes with large gradients (typi-cally head classes in imbalanced settings), and gradient noise applies uniform isotropic perturbation. None of these methods adapt the perturbation to the characteristics of each class, which motivates our approach of learning class-aware gradient perturbations. 
+
+## 3.3 Conjectures on Gradient Perturbation and Augmenta-tion 
+
+Drawing an analogy to LPL [Li et al., 2022b], which establishes the correspon-dence between logit perturbation and positive/negative data augmentation, we propose two conjectures linking gradient perturbation to learning behavior: 
+
+Conjecture 1 (Positive Augmentation via Gradient Amplification) . If we wish to apply positive augmentation to class c (i.e., enhance the learning for that class), we should amplify the effective gradient norm for class c, increasing its contribution to the parameter update: 
+
+∥˜gc∥ > ∥¯gc∥ =⇒ positive augmentation for class c. (5) 
+
+Conjecture 2 (Negative Augmentation via Gradient Dampening) . If we wish to apply negative augmentation to class c (i.e., suppress overfitting for that class), we should dampen the effective gradient norm for class c, decreasing its contribution to the parameter update: 
+
+∥˜gc∥ < ∥¯gc∥ =⇒ negative augmentation for class c. (6) These conjectures are consistent with existing empirical observations. In long-tail classification, re-weighting methods [Cui et al., 2019] up-weight tail class losses, effectively amplifying their gradients. Gradient clipping implicitly dampens head class gradients. Our framework provides a formal basis for understanding and generalizing these empirical practices. 
+
+## 3.4 Learning to Perturb Gradients (LPG) 
+
+3.4.1 Formulation 
+
+Standard training updates parameters via: 
+
+W ← W − η
+
+> C
+
+X
+
+> c=1
+
+X
+
+> xi∈Sc
+
+gi. (7) 6LPG introduces a class-level gradient perturbation: 
+
+W ← W − η
+
+> C
+
+X
+
+> c=1
+
+X
+
+> xi∈Sc
+
+(gi + δc), (8) where δc ∈ R|W | is the gradient perturbation for class c.Directly learning δc in the parameter space is infeasible due to the high dimensionality of W . Instead, we perturb the low-dimensional logit gradient hi
+
+and propagate the perturbation through the chain rule: 
+
+˜hi = hi + δhc , xi ∈ Sc, (9) where δhc ∈ RC is the logit gradient perturbation for class c. The resulting parameter gradient perturbation is: 
+
+δc = Ji δhc . (10) This formulation has three advantages: the perturbation space is RC rather than R|W |, making optimization tractable; the perturbation naturally respects the network’s computational graph; and different samples within the same class share the perturbation direction but receive instance-specific parameter gradients due to the sample-dependent Jacobian Ji.
+
+3.4.2 Optimization Objective 
+
+Guided by Conjectures 1 and 2, we design the perturbation objective. Let Pa
+
+denote the set of classes receiving positive augmentation and Na the set receiving negative augmentation. For positive augmentation classes, we seek to maximize the effective gradient norm: 
+
+δhc = arg max 
+
+> ∥δ∥≤ ϵc
+
+∥JTi (hi + δ)∥, c ∈ P a. (11) For negative augmentation classes, we seek to minimize it: 
+
+δhc = arg min 
+
+> ∥δ∥≤ ϵc
+
+∥JTi (hi + δ)∥, c ∈ N a. (12) 
+
+3.4.3 Efficient Closed-Form Solution 
+
+The above optimization can be simplified. Since hi is available from the backward pass, we consider perturbations along the logit gradient direction: For positive augmentation: 
+
+˜hc = hc + αc · hc
+
+∥hc∥ , (13) For negative augmentation: 
+
+˜hc = hc − αc · hc
+
+∥hc∥ , (14) 7where αc = ϵc controls the perturbation magnitude. This is equivalent to scaling the logit gradient: 
+
+˜hc = hc ·
+
+
+
+1 ± αc
+
+∥hc∥
+
+
+
+. (15) This closed-form solution is optimal when the perturbation is constrained to the direction of hc, and it avoids the need to compute the Jacobian explicitly. 
+
+3.4.4 PGD-based Refined Solution 
+
+For a more powerful perturbation, we employ Projected Gradient Descent (PGD) to optimize δhc in the full RC space. Starting from δh, (0)  
+
+> c
+
+= 0 , at each step t:
+
+δh, (t+1)  
+
+> c
+
+= Π ∥δ∥≤ ϵc
+
+
+
+δh, (t) 
+
+> c
+
++ κ · sign 
+
+
+
+∇δ ∥JTi (hi + δh, (t) 
+
+> c
+
+)∥
+
+ 
+
+, c ∈ P a, (16) 
+
+δh, (t+1)  
+
+> c
+
+= Π ∥δ∥≤ ϵc
+
+
+
+δh, (t) 
+
+> c
+
+− κ · sign 
+
+
+
+∇δ ∥JTi (hi + δh, (t) 
+
+> c
+
+)∥
+
+ 
+
+, c ∈ N a, (17) where κ is the PGD step size and Π denotes projection onto the ℓ2-ball. In practice, we find that T = 3 PGD steps suffice. 
+
+## 3.5 Category Set Split 
+
+The partition of classes into Pa and Na depends on the training scenario: 
+
+Case 1: Balanced / General Classification. We partition based on per-class accuracy. Let ¯qc denote the running average accuracy of class c. Classes with accuracy below a threshold τ receive positive augmentation: 
+
+Pa = {c : ¯ qc < τ }, Na = {c : ¯ qc ≥ τ }. (18) 
+
+Case 2: Long-tail Classification. We partition based on class frequency. Rare classes receive positive augmentation, while frequent classes receive negative augmentation: 
+
+Pa = {c : Nc < τ }, Na = {c : Nc ≥ τ }. (19) 
+
+Case 3: Noisy Label Learning. We partition based on the intra-class gradient variance. Classes with high gradient variance likely contain more label noise and should be dampened: 
+
+Na = {c : Var (hc) > τ v }, Pa = {1, . . . , C } \ N a, (20) where Var (hc) = 1
+
+> Nc
+
+P 
+
+> xi∈Sc
+
+∥hi − ¯hc∥2 measures the dispersion of logit gradients within class c.8Algorithm 1 Learning to Perturb Gradients (LPG) 
+
+Require: Training set D, network f (·; W ), learning rate η, perturbation param-eters ϵ, ∆ϵ, τ , PGD steps T , step size κ 
+
+> 1:
+
+Initialize W 
+
+> 2:
+
+for epoch = 1 to E do  
+
+> 3:
+
+Compute splitting statistic ¯sc for each class c 
+
+> 4:
+
+Partition classes into Pa and Na (Section 3.5)  
+
+> 5:
+
+Compute perturbation bounds ϵc via Eq. (21)  
+
+> 6:
+
+for each mini-batch B do  
+
+> 7:
+
+Forward pass: compute logits ui and loss l(ui, y i) 
+
+> 8:
+
+Backward pass: compute logit gradients hi = ∂l/∂u i 
+
+> 9:
+
+for each class c present in B do  
+
+> 10:
+
+if closed-form solution then  
+
+> 11:
+
+Compute ˜hc via Eq. (13) or (14)  
+
+> 12:
+
+else  
+
+> 13:
+
+Solve δhc via PGD with T steps  
+
+> 14:
+
+˜hc = hc + δhc 
+
+> 15:
+
+end if  
+
+> 16:
+
+end for  
+
+> 17:
+
+Gradient computation: compute parameter gradients using per-turbed logit gradients ˜hi 
+
+> 18:
+
+Parameter update: W ← W − η P 
+
+> i∈B
+
+˜gi 
+
+> 19:
+
+end for  
+
+> 20:
+
+end for  
+
+> 21:
+
+return W
+
+## 3.6 Perturbation Bound 
+
+Following LPL [Li et al., 2022b], we design class-dependent perturbation bounds that are larger for classes requiring stronger augmentation: 
+
+ϵc = ϵ + ∆ ϵ · | τ − ¯sc|, (21) where ϵ is the base perturbation, ∆ϵ controls the bound variation, and ¯sc is the splitting statistic (accuracy for Case 1, frequency for Case 2, gradient variance for Case 3). Classes farther from the threshold τ receive larger perturbations, enabling stronger positive or negative augmentation where it is most needed. 
+
+## 3.7 Algorithm 
+
+The complete LPG training procedure is summarized in Algorithm 1. The key difference from standard training is in lines 9–16: after computing logit gradients in the backward pass, we apply class-level perturbations before propagating gradients further to the parameters. In PyTorch, this can be implemented by intercepting the gradient at the logit layer via a custom hook 
+
+9on the logit computation, modifying it, and allowing the perturbed gradient to flow to lower layers. 
+
+## 3.8 Theoretical Analysis 
+
+3.8.1 Duality with Logit Perturbation 
+
+We establish the connection between LPG and LPL. 
+
+Proposition 1 (Forward-Backward Duality) . Let δLPL ∈ RC be a logit pertur-bation applied in LPL, so that the perturbed loss is l(ui + δLPL , y i). The resulting change in the parameter gradient is: 
+
+∆gi = ∇W l(ui + δLPL , y i) − ∇ W l(ui, y i) ≈ Hi δLPL , (22) 
+
+where Hi = ∂2l∂W ∂u i ∈ R|W |× C is the cross-derivative. Under the chain rule, 
+
+Hi = Ji ∂2l∂u 2
+
+> i
+
+, so: 
+
+∆gi ≈ Ji
+
+∂2l∂u 2
+
+> i
+
+δLPL 
+
+| {z }
+
+> δhc
+
+. (23) 
+
+Thus, LPL induces a logit gradient perturbation δhc = ∂2l∂u 2
+
+> i
+
+δLPL , which is a specific structured form. LPG generalizes this by allowing arbitrary δhc ∈ RC .
+
+This shows that LPL is a special case of LPG where the logit gradient perturbation is constrained to the range of ∂2l∂u 2
+
+> i
+
+. Since this Hessian is positive semi-definite for cross-entropy loss, LPL cannot produce the gradient direction changes that LPG can, and LPG is strictly more expressive. 
+
+3.8.2 Generalization Bound 
+
+We establish a connection between the perturbation bound ϵc and generalization. 
+
+Proposition 2 (Perturbation Bound and Generalization) . Let L(W ) denote the population risk and ˆL(W ) the empirical risk. Under LPG with perturbation bounds {ϵc}Cc=1 , for any prior distribution P over parameters and β > 0:
+
+L(W ) ≤ ˆLLPG (W ) + 
+
+r KL (Q∥P ) + log(2 N/β )2N + λ
+
+> C
+
+X
+
+> c=1
+
+Nc
+
+N ϵc, (24) 
+
+where Q is the distribution induced by the stochastic LPG training, ˆLLPG is the empirical loss under LPG perturbation, and λ is a constant depending on the Lipschitz constant of the loss and the network. Sketch of proof. We apply the PAC-Bayesian framework [McAllester, 2003]. For each class c, the gradient perturbation with bound ϵc changes the parameter update by at most ηϵ c · ∥ Jc∥F in Frobenius norm per step. Accumulating over 10 Table 1: Top-1 error rates (%) on CIFAR-10 and CIFAR-100 with balanced setting. Best results are in bold .Method CIFAR-10 CIFAR-100 WRN-28-10 ResNet-110 WRN-28-10 ResNet-110 CE 3.89 5.91 18.85 24.56 Label Smoothing 3.82 5.87 18.40 24.12 Mixup 3.56 5.48 17.82 23.55 ISDA 3.44 5.30 17.56 23.18 LA 3.52 5.39 17.69 23.35 LPL (mean + fixed) 3.35 5.18 17.22 22.80 LPL (mean + varied) 3.28 5.12 17.08 22.65 SAM 3.46 5.35 17.45 23.01 Gradient Noise 3.71 5.62 18.12 23.89 LPG (mean + fixed) 3.24 5.05 16.89 22.42 LPG (mean + varied) 3.15 4.98 16.71 22.28     
+
+> LPG-PGD (mean + varied) 3.11 4.94 16.63 22.15
+
+T training steps, the total deviation from standard SGD is bounded by O(T η ¯ϵ)
+
+where ¯ϵ = P 
+
+> cNc
+> N
+
+ϵc. By choosing the prior P as the distribution of standard SGD iterates, the KL divergence captures the deviation caused by gradient perturbation. The bound shows a trade-off: larger perturbation bounds ϵc
+
+increase the generalization gap, but they also reduce the perturbed empirical loss ˆLLPG by providing stronger augmentation. The optimal ϵc balances these two effects. 
+
+# 4 Experiments 
+
+## 4.1 Experimental Setup 
+
+We evaluate LPG on three scenarios: balanced classification, long-tail classifica-tion, and noisy label learning. Following LPL [Li et al., 2022b], we use CIFAR-10 and CIFAR-100 as the primary benchmarks. 
+
+Balanced classification. We train Wide-ResNet-28-10 [Zagoruyko and Ko-modakis, 2016] and ResNet-110 [He et al., 2016] on CIFAR-10 and CIFAR-100 with standard data augmentation (random cropping and horizontal flipping). We directly compare with all methods reported in LPL. 
+
+Long-tail classification. We use CIFAR-10-LT and CIFAR-100-LT [Cui et al., 2019] with imbalance ratios of 100:1 and 10:1, following the standard protocol. The backbone is ResNet-32. 11 CE LA ISDA LPL SAM LPG      
+
+> (fixed)
+> LPG
+> (varied)
+> LPG
+> (PGD)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Accuracy (%)
+> (a) CIFAR-10-LT (Ratio 100)
+> All
+> Head
+> Tail
+> CE LA ISDA LPL SAM LPG
+> (fixed)
+> LPG
+> (varied)
+> LPG
+> (PGD)
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Accuracy (%)
+> (b) CIFAR-100-LT (Ratio 100)
+> All
+> Head
+> Tail
+
+Figure 2: Long-tail classification accuracy on CIFAR-10-LT and CIFAR-100-LT with imbalance ratio 100. LPG consistently improves tail-class accuracy while maintaining head-class performance. 
+
+Noisy label learning. We inject symmetric label noise at rates of 20%, 50%, and 80% into CIFAR-10 and CIFAR-100 training sets. The backbone is ResNet-32. 
+
+Implementation details. We use SGD with momentum 0.9, weight decay 
+
+5 × 10 −4, and batch size 128. For balanced classification, we train for 200 epochs with an initial learning rate of 0.1 decayed by 0.1 at epochs 100 and 150. For long-tail and noisy label settings, we follow the respective standard protocols. The perturbation parameters ϵ, ∆ϵ, and τ are selected via validation sets. We use the closed-form solution (Eqs. (13) –(14) ) as the default, and report PGD-based results as LPG-PGD. 
+
+## 4.2 Balanced Classification 
+
+Table 1 presents the Top-1 error rates on CIFAR-10 and CIFAR-100. LPG achieves competitive results with all methods. On CIFAR-100 with ResNet-110, LPG (mean + varied bound) achieves an error rate of 22.28%, outperforming LPL by 0.37% absolute. This demonstrates that gradient perturbation provides complementary benefits to forward-chain perturbation methods. 
+
+## 4.3 Long-tail Classification 
+
+Figure 2 shows results on CIFAR-10-LT and CIFAR-100-LT with imbalance ratio 100. LPG consistently outperforms all baselines across different datasets. Notably, on CIFAR-100-LT with imbalance ratio 100, LPG achieves 32.0% overall accuracy, surpassing LPL by 3.2% and SAM by 6.1%. The improvement is most pronounced for tail classes, consistent with our conjecture that amplifying tail class gradients provides effective positive augmentation. 12 20 50 80   
+
+> Symmetric Noise Rate (%)
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> Test Accuracy (%)
+> (a) CIFAR-10
+> CE
+> GCE
+> SCE
+> SAM
+> DivideMix
+> LPG (fixed)
+> LPG (varied)
+> LPG (PGD)
+> 20 50 80
+> Symmetric Noise Rate (%)
+> 20
+> 30
+> 40
+> 50
+> 60
+> Test Accuracy (%)
+> (b) CIFAR-100
+> CE
+> GCE
+> SCE
+> SAM
+> DivideMix
+> LPG (fixed)
+> LPG (varied)
+> LPG (PGD)
+
+Figure 3: Test accuracy under symmetric label noise on CIFAR-10 and CIFAR-100. LPG demonstrates strong robustness to label noise by dampening gradients of high-variance classes. LA LPL SAM    
+
+> 16.0
+> 16.5
+> 17.0
+> 17.5
+> 18.0
+> Error Rate (%)
+> -0.84
+> -0.66
+> -0.77
+> (a) Combination on CIFAR-100
+> Base
+> Base + LPG
+> CE LPL LPG LPL+LPG
+> 0
+> 10
+> 20
+> 30
+> 40
+> Accuracy (%)
+> (b) Complementarity on CIFAR-100-LT
+> All
+> Tail
+
+Figure 4: (a) Combination of LPG with existing methods on CIFAR-100 (WRN-28-10). Error reduction from adding LPG is annotated above each bar. (b) Com-plementarity analysis on CIFAR-100-LT (ratio 100): LPG and LPL provide additive improvements when combined. 
+
+## 4.4 Noisy Label Learning 
+
+Figure 3 presents results under symmetric label noise. LPG shows a clear advantage in this scenario: by dampening the gradients of high-variance classes (which are more likely to contain noisy labels), LPG naturally suppresses the harmful effect of incorrect labels. At 80% noise rate on CIFAR-10, LPG achieves 75.5% accuracy, outperforming DivideMix by 2.7%. 
+
+## 4.5 Combination with Existing Methods 
+
+Figure 4(a) demonstrates that LPG can be combined with existing methods as a plug-in module. LA+LPG and LPL+LPG both outperform their respective base methods, confirming the complementarity of forward and backward perturbation. SAM+LPG also shows improvement, suggesting that LPG captures class-specific effects that SAM’s uniform perturbation misses. Figure 4(b) further shows the complementarity of LPG and LPL. When used together, the improvement is additive, confirming that they operate on different aspects of the training process: 13 Table 2: Top-1 error rates (%) on CIFAR-100 with different architectures. Method ResNet-32 SE-ResNet-110 WRN-16-8 ISDA 26.45 22.18 17.85 LPL (mean + varied) 25.82 21.65 17.32 LPG (mean + varied) 25.28 21.15 16.82 (a) Baseline (CE) (b) LPL (c) LPG 
+
+Figure 5: t-SNE visualization of features learned by different methods on CIFAR-100-LT. Circles denote head classes and triangles denote tail classes. LPG produces more compact intra-class clusters and larger inter-class margins, par-ticularly for tail classes. LPL modifies the loss landscape (forward), while LPG modifies the optimization trajectory (backward). On noisy label learning, LPG alone outperforms LPL alone, as gradient dampening provides a more direct mechanism for suppressing noisy label effects. 
+
+## 4.6 Analysis 
+
+4.6.1 Performance across Different Architectures 
+
+Table 2 compares LPG with ISDA and LPL on ResNet-32, SE-ResNet-110, and Wide-ResNet-16-8. LPG consistently improves across all architectures, confirming its generality. 
+
+4.6.2 Feature Space Visualization 
+
+Figure 5 shows t-SNE visualizations of features learned by baseline, LPL, and LPG on CIFAR-100-LT. LPG produces more compact intra-class clusters and larger inter-class margins, particularly for tail classes, confirming that gradient perturbation improves the learned feature space. 
+
+4.6.3 Hyperparameter Sensitivity 
+
+Figure 6 analyzes the sensitivity of LPG to three hyperparameters. For the threshold τ , LPG is robust in a wide range; setting τ to the median class frequency 14 0.4 0.6     
+
+> Threshold
+> 20
+> 25
+> 30
+> Error Rate (%)
+> (a) Sensitivity to
+> CIFAR-10-LT
+> CIFAR-100-LT
+> 0.5 1.0
+> Base Perturbation
+> 20
+> 25
+> 30
+> Error Rate (%)
+> (b) Sensitivity to
+> CIFAR-10-LT
+> CIFAR-100-LT
+> 0510
+> PGD Steps T
+> 20
+> 25
+> 30
+> Error Rate (%)
+> (c) Sensitivity to PGD Steps
+> CIFAR-10-LT
+> CIFAR-100-LT
+
+Figure 6: Sensitivity analysis of LPG to key hyperparameters on CIFAR-10-LT and CIFAR-100-LT. (a) Threshold τ ; (b) Base perturbation ϵ; (c) PGD steps T .LPG is robust across a wide range of hyperparameter settings. (long-tail) or 50% accuracy (balanced) works well. For the base perturbation ϵ,performance is stable for ϵ ∈ [0 .1, 0.5] ; too large ϵ (>1.0) degrades performance by over-perturbing. For PGD steps T , the closed-form solution ( T = 0 ) already achieves strong results; T = 3 provides marginal improvement at the cost of additional computation. 
+
+4.6.4 Training Overhead 
+
+LPG adds minimal overhead compared to standard training: the perturbation is computed in RC space, and the closed-form solution requires only a norm computation and scaling. On CIFAR-100 with ResNet-110, LPG increases training time by approximately 3% (closed-form) and 8% (PGD with T = 3 ), compared to 15% for SAM (which requires an additional forward-backward pass). 
+
+# 5 Conclusion 
+
+We have presented a unified framework for gradient perturbation in deep learn-ing, revealing that SAM, gradient clipping, and gradient noise injection can all be understood as specific instantiations. Based on two conjectures linking gradient perturbation to positive/negative augmentation, we proposed LPG, which adaptively perturbs logit-level gradients at the class level. Theoretically, we established the duality between logit perturbation and gradient perturba-tion, and derived PAC-Bayesian generalization bounds for gradient perturbation. Experiments across three scenarios demonstrated LPG’s effectiveness and com-plementarity with existing methods. Limitations and future work include: (1) extending from class-level to sample-level gradient perturbation for finer-grained control; (2) combining LPG with curriculum learning for adaptive perturbation scheduling; and (3) applying LPG to other domains such as language modeling and generative tasks. 15 Broader Impact 
+
+This work provides a formal framework for understanding and designing gradi-ent perturbation methods. The unified perspective may inspire new methods that combine forward and backward perturbations. LPG can improve model robustness in long-tail and noisy label scenarios, which are common in real-world applications. We do not foresee significant negative societal impacts from this work. 
+
+# References 
+
+Jonathon Byrd and Zachary C Lipton. What is the effect of importance weighting in deep learning? In Proceedings of the 36th International Conference on Machine Learning , 2019. Ekin D Cubuk, Barret Zoph, Dandelion Mané, Vijay Vasudevan, and Quoc V Le. Autoaugment: Learning augmentation strategies from data. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 113–123, 2019. Jiequan Cui, Zhisheng Zhong, Shu Liu, Bei Yu, and Jiaya Jia. Parametric contrastive learning. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 2021. Yin Cui, Menglin Jia, Tsung-Yi Lin, Yang Song, and Serge Belongie. Class-balanced loss based on effective number of samples. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 9268–9277, 2019. Pierre Foret, Ariel Kleiner, Hossein Mobahi, and Behnam Neyshabur. Sharpness-aware minimization for efficiently improving generalization. In International Conference on Learning Representations , 2021. URL https://openreview. net/forum?id=6Tm1mposlrM .Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2016. Lu Jiang, Zhengyuan Zhou, Thomas Leung, Li-Jia Li, and Li Fei-Fei. Mentornet: Learning data-driven curriculum for very deep neural networks on corrupted labels. In International Conference on Machine Learning , 2018. Bingyi Kang, Saining Xie, Marcus Rohrbach, Zhicheng Yan, Albert Gordo, Jiashi Feng, and Yannis Kalantidis. Decoupling representation and classifier for long-tailed recognition. In International Conference on Learning Representations ,2020. 16 Jungmin Kwon, Jeongseop Kim, Hyunseo Park, and In Kwon Choi. Asam: Adaptive sharpness-aware minimization for scale-invariant learning of deep neural networks. In International conference on machine learning , pages 5905–5914. PMLR, 2021. Junnan Li, Richard Socher, and Steven C. H. Hoi. Dividemix: Learning with noisy labels as semi-supervised learning. In International Conference on Learning Representations , 2020. Mengke Li, Yiu-Ming Cheung, and Yang Lu. Long-tailed visual recognition via gaussian clouded logit adjustment. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 6929–6938, 2022a. Mengyang Li, Fengguang Su, Ou Wu, and Ji Zhang. Logit perturbation. In 
+
+AAAI , volume 36, pages 1359–1366, 2022b. Mengyang Li, Fengguang Su, Ou Wu, and Ji Zhang. Class-level logit perturbation. 
+
+IEEE transactions on neural networks and learning systems , 35(10):13926– 13940, 2023. Mengyang Li, Xiaoling Zhou, and Ou Wu. Delving into the training dynamics for image classification. IEEE Transactions on Image Processing , 34:6783–6798, 2025. Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards deep learning models resistant to adversarial attacks. In International Conference on Learning Representations , 2018. David A McAllester. Simplified pac-bayesian margin bounds. In Learning Theory and Kernel Machines: 16th Annual Conference on Learning Theory and 7th Kernel Workshop, COLT/Kernel 2003, Washington, DC, USA, August 24-27, 2003. Proceedings . Springer, 2003. Aditya Krishna Menon, Sadeep Jayasumana, Ankit Singh Rawat, Himanshu Jain, Andreas Veit, and Sanjiv Kumar. Long-tail learning via logit adjustment. In International Conference on Learning Representations , 2021. URL https: //openreview.net/forum?id=37nvvqkCo5 .Arvind Neelakantan, Luke Vilnis, Quoc V Le, Ilya Sutskever, Lukasz Kaiser, Karol Kurach, and James Martens. Adding gradient noise improves learning for very deep networks. arXiv preprint arXiv:1511.06807 , 2015. Razvan Pascanu, Tomas Mikolov, and Yoshua Bengio. On the difficulty of training recurrent neural networks. In International Conference on Machine Learning , pages 1310–1318. PMLR, 2013. Giorgio Patrini, Alessandro Rozza, Aditya Krishna Menon, Richard Nock, and Lizhen Qu. Making deep neural networks robust to label noise: A loss correction approach. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2017. 17 Christian Szegedy, Vincent Vanhoucke, Sergey Ioffe, Jon Shlens, and Zbigniew Wojna. Rethinking the inception architecture for computer vision. In Pro-ceedings of the IEEE conference on Computer Vision and Pattern Recognition ,pages 2818–2826, 2016. Xudong Wang, Long Lian, Zhongqi Miao, Ziwei Liu, and Stella X Yu. Long-tailed recognition by routing diverse distribution-aware experts. In International Conference on Learning Representations , 2021. Yisen Wang, Xingjun Ma, Zaiyi Chen, Yuan Luo, Jinfeng Yi, and James Bailey. Symmetric cross entropy for robust learning with noisy labels. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 322–330, October 2019a. Yulin Wang, Xuran Pan, Shiji Song, Hong Zhang, Gao Huang, and Cheng Wu. Implicit semantic data augmentation for deep networks. In Advances in Neural Information Processing Systems , 2019b. Yang You, Igor Gitman, and Boris Ginsburg. Large batch training of convolu-tional networks. arXiv preprint arXiv:1708.03888 , 2017. Tianhe Yu, Saurabh Kumar, Abhishek Gupta, Sergey Levine, Karol Hausman, and Chelsea Finn. Gradient surgery for multi-task learning. In Advances in Neural Information Processing Systems , pages 5824–5836, 2020. Sergey Zagoruyko and Nikos Komodakis. Wide residual networks. In British Machine Vision Conference , 2016. Hongyi Zhang, Moustapha Cisse, Yann N Dauphin, and David Lopez-Paz. mixup: Beyond empirical risk minimization. In International Conference on Learning Representations , 2018. Zhilu Zhang and Mert R Sabuncu. Generalized cross entropy loss for training deep neural networks with noisy labels. In Advances in Neural Information Processing Systems , 2018. Juntang Zhuang, Boqing Gong, Liangzhe Yuan, Yin Cui, Hartwig Adam, Nicha C. Dvornek, Sekhar Tatikonda, James S. Duncan, and Ting Liu. Surrogate gap minimization improves sharpness-aware training. In International Conference on Learning Representations , 2022. URL https://openreview.net/forum? id=edONMAnhLu-.18
