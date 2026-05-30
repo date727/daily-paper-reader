@@ -6,100 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-05-29
-- 运行时间：2026-05-29 21:21:17 UTC
+- 最新运行日期：2026-05-30
+- 运行时间：2026-05-30 20:23:25 UTC
 - 运行状态：成功
-- 本次总论文数：26
-- 精读区：14
+- 本次总论文数：19
+- 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日聚焦几何对抗框架与鲁棒性验证的前沿论文推荐  
-2) 精读文章揭示可见光-红外VLMs的几何攻击漏洞，速读内容则探讨数据集边界对AI生成图像检测的影响  
-3) 建议对AI安全领域感兴趣者优先阅读几何对抗理论，普通读者可从速读文章了解对抗样本检测的实践挑战
-- 详情：[/202605/29/README](/202605/29/README)
+1) 今日精读与速读共19篇论文，聚焦视觉语言模型与生成模型的前沿挑战  
+2) 视觉语言模型（LVLMs）安全性成焦点：两篇精读论文揭示其对抗脆弱性与预训练数据隐私风险  
+3) 建议关注纹理约束扰动与跨模态优化技术，以及图像生成模型的隐私保护方法最新进展
+- 详情：[/202605/30/README](/202605/30/README)
 
 ### 精读区论文标签
-1. [Exposing Vulnerabilities in Visible-Infrared VLMs: A Unified Geometric Adversarial Framework with Cross-Task Transferability](/202605/29/2605.22273v1-exposing-vulnerabilities-in-visible-infrared-vlms-a-unified-geometric-adversarial-framework-with-cross-task-transferability)  
+1. [Unveiling the Fragility of Vision-Language Models: Multi-Modal Adversarial Synergy via Texture-Constrained Perturbations and Cross-Modal Optimization](/202605/30/2605.26501v1-unveiling-the-fragility-of-vision-language-models-multi-modal-adversarial-synergy-via-texture-constrained-perturbations-and-cross-modal-optimization)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
-2. [The Matching Principle: A Geometric Theory of Loss Functions for Nuisance-Robust Representation Learning](/202605/29/2605.22800v1-the-matching-principle-a-geometric-theory-of-loss-functions-for-nuisance-robust-representation-learning)  
+   evidence：研究多模态对抗攻击对视觉语言模型的影响
+2. [Black-box Membership Inference Attacks on the Pre-training Data of Image-generation Models](/202605/30/2605.27020v1-black-box-membership-inference-attacks-on-the-pre-training-data-of-image-generation-models)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-3. [Med-R2: An Adversarial Benchmark for Evidence-Grounded Reasoning in Medical VLMs](/202605/29/2605.24492v1-med-r2-an-adversarial-benchmark-for-evidence-grounded-reasoning-in-medical-vlms)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：医疗对抗攻击与防御
-4. [Where Detectors Fail: Probing Generative Space for Generalizable AI-Generated Image Detection](/202605/29/2605.24906v3-where-detectors-fail-probing-generative-space-for-generalizable-ai-generated-image-detection)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的检测方法
-5. [ERNIE-Image Technical Report](/202605/29/2605.25347v1-ernie-image-technical-report)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：介绍文本到图像生成模型
-6. [Certified Robustness from Approximate Gaussian Mixture Structures in Pretrained Latent Spaces](/202605/29/2605.25352v1-certified-robustness-from-approximate-gaussian-mixture-structures-in-pretrained-latent-spaces)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：基于预训练潜在空间的对抗鲁棒性框架
-7. [Capability and Robustness Cannot Both Be Free: An Information-Theoretic Bound for Vision-Language-Action Models](/202605/29/2605.25889v3-capability-and-robustness-cannot-both-be-free-an-information-theoretic-bound-for-vision-language-action-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动对模型鲁棒性的影响
-8. [Closed-Loop Bidirectional Prompting for Adversarial Robustness of Vision Language Models](/202605/29/2605.25922v1-closed-loop-bidirectional-prompting-for-adversarial-robustness-of-vision-language-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的模型保护方法
-9. [DSRDM: Digital Signal Recovery Diffusion Model for Semantic Communications](/202605/29/2605.27730v1-dsrdm-digital-signal-recovery-diffusion-model-for-semantic-communications)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：扩散模型在图像生成中的应用
-10. [Reading or Guessing? Visual Grounding Failures of Vision-Language Models for OCR in Ancient Greek Editions](/202605/29/2605.27750v1-reading-or-guessing-visual-grounding-failures-of-vision-language-models-for-ocr-in-ancient-greek-editions)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
-11. [No Safe Dose: How Training Data Drives Unsafe Image Generation](/202605/29/2605.28137v1-no-safe-dose-how-training-data-drives-unsafe-image-generation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：训练数据对图像生成安全性的影响
-12. [Gradient Perturbation: Learning to Perturb Gradients for Adaptive Training](/202605/29/2605.29494v1-gradient-perturbation-learning-to-perturb-gradients-for-adaptive-training)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：梯度扰动的统一框架
-13. [Improving Adversarial Robustness of Attribution via Implicit Regularization](/202605/29/2605.29983v1-improving-adversarial-robustness-of-attribution-via-implicit-regularization)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：提升图像对抗扰动鲁棒性
-14. [VPG: Visual Prefix Guidance for Autoregressive Image and Video Generation](/202605/29/2605.30317v1-vpg-visual-prefix-guidance-for-autoregressive-image-and-video-generation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
+3. [Linear-DPO: Linear Direct Preference Optimization for Diffusion and Flow-Matching Generative Models](/202605/30/2605.21123v1-linear-dpo-linear-direct-preference-optimization-for-diffusion-and-flow-matching-generative-models)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+4. [Detecting Trojaned DNNs via Spectral Regression Analysis](/202605/30/2605.21146v1-detecting-trojaned-dnns-via-spectral-regression-analysis)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：图像对抗攻击检测方法
+5. [Flow Mismatching: Unsupervised Anomaly Detection via Velocity Discrepancies in Flow Matching Models](/202605/30/2605.23070v1-flow-mismatching-unsupervised-anomaly-detection-via-velocity-discrepancies-in-flow-matching-models)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：基于流匹配的异常检测
+6. [Robust LLM Watermarking with Minimal Semantic Distortion for IP Protection](/202605/30/2605.23175v1-robust-llm-watermarking-with-minimal-semantic-distortion-for-ip-protection)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击防御技术
+7. [Phase-Aware Wavelet-Based-Scattering Encoder-Decoder for Dense Predictions](/202605/30/2605.24621v1-phase-aware-wavelet-based-scattering-encoder-decoder-for-dense-predictions)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：图像生成质量评估方法
 
 ### 速读区论文标签
-1. [Mind Your Margin and Boundary: Are Your Distilled Datasets Truly Robust?](/202605/29/2605.20606v2-mind-your-margin-and-boundary-are-your-distilled-datasets-truly-robust)  
+1. [Reducing Object Hallucination in LVLMs via Emphasizing Image-negative Tokens](/202605/30/2605.21300v1-reducing-object-hallucination-in-lvlms-via-emphasizing-image-negative-tokens)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动下的模型鲁棒性研究
-2. [Findings of the Counter Turing Test: AI-Generated Image Detection](/202605/29/2605.20787v3-findings-of-the-counter-turing-test-ai-generated-image-detection)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-3. [Decomposing Subject-Driven Image Generation via Intermediate Structural Prediction](/202605/29/2605.20807v1-decomposing-subject-driven-image-generation-via-intermediate-structural-prediction)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-4. [Comparative Evaluation of Deep Learning Models for Fake Image Detection](/202605/29/2605.20971v1-comparative-evaluation-of-deep-learning-models-for-fake-image-detection)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：图像伪造检测模型
-5. [Guided Trajectory Optimization with Sparse Scaling for Test-Time Diffusion](/202605/29/2605.21907v1-guided-trajectory-optimization-with-sparse-scaling-for-test-time-diffusion)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：研究对抗攻击的图像防御策略
-6. [Composing People Together: Iterative Pose-Image Generation for Multi-Person Interaction Scenes](/202605/29/2605.23178v1-composing-people-together-iterative-pose-image-generation-for-multi-person-interaction-scenes)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：探讨生成式图像对抗扰动生成方法
-7. [Self-supervised Adversarial Purification for Graph Neural Networks](/202605/29/2605.23239v1-self-supervised-adversarial-purification-for-graph-neural-networks)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击的防御策略
-8. [Diffusion Domain Expansion: Learning to Coordinate Pre-trained Diffusion Models](/202605/29/2605.23275v1-diffusion-domain-expansion-learning-to-coordinate-pre-trained-diffusion-models)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-9. [Broken Memories: Detecting and Mitigating Memorization in Diffusion Models with Degraded Generations](/202605/29/2605.22050v3-broken-memories-detecting-and-mitigating-memorization-in-diffusion-models-with-degraded-generations)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-10. [AesFormer: Transform Everyday Photos into Beautiful Memories](/202605/29/2605.22126v1-aesformer-transform-everyday-photos-into-beautiful-memories)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-11. [No Pose, No Problem in 4D: Feed-Forward Dynamic Gaussians from Unposed Multi-View Videos](/202605/29/2605.22190v1-no-pose-no-problem-in-4d-feed-forward-dynamic-gaussians-from-unposed-multi-view-videos)  
-   标签：评分：6.0/10、query:image-adversarial
    evidence：对抗扰动下的图像模型保护
-12. [Boundary-targeted Membership Inference Attacks on Safety Classifiers](/202605/29/2605.22373v1-boundary-targeted-membership-inference-attacks-on-safety-classifiers)  
+2. [Disentangling Generation and Regression in Stochastic Interpolants for Controllable Image Restoration](/202605/30/2605.21381v1-disentangling-generation-and-regression-in-stochastic-interpolants-for-controllable-image-restoration)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：图像生成与对抗攻击相关
+3. [Memorisation, convergence and generalisation in generative models](/202605/30/2605.21402v1-memorisation-convergence-and-generalisation-in-generative-models)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：生成模型的泛化能力
+4. [Uni-Edit: Intelligent Editing Is A General Task For Unified Model Tuning](/202605/30/2605.21487v2-uni-edit-intelligent-editing-is-a-general-task-for-unified-model-tuning)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：图像生成技术的最新进展
+5. [Do Synthetic Brain MRIs Reliably Improve Tumour Classification? A StyleGAN2-ADA Class-Plane Augmentation Study on BRISC 2025](/202605/30/2605.23094v1-do-synthetic-brain-mris-reliably-improve-tumour-classification-a-stylegan2-ada-class-plane-augmentation-study-on-brisc-2025)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击对医学图像分类的影响
+6. [How Well Do Models Follow Their Constitutions?](/202605/30/2605.24229v1-how-well-do-models-follow-their-constitutions)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动对生成模型的影响
+7. [Five Queries Are Enough: Query-Efficient and Surrogate-Free Membership Inference Attacks on RAG via Entailment](/202605/30/2605.24312v1-five-queries-are-enough-query-efficient-and-surrogate-free-membership-inference-attacks-on-rag-via-entailment)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击下的模型保护
+8. [Enhancing Single-Image Facial Demorphing using Multimodal Large Language Models](/202605/30/2605.25442v1-enhancing-single-image-facial-demorphing-using-multimodal-large-language-models)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：利用多模态模型提升图像篡改检测
+9. [What Does the Server See? Understanding Privacy Leakage from Large Language Models in Split Inference](/202605/30/2605.23158v1-what-does-the-server-see-understanding-privacy-leakage-from-large-language-models-in-split-inference)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：隐私攻击对安全分类器的影响
+   evidence：隐私泄露与模型保护
+10. [PiD: Fast and High-Resolution Latent Decoding with Pixel Diffusion](/202605/30/2605.23902v1-pid-fast-and-high-resolution-latent-decoding-with-pixel-diffusion)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：提出对抗扰动生成方法
+11. [VectorArk: Learning Practical Image Vectorization with Rounded Polygon Representation](/202605/30/2605.24398v1-vectorark-learning-practical-image-vectorization-with-rounded-polygon-representation)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：图像向量化鲁棒性提升
+12. [AVBench: Human-Aligned and Automated Evaluation Benchmark for Audio-Video Generative Models](/202605/30/2605.24652v1-avbench-human-aligned-and-automated-evaluation-benchmark-for-audio-video-generative-models)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
 
 
 ### ⚡ 这个站点能做什么
