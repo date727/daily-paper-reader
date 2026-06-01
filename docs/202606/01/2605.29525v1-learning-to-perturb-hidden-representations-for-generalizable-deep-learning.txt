@@ -1,0 +1,898 @@
+Title: Learning to Perturb Hidden Representations for Generalizable Deep Learning
+
+URL Source: https://arxiv.org/pdf/2605.29525v1
+
+Published Time: Fri, 29 May 2026 00:48:18 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Learning to Perturb Hidden Representations for Generalizable Deep Learning 
+
+## Hua Li Henan University 
+
+## lihuahenu@163.com 
+
+## May 29, 2026 
+
+Abstract 
+
+Deep neural networks process data through a cascade of representations: input features, hidden activations, logits, and loss. While perturbations at the input, logit, and label levels have been systematically studied, the intermediate hidden activations, which constitute the bulk of the network’s computation, have received no unified perturbation analysis. In this paper, we establish a unified framework for hidden activation perturbation, revealing that Dropout, Manifold Mixup, adversarial feature perturbation, and related methods all impose specific forms of activation perturbation but with class-agnostic or random strategies. We conjecture that expansive perturbation (increasing activation norm) acts as positive augmentation, while contractive perturbation (decreasing activation norm) acts as negative augmentation, and that the perturbation layer determines whether the effect resembles input-level augmentation (shallow layers) or logit-level manipulation (deep layers). We propose Learning to Perturb Activations (LPA), which adaptively perturbs activations at a selected hidden layer with class-level perturbations learned via PGD. We further provide theoretical analysis connecting activation perturbation to flat minima and perturbation amplification through layers. Experiments on balanced classification, long-tail classification, and domain generalization demonstrate that LPA consistently outperforms existing methods and provides complementary benefits to logit perturbation methods such as LPL. 
+
+# 1 Introduction 
+
+In the forward pass of a deep neural network, data flows through a sequence of transformations: input features, hidden activations across multiple layers, logits, and finally the loss. Perturbation at various points along this pipeline has been shown to improve generalization, robustness, and calibration. At the input level, feature perturbation methods such as data augmentation [Zhang et al., 2018] and adversarial training [Madry et al., 2018] modify the input or its 1
+
+> arXiv:2605.29525v1 [cs.LG] 28 May 2026
+
+representations. At the logit level, methods including Label Smoothing [Szegedy et al., 2016], Logit Adjustment [Menon et al., 2021], and Logit Perturbation Learning (LPL) [Li et al., 2022, 2025, 2023] perturb the pre-softmax outputs. At the label level, Mixup [Zhang et al., 2018] and its variants interpolate between training labels. However, the hidden activations that occupy the vast majority of network layers have not been examined through a systematic perturbation lens. This gap is notable because several widely used methods implicitly perturb hidden activations. Dropout [Srivastava et al., 2014] zeros out random activation units, DropBlock [Ghiasi et al., 2018] applies structured zeroing, Shake-Shake [Gastaldi, 2017] and ShakeDrop [Yamada et al., 2018] randomly scale residual branch activations, Manifold Mixup [Verma et al., 2019] interpolates activations be-tween samples, and adversarial feature perturbation [Volpi et al., 2018] perturbs features to maximize the loss. These methods are motivated by different ob-jectives (regularization, robustness, generalization) and have been developed independently without a unifying framework. Analogous to LPL [Li et al., 2022], which establishes the correspondence between logit perturbation and positive/negative data augmentation, we ob-serve a similar correspondence for hidden activation perturbation: expansive perturbation (increasing activation norm) effectively generates more diverse representations for a class, acting as positive augmentation, while contractive perturbation (decreasing activation norm) compresses the class’s representa-tion distribution, acting as negative augmentation. Moreover, the choice of perturbation layer determines the nature of the effect: shallow-layer pertur-bation influences low-level feature diversity (similar to input augmentation), while deep-layer perturbation affects semantic class relationships (similar to logit perturbation). A key distinction from logit perturbation is the dimensionality of the per-turbation space. Logit perturbation operates in RC where C is the number of classes, providing coarse category-level control. Activation perturbation operates in Rdl where dl is the hidden layer dimension, typically much larger than C. This higher-dimensional space enables finer control over intra-class representation structure that logit perturbation cannot achieve. Based on these observations, we propose Learning to Perturb Activations (LPA), which adaptively perturbs activations at a selected hidden layer with class-level perturbations. The perturbation direction and magnitude are learned via Projected Gradient Descent (PGD), guided by whether each class requires positive or negative augmentation. Our main contributions are: 1. We establish a unified framework for hidden activation perturbation, show-ing that Dropout, Manifold Mixup, adversarial feature perturbation, and related methods can all be understood as specific instantiations with class-agnostic strategies. 2. We propose LPA, which adaptively perturbs hidden-layer activations at the class level with layer-adaptive perturbation bounds, and provide theoretical 2analysis connecting activation perturbation to flat minima and perturbation amplification. 3. We analyze the layer-dependence of perturbation effects and propose a layer selection strategy, showing that LPA generalizes LPL as a special case when the perturbation layer is the logit layer. 4. We conduct experiments on three scenarios (balanced classification, long-tail classification, and domain generalization), demonstrating that LPA consistently improves upon existing methods and provides complementary benefits to LPL. 
+
+# 2 Related Work 
+
+## 2.1 Regularization via Activation Modification 
+
+Dropout [Srivastava et al., 2014] and its variants zero out random activation units during training, serving as an implicit form of activation perturbation. Spatial Dropout [Tompson et al., 2015] drops entire feature maps, and DropBlock [Ghiasi et al., 2018] extends this to contiguous regions. Stochastic Depth [Huang et al., 2016] randomly drops entire residual blocks, and R-Drop [Wu et al., 2021] enforces consistency between two Dropout passes. Shake-Shake [Gastaldi, 2017] and ShakeDrop [Yamada et al., 2018] randomly scale residual branch activations. These methods all perturb activations, but the perturbation form and location are fixed and not adaptive to class-level characteristics. 
+
+## 2.2 Feature-level Data Augmentation 
+
+Manifold Mixup [Verma et al., 2019] interpolates hidden activations between training samples, extending Mixup [Zhang et al., 2018] to intermediate layers. ISDA [Wang et al., 2019] uses the feature covariance of the penultimate layer to define an effective logit perturbation. While these methods generate new representations, they do not analyze perturbation intensity in relation to per-class performance, nor do they differentiate between positive and negative augmentation. 
+
+## 2.3 Adversarial Feature Perturbation 
+
+Adversarial Data Augmentation (ADA) [Volpi et al., 2018] perturbs features to maximize the loss, improving robustness to distribution shifts. Similar ideas appear in domain generalization [Shankar et al., 2018]. These methods only perform positive augmentation (loss maximization) and do not consider the negative augmentation scenario, where suppressing certain classes is beneficial. 32.4 Logit Perturbation 
+
+Label Smoothing [Szegedy et al., 2016], Logit Adjustment (LA) [Menon et al., 2021], and LPL [Li et al., 2022] perturb the logit vector. LPL unifies these methods and proposes learning the perturbation. LPA extends this line of work from the logit layer to arbitrary hidden layers, providing higher-dimensional perturbation spaces and layer-adaptive strategies. 
+
+# 3 Methodology 
+
+## 3.1 Preliminaries and Notation 
+
+Consider a C-class classification problem with training set D = {(xi, y i)}Ni=1 . A DNN with L layers processes each input as: 
+
+a(l) 
+
+> i
+
+= ϕ(l)(W (l)a(l−1)  
+
+> i
+
++ b(l)), l = 1 , . . . , L, (1) where a(0)  
+
+> i
+
+= xi is the input, a(L) 
+
+> i
+
+= ui ∈ RC is the logit vector, and dl denotes the dimension of layer l. The cross-entropy loss is l(ui, y i) = − log pyi .We define activation perturbation at layer l as replacing the original activation with a perturbed version: 
+
+˜a(l) 
+
+> i
+
+= a(l) 
+
+> i
+
++ δ(l) 
+
+> i
+
+, (2) where δ(l) 
+
+> i
+
+∈ Rdl is the perturbation vector. The subsequent layers l+1, . . . , L 
+
+compute normally using ˜a(l) 
+
+> i
+
+as input. We use fl+1: L(·) to denote the subnetwork from layer l+1 to the output, so the perturbed loss is l(fl+1: L(a(l) 
+
+> i
+
++ δ(l) 
+
+> i
+
+), y i).Let Sc = {xi : yi = c} with Nc = |Sc|, and Pa, Na denote the sets of classes receiving positive and negative augmentation respectively. 
+
+## 3.2 A Unified View of Activation Perturbation 
+
+Existing methods that modify hidden activations can all be expressed in the form ˜a(l) 
+
+> i
+
+= a(l) 
+
+> i
+
++ δ(l) 
+
+> i
+
+. We analyze each below. 
+
+Dropout. Dropout with keep probability p produces: 
+
+δ(l) 
+
+> i
+
+= a(l) 
+
+> i
+
+⊙ (m − 1), mj ∼ Bernoulli (p), (3) a sample-level, random, multiplicative perturbation. The perturbation direction and magnitude are completely random and class-agnostic. 
+
+Manifold Mixup. At layer l, Manifold Mixup interpolates between two samples: 
+
+δ(l) 
+
+> i
+
+= λ(a(l) 
+
+> j
+
+− a(l) 
+
+> i
+
+), λ ∼ Beta (α, α ), (4) where the perturbation direction points toward another sample’s activation. This is a cross-sample perturbation with random magnitude. 41 5 10 15 20     
+
+> Class Index
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> Relative Activation Variation  [ (l)
+> i ]/  [ a(l)
+> i ]
+> (a) Balanced CIFAR-100
+> Dropout
+> Adv. Feature
+> LPA
+> 1510 15 20
+> Class Index (Head to Tail)
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> Relative Activation Variation  (b) CIFAR-100-LT (Ratio 100)
+> Dropout
+> Adv. Feature
+> LPA
+
+Figure 1: Relative activation variation E[∥δ(l) 
+
+> i
+
+∥]/E[∥a(l) 
+
+> i
+
+∥] across classes. (a) On balanced data, LPA applies larger perturbation to lower-accuracy classes. (b) On long-tail data, LPA adaptively amplifies tail class activations and compresses head class activations, while Dropout and adversarial perturbation fail to adapt. 
+
+Adversarial feature perturbation. 
+
+δ(l) 
+
+> i
+
+= arg max  
+
+> ∥δ∥≤ ϵ
+
+l(fl+1: L(a(l) 
+
+> i
+
++ δ), y i), (5) a sample-level, deterministic perturbation along the direction of steepest loss increase. This method only performs positive augmentation. 
+
+Key observation. These methods exhibit different perturbation patterns across classes, as illustrated in Figure 1. Dropout applies approximately equal perturbation proportion to all classes. Adversarial feature perturbation scales with the local loss landscape geometry of each class. Neither adapts the pertur-bation to per-class learning needs. This motivates learning class-aware activation perturbations. 
+
+## 3.3 Conjectures on Activation Perturbation and Augmen-tation 
+
+We propose three conjectures linking activation perturbation to learning behavior: 
+
+Conjecture 1 (Positive Augmentation via Expansive Perturbation) . Applying expansive perturbation to the activations of class c (increasing the activation norm along the loss-increasing direction) effectively generates more diverse repre-sentations for that class, pushing the decision boundary to accommodate a wider representation spread. This acts as positive augmentation: 
+
+∥˜a(l) 
+
+> c
+
+∥ > ∥a(l) 
+
+> c
+
+∥ =⇒ positive augmentation for class c. (6) 
+
+Conjecture 2 (Negative Augmentation via Contractive Perturbation) . Applying contractive perturbation to the activations of class c (decreasing the activation norm along the loss-decreasing direction) compresses the class’s representation 
+
+5distribution, making it more concentrated and reducing its influence on the decision boundary. This acts as negative augmentation: 
+
+∥˜a(l) 
+
+> c
+
+∥ < ∥a(l) 
+
+> c
+
+∥ =⇒ negative augmentation for class c. (7) 
+
+Conjecture 3 (Layer-Dependent Perturbation Effect) . The effect of activation perturbation depends on the perturbed layer. Shallow-layer perturbation primarily influences low-level feature diversity (analogous to input-level augmentation), while deep-layer perturbation primarily influences semantic class relationships (analogous to logit perturbation). Selecting an appropriate perturbation layer can combine both effects. 
+
+These conjectures are consistent with existing observations. Dropout, applied at various layers, provides regularization through random perturbation, but its class-agnostic nature limits its effectiveness in imbalanced settings. Adversarial feature perturbation applies expansive perturbation uniformly, ignoring classes that would benefit from contractive perturbation. 
+
+## 3.4 Learning to Perturb Activations (LPA) 
+
+3.4.1 Formulation 
+
+Selecting a perturbation layer l, LPA defines the training objective as: 
+
+LLPA = X
+
+> c∈N a
+
+X
+
+> xi∈Sc
+
+min  
+
+> ∥˜δ(l)
+> c∥≤ ϵc
+
+l(fl+1: L(a(l) 
+
+> i
+
++˜δ(l) 
+
+> c
+
+), c )+ X
+
+> c∈P a
+
+X
+
+> xi∈Sc
+
+max  
+
+> ∥˜δ(l)
+> c∥≤ ϵc
+
+l(fl+1: L(a(l) 
+
+> i
+
++˜δ(l) 
+
+> c
+
+), c ),
+
+(8) where ˜δ(l) 
+
+> c
+
+∈ Rdl is the class-level perturbation vector at layer l. For classes in Pa (positive augmentation), we maximize the perturbed loss within the 
+
+ϵc-ball, pushing the decision boundary outward. For classes in Na (negative augmentation), we minimize the perturbed loss, concentrating the representation. 
+
+3.4.2 Relationship with LPL 
+
+When the perturbation layer is the logit layer ( l = L), the activation a(L) 
+
+> i
+
+= ui and 
+
+fL+1: L is the identity, so LPA reduces to LPL. When l = L−1 (the penultimate layer), the perturbation passes through the final linear layer W (L) to reach the logits, producing δlogit = W (L) ˜δ(L−1)  
+
+> c
+
+. Since rank (W (L)) ≤ min (dL−1, C )
+
+and typically dL−1 ≫ C, LPA at layer L−1 can produce logit perturbations spanning a strict superset of what LPL can achieve. Therefore, LPA is a strict generalization of LPL. 
+
+3.4.3 PGD Optimization 
+
+We solve for ˜δ(l) 
+
+> c
+
+via Projected Gradient Descent. The gradient of the perturbed loss w.r.t. the perturbation at layer l is: 
+
+∂l (fl+1: L(a(l) 
+
+> i
+
++ ˜δ(l) 
+
+> c
+
+), c )
+
+∂ ˜δ(l) 
+
+> c˜δ=0
+
+= ∂l ∂a (l)
+
+> i
+
+. (9) 6For positive augmentation classes, the PGD update accumulates the class-averaged gradient: 
+
+˜δ(l) 
+
+> c
+
+= αNc
+
+X 
+
+> j:yj=c
+
+∂l j
+
+∂a (l)
+
+> j
+
+, (10) while for negative augmentation classes, the perturbation follows the negative gradient: 
+
+˜δ(l) 
+
+> c
+
+= − αNc
+
+X 
+
+> j:yj=c
+
+∂l j
+
+∂a (l)
+
+> j
+
+. (11) After each PGD step, we project onto the ℓ2-ball of radius ϵc. In practice, 
+
+T = 3 PGD steps suffice. 
+
+3.4.4 Low-Rank Perturbation 
+
+The perturbation dimension dl can be large for intermediate layers. To reduce computational cost, we constrain the perturbation to the top-k gradient directions. Let g(l) 
+
+> c
+
+= 1
+
+> Nc
+
+P 
+
+> j:yj=c∂l j
+> ∂a (l)
+> j
+
+be the class-averaged activation gradient. We perform singular value decomposition g(l) 
+
+> c
+
+= U ΣV T and retain only the top-k components: 
+
+˜δ(l) 
+
+> c
+
+= α ·
+
+> k
+
+X
+
+> j=1
+
+σj vj , (12) where σj and vj are the j-th largest singular value and corresponding right singular vector. In practice, we find that k = dl/4 maintains performance while reducing memory and computation by approximately 50%. 
+
+## 3.5 Layer Selection Strategy 
+
+Fixed layer selection. Guided by Conjecture 3, selecting a mid-to-deep layer (e.g., the output of the third stage in a ResNet) typically works best, as it combines semantic-level control with sufficient network depth for the perturbation to propagate effectively. 
+
+Adaptive layer selection. During training, we periodically evaluate the effectiveness of perturbation at each candidate layer by measuring the average loss change it produces: 
+
+l∗ = arg max 
+
+> l
+
+X
+
+> c
+
+1
+
+Nc
+
+X
+
+> xi∈Sc
+
+l(fl+1: L(a(l) 
+
+> i
+
++ ˜δ(l) 
+
+> c
+
+), c ) − l(fl+1: L(a(l) 
+
+> i
+
+), c ) . (13) The layer producing the largest average loss change is selected for subsequent training epochs. 7Multi-layer perturbation. Perturbations can be applied at multiple layers simultaneously with independent bounds per layer. Our experiments show that multi-layer perturbation provides marginal improvement over single-layer at the best layer, with increased training cost. 
+
+## 3.6 Category Set Split and Bound Calculation 
+
+Category set split. We follow LPL’s design. For balanced classification, classes with accuracy below the mean are assigned to Pa. For long-tail classi-fication, rare classes are assigned to Pa. For domain generalization, all classes receive positive augmentation (expansive perturbation) since the goal is to increase representation diversity across domains. 
+
+Perturbation bound. The class-dependent bound is: 
+
+ϵc = ϵ + ∆ ϵ · | τ − ¯sc|, (14) where ¯sc is the splitting statistic. Additionally, we introduce a layer-dependent scaling factor γl = βL−l with β < 1, so the effective bound at layer l is: 
+
+ϵ(l) 
+
+> c
+
+= γl · ϵc. (15) Shallow-layer perturbations are amplified by subsequent layers, so they require smaller bounds to prevent excessive distortion. 
+
+## 3.7 Algorithm 
+
+The complete LPA training procedure is summarized in Algorithm 1. In PyTorch, this can be implemented by inserting a hook at the chosen layer 
+
+l that intercepts the activation, computes the class-level perturbation via PGD (requiring additional forward passes through layers l+1 to L), and replaces the activation before continuing the forward pass. 
+
+## 3.8 Theoretical Analysis 
+
+3.8.1 Connection to Flat Minima Proposition 1 (Activation Perturbation and Flat Minima) . Let W (l) denote the parameters at layer l. An activation perturbation δ(l) at layer l is equivalent to a structured parameter perturbation at layer l:
+
+fl+1: L(a(l) 
+
+> i
+
++ δ(l)) = fl+1: L(ϕ(l)(( W (l) + ∆ W (l))a(l−1)  
+
+> i
+
++ b(l))) , (16) 
+
+where ∆W (l) satisfies ϕ(l)(∆ W (l)a(l−1)  
+
+> i
+
+) ≈ δ(l) for the given input. Therefore, LPA training minimizes the worst-case loss over a structured neighborhood of 
+
+W (l), analogous to SAM [Foret et al., 2021] but with perturbation geometry determined by the network’s Jacobian. Models trained with LPA thus converge to flat minima with respect to the parameters at the perturbed layer. 
+
+8Algorithm 1 Learning to Perturb Activations (LPA) 
+
+Require: Training set D, network f , perturbation layer l, perturbation param-eters ϵ, ∆ϵ, τ, β , PGD steps T , step size κ 
+
+> 1:
+
+Initialize network parameters Θ 
+
+> 2:
+
+for epoch = 1 to E do  
+
+> 3:
+
+Compute splitting statistic ¯sc for each class c 
+
+> 4:
+
+Partition classes into Pa and Na 
+
+> 5:
+
+Compute layer-scaled bounds ϵ(l) 
+
+> c
+
+= βL−l(ϵ + ∆ ϵ · | τ − ¯sc|) 
+
+> 6:
+
+for each mini-batch B do  
+
+> 7:
+
+Forward pass up to layer l: compute a(l) 
+
+> i
+> 8:
+
+Compute activation gradients g(l) 
+
+> c
+
+= 1
+
+> Nc
+
+P  
+
+> j:yj=c∂l j
+> ∂a (l)
+> j
+> 9:
+
+for each class c present in B do  
+
+> 10:
+
+if c ∈ P a then  
+
+> 11:
+
+Solve ˜δ(l) 
+
+> c
+
+= arg max ∥δ∥≤ ϵ(l)
+
+> c
+
+l(fl+1: L(a(l) 
+
+> i
+
++ δ), c ) via PGD  
+
+> 12:
+
+else  
+
+> 13:
+
+Solve ˜δ(l) 
+
+> c
+
+= arg min ∥δ∥≤ ϵ(l)
+
+> c
+
+l(fl+1: L(a(l) 
+
+> i
+
++ δ), c ) via PGD  
+
+> 14:
+
+end if  
+
+> 15:
+
+end for  
+
+> 16:
+
+Compute perturbed activations: ˜a(l) 
+
+> i
+
+= a(l) 
+
+> i
+
++ ˜δ(l) 
+
+> c
+> 17:
+
+Continue forward pass from layer l+1 with ˜a(l) 
+
+> i
+> 18:
+
+Compute loss and update Θ via SGD  
+
+> 19:
+
+end for  
+
+> 20:
+
+end for  
+
+> 21:
+
+return Θ
+
+3.8.2 Perturbation Amplification Proposition 2 (Perturbation Amplification Across Layers) . Let Kl denote the Lipschitz constant of the subnetwork from layer l+1 to the output. An activation perturbation ∥δ(l)∥ = ϵ at layer l produces a logit-level change bounded by: 
+
+∥fl+1: L(a(l) + δ(l)) − fl+1: L(a(l))∥ ≤ Kl · ϵ. (17) 
+
+Since Kl is typically larger for smaller l (perturbation passes through more layers), shallow-layer perturbations are amplified more strongly, justifying the layer-dependent scaling factor γl = βL−l.
+
+3.8.3 LPA Generalizes LPL Proposition 3 (LPA as a Generalization of LPL) . When the perturbation layer is the logit layer ( l = L), a(L) 
+
+> i
+
+= ui and fL+1: L is the identity, so LPA reduces to LPL. When l < L , the perturbation ˜δ(l) 
+
+> c
+
+∈ Rdl passes through the linear transformation of subsequent layers to produce a logit perturbation δlogit =
+
+W (l+1: L) ˜δ(l) 
+
+> c
+
+where W (l+1: L) is the composed weight matrix from layer l+1 to the 
+
+9logits. Since dl > C typically, the range of δlogit under LPA is a strict superset of the achievable logit perturbations under LPL. 
+
+# 4 Experiments 
+
+## 4.1 Experimental Setup 
+
+We evaluate LPA on three scenarios: balanced classification, long-tail classifica-tion, and domain generalization. For the first two, we follow the same protocols as LPL [Li et al., 2022], using CIFAR-10 and CIFAR-100 as benchmarks. 
+
+Balanced classification. We train Wide-ResNet-28-10 [Zagoruyko and Ko-modakis, 2016] and ResNet-110 [He et al., 2016] on CIFAR-10 and CIFAR-100 with standard data augmentation. We perturb at the output of stage 3 in ResNet-110 and the corresponding layer in WRN-28-10. 
+
+Long-tail classification. We use CIFAR-10-LT and CIFAR-100-LT [Cui et al., 2019] with imbalance ratios of 100:1 and 10:1. The backbone is ResNet-32. 
+
+Domain generalization. We use PACS, VLCS, OfficeHome, and TerraIncog-nita from the DomainBed benchmark [Gulrajani and Lopez-Paz, 2021], following the leave-one-domain-out protocol. The backbone is ResNet-50 pretrained on ImageNet. In this scenario, all classes receive positive augmentation to increase representation diversity across domains. 
+
+Implementation details. We use SGD with momentum 0.9, weight decay 
+
+5 × 10 −4, and batch size 128. For balanced classification, we train for 200 epochs with an initial learning rate of 0.1 decayed at epochs 100 and 150. The perturbation parameters ϵ, ∆ϵ, τ , and β are selected via validation. PGD uses 
+
+T = 3 steps with step size κ = 2 ϵ/T . For the low-rank variant, we set k = dl/4.
+
+## 4.2 Balanced Classification 
+
+Table 1 presents results on CIFAR-10 and CIFAR-100. LPA outperforms all baselines including LPL. On CIFAR-100 with ResNet-110, LPA (mean + var-ied bound) achieves 21.92% error, a 0.73% improvement over LPL. The low-rank variant achieves comparable performance with reduced computational cost. Compared to Dropout and Manifold Mixup, which also perturb intermediate activations, LPA’s adaptive class-level perturbation provides significantly better results, confirming the advantage of learned perturbation over random or fixed strategies. 10 Table 1: Top-1 error rates (%) on CIFAR-10 and CIFAR-100 with balanced setting. Method CIFAR-10 CIFAR-100 WRN-28-10 ResNet-110 WRN-28-10 ResNet-110 CE 3.89 5.91 18.85 24.56 Label Smoothing 3.82 5.87 18.40 24.12 Mixup 3.56 5.48 17.82 23.55 ISDA 3.44 5.30 17.56 23.18 LPL (mean + varied) 3.28 5.12 17.08 22.65 Dropout 3.52 5.65 18.12 23.85 DropBlock 3.48 5.58 17.95 23.62 Manifold Mixup 3.38 5.35 17.65 23.28 LPA (mean + fixed) 3.18 4.95 16.72 22.15 LPA (mean + varied) 3.06 4.82 16.48 21.92     
+
+> LPA-lowrank (mean + varied) 3.09 4.86 16.55 22.01
+
+Table 2: Domain generalization accuracy (%) on DomainBed benchmarks with ResNet-50. Average over three random seeds. Method PACS VLCS OfficeHome TerraInc ERM 85.5 77.3 66.5 46.2 DANN 84.4 76.6 65.2 44.8 CORAL 86.0 77.8 66.8 46.5 Mixup 86.1 77.5 67.2 46.8 Manifold Mixup 86.5 77.9 67.5 47.1 RSC 85.4 77.2 65.8 45.5 SWAD 87.2 78.5 68.8 48.2 LPA 87.8 79.1 69.5 49.0 
+
+## 4.3 Long-tail Classification 
+
+Figure 2 shows results on CIFAR-10-LT and CIFAR-100-LT with imbalance ratio 100. LPA consistently outperforms all baselines. On CIFAR-100-LT, LPA achieves 34.2% overall accuracy, surpassing LPL by 5.4% and LPG by 2.2%. The improvement is largest for tail classes, consistent with Conjecture 1: expanding tail-class activations provides effective positive augmentation in the representation space. 
+
+## 4.4 Domain Generalization 
+
+Table 2 presents domain generalization results. LPA outperforms all baselines on all four benchmarks, including SWAD which is specifically designed for domain generalization. This validates the advantage of activation perturbation for simu-11 0 10 20 30 40 50 
+
+Accuracy (%) 
+
+> CE
+> LA
+> ISDA
+> LPL
+> Dropout
+> M-Mixup
+> LPA(fix)
+> LPA(var)
+> 39.5
+> 12.6
+> 42.0
+> 17.4
+> 43.5
+> 19.4
+> 45.2
+> 22.1
+> 40.8
+> 15.5
+> 44.5
+> 20.8
+> 46.8
+> 25.2
+> 48.5
+> 28.1
+
+(a) CIFAR-10-LT (Ratio 100)     
+
+> All
+> Tail
+> 010 20 30 40
+
+Accuracy (%) 
+
+> CE
+> LA
+> ISDA
+> LPL
+> Dropout
+> M-Mixup
+> LPA(fix)
+> LPA(var)
+> 24.3
+> 6.1
+> 26.5
+> 9.7
+> 28.8
+> 13.2
+> 28.8
+> 13.2
+> 25.2
+> 8.2
+> 27.5
+> 12.5
+> 31.5
+> 17.5
+> 34.2
+> 22.8
+
+(b) CIFAR-100-LT (Ratio 100) 
+
+> All
+> Tail
+
+Figure 2: Long-tail classification accuracy on CIFAR-10-LT and CIFAR-100-LT with imbalance ratio 100. LPA achieves the best tail-class accuracy by adaptively expanding tail-class representations. ISDA LPL Dropout M-Mixup 
+
+> 15.5
+> 16.0
+> 16.5
+> 17.0
+> 17.5
+> 18.0
+> 18.5
+> 19.0
+> Error Rate (%)
+> -0.74
+> -1.03
+> -0.67
+> -0.47
+
+(a) Combination on CIFAR-100    
+
+> Base
+> Base + LPA
+> CE LPL LPA LPL+LPA
+> 0
+> 10
+> 20
+> 30
+> 40
+> Accuracy (%)
+
+(b) Complementarity on CIFAR-100-LT 
+
+> All
+> Tail
+
+Figure 3: (a) Combination of LPA with existing methods on CIFAR-100 (WRN-28-10). (b) Complementarity analysis on CIFAR-100-LT (ratio 100): LPA and LPL provide additive improvements when combined. lating domain shifts: by expanding class representations at intermediate layers, LPA effectively augments the feature space to cover unseen domain variations. Notably, LPA outperforms Manifold Mixup, which also operates on hidden activations but uses random interpolation rather than learned perturbation. 
+
+## 4.5 Combination with Existing Methods 
+
+Figure 3(a) shows that LPA can be combined with existing methods as a plug-in module. ISDA+LPA, LPL+LPA, and Dropout+LPA all outperform their respective base methods. LPL+LPA, which applies perturbation at both the logit and activation layers, achieves the best result (16.05% error on CIFAR-100), confirming that logit and activation perturbations are complementary. Figure 3(b) shows the complementarity on CIFAR-100-LT. LPA alone out-performs LPL alone, and combining them yields further improvement, as they operate at different levels of the representation hierarchy. 12 Stage 1 Stage 2 Stage 3 Logit 
+
+> (LPL)
+> 21
+> 22
+> 23
+> 24
+> 25
+> Error Rate (%)
+> (a) Perturbation at Different Layers
+> CE Baseline
+> Single
+> (Stage 3)
+> 2-Layer
+> (S2+S3)
+> 3-Layer
+> (S1+S2+S3)
+> 21.4
+> 21.6
+> 21.8
+> 22.0
+> 22.2
+> Error Rate (%)
+> (b) Single vs. Multi-Layer
+> Error Rate
+> Relative Cost
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> Relative Training Cost
+
+Figure 4: (a) Classification error when perturbing at different layers of ResNet-110 on CIFAR-100. Stage 3 output yields the best result. Logit-layer perturbation (stage 4) recovers LPL. (b) Single-layer vs. multi-layer perturbation. Single-layer perturbation at the optimal layer provides the best trade-off between performance and cost. Table 3: Top-1 error rates (%) on CIFAR-100 with different architectures. Method ResNet-32 SE-ResNet-110 WRN-16-8 ISDA 26.45 22.18 17.85 LPL (mean + varied) 25.82 21.65 17.32 LPA (mean + varied) 24.85 21.02 16.48 
+
+## 4.6 Analysis 
+
+4.6.1 Layer Selection 
+
+Figure 4(a) shows the effect of perturbing at different layers of ResNet-110 on CIFAR-100. Perturbation at the stage 3 output achieves the lowest error, confirming Conjecture 3: the optimal layer is mid-to-deep, where the represen-tation is sufficiently semantic yet has enough remaining network depth for the perturbation to propagate. Logit-layer perturbation (stage 4) recovers LPL’s performance, while stage 1 perturbation is less effective due to information overwriting in subsequent layers. Figure 4(b) compares single-layer and multi-layer perturbation. Multi-layer perturbation provides marginal improvement over single-layer at the best layer, with significantly increased training cost (approximately 2.5 ×). Single-layer perturbation at the optimal layer offers the best trade-off. 
+
+4.6.2 Performance across Different Architectures 
+
+Table 3 compares LPA with ISDA and LPL across three architectures. LPA consistently outperforms both, with the largest improvement on ResNet-32 where the representation space is most constrained. 13 (a) Baseline (CE) (b) LPL (c) LPA Figure 5: t-SNE visualization of penultimate-layer features on CIFAR-100-LT. Circles denote head classes and triangles denote tail classes. LPA produces the most compact intra-class clusters and largest inter-class margins for tail classes. (a) CE (b) LPA 
+
+Figure 6: Grad-CAM visualizations on CIFAR-100. Compared to CE, LPA attends to broader and more discriminative regions, suggesting that activation perturbation encourages the network to rely on a wider set of features. 
+
+4.6.3 Feature Space Visualization 
+
+Figure 5 shows t-SNE visualizations of penultimate-layer features. LPA produces more compact intra-class clusters and larger inter-class margins than both CE and LPL, particularly for tail classes. This confirms that activation perturbation directly shapes the representation space in ways that logit perturbation cannot. 
+
+4.6.4 Grad-CAM Visualization 
+
+Figure 6 shows Grad-CAM visualizations. LPA-trained models attend to broader and more semantically relevant regions compared to CE-trained models. This is consistent with the interpretation that expansive activation perturbation for positive-augmentation classes effectively diversifies the features the model relies on. 14 0.00 0.25 0.50 0.75       
+
+> Base Perturbation
+> 31
+> 32
+> 33
+> 34
+> 35
+> Error Rate (%)
+> (a) Sensitivity to
+> 0.4 0.6 0.8 1.0
+> Layer Scaling
+> 31.0
+> 31.5
+> 32.0
+> Error Rate (%)
+> (b) Sensitivity to
+> 0.5 1.0
+> Low-Rank Ratio k/dl
+> 31
+> 32
+> 33
+> Error Rate (%)
+> (c) Sensitivity to k/dl
+
+Figure 7: Sensitivity analysis on CIFAR-100-LT. (a) Base perturbation ϵ;(b) Layer scaling factor β; (c) Low-rank dimension k/d l. LPA is robust across a wide range of settings. 
+
+4.6.5 Hyperparameter Sensitivity 
+
+Figure 7 analyzes sensitivity to three hyperparameters. Performance is stable for ϵ ∈ [0 .05 , 0.3] , with degradation for ϵ > 0.5 due to over-perturbation. The layer scaling factor β works well in [0 .5, 0.8] , with β = 0 .7 as the default. The low-rank ratio k/d l shows that retaining 25% or more of the gradient directions preserves most of LPA’s benefit. 
+
+4.6.6 Training Overhead 
+
+LPA requires additional forward passes through layers l+1 to L for PGD opti-mization. On CIFAR-100 with ResNet-110, perturbing at stage 3 (which has 2 remaining stages) increases training time by approximately 18% with T = 3 
+
+PGD steps. The low-rank variant reduces this to approximately 12%. For com-parison, SAM requires a full additional forward-backward pass (approximately 30% overhead). LPA’s overhead scales with the number of layers after the pertur-bation point, making deep-layer perturbation more efficient than shallow-layer perturbation. 
+
+# 5 Discussion 
+
+The perturbation perspective reveals a complete hierarchy along the forward pass: input perturbation, activation perturbation (LPA), logit perturbation (LPL), and label perturbation. Each level provides different granularity and operates in a different-dimensional space. Input perturbation modifies raw features, activation perturbation controls representation structure in high-dimensional spaces, logit perturbation adjusts class-level relationships in RC , and label perturbation modifies the supervision signal. Future work could investigate optimal strategies for combining perturbations at multiple levels simultaneously. A limitation of LPA is that class-level perturbation may not be sufficiently fine-grained. Sample-level adaptive perturbation, where each sample receives a personalized perturbation, is a promising direction but increases computational 15 cost. Additionally, the layer selection strategy, while effective, could be further automated through gradient-based architecture search methods. 
+
+# 6 Conclusion 
+
+We have presented a unified framework for hidden activation perturbation, re-vealing that Dropout, Manifold Mixup, adversarial feature perturbation, and related methods all impose class-agnostic activation perturbations. Based on three conjectures linking activation perturbation to positive/negative augmenta-tion and layer-dependent effects, we proposed LPA, which adaptively perturbs hidden-layer activations at the class level. Theoretically, we connected activation perturbation to flat minima, derived perturbation amplification bounds across layers, and showed that LPA generalizes LPL. Experiments across balanced clas-sification, long-tail classification, and domain generalization demonstrated that LPA consistently improves upon existing methods and provides complementary benefits to logit perturbation. 
+
+# Broader Impact 
+
+This work extends the perturbation framework from logits to hidden activations, providing a more complete understanding of how perturbation at different network levels affects learning. LPA can improve model generalization in domain shift scenarios, which is important for deploying models in diverse real-world environments. We do not foresee significant negative societal impacts from this work. 
+
+# References 
+
+Yin Cui, Menglin Jia, Tsung-Yi Lin, Yang Song, and Serge Belongie. Class-balanced loss based on effective number of samples. In CVPR , pages 9268–9277, 2019. Pierre Foret, Ariel Kleiner, Hossein Mobahi, and Behnam Neyshabur. Sharpness-aware minimization for efficiently improving generalization. In ICLR , 2021. Xavier Gastaldi. Shake-shake regularization. In ICLR Workshop , 2017. Golnaz Ghiasi, Tsung-Yi Lin, and Quoc V Le. Dropblock: A regularization method for convolutional networks. NeurIPS , 31, 2018. Ishaan Gulrajani and David Lopez-Paz. In search of lost domain generalization. In ICLR , 2021. Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In CVPR , pages 770–778, 2016. 16 Gao Huang, Yu Sun, Zhuang Liu, Daniel Sedra, and Kilian Q Weinberger. Deep networks with stochastic depth. In ECCV , pages 646–661, 2016. Mengyang Li, Fengguang Su, Ou Wu, and Ji Zhang. Logit perturbation. In 
+
+AAAI , volume 36, pages 1359–1366, 2022. Mengyang Li, Fengguang Su, Ou Wu, and Ji Zhang. Class-level logit perturbation. 
+
+IEEE transactions on neural networks and learning systems , 35(10):13926– 13940, 2023. Mengyang Li, Xiaoling Zhou, and Ou Wu. Delving into the training dynamics for image classification. IEEE Transactions on Image Processing , 34:6783–6798, 2025. Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards deep learning models resistant to adversarial attacks. In ICLR , 2018. Aditya Krishna Menon, Sadeep Jayasumana, Ankit Singh Rawat, Himanshu Jain, Veena Kumar, and Sanjiv Ravi. Long-tail learning via logit adjustment. In ICLR , 2021. Shiv Shankar, Vihari Piratla, Soumen Chakrabarti, Siddhartha Chaudhuri, Preethi Jyothi, and Sunita Sarawagi. Generalizing across domains via cross-gradient training. In ICLR , 2018. Nitish Srivastava, Geoffrey Hinton, Alex Krizhevsky, Ilya Sutskever, and Ruslan Salakhutdinov. Dropout: a simple way to prevent neural networks from overfitting. Journal of Machine Learning Research , 15(1):1929–1958, 2014. Christian Szegedy, Vincent Vanhoucke, Sergey Ioffe, Jon Shlens, and Zbigniew Wojna. Rethinking the inception architecture for computer vision. In CVPR ,pages 2818–2826, 2016. Jonathan Tompson, Ross Goroshin, Arjun Jain, Yann LeCun, and Christoph Bregler. Efficient object localization using convolutional networks. In CVPR ,pages 648–656, 2015. Vikas Verma, Alex Lamb, Christopher Beckham, Amir Najafi, Ioannis Mitliagkas, David Lopez-Paz, and Yoshua Bengio. Manifold mixup: Better representations by interpolating hidden states. In ICML , pages 6438–6447, 2019. Riccardo Volpi, Hongseok Namkoong, Ozan Sener, John Duchi, Vittorio Murino, and Silvio Savarese. Generalizing to unseen domains via adversarial data augmentation. NeurIPS , 31, 2018. Yulin Wang, Xuran Pan, Shiji Song, Hong Zhang, Gao Huang, and Cheng Wu. Implicit semantic data augmentation for deep networks. NeurIPS , 32, 2019. 17 Lijun Wu, Juntao Li, Yue Wang, Qi Meng, Tao Qin, Wei Chen, Min Zhang, Tie-Yan Liu, et al. R-drop: Regularized dropout for neural networks. NeurIPS ,34:10890–10905, 2021. Yoshihiro Yamada, Masakazu Iwamura, and Koichi Kise. Shakedrop regulariza-tion. In ICLR , 2018. Sergey Zagoruyko and Nikos Komodakis. Wide residual networks. In BMVC ,2016. Hongyi Zhang, Moustapha Cisse, Yann N Dauphin, and David Lopez-Paz. mixup: Beyond empirical risk minimization. In ICLR , 2018. 18
