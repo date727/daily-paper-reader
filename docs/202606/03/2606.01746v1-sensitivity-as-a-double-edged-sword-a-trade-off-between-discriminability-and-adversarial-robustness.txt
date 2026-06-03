@@ -1,0 +1,638 @@
+Title: Sensitivity as a Double-Edged Sword: A Trade-off Between Discriminability and Adversarial Robustness
+
+URL Source: https://arxiv.org/pdf/2606.01746v1
+
+Published Time: Tue, 02 Jun 2026 02:08:23 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Sensitivity as a Double-Edged Sword: A Trade-off Between Discriminability and Adversarial Robustness 
+
+# Kai Wang 
+
+kkaiwwana@gmail.com 
+
+# Abstract 
+
+Modern neural networks are highly susceptible to adversar-ial perturbations. In this work, we identify that part of this vulnerability stems from the sensitivity of the widely used fully connected (FC) classifiers to such perturbations. In contrast, simple ℓ2 distance-based classifiers exhibit signif-icantly greater robustness. We provide thorough theoret-ical and empirical analysis showing that while FC clas-sifiers’ high sensitivity makes them discriminative, it also makes them vulnerable. Conversely, ℓ2-classifiers’ insensi-tivity grants robustness but limits performance. Motivated by this trade-off, we propose a novel ℓ2-reclassifier based on a Hybrid Prototype Mixing (HPM) framework. This method retains the discriminative power of FC classifiers while leveraging the robustness of ℓ2 distance. It yields ℓ2-distance-based predictions by fusing two prototype types: (1) stable, dataset-level prototypes updated via EMA, and (2) dynamic, batch-level prototypes generated from the FC classifier’s predictions using a Straight-Through Estimator (STE). However, this dynamic, STE-based architecture in-troduces significant challenges for evaluation, such as gra-dient obfuscation and forward discontinuity. To address this, we propose a new, rigorous evaluation protocol, the Mixed Surrogate Attack (MSA), which uses multiple surro-gates along with powerful AutoAttack to ensure a fair and robust assessment. Extensive experiments demonstrate that our lightweight, plug-and-play module, with minimal fine-tuning, effectively enhances the adversarial robustness of various existing SOTA adversarially trained models. 
+
+# 1. Introduction 
+
+Modern neural networks are highly vulnerable to adversar-ial perturbations [33]. Numerous studies have investigated the causes of this phenomenon, such as the local linearity of neural networks [22], reliance on non-robust features [27], and limited out-of-distribution generalizability [51]. In this paper, we offer a new perspective on this vulnerability, fo-cusing on the classifier component. We first observe that a standard FC classifier exhibits significantly weaker adver-
+
+Figure 1. Accuracy on CIFAR-10 [32] validation set under APGD attack from AutoAttack [14]). We adopt ResNet-34 [24] to CIFAR-10 and replace its classifier with a simple ℓ2-classifier. 
+
+sarial robustness compared to a simple ℓ2-distance-based classifier (see Fig. 1). Under a minimal ℓ∞ perturbation, a model with an FC classifier’s accuracy can collapse, while an ℓ2-classifier maintains high accuracy, even when both models are trained normally without adversarial training. This highlights the inherent robustness of the ℓ2-classifier. To understand this discrepancy, we analyze both clas-sifiers from a unified perspective, focusing on their sensi-tivity to feature variations. Our theoretical and empirical analysis ( §3.3-3.4) reveals that FC classifiers are almost al-ways more sensitive to feature variations than ℓ2-classifiers, especially in high-dimensional spaces. This sensitivity is a double-edged sword: it allows FC classifiers to capture subtle, discriminative differences in clean data, but it also makes them highly susceptible to adversarial noise. Con-versely, the ℓ2-classifier’s insensitivity reduces the impact of adversarial noise but hinders its ability to capture mean-ingful differences between classes ( §3.5). Motivated by this, we aim to design a solution that lever-
+
+> arXiv:2606.01746v1 [cs.CV] 1 Jun 2026
+
+ages the robustness of ℓ2-classifiers while retaining the dis-criminative power of FC classifiers. To this end, we pro-pose a Hybrid Prototype Mixing (HPM) framework ( §3.6). This ℓ2-reclassifier generates adaptive prototypes by fusing stable, dataset-level centroids (updated via EMA) with dy-namic, batch-level centroids. Crucially, these dynamic cen-troids are generated based on the predictions of the exist-ing FC classifier, using a Straight-Through Estimator (STE) to ensure end-to-end trainability. The final classification is then performed using the robust ℓ2-distance to these fused hybrid prototypes. However, this dynamic, input-dependent architecture, which relies on the discrete argmax operation (via STE), poses a significant challenge to standard adversarial evalu-ation. It creates issues of gradient obfuscation and forward discontinuity, where small input perturbations can cause abrupt changes in the model’s internal state, rendering stan-dard gradient-based attacks ineffective ( §3.7). A naive eval-uation would thus report a false sense of security. To fairly assess our defense, we introduce as a second key contribution: a new, rigorous evaluation protocol called the Mixed Surrogate Attack (MSA) ( §3.7). This protocol is specifically designed to evaluate dynamic, discontinuous defenses by leveraging an ensemble of white-box surrogate models (including the base FC classifier itself) to find worst-case adversarial examples. We demonstrate the effectiveness of our HPM reclas-sifier through extensive experiments ( §4) on CIFAR-10, CIFAR-100, and ImageNet. We show that our module, when applied as a lightweight, plug-and-play component to existing SOTA adversarially trained models, can further enhance their robustness with minimal, classifier-only fine-tuning. In short, our main contributions are: • We explore the fundamental trade-off between sensitiv-ity, discriminative power, and adversarial robustness by comparing FC and ℓ2-classifiers. • We propose a novel ℓ2-reclassifier, the Hybrid Prototype Mixing (HPM) framework, that leverages FC predictions to create robust, dynamic ℓ2-decision boundaries. • We identify the evaluation challenges (gradient obfusca-tion, discontinuity) inherent in such dynamic defenses and propose a rigorous Mixed Surrogate Attack (MSA) protocol to address them. • We demonstrate through extensive experiments that our method effectively improves the robustness of existing SOTA models via minimal fine-tuning. 
+
+# 2. Related Work 
+
+Adversarial Attack and Defense. Adversarial attack and defense is a critical area, in enhancing the robustness and security of AI systems, which are vulnerable [10, 38, 50] to adversarial samples which are subtly altered inputs [22, 50] (the strength of perturbations are usually constrained by ℓp
+
+norm, e.g. ℓ2, ℓ ∞) to deceive models. Research in this field primarily considers two settings: black-box and white-box. In black-box attacks [12, 43], attackers have limited access, typically only interacting with the model’s outputs, while white-box attacks allow full access to model inter-nals, enabling more optimized attack strategies. Key algo-rithms have set milestones in this field. For example, the fast gradient sign method (FGSM) [22] and projected gra-dient descent (PGD) [33] are prominent white-box attack methods, while adversarial training [6, 22, 33] remains one of the most effective defense mechanisms, hardening mod-els by exposing them to adversarial examples during train-ing. In this work, we will expose models armored by our 
+
+ℓ2-reclassifier to various kinds of attack algorithms, using standardized benchmark RobustBench [16]. 
+
+Distance-based Classifiers. Early distance-based (DB) classifiers, such as K-Nearest Neighbors (KNN) [13], Min-imum Distance Classifier (MDC) [25], and Nearest Class Mean (NCM) [56], date back to the last century. Among them, representing each class by its centroid offers strong interpretability [53] and efficiency. However, traditional DB methods struggle with high-dimensional [1, 9], large-scale data. With the advent of deep networks like ResNet [24], which map inputs into lower-dimensional space, DB clas-sifiers have regained attention. This revival has led to methods such as Matching Networks [52] and Prototypi-cal Networks [49], particularly in few-shot and zero-shot learning [46, 54]. Subsequent improvements focus on op-timizing prototype representation and incorporating learn-able components [20, 21, 28, 37]. These techniques have also been extended to domain adaptation [8, 41] and contin-ual learning [34, 44]. Nevertheless, DB classifiers generally underperform FC classifiers when scaled to larger datasets and class counts. An exception is Deep Nearest Centroids (DNC) [53], which leverages clustering algorithm for sub-centroids discovery and achieves performance comparable to FC classifiers on ImageNet [18]. However, its accuracy only dropped slightly from 77.80% to 77.31%, while the FC baseline achieves 77.52%, when reduced to a single cen-troid per class (in this case, it has same parameters counts to FC classifier). This suggests that the clustering mech-anism is not the key factor behind DNC’s success. While the use of a memory bank helps generate more informa-tive centroids, we argue that the critical factor is the use of cosine similarity over normalized features 1. This design mimics FC classifiers and leads to comparable results. In contrast, DeepNCM [23], a similar work that leverages ℓ2-classifier, experiences severe performance decay on larger CIFAR-100 [32] dataset. 
+
+Deep Metric Learning. Despite what its name might sug-  
+
+> 1Their implementation applies layer normalization [5] and ℓ2normal-ization to both features and class centroids.
+
+gest, most work in deep metric learning (DML) [30] does not aim to explicitly design an interpretable, task-specific distance function [40]. Instead, the primary focus has been on learning a better embedding space [47], where intra-class samples are pulled closer and inter-class samples are pushed farther apart. As such, although some recent studies [35] have explored the use of DML for adversarial defense, their emphasis lies in leveraging triplet-based losses [26] to ob-tain more robust feature representations, rather than altering the form of the decision function [57] itself, which remains structurally similar to a FC layer operating under cosine dis-tance. Instead, to the best of our knowledge, our work is the first to identify that simply changing the decision rule can lead to substantial differences in adversarial robustness. 
+
+# 3. Methodology 
+
+3.1. Notations 
+
+Let x ∈ Rh×w×c and X ∈ Rb×h×w×c denote a single im-age and a batch of images, respectively, where b is the batch size, c the number of channels, and h, w the image height and width. The true and predicted labels are denoted by 
+
+y, ˆy ∈ { 0, . . . , k −1} (or {0, . . . , k −1}b for batches), where 
+
+k is the number of classes. We denote the backbone (fea-ture extractor) as ϕ, which maps x or X to a feature vector 
+
+z ∈ Rd or Z ∈ Rb×d, where d is the feature dimension. All vectors are assumed to be row vectors by default. 
+
+3.2. Unified Perspective of Classifiers 
+
+The fundamental difference between a DB classifier and a FC classifier lies in their respective decision and optimiza-tion forms. We first define the DB classifier Fd and the FC classifier Fc, both of which map feature representations to output logits. For simplicity and considering the effective-ness of multi-centroids strategy, we only discuss DB classi-fiers with a single centroid per class. Let W d ∈ Rk×d and 
+
+W c ∈ Rd×k denote the weight matrices of the DB and FC classifiers (excluding bias), respectively. The FC classifier predicts labels via: 
+
+ˆyc = argmax ( z · W c) = argmax [ ⟨z, W c
+
+> :,i
+
+⟩]k−1 
+
+> i=0
+
+(1) where W c 
+
+> :,i
+
+denotes the i-th column of W c. In contrast, the DB classifier is defined as: 
+
+ˆyd = argmax − d(z, W d) = argmax − [d(z, W di )] k−1
+
+> i=0
+
+(2) where d(·, ·) is a distance metric and W di is the centroid of class i. Interestingly, in recent SOTA work [53], the DB classifier uses cosine similarity between normalized fea-tures and centroids. Under this setting, the DB classifier be-comes equivalent in form to the FC classifier, and therefore yields comparable performance, whereas the solution with 
+
+ℓ2-classifier [23] fails. This implies that the two classifiers can be made nearly equivalent through decision form de-sign, yet may differ substantially when their decision mech-anisms diverge. Regarding optimization, modern DB classi-fiers [23, 34, 53] typically learn the feature extractor jointly with classification, rather than fitting centroids on fixed fea-tures as in early works [36]. In this setting, the centroids are not explicitly updated via gradient descent, yet implic-itly shaped by supervised learning through the features. So what truly differentiates the two? We identify a key insight: compared to FC classifiers, those using ℓ2-distance tend to be less sensitive to variations in feature representations. As we will show, this insensitivity is a double-edged sword, providing improved robustness but reduced discriminative capability. 
+
+3.3. Sensitivity to Feature Variations 
+
+We provide a simple insight: DB classifiers, specifically those using ℓ2-distance, tend to be less sensitive to feature perturbations than FC classifiers based on inner products. For clarity, we assume that the variation in feature repre-sentation is ϵ ∈ Rd, and both the feature vector z and the perturbation ϵ have the same ℓ2 norm under both classifiers, as they share the same feature extractor. Let wc and wd
+
+denote the reference vectors for the FC and DB classifiers (i.e., W c 
+
+> :,i
+
+and W di ), respectively. The relative sensitivity of the DB classifier, denoted as Sc ∈ R≥0, is defined as: 
+
+Sc = (zc + ϵc) · wc − zc · wc
+
+zc · wc
+
+= ∥ϵc∥ · | cos( γ)|∥zc∥ · | cos( θc)| (3) where θc is the angle of zc and wc, and γ is the angle of ϵc
+
+and wc. Similarly, the relative sensitivity for ℓ2-classifier, denoted as Sd ∈ R≥0, is: 
+
+Sd = ∥(zd + ϵd) − wd∥ − ∥ zd − wd∥∥zd − wd∥ (4) We aim to explore the relationship between Sc and the supremum of Sd. First, we can easily derive the supre-mum of Sd via triangle inequity and cosine formula, which is given as follows: 
+
+sup Sd = ∥ϵd∥
+
+p∥zd∥2 + ∥wd∥2 − 2∥zd∥∥ wd∥cos( θd) (5) where θd is the angle of zd and wd. Then, we can derive an equivalent form and further give a sufficient condition for 
+
+Sc being greater or equal to sup Sd as follows: 
+
+Sc ≥ sup Sd ⇐⇒ (6) 
+
+|cos( θc)| ≤| cos( γ)| · 
+
+s ∥wd∥∥zc∥
+
+2
+
+− 2 · cos( θd) ∥wd∥∥zc∥ + 1 
+
+⇐= | cos( θc)| ≤ | cos( γ)| · | sin( θd)| (7) Thus, we can derive the following inference, which indi-cates under what sufficient conditions the decision results based on inner products are more sensitive: 
+
+|cos( θc)||sin( θd)| ≤ | cos( γ)| =⇒ Sc ≥ sup Sd (8) 
+
+3.4. Distributional Analysis 
+
+Next, we are interested in the distribution of random vari-able |cos( θc)|/|sin( θd)|. From this, we can infer the probabil-ity that Eq.(8)’s condition holds. To proceed, we denote 
+
+H = cos( θc) and T = sin( θd), and their respective proba-bility density functions (PDFs) are denoted as pH and pT .Next, we aim to derive the cumulative distribution function (CDF) FX (x) of X = |H/T |, with the process as follows: 
+
+FX (x) = P( X ≤ x) = P( | HT | ≤ x) = P( |H| ≤ T · x)=
+
+Z 10
+
+pT (τ, d ) · P( |H| ≤ τ · x) d τ
+
+=
+
+Z 10
+
+pT (τ, d )
+
+Z τ ·x 
+
+> −τ·x
+
+pH(η, d )d ηdτ (9) 
+
+Isotropic Distribution. If we assume that z is uniformly distributed in direction over the space, or alternatively adopt a more conveniently defined concept, we assume that z
+
+follows an isotropic distribution, e.g., multivariate Gaus-sian distribution with a shared variance in each component. These two assumptions are equivalent when the norm of z is fixed [42]; otherwise, isotropy is a sufficient condition for directional uniformity. Then, basing on angle distribution in random packing on sphere [11], pH and pT can be easily derived as follows (the proof can be found in the supple-mentary material): 
+
+
+
+pH(η, d ) = Γ( d/2)Γ( d−12 )√π · (1 − η2) d−12 −1
+
+pT (τ, d ) = 2Γ( d/2)Γ( d−12 )√π · τ d−2 
+
+> (1 −τ2)1/2
+
+(10) Then, the probability that Eq.(8) holds can be derived by combining Eq.(9) and Eq.(10), as follows (also see Fig. 2): 
+
+P( |cos( θc)||sin( θd)| ≤ | cos( γ)|) = FX (|cos( γ)|) = (11) 
+
+2 · Γ2( n 
+
+> 2
+
+)
+
+π · Γ2( n−12 )
+
+Z 10
+
+xd−2
+
+√1 − x2
+
+Z x·cos( γ)0
+
+(1 − y2) n−32 dxdy
+
+Empirical Distribution. Although the above results indeed characterize that, as the feature dimensionality increases, the FC classifier is almost always more sensitive than the ℓ2-classifier, in practical scenarios, the input feature vectors are rarely randomly distributed over the entire space. Instead, they are typically correlated with the reference vectors of each class in the classifier. However, we cannot analytically 
+
+Figure 2. The CDFs of X with given dimensions under isotropic assumption. Notably, γ is the angle between feature variation and reference vector in FC classifier, which tends to be near zero (| cos( γ)| would be close to 1.0) to results in greater perturbations under adversarial attack. 
+
+derive the distribution of the angles between them. There-fore, we aim to model the real features and classifier param-eters from large-scale datasets and, based on this modeling, obtain an analytically tractable empirical probability distri-bution. Specifically, we extract features from the dataset using a trained network and statistically analyze the angular distributions between these features and the reference vec-tors in the classification head. In particular, considering the distinct relationships between a feature vector and its cor-responding class versus non-corresponding class reference vectors, we model these angles separately as positive and negative samples. Formally, for a feature vector z of class 
+
+K and reference vectors wi=Kd and wi̸=Kd , we respectively compute the distributions of their angles and fit them using truncated Gaussian distributions. The resulting PDFs are then combined according to the sample sizes to obtain the final empirical distribution. Since we are dealing with an-gular distributions, we truncate the Gaussian range to [0 , π ]
+
+and estimate the empirical parameters μ+ 
+
+> c
+
+, σ+ 
+
+> c
+
+and μ− 
+
+> c
+
+, σ−
+
+> c
+
+accordingly. Similarly, we obtain the empirical parameters 
+
+μ+ 
+
+> d
+
+, σ+ 
+
+> d
+
+and μ− 
+
+> d
+
+, σ− 
+
+> d
+
+for the trained distance-based classifier. Then the PDF of θd and θc are given as follows: 
+
+
+
+pθc (x) = αc · t(x, μ + 
+
+> c
+
+, σ + 
+
+> c
+
+) + (1 − αc) · t(x, μ − 
+
+> c
+
+, σ − 
+
+> c
+
+)
+
+pθd (x) = αd · t(x, μ + 
+
+> d
+
+, σ + 
+
+> d
+
+) + (1 − αd) · t(x, μ − 
+
+> d
+
+, σ − 
+
+> d
+
+)
+
+t(x, μ, σ ) = 1 
+
+> σ
+
+· φ((x−μ)/σ)Φ( (π−μ)/σ)+Φ( μ/σ)−1
+
+(12) where α is the ratio of number of samples with correspond-ing category, φ(·) is the PDF of standard normal distribution and Φ( ·) is its CDF. By applying variable substitution, we can easily derive pH and pT , and then empirical probability can be derived as follows: 
+
+P( |cos( θc)||sin( θd)| ≤ | cos( γ)|) = FX (|cos( γ)|) = (13) 
+
+Z π
+
+> 2
+> 0
+
+(pθd (x) + pθd (π − x)) 
+
+Z sin( x)·
+
+> cos( γ)sin( x)·−cos( γ)
+
+pθc (cos −1(y)) 
+
+p1 − y2 dxdy
+
+We begin by validating the rationality of our assump-tion regarding the angular distribution of positive and neg-ative samples on the ImageNet validation set. Specifi-cally, we observe that the angles between feature vectors and their corresponding class prototypes (positive samples), and those with non-corresponding class prototypes (nega-tive samples), form two distinct modes. Using ResNet-50 as an example, the positive sample angles exhibit a mean of μ+ 
+
+> c
+
+= 66 .81 ◦ and a standard deviation of σ+ 
+
+> c
+
+= 5 .56 ◦,while the negative sample angles are highly concentrated around 90 ◦ (with μ− 
+
+> c
+
+= 90 .01 ◦ and σ− 
+
+> c
+
+= 3 .02 ◦). Sim-ilarly, we train a ResNet-50 equipped with a ℓ2-classifier on ImageNet. The resulting angular statistics, denoted as 
+
+μ+ 
+
+> d
+
+and σ+ 
+
+> d
+
+for positives and μ− 
+
+> d
+
+and σ− 
+
+> d
+
+for negatives, are 
+
+74 .3◦ and 7.9◦, and 101 .3◦ and 4.3◦, respectively. By mod-eling the empirical distributions as in Eq.(12), and substi-tuting the observed statistics μ+ 
+
+> c
+
+, σ + 
+
+> c
+
+and μ− 
+
+> c
+
+, σ − 
+
+> c
+
+, we can derive an approximated CDF for the probability in Eq.(8). The corresponding results are illustrated in Fig.3, showcas-ing our method yields a plausible analytical model for such distribution compared with observed empirical distribution. These findings collectively suggest that, under both ideal-ized and empirical angular distributions, ℓ2-classifiers ex-hibits lower sensitivity to feature variations. This reduced sensitivity contributes to improved robustness; however, it also comes at a cost, as insensitivity to feature variations may hinder discriminability.     
+
+> Figure 3. The empirical distribution of θc,θdand the empirical and modeled CDF (from Eq. (13)) of random variable cos( θc)/sin( θd).
+
+3.5. Sensitivity: A Double-edge Sword 
+
+Through analysis and numerical computation, we can ob-serve that, especially in high-dimensional spaces, decision-making via FC methods is very likely to be more sen-sitive than using ℓ2 -distance. This trait is essentially a double-edged sword: in the case of adversarial attacks, ϵ in the above derivation can represent the maximum perturba-tion that an attacker can apply on the feature space (which can be bounded by the ℓ2 -norm by assumption), and the above conclusion suggests that ℓ2-classification strategies are less susceptible to perturbations, meaning such mod-els will have stronger adversarial robustness. However, if 
+
+ϵ is viewed as the natural feature differences between sam-ples in the dataset, it implies that ℓ2-classifier is less able to capture these differences, leading to weaker classifica-tion capabilities. This is consistent with the observations people have made over time, e.g., the performance of Deep-NCM that uses a regular ℓ2-classifier drops in more chal-lenging datasets, while its close counterpart DNC that lever-ages inner-product similarity achieves comparable results to FC classifier. In this case, we aim to acknowledge the weaknesses of vanilla ℓ2-classifier while leveraging their valuable aspects. Rather than leaving them to operate in isolation, we explicitly take advantage of the merits of FC classifiers. By combining estimated sample class centroids with dataset-level class centroids, we use fused prototypes to achieve refined classification outcomes. 
+
+3.6. Hybrid Prototype Re-Classification Strategy 
+
+As discussed in §3.5, the ℓ2-classifier’s insensitivity pro-vides robustness at the cost of discriminative precision, whereas the FC classifier exhibits the opposite trade-off. Our primary objective is to devise a learning framework that effectively integrates the strengths of both. Specifically, we aim to exploit the FC classifier’s fine-grained predictive ca-pability to generate dynamic prototypes, and then employ the ℓ2-classifier’s robust distance metric to reconstruct a more stable decision boundary. However, our preliminary experiments revealed a critical limitation in this idea: a model relying solely on dynamic batch prototypes (derived from FC logits) fails to achieve genuine robustness. The apparent defense effect is merely an artifact of the FC classifier’s argmax dependency. This dependence introduces unavoidable 2 gradient masking is-sues (will be elaborated in §3.7), rendering the FC model it-self a perfectly exploitable surrogate for adversarial attacks. To establish a defense with genuine robustness, we pro-pose a Hybrid Prototype Mixing (HPM) framework. This strategy eliminates exclusive reliance on the vulnerable FC predictions by introducing stable, dataset-level prototypes   
+
+> 2In fact, although we can theoretically replace the argmax with a fully differentiable low-temperature softmax, its impact on the gradient exploitability for adversarial attacks is equally fatal.
+
+as anchors. The HPM framework jointly optimizes the backbone ϕ, the FC classifier W c, and a prototype mixer 
+
+m(·, ·) parameterized by ϕm. It is constructed upon two distinct types of prototypes: 
+
+Dataset-Level Prototypes ( Cglobal ). We maintain a set of stable dataset-level prototypes Cglobal ∈ Rk×d as a persis-tent buffer. Since the feature distribution ϕ(X) shifts during training, computing dataset-wide centroids at each step is infeasible. Instead, we update Cglobal using an Exponential Moving Average (EMA), aligning with the fact that newer features better reflect the current model state. The update rule, applied during training, is: 
+
+Cglobal ← λ · C global + (1 − λ) · C gt batch (14) where λ is the momentum coefficient, and Cgt batch is the batch-level prototype computed using ground-truth labels 
+
+y, ensuring the stability and correctness of this anchor. 
+
+Dynamic Batch-Level Prototypes ( Cbatch ). We com-pute dynamic batch-level prototypes Cbatch ∈ Rk×d based on the predicted labels from the FC classifier. This pro-vides a fine-grained, adaptive signal. To ensure end-to-end trainability while using discrete argmax assignments, we use the Straight-Through Estimator (STE) based on the FC logits L = ZW c:
+
+
+
+Psoft = softmax( L)
+
+Phard = one-hot (argmax( L)) 
+
+Pste = Psoft + stop-grad (Phard − P soft )
+
+(15) From this, Cbatch can be simply obtained as follows: 
+
+Cbatch = (Pste )⊤Z
+
+hPb−1 
+
+> i=0
+
+(Pste )i,j 
+
+ik−1
+
+> j=0
+
++ ε
+
+(16) where Z = ϕ(X), and ε is a small constant for numerical stability, and the division is broadcasted. 
+
+Prototype Fusion and Final Prediction. Given the reliable but coarse Cglobal and the fine-grained but noisy Cbatch , we introduce a learnable prototype mixer m(·, ·) parameterized by ϕm = {Wm, b m}. We adopt a simple linear transforma-tion to fuse them into the final hybrid prototype Chybrid :
+
+Chybrid = m(Cglobal , Cbatch ) = [ Cglobal , Cbatch ]·Wm +bm (17) where Wm ∈ R2d×d and bm ∈ Rd are the learnable param-eters of the mixer. The model’s final output logits, Lhybrid ,are the negative ℓ2-distances from each feature Zi to this hybrid prototype: 
+
+(Lhybrid )ij = −∥ Zi − (Chybrid )j ∥2 (18) The entire architecture, comprising the backbone ϕ, the FC classifier W c, and the prototype mixer ϕm, can be trained in an end-to-end manner. The HPM framework is hy-pothesized to enhance robustness because the final decision (Eq.18) no longer depends exclusively on the vulnerable FC logit assignments but is instead stabilized through the EMA-updated Cglobal, providing a more reliable and re-silient decision boundary.  
+
+> Figure 4. An overview to the proposed evaluation protocol for genuine robustness of dynamic models like our proposed.
+
+3.7. Evaluation Protocol 
+
+The HPM architecture ( §3.6), although more robust, still employs a semi-discrete STE mechanism (Eq.(15)) and therefore poses substantial challenges to standard gradient-based adversarial attacks, resulting in obfuscated gradi-ents [4]. While such obfuscation may increase the prac-tical difficulty of an attack in real-world, a rigorous aca-demic evaluation requires a worst-case analysis under the assumption of a white-box adversary capable of bypassing these artifacts. The gradient obfuscation observed in our model arises from two principal sources: (1) Gradient Sig-nal Problem: The STE mechanism supplies a backward gradient (through Psoft ) that poorly approximates the true forward mapping, which depends on Phard . (2) Forward Discontinuity Problem: Even when a backward gradient is available (e.g., through the built-in STE), the forward pass itself remains discontinuous. A small perturbation ϵ
+
+added to Zt during the t-th step of an attack may cause 
+
+argmax( Lt) to switch labels, leading to an abrupt change in the computed Cbatch (Eq.(15)). Such discontinuities vio-late the static model assumption of iterative attacks, as the gradient computed at Xt no longer provides a valid direc-tion for minimizing the loss at Xt+1 .To address these challenges, we first adopt the Backward Pass Differentiable Approximation (BPDA) strategy [4]. We assume the attacker possesses full knowledge of our ar-chitecture, including the STE mechanism. The attacker may thus utilize the smooth gradients derived from Psoft to per-form gradient-based attacks. However, BPDA alone cannot fully resolve the forward discontinuity issue. To establish a stable optimization landscape for the attacker, we introduce a fully soft model that uses Psoft in forward-pass as our sur-rogate model. Moreover, considering the fact that such ap-proach base its prediction on FC’s, it indicates the vanilla FC model would be another powerful surrogate model. Therefore, we propose a Mixed Surrogate Attack (MSA) protocol that integrates two complementary white-box sur-rogate models to generate maximally effective adversarial examples: 
+
+Surrogate 1: The FC Oracle. This surrogate targets the discontinuity problem directly. The attack is optimized solely against the FC logits, which is the most effective means of inducing abrupt changes in Cbatch . This approach poses a genuine threat to our model, as the re-classification process fundamentally relies on FC-based predictions. 
+
+Surrogate 2: The Soft-Hybrid Model. This surrogate targets the final ℓ2 decision boundary under the assump-tion of a perfectly smooth STE. It substitutes Pste with Psoft 
+
+to compute a soft batch centroid Cbatch soft , which is subse-quently fused with the fixed Cglobal through the same learned mixer m(·, ·).
+
+Final Evaluation Protocol. Our worst-case evaluation is defined as the minimum accuracy observed across a com-prehensive suite of attack methods. This protocol is partic-ularly crucial for multi-class scenarios, where both gradient mismatch and decision discontinuity are more pronounced. It is worth noting that, although black-box attacks typically exhibit limited success against conventional models com-pared to gradient-based attacks, they are of special impor-tance here because they can expose pseudo-robust samples when gradient information is unreliable. Accordingly, our complete evaluation protocol is as follows: 
+
+Step 1: Mixed Surrogate Attack (MSA): An adaptive PGD-based attack (e.g., APGD from AutoAttack) employ-ing an ensemble of surrogates. The generated adversarial examples Xadv are then evaluated on the test model. 
+
+Step 2: Gradient-Free Black-Box Attack: A high-strength black-box attack (Square Attack [3]) on test model to estimate the worst-case robustness independently of any gradient-based assumptions. 
+
+Rationale and Contributions. This evaluation framework is motivated by both practical and academic considerations. From a practical standpoint, dynamic, input-dependent ar-chitectures like ours represent a promising direction for de-veloping defenses that inherently challenge standard adver-sarial methodologies. Our work provides a concrete real-ization of such a defense. From an academic perspective, this study exposes a critical gap between conventional eval-uation protocols and emerging defensive paradigms. It of-fers a detailed case study of two distinct yet intertwined challenges: gradient mismatch (addressed by BPDA) and forward discontinuity (addressed by surrogate modeling). We hope this work encourages the development of next-generation adaptive attacks designed to rigorously evaluate dynamic, discontinuous, and hybrid defense architectures. 
+
+# 4. Experiment 
+
+4.1. Datasets 
+
+CIFAR-10 & CIFAR-100 We evaluate the adversarial robustness of models on CIFAR-10 and CIFAR-100 datasets [32]. CIFAR-10 has 10 categories of common objects, with 60000 32 ×32 color images split into 50000 for training and 10000 for testing. While CIFAR-100, with 100 more fine-grained categories, has the same image count but only 600 images per category, making it sparser and more challenging than CIFAR-10. 
+
+ImageNet To provide a more credible analysis, we vali-dated our method on a larger-scale dataset, ImageNet [18]. However, considering the sheer volume of ImageNet and the high computational cost of generating adversarial ex-amples, all experiments were conducted on a subset of Im-ageNet. Specifically, we sampled 10 images per class from the training set, resulting in a total of 10,000 images for fine-tuning. For evaluation, we sampled 5 images per class from the validation set, yielding 5,000 images in total. 
+
+4.2. Evaluation Setup 
+
+We evaluate all models on the integrated standard adver-sarial robustness benchmark platform, RobustBench [16]. To prove our method can further enhance various exist-ing adversarially robust models, including both top-ranked SOTA methods and relatively weaker model. Moreover, since these works typically provide models based on dif-ferent architectures, we also deliberately choose networks with diverse architectures to validate the applicability of our method. (The specific model architectures can be found in the supplementary materials.) Then, we applied our re-classifier using their pretrained parameters (frozen) and ad-versarially fine-tune them on the corresponded dataset. This is highly efficient since most of these models were massive, whereas training classifier only is far less demanding. Fi-nally, we report the robust accuracy of the enhanced mod-els under our evaluation protocol. We compare it with the original models’ robust accuracy that we re-evaluated under the same attack settings. Our implementation details can be found in the supplementary material. Works / Methods CIFAR-10, ℓ∞ = 8/255 CIFAR-100, ℓ∞ = 8/255                                                                                           
+
+> Clean Acc. Robust Acc. Clean Acc. Robust Acc.
+> →Build on fully-connected classifier
+> Cui [17] 92.9 67.7 73.1 38.6 Wang [55] 93.4 71.3 73.6 42.7 Jia [29] 85.3 58.0 65.9 31.5 Bartoldson [7] 93.7 74.1 --
+> →Build on distance-based classifier
+> Cui [17] 91.8 69.8( +2.2 )72.9 39.4( +0.8 )Wang [55] 92.0 72.9( +1.6 )73.6 43.1( +0.4 )Jia [29] 82.8 63.6( +5.6 )65.9 33.3( +1.8 )Bartoldson [7] 91.9 76.4( +2.3 )--
+> Table 1. Quantitative results of adversarial robustness experiment on CIFAR-10 and CIFAR-100.
+> Works / Methods ImageNet, ℓ∞=4/255
+> Clean Acc. Robust Acc.
+> →Build on fully-connected classifier
+> Xu [58] 78.5 58.3 Amini [2] 77.8 58.5 Singh [48] 72.8 48.1 Mo [39] 68.0 33.0
+> →Build on distance-based classifier
+> Xu [58] 78.0 60.6(+ 2.3 )Amini [2] 76.1 60.5(+ 2.0 )Singh [48] 68.4 49.6(+ 1.5 )Mo [39] 67.7 35.7(+ 2.7 )
+> Table 2. Quantitative results of adversarial robust-ness experiment on ImageNet.
+> COMPONENTS Xu [58], ImageNet, ℓ∞=4/255
+> CEest PMixer DistDeci Clean Acc. Robust Acc.
+> Default Classifier 78.5 58.3
+> ✓✓✓78.0 60.6 (+2.3)
+> ✓✓78.4 58.4 (+0.1)
+> ✓✓78.2 58.8 (+0.5)
+> ✓76.5 55.1 (-3.2)
+> ✓✓FC-Head 73.1 55.3 (-3.0)
+> Table 3. Results of ablation study. All setup variants are based on the SOTA model from [58] on ImageNet. Notably, we provide a special implementation and denoted as FC-Head in the DistDeci column. It means we use FC head again as similarity measure in our reclassification head.
+
+4.3. Quantitative Results 
+
+Our main results on CIFAR-10/100 and ImagNet can be found in Tab. 1 and Tab. 2, respectively. It can be ob-served that our method enhances the robustness of all mod-els we randomly selected. This aligns well with our the-oretical analysis: as the number of classes and feature di-mensionality increases, the input feature vectors tend to be nearly orthogonal to the reference vectors of almost all cat-egories for FC classifier. This makes them highly suscep-tible to adversarial perturbations, resulting in large devia-tions from the original predictions. Moreover, correct pre-dictions, while themselves vulnerable, are further affected by perturbations collaboratively induced by these unrelated classes. In contrast, the re-classifier, which makes decisions based on the ℓ2 distance, exhibits a significant advantage. The re-classification strategy also ensures that the distance-based classifier retains strong discriminative power even when dealing with large-scale datasets. We will deeply an-alyze the effectiveness of each competent in next section. 
+
+4.4. Ablation Study and Analysis 
+
+To assess the effectiveness of the proposed method, we de-compose it into three components: dataset-level centroid estimation (CEst), the parameterized mixer (PMixer), and the DB decision module (DistDeci). We then remove these components, or when their functionality is indispensable, replace them with the simplest possible alternatives (details can be found in the supplementary material). The results are reported in Tab. 3. All components provide clear and positive contributions to robustness. We further compare different distance measures to vali-date the advantage of the ℓ2-distance–based classifier. Re-placing the negative ℓ2 distance with inner-product similar-ity leads to additional performance degradation (see the last row of Tab. 3). We also examine the vanilla ℓ2 classifier. For example, replacing the FC layer of Cui’s model [17] with an 
+
+ℓ2 head yields a 4.6% improvement under the APGD-CE at-tack on CIFAR-100. However, the vanilla ℓ2 classifier fails on ImageNet when applied to Xu’s model [58], where the large number of classes amplifies its limited discriminative capacity. This observation is consistent with our analysis. 
+
+# 5. Conclusion 
+
+In this paper, we analyzed the fundamental trade-off be-tween sensitivity, discriminative power, and robustness in FC versus ℓ2-classifiers. To effectively leverage and unify their benefits, we proposed the Hybrid Prototype Mixing (HPM) framework, a dynamic ℓ2 re-classifier that fuses batch- and dataset-level prototypes. Recognizing that this architecture causes challenges like gradient obfuscation, we introduced the rigorous Mixed Surrogate Attack (MSA) protocol for fair evaluation. Our lightweight, plug-and-play HPM module successfully enhanced the adversarial robust-ness of various SOTA models with minimal fine-tuning. References 
+
+[1] Charu C Aggarwal, Alexander Hinneburg, and Daniel A Keim. On the surprising behavior of distance metrics in high dimensional space. In International conference on database theory , pages 420–434. Springer, 2001. 2 [2] Sajjad Amini, Mohammadreza Teymoorianfard, Shiqing Ma, and Amir Houmansadr. Meansparse: Post-training robust-ness enhancement through mean-centered feature sparsifica-tion. arXiv preprint arXiv:2406.05927 , 2024. 8, 2 [3] Maksym Andriushchenko, Francesco Croce, Nicolas Flam-marion, and Matthias Hein. Square attack: a query-efficient black-box adversarial attack via random search. In European conference on computer vision , pages 484–501. Springer, 2020. 7, 1 [4] Anish Athalye, Nicholas Carlini, and David Wagner. Obfus-cated gradients give a false sense of security: Circumventing defenses to adversarial examples. In International confer-ence on machine learning , pages 274–283. PMLR, 2018. 6 [5] Jimmy Lei Ba. Layer normalization. arXiv preprint arXiv:1607.06450 , 2016. 2 [6] Tao Bai, Jinqi Luo, Jun Zhao, Bihan Wen, and Qian Wang. Recent advances in adversarial training for adversarial ro-bustness. arXiv preprint arXiv:2102.01356 , 2021. 2 [7] Brian R Bartoldson, James Diffenderfer, Konstantinos Parasyris, and Bhavya Kailkhura. Adversarial robustness limits via scaling-law and human-alignment studies. arXiv preprint arXiv:2404.09349 , 2024. 8, 1, 2, 3 [8] Shai Ben-David, John Blitzer, Koby Crammer, and Fernando Pereira. Analysis of representations for domain adapta-tion. Advances in neural information processing systems ,19, 2006. 2 [9] Kevin Beyer, Jonathan Goldstein, Raghu Ramakrishnan, and Uri Shaft. When is “nearest neighbor” meaningful? In Database Theory—ICDT’99: 7th International Confer-ence Jerusalem, Israel, January 10–12, 1999 Proceedings 7 ,pages 217–235. Springer, 1999. 2 [10] Gerda Bortsova, Cristina Gonz´ alez-Gonzalo, Suzanne C Wetstein, Florian Dubost, Ioannis Katramados, Laurens Hogeweg, Bart Liefers, Bram van Ginneken, Josien PW Pluim, Mitko Veta, et al. Adversarial attack vulnerability of medical image analysis systems: Unexplored factors. Medi-cal Image Analysis , 73:102141, 2021. 2 [11] Tony Cai, Jianqing Fan, and Tiefeng Jiang. Distributions of angles in random packing on spheres. The Journal of Ma-chine Learning Research , 14(1):1837–1864, 2013. 4, 2 [12] Pin-Yu Chen, Huan Zhang, Yash Sharma, Jinfeng Yi, and Cho-Jui Hsieh. Zoo: Zeroth order optimization based black-box attacks to deep neural networks without training substi-tute models. In Proceedings of the 10th ACM workshop on artificial intelligence and security , pages 15–26, 2017. 2 [13] Thomas Cover and Peter Hart. Nearest neighbor pattern clas-sification. IEEE transactions on information theory , 13(1): 21–27, 1967. 2 [14] Francesco Croce and Matthias Hein. Reliable evalua-tion of adversarial robustness with an ensemble of diverse parameter-free attacks. In ICML , 2020. 1 [15] Francesco Croce and Matthias Hein. Minimally distorted adversarial examples with a fast adaptive boundary attack. In International Conference on Machine Learning , pages 2196–2205. PMLR, 2020. 1 [16] Francesco Croce, Maksym Andriushchenko, Vikash Se-hwag, Edoardo Debenedetti, Nicolas Flammarion, Mung Chiang, Prateek Mittal, and Matthias Hein. Robustbench: a standardized adversarial robustness benchmark. arXiv preprint arXiv:2010.09670 , 2020. 2, 7, 1 [17] Jiequan Cui, Zhuotao Tian, Zhisheng Zhong, Xiaojuan Qi, Bei Yu, and Hanwang Zhang. Decoupled kullback-leibler divergence loss. Advances in Neural Information Processing Systems , 37:74461–74486, 2024. 8, 1, 2 [18] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on computer vision and pattern recognition , pages 248–255. Ieee, 2009. 2, 7 [19] William Falcon and The PyTorch Lightning team. PyTorch Lightning, 2019. 1 [20] Tianyu Gao, Xu Han, Zhiyuan Liu, and Maosong Sun. Hy-brid attention-based prototypical networks for noisy few-shot relation classification. In Proceedings of the AAAI con-ference on artificial intelligence , pages 6407–6414, 2019. 2 [21] Manas Gogoi, Sambhavi Tiwari, and Shekhar Verma. Adaptive prototypical networks. arXiv preprint arXiv:2211.12479 , 2022. 2 [22] Ian J Goodfellow. Explaining and harnessing adversarial ex-amples. arXiv preprint arXiv:1412.6572 , 2014. 1, 2 [23] Samantha Guerriero, Barbara Caputo, and Thomas Mensink. Deepncm: Deep nearest class mean classifiers. 2018. 2, 3 [24] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceed-ings of the IEEE conference on computer vision and pattern recognition , pages 770–778, 2016. 1, 2 [25] Michael E Hodgson. Reducing the computational require-ments of the minimum-distance classifier. Remote sensing of environment , 25(1):117–128, 1988. 2 [26] Elad Hoffer and Nir Ailon. Deep metric learning using triplet network. In International workshop on similarity-based pat-tern recognition , pages 84–92. Springer, 2015. 3 [27] Andrew Ilyas, Shibani Santurkar, Dimitris Tsipras, Logan Engstrom, Brandon Tran, and Aleksander Madry. Adversar-ial examples are not bugs, they are features. Advances in neural information processing systems , 32, 2019. 1 [28] Zhong Ji, Xingliang Chai, Yunlong Yu, Yanwei Pang, and Zhongfei Zhang. Improved prototypical networks for few-shot learning. Pattern Recognition Letters , 140:81–87, 2020. 2[29] Xiaojun Jia, Yong Zhang, Baoyuan Wu, Ke Ma, Jue Wang, and Xiaochun Cao. Las-at: adversarial training with learn-able attack strategy. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition , pages 13398–13408, 2022. 8, 2 [30] Mahmut Kaya and Hasan S ¸ akir Bilge. Deep metric learning: A survey. Symmetry , 11(9):1066, 2019. 3 [31] Diederik P Kingma. Adam: A method for stochastic opti-mization. arXiv preprint arXiv:1412.6980 , 2014. 1 [32] Alex Krizhevsky, Vinod Nair, and Geoffrey Hin-ton. Cifar-10 and cifar-100 datasets. URl: https://www.cs.toronto.edu/ kriz/cifar.html , 6(1):1, 2009. 1, 2, 7 [33] Aleksander Madry. Towards deep learning models resis-tant to adversarial attacks. arXiv preprint arXiv:1706.06083 ,2017. 1, 2 [34] Zheda Mai, Ruiwen Li, Hyunwoo Kim, and Scott San-ner. Supervised contrastive replay: Revisiting the nearest class mean classifier in online class-incremental continual learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 3589–3599, 2021. 2, 3 [35] Chengzhi Mao, Ziyuan Zhong, Junfeng Yang, Carl Vondrick, and Baishakhi Ray. Metric learning for adversarial robust-ness. Advances in neural information processing systems ,32, 2019. 3 [36] Thomas Mensink, Jakob Verbeek, Florent Perronnin, and Gabriela Csurka. Distance-based image classification: Gen-eralizing to new classes at near-zero cost. IEEE transactions on pattern analysis and machine intelligence , 35(11):2624– 2637, 2013. 3 [37] Pascal Mettes, Elise Van der Pol, and Cees Snoek. Hyper-spherical prototype networks. Advances in neural informa-tion processing systems , 32, 2019. 2 [38] Andy Michel, Sumit Kumar Jha, and Rickard Ewetz. A sur-vey on the vulnerability of deep neural networks against ad-versarial attacks. Progress in Artificial Intelligence , 11(2): 131–141, 2022. 2 [39] Yichuan Mo, Dongxian Wu, Yifei Wang, Yiwen Guo, and Yisen Wang. When adversarial training meets vision trans-formers: Recipes from training to architecture. Advances in Neural Information Processing Systems , 35:18599–18611, 2022. 8, 2 [40] Kevin Musgrave, Serge Belongie, and Ser-Nam Lim. A met-ric learning reality check. In European Conference on Com-puter Vision , pages 681–699. Springer, 2020. 3 [41] Yingwei Pan, Ting Yao, Yehao Li, Yu Wang, Chong-Wah Ngo, and Tao Mei. Transferrable prototypical networks for unsupervised domain adaptation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 2239–2247, 2019. 2 [42] Omiros Papaspiliopoulos. High-dimensional probability: An introduction with applications in data science, 2020. 4 [43] Nicolas Papernot, Patrick McDaniel, Ian Goodfellow, Somesh Jha, Z Berkay Celik, and Ananthram Swami. Practi-cal black-box attacks against machine learning. In Proceed-ings of the 2017 ACM on Asia conference on computer and communications security , pages 506–519, 2017. 2 [44] German I Parisi, Ronald Kemker, Jose L Part, Christopher Kanan, and Stefan Wermter. Continual lifelong learning with neural networks: A review. Neural networks , 113:54–71, 2019. 2 [45] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zem-ing Lin, Natalia Gimelshein, Luca Antiga, Alban Desmai-son, Andreas Kopf, Edward Yang, Zachary DeVito, Mar-tin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala. Pytorch: An imperative style, high-performance deep learning library. In Advances in Neural Information Processing Systems 32 ,pages 8024–8035. Curran Associates, Inc., 2019. 1 [46] Bernardino Romera-Paredes and Philip Torr. An embarrass-ingly simple approach to zero-shot learning. In International conference on machine learning , pages 2152–2161. PMLR, 2015. 2 [47] Florian Schroff, Dmitry Kalenichenko, and James Philbin. Facenet: A unified embedding for face recognition and clus-tering. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 815–823, 2015. 3 [48] Naman Deep Singh, Francesco Croce, and Matthias Hein. Revisiting adversarial training for imagenet: Architectures, training and generalization across threat models. Advances in Neural Information Processing Systems , 36:13931–13955, 2023. 8, 2 [49] Jake Snell, Kevin Swersky, and Richard Zemel. Prototypical networks for few-shot learning. Advances in neural informa-tion processing systems , 30, 2017. 2 [50] C Szegedy. Intriguing properties of neural networks. arXiv preprint arXiv:1312.6199 , 2013. 2 [51] Dimitris Tsipras, Shibani Santurkar, Logan Engstrom, Alexander Turner, and Aleksander Madry. Robustness may be at odds with accuracy. In International Conference on Learning Representations , number 2019, 2019. 1 [52] Oriol Vinyals, Charles Blundell, Timothy Lillicrap, Daan Wierstra, et al. Matching networks for one shot learning. Ad-vances in neural information processing systems , 29, 2016. 2[53] Wenguan Wang, Cheng Han, Tianfei Zhou, and Dongfang Liu. Visual recognition with deep nearest centroids. arXiv preprint arXiv:2209.07383 , 2022. 2, 3 [54] Yaqing Wang, Quanming Yao, James T Kwok, and Lionel M Ni. Generalizing from a few examples: A survey on few-shot learning. ACM computing surveys (csur) , 53(3):1–34, 2020. 2[55] Zekai Wang, Tianyu Pang, Chao Du, Min Lin, Weiwei Liu, and Shuicheng Yan. Better diffusion models further improve adversarial training. In International Conference on Machine Learning , pages 36246–36263. PMLR, 2023. 8, 2 [56] Andrew R Webb. Statistical pattern recognition . John Wiley & Sons, 2003. 2 [57] Kilian Q Weinberger and Lawrence K Saul. Distance met-ric learning for large margin nearest neighbor classification. 
+
+Journal of machine learning research , 10(2), 2009. 3 [58] Xiaoyun Xu, Shujian Yu, Zhuoran Liu, and Stjepan Picek. Mimir: Masked image modeling for mutual information-based adversarial robustness. arXiv preprint arXiv:2312.04960 , 2023. 8, 2 Sensitivity as a Double-Edged Sword: A Trade-off Between Discriminability and Adversarial Robustness 
+
+# Supplementary Material 
+
+# 6. Implementation Details 
+
+6.1. Environments 
+
+Our project is implemented entirely in Python using PyTorch [45] and PyTorch-Lightning [19], with all experiments con-ducted on a Linux server equipped with a single GPU. The versions and models of key software and hardware are summarized in Tab. 4. 
+
+Component Version / Model 
+
+System Ubuntu 22.04 LTS 
+
+Python 3.12.2 
+
+PyTorch 2.4.1+cu121 
+
+GPU 1× NVIDIA RTX 4090 
+
+Table 4. Key software versions and GPU model of our implementation. cu121 means the CUDA version is 12.1 .
+
+6.2. Adversarial Fine-tuning 
+
+When fine-tuning on clean data alone, we find it is often sufficient to enhance the robustness of certain models at some point. However, since these models primarily achieve adversarial robustness through adversarial training, we choose to further improve their performance using a similar adversarial training approach during fine-tuning. Specifically, we employ adversarial training based on the Improved Kullback-Leibler (IKL) loss [17]. The IKL loss, an enhanced version of the Decoupled Kullback-Leibler (DKL) loss, is equivalent to the KL loss during gradient-based optimization and consists of two components: a weighted Mean Squared Error (wMSE) and a Cross-Entropy (CE) loss with soft labels. This composite loss serves as our optimization objective. During training, adversarial samples are generated to maximize the IKL loss over 10 gradient-based update steps 3, and these samples are subsequently used for adversarial training. Additionally, we configure the key hyperparameters for the fine-tuning process as follows: • The learning rate for Adam [31] optimizer is set to 5 × 10 −5 for all models. • The momentum parameters λ1 and λ2 are set to λ1 = λ2 = 0 .98 for CIFAR-10, while for CIFAR-100 and ImageNet, they are increased to λ1 = λ2 = 0 .995 to accommodate more classes, given a fixed batch size of 64. • For the CIFAR-10, the training amount is set to one epoch. This number is doubled due to the larger number of categories for CIFAR-100 and ImageNet. 
+
+6.3. Evaluation Details 
+
+In this section , We detail our use of AutoAttack to evaluate the model’s adversarial robustness under the two most powerful white-box attacks, specifically, APGD-CE, APGD-DLR [14] and Square Attack [3]. Unlike the standard evaluation used in RobustBench [16], we omit the white-box FAB Attack [15], as this attack is significantly less effective and fail to pose a threat to the models we evaluated. Therefore, similar to the setup in [7] 4, we choose to exclude it. Additionally, due to our limited computational resources, we further reduce the evaluation cost of adversarial robustness (as generating a single adversarial example involves dozens of forward and backward passes). First, we evaluate robustness using only 25% of the test samples (for CIFAR-10 and CIFAR-100), which are uniformly sampled and then fixed. Second, we reduce the number of attack steps for generating adversarial examples from the default 100 steps to 40 (again, following [7]). This reduction is justified, as vulnerable samples are often successfully attacked within fewer steps, while increasing the number of steps for robust samples does not significantly improve the attack success rate. However, this setup inevitably   
+
+> 3The implementation of the IKL loss and training procedure can be found in their official repository: github.com/jiequancui/DKL .
+> 4These setups can be found in their official implementation: github.com/bbartoldson/Adversarial-Robustness-Limits .
+
+allows some borderline samples to evade successful attacks. As a result, the overall accuracy we report (including that of baseline models) is approximately 0.5% higher than the corresponding scores on the RobustBench [16] leaderboard. Nevertheless, this discrepancy does not affect the direct comparisons between models in Tab. 1 and Tab. 2 of the main paper, as all models follow exactly the same evaluation settings. Additionally, we list the concrete model architectures and their rankings on the RobustBench leaderboard for the evaluated works here: • Cui [17] RANK# No.9 on CIFAR-10, RANK# No.4 on CIFAR-100; Architecture: WideResNet-28-10 .• Wang [55] RANK# No.5 on CIFAR-10, RANK# No.1 on CIFAR-100; Architecture: WideResNet-70-16 .• Jia [29] RANK# No.43 on CIFAR-10, RANK# No.17 on CIFAR-100; Architecture: WideResNet-70-16 for CIFAR-10 and WideResNet-34-20 for CIFAR-100. • Bartoldson [7] RANK# No.1 on CIFAR-10, RANK# N/A on CIFAR-100; Architecture: WideResNet-94-16 .• Xu [58] RANK# No.1 on ImageNet; Architecture: Swin-L .• Amini [2] RANK# No.6 on ImageNet; Architecture: MeanSparse ConvNeXt-L .• Singh [48] RANK# No.16 on ImageNet; Architecture: ConvNeXt-T + ConvStem .• Mo [39] RANK# No.26 on ImageNet; Architecture: ViT-B .
+
+# 7. Proof of Classifier Sensitivity 
+
+We define the sensitivity of FC and DB classifiers in Eq. 1 and Eq. 2 of our main paper, reflecting how significantly the model’s predictions change in response to variations in the input feature representations. We first derive the supremum of Sd
+
+in Eq. 5 of the main paper. The proof of this result is simply as follows: 
+
+Sd = | ∥zd + ϵd − wd∥ − ∥ zd − wd∥∥zd − wd∥ | ≤ ∥ϵd∥∥zd − wd∥ = ∥ϵ∥
+
+p(∥zd∥2 + ∥wd∥2 − 2∥zd∥∥ wd∥ · cos( θd)) (19) Equivalence holds iff ϵd is collinear with zd − wd. Obviously, this value is the supremum of Sd, which is the maximum influence on the model output when the feature changes. Then, we can easily derive the condition for Sc ≥ sup Sd as follows: 
+
+Sc ≥ sup Sd ⇐⇒ ∥ϵc∥ · | cos( γ)|∥zc∥ · | cos( θc)| ≥ ∥ϵd∥
+
+p∥zd∥2 + ∥wd∥2 − 2∥zd∥∥ wd∥cos( θd) (20) 
+
+⇐⇒ ∥zc∥ · | cos( θc)| ≤ | cos( γ)| · p∥zd∥2 + ∥wd∥2 − 2∥zd∥∥ wd∥cos( θd) (21) 
+
+⇐⇒ |cos( θc)| ≤ | cos( γ)| · 
+
+s ∥wd∥∥zc∥
+
+2
+
+− 2 · cos( θd) ∥wd∥∥zc∥ + 1 (22) Meanwhile, we have 
+
+r ∥wd∥∥z∥
+
+2
+
+− 2 · cos( θd) ∥wd∥∥z∥ + 1 ≥ | sin( θd)|, and then we can derive such condition as in Eq. 8 of the main text, which indicates when FC classifiers are more sensitive to feature variations. 
+
+7.1. Isotropic Distribution 
+
+Further more, we wish to derive the probability that such condition holds under our isotropic assumption. Firstly, we already know from [11] that the probability density functions of the random variables θd and θc are as follows: 
+
+p(θ, d ) = Γ( d 
+
+> 2
+
+)Γ( d−12 )√π · sin d−2θ = C · sin d−2(θ) (23) where C is a coefficient term and θ ∈ [0 , π ]. What we aim to explore is the distribution of |cos( θc)|/|sin( θd)|. By performing a variable substitution: let η = cos( θ) and τ = sin( θ), we can easily derive the distributions of H = cos( θc) and T = sin( θd),and their PDFs are as follows: 
+
+pH(η, d ) = C · (1 − η2) d−12 −1, p T (τ, d ) = 2C · τ d−2
+
+√1 − τ 2 (24) Notably, when computing the distribution of sin( θd), attention should be paid to the range of θ. When making a variable substitution, we let θ = arcsin( τ ) where τ ∈ [0 , 1] , and then we should multiply the probability density by 2. Next, we can derive the distribution function of X = |H/T |, and the calculation process is as follows: 
+
+FX (x) = P( X ≤ x) = P( | HT | ≤ x) = P( |H| ≤ T · x) (25) 
+
+=
+
+Z 10
+
+pT (τ, d ) · P( |H| ≤ τ · x) d τ (26) 
+
+=
+
+Z 10
+
+pT (τ, d )
+
+Z τ ·x 
+
+> −τ·x
+
+pH(η, d )d ηdτ (27) 
+
+=
+
+Z 10
+
+2C · τ d−2
+
+√1 − τ 2
+
+Z τ ·x
+
+> 0
+
+2C · (1 − η2) d−32 dηdτ (28) For the computational efficiency and simplicity, we let τ = sin( x), η = sin( y) to further reparametrize integration variables in trigonometric form when numerically computing CDF as in Fig. 2 of the main text, as follows: 
+
+FX (z) = 4 · Γ2( d 
+
+> 2
+
+)
+
+π · Γ2( d−12 )
+
+Z π
+
+> 2
+> 0
+
+sin d−2(x)
+
+Z sin −1(cos( γ)·
+
+> sin( z)) 0
+
+cos d−2(y)d xdy (29) 
+
+7.2. Empirical Distribution 
+
+Here, we provide the proof hint of our conclusion in Eq. 13 of the main text. First, based on our analysis and assumptions, the PDFs of θc and θd are given in Eq. 12 of the main text. Then, we apply a variable substitution similar to Eq. (24) to derive the PDFs of pH and pT . Considering the complexity of their PDFs, however, we avoid applying variable substitution directly to their analytical forms. Instead, we derive a generalized form of FX from Eq.(27) first, which is easy to prove, for any pH
+
+and pT as follows: 
+
+FX (z) = 
+
+Z 10
+
+pθd (sin −1(x)) + pθd (π − sin −1(x)) 
+
+√1 − x2
+
+Z x·z
+
+> −x·z
+
+pθc (cos −1(y)) 
+
+p1 − y2 dxdy (30) Finally, we apply simple variable substitution by letting x = sin( t) to simplify the results presented in Eq.13 of the main text. 
+
+# 8. Limitations and Future Work 
+
+There are still several limitations in this work. First, we evaluate our model by fine-tuning pretrained models from existing works. However, since the fine-tuning setup may differ significantly from the original training configurations (e.g., train-ing objectives, data augmentations), extensive fine-tuning could lead to overfitting and performance degradation, making it challenging to determine the optimal fine-tuning settings. Nonetheless, we see great potential in our method and believe that incorporating it into existing frameworks for from-scratch training could further enhance their robustness. Unfortunately, due to our very limited computational resources, we were unable to conduct such large-scale adversarial training. (For ex-ample, [7] achieves SOTA performance on CIFAR-10 while requiring over 10 21 training FLOPs!) In addition, there remains considerable room for exploration regarding various design choices within our method, such as selecting better criterion functions (e.g., contrastive learning loss [34]). As we aim to approach the problem from a simple perspective, specifically, by comparing FC classifiers and ℓ2-classifiers, and to provide a focused theoretical analysis, we are constrained by the scope and length of this paper and are therefore unable to explore the broader implications of classifier sensitivity differences from a higher-level perspective. For instance, since this work reveals a link between feature sensitivity, adversarial robustness, and classification performance, a natural question arises: under a constraint that balances robustness and accuracy, can we derive an optimal form of classifier? Moreover, the sensitivity analysis presented in this paper remains at the level of individual logit elements. The quantitative effect of classifier sensitivity on the model’s overall prediction (particularly the top-confidence class) remains an open question. We hope these discussions can inspire future research.
