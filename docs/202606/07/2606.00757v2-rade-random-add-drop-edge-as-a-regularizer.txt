@@ -1,0 +1,3848 @@
+Title: RADE: Random Add-Drop Edge as a Regularizer
+
+URL Source: https://arxiv.org/pdf/2606.00757v2
+
+Published Time: Wed, 03 Jun 2026 01:25:30 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+# RADE: Random Add-Drop Edge as a Regularizer 
+
+Danial Saber 1 Amirali Salehi-Abari 1
+
+## Abstract 
+
+Graph Neural Networks (GNNs) suffer from over-fitting and over-squashing of long-range informa-tion. Stochastic graph augmentations (e.g., edge deletion) regularize training against overfitting but can introduce train-inference misalignment and do not improve over-squashing. In contrast, rewiring methods improve connectivity to miti-gate over-squashing, but are not designed to reg-ularize training. We propose Random Add-Drop Edge (RADE) , a stochastic graph augmentation method that jointly drops and adds edges to ad-dress both overfitting and over-squashing simul-taneously. RADE is provably designed to align training and inference so that random augmenta-tions regularize training without distribution shift, while supporting long-range communication at inference. We further propose and study a mini-batch gradient-norm balancing algorithm that adapts deletion and addition rates during training, rendering RADE hyperparameter-free in practice. Experiments on node- and graph-classification benchmarks show that RADE is a strong regular-izer and mitigates over-squashing. Ablations sup-port the roles of train-inference alignment, adap-tive rate selection, and the complementary effects of random edge deletion and edge addition. 
+
+## 1. Introduction 
+
+Graph Neural Networks (GNNs) (Gori et al., 2005; Micheli, 2009; Scarselli et al., 2008) are neural networks designed for relational data (e.g., social networks, protein-protein networks, etc.), with diverse applications such as recom-mender systems (Wu et al., 2022), knowledge graph com-pletion (Arora, 2020), and molecular property prediction (Kearnes et al., 2016). The dominant paradigm of GNNs is Message-Passing Neural Networks (MPNNs) (Gilmer et al., 2017), in which each node iteratively aggregates and     
+
+> 1Ontario Tech University, Oshawa, Ontario, Canada. Corre-spondence to: Danial Saber <danial.saber@ontariotechu.ca >.
+> Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s).
+
+transforms messages from its neighbors. Despite GNNs’ success, their generalizability faces several challenges, in-cluding limited expressiveness (Bevilacqua et al., 2022), over-smoothing (Li et al., 2019), over-squashing (Alon & Yahav, 2021), and overfitting. We focus on two problems of overfitting , a widespread challenge in machine learning, and over-squashing , a distinctive challenge for MPNNs. Over-squashing occurs when the set of nodes that influence a node’s representation through message passing expands rapidly as the number of layers increases, forcing a lot of information to be compressed into a fixed-size embedding (Alon & Yahav, 2021). This limits the ability to capture higher-order and long-range dependencies in graphs. Prior work addresses overfitting and over-squashing largely in separation. To reduce overfitting in GNNs, common ap-proaches include penalty-based regularization (e.g., weight decay), architectural regularization (e.g., Dropout (Srivas-tava et al., 2014)), and stochastic graph augmentation as an implicit regularizer—mostly in the form of deletion-based perturbations (e.g., DropEdge (Rong et al., 2020)). Of spe-cial interest for GNNs is graph augmentation, but it is often tuning-sensitive: weak perturbations have little effect, while strong ones remove useful graph signal. Also, training on perturbed views can create train-inference misalignment unless an explicit correction is applied. To mitigate over-squashing, existing methods typically increase connectivity through rewiring or shortcut edges (Abboud et al., 2022; Arnaiz-Rodr ´ıguez et al., 2022; Karhadkar et al., 2023; Alon & Yahav, 2021). These methods can improve long-range information flow, but the extent of rewiring must still be tuned, and simple random edge addition is less emphasized than more structured surgical rewiring. Looking across these two bodies of work, stochastic aug-mentations regularize training without improving long-range communication, whereas rewiring methods—viewed as a form of augmentation—improve connectivity with-out regularizing. This gap calls for a unified augmenta-tion framework that regularizes training and, when needed, improves long-range connectivity against over-squashing. Since random edge addition has the potential to be a stochas-tic regularizer and to facilitate long-range connectivity, a natural question arises: can random edge addition be com-bined with edge deletion so that the same augmentation both regularizes training and, when useful, improves long-1
+
+> arXiv:2606.00757v2 [cs.LG] 2 Jun 2026 RADE: Random Add-Drop Edge as a Regularizer
+
+range communication? The main difficulty is train-inference alignment, since training on randomly perturbed graphs but inferring on a fixed graph can induce misalignment or distri-bution shift. A second practical challenge is controlling the deletion and addition rates without dataset-specific tuning. We propose Random Add-Drop Edge (RADE) , a stochastic topology augmentation that randomly drops existing edges and adds non-edges during training, with corrections for train-inference alignment. We introduce two variants of RADE. RADE-OF solely targets overfitting: it corrects both deletion and addition effects, so that training-time message aggregation, in expectation, matches the aggregation of the input graph at inference. Thus, the random perturbations act as training-time regularization without systematically shift-ing the inference rule. RADE-OFS targets both overfitting and over-squashing: it corrects the deletion effect but keeps the expected contribution of added edges at inference, thus preserving the regularization benefit of stochastic pertur-bations while creating additional communication paths for long-range information flow. For both variants, we further show that the regularization effects of random deletion and addition are generally not interchangeable. We also intro-duce a mini-batch gradient-norm balancing rule that adapts the drop/add rates during training, thereby making RADE practically hyperparameter-free. Our extensive evaluation across diverse node- and graph-level datasets and various backbone models (e.g., GCN, GIN, and GAT) confirms RADE’s potential for both im-plicit regularization and over-squashing mitigation. RADE-OF consistently outperforms competitive regularizers while RADE-OFS is the most effective when long-range commu-nication is important: it yields the largest gains on over-squashing-prone graph classification benchmarks (Saber & Salehi-Abari, 2025) and datasets requiring long-range interactions (e.g., peptides-func) (Dwivedi et al., 2022). Ablations further verify the benefit of our train-inference alignment rules (i.e., removing alignment rules downgrades performance), the performance gains of our adaptive rate selection (i.e., adaptively selected drop/add rates outper-form fixed, hyperparameter-tuned choices), and the comple-mentary effects of random drop and addition (i.e., RADE outperforms the drop-only or add-only variants). Overall, RADE appears to be a simple and effective augmentation framework for regularizing against overfitting and mitigat-ing over-squashing. 
+
+## 2. Related Work 
+
+Data augmentation for GNNs perturbs the input graph through its topology (edges/nodes) or attributes (node/edge features). Many augmentations are stochastic regularizers against overfitting, while others address structural limita-tions of MPNNs (e.g., over-squashing). We review prior work through two lenses: overfitting and over-squashing. 
+
+Overfitting. Stochastic augmentations act as implicit regu-larizers against overfitting. Examples include random edge deletion (Rong et al., 2020), feature/representation noise in-jection (Veli ˇckovi ´c et al., 2019; Feng et al., 2019; Yang et al., 2021), feature/message masking (Thakoor et al., 2022; Fang et al., 2023; You et al., 2021), and node dropping to generate alternative views (Feng et al., 2020; Saber & Salehi-Abari, 2024; You et al., 2020; Louis et al., 2023). These pertur-bations can also mitigate over-smoothing in deep GNNs by weakening or randomizing propagation pathways (Rong et al., 2020; Thakoor et al., 2022; Fang et al., 2023). 
+
+Over-squashing. To improve long-range information flow, many methods add or rewire connectivity to alleviate bottle-necks (Alon & Yahav, 2021). This includes virtual nodes (Cai et al., 2023; Southern et al., 2025), higher-order struc-tures (Bodnar et al., 2021a;b), last-layer full connectivity (Alon & Yahav, 2021), diffusion/multi-hop rewiring (Ab-boud et al., 2022; Abu-El-Haija et al., 2019; Wang et al., 2021; Nikolentzos et al., 2020; Gasteiger et al., 2019; Br ¨uel-Gabrielsson et al., 2022; Barbero et al., 2024; Gutteridge et al., 2023), fully-connected attention in graph transformers (Ying et al., 2021; Kreuzer et al., 2021; Ramp ´a ˇsek et al., 2022), and targeted edge addition around bottlenecks (Top-ping et al., 2022; Karhadkar et al., 2023). 
+
+Other objectives. Augmentations have also been used to improve expressiveness by ensembling diverse substructure views (Papp et al., 2021; Bevilacqua et al., 2022), to support robustness/denoising under structural noise or adversaries (Wu et al., 2019b; Zhang & Zitnik, 2020; Entezari et al., 2020), and to enable scalable stochastic training via sampled neighborhoods (Hamilton et al., 2017; Chen et al., 2018b;a; Jacob et al., 2023; Zeng et al., 2020; Louis et al., 2022). 
+
+Our work. Our work bridges two separate uses of graph augmentation—regularization against overfitting and con-nectivity enrichment against over-squashing—through ran-dom edge addition. Existing regularizers mostly drop graph signals (e.g., nodes, edges, etc.), while random edge addi-tion remains underexplored as a regularizer for overfitting. In contrast, over-squashing methods often add edges deter-ministically or in a bottleneck-driven manner, rather than through uniformly random edge addition. RADE combines the two views through random add-drop edge augmentation: deletion and addition jointly induce a regularizer, while addition can enrich long-range communication paths. 
+
+## 3. Preliminaries and Background 
+
+We consider an undirected graph G = ( V, E ) with n nodes and m edges, represented by an adjacency matrix A ∈{0, 1}n×n, where Aij = 1 iff (i, j ) ∈ E. Each node i has a 
+
+d-dimensional feature vector xi, stacked as X ∈ Rn×d.2RADE: Random Add-Drop Edge as a Regularizer 
+
+Message-Passing Neural Networks (MPNNs). Most GNNs are MPNNs, in which node representations are it-eratively updated via messages from their neighbors. Let 
+
+H(ℓ) ∈ Rn×dℓ denote the representations at layer ℓ, where each row vector h(ℓ) 
+
+> i
+
+corresponds to node i’s representation. The initial representations are h(0)  
+
+> i
+
+= xi. For each layer 
+
+ℓ ≤ L, each node i’s representation is updated by 
+
+h(ℓ) 
+
+> i
+
+= Up (ℓ)
+
+h(ℓ−1)  
+
+> i
+
+, a(G,ℓ )
+
+> i
+
+
+
+, (1) where the update function Up (ℓ) uses the previous represen-tation h(ℓ−1)  
+
+> i
+
+, and the aggregated neighbor message 
+
+a(G,ℓ ) 
+
+> i
+
+= Agg (ℓ)n 
+
+m(ℓ−1)  
+
+> ij
+
+: Aij = 1 , j ̸ = i
+
+o 
+
+. (2) Here, Agg (ℓ) is a layer-ℓ aggregation operator (e.g., sum/mean or degree-normalized aggregation) over m(ℓ−1)  
+
+> ij
+
+,where m(ℓ−1)  
+
+> ij
+
+denotes the message of node j to node i
+
+based on their (ℓ − 1) -layer representations. Stacking layers allows information from multi-hop neighborhoods to influ-ence final node i’s representation h(L) 
+
+> i
+
+. Many GNNs use a weighted-sum aggregation operator. 
+
+Definition 3.1 (Weighted-sum aggregation) . Agg (ℓ) is a 
+
+weighted-sum aggregator if there exist weights {α(G) 
+
+> ij
+
+}j̸ =i
+
+such that, for each node i,
+
+a(G,ℓ ) 
+
+> i
+
+= X 
+
+> j̸=i
+
+αG 
+
+> ij
+
+m(ℓ−1)  
+
+> ij
+
+, (3) The coefficients αG 
+
+> ij
+
+depend on graph structure (e.g., de-grees) and/or representations (e.g., attention). 1
+
+For example, in GIN (Xu et al., 2019), αG 
+
+> ij
+
+= Aij (sum ag-gregation); in GAT (Veli ˇckovi ´c et al., 2018), αG 
+
+> ij
+
+= Aij Bij ,with Bij being the j’s attention to i; and in GCN (Kipf & Welling, 2017), αG 
+
+> ij
+
+= Aij /pdidj , with degrees di and dj .
+
+Data Augmentation in Graphs. Graph augmentation sam-ples a perturbed view G′ of an input graph G by modifying its topology A or node attributes X. We model an augmen-tation method as a conditional distribution Q(· | G ) over graphs with a sampled view G′ ∼ Q (· | G ). This view-sampling perspective unifies two common purposes of aug-mentation: mitigating overfitting and over-squashing. When 
+
+G′ is sampled stochastically during training (e.g., once per epoch) but inference uses the input graph G, augmentation serves as implicit regularization against overfitting. In con-trast, when augmentation is used to alleviate over-squashing, one typically constructs a single augmented graph G′—i.e., 
+
+Q is degenerate at G′—and uses that same graph for both     
+
+> 1For notational brevity, we write αG
+> ij in place of α(G,l )
+> ij , sup-pressing the layer dependence when unambiguous.
+
+training and inference . Such augmentations typically add shortcut edges that shorten long-range message-passing paths and improve information flow. These two uses sug-gest a combined setting: one may resample perturbed views stochastically during training while using a fixed augmented graph at inference, so that augmentation helps address over-fitting during training and improves connectivity to mitigate over-squashing at inference. 
+
+Train-Inference Alignment in Data Augmentation. Since graph augmentations perturb message passing, a central question is whether the aggregation used during training aligns with the one used at inference, as failing to do so can hinder generalization. The nature of this alignment depends on the purpose of augmentation. When augmentation is used to mitigate overfitting, a train-inference mismatch arises: the model aggregates messages on epoch-specific perturbed graphs during training, but on the fixed input graph during inference. To avoid poten-tial train-inference mismatch, the training-time aggregation should be corrected so that it aligns with the inference-time aggregation in expectation under the augmentation Q.
+
+Definition 3.2 (Expectation-Preserving Aggregation) . Let 
+
+ea(G′,ℓ ) 
+
+> i
+
+be the output of the corrected training-time aggre-gation gAgg on the perturbed graph G′ under Q, and a(G,ℓ )
+
+> i
+
+be the output of the inference-time aggregation Agg . The training-time aggregation is expectation-preserving if, for every layer ℓ and node i,
+
+EG′∼Q (·|G )
+
+hea(G′,ℓ ) 
+
+> i
+
+| H(ℓ−1) i
+
+= a(G,ℓ ) 
+
+> i
+
+. (4) When this condition holds, stochastic training introduces mean-zero aggregation noise around the inference-time aggregation rather than a systematic bias. Many com-mon graph augmentations (Rong et al., 2020; Feng et al., 2020) do not yield expectation-preserving aggregation by default—e.g., simple edge deletion (Rong et al., 2020) changes the expected aggregated messages—so achieving expectation-preserving criterion typically requires correct-ing the training-time aggregation. Definition 3.2 is not only an alignment criterion; it also provides the principle for deriving the corrected aggregation rule gAgg from any aggre-gation rule Agg under stochastic augmentation. In contrast, when the goal is to mitigate over-squashing, one typically uses the same augmented graph G′ in both training and inference . In this regime, the same aggregation 
+
+a(G′,ℓ ) 
+
+> i
+
+is used in both phases, so there is no train-inference aggregation mismatch to correct. If one seeks to mitigate overfitting and over-squashing si-multaneously, and the same augmentation is used in both training and inference, then both phases induce the same change in message aggregation without any train-inference mismatch. However, if training uses stochastic perturbed 3RADE: Random Add-Drop Edge as a Regularizer 
+
+views while inference uses a fixed aggregation rule, then the expected training-time aggregation should be aligned with the chosen inference-time aggregation. In this case, expec-tation preservation should be defined not necessarily with respect to the input-graph aggregation, but with respect to the desirable inference-time aggregation that preserves the desirable augmentation effect (e.g., shortcuts for long-range communication). 
+
+Augmentation for Implicit Regularization. Under some simplifying assumptions, stochastic graph augmentation with expectation-preserving aggregation can be interpreted as an implicit regularizer (Fang et al., 2023). Consider bi-nary cross-entropy loss under a linear MPNN, 2 where LBCE 
+
+and ˜LBCE are the BCE losses on the input and perturbed graphs, respectively. Then the expected loss follows the variance-based regularization view (Fang et al., 2023): 
+
+E[ ˜LBCE ] ≈ LBCE + 12
+
+X
+
+> i
+
+zi(1 − zi) Var( δi), (5) where zi = σ(si), with σ the sigmoid function and si the logit on the input graph, and δi is the induced perturbation noise around si.3 Eq. (5) shows that stochastic perturba-tion is a variance-based regularizer: training favors parame-ters that produce low-variance predictions across perturbed views, as in Dropout (Srivastava et al., 2014), DropMes-sage (Fang et al., 2023), and DropEdge (Rong et al., 2020). 
+
+DropEdge. DropEdge (Rong et al., 2020) randomly deletes edges during each epoch of training, so messages are ag-gregated on a perturbed graph with a stochastic subset of the original edges. This stochastic perturbation acts as an implicit regularizer. However, expectation-preserving ag-gregation is not automatic: edge deletion changes the ex-pected aggregation unless the training-time aggregation is 
+
+corrected . For sum aggregation (e.g., GIN), this correc-tion reduces to rescaling by a global factor. For general weighted-sum schemes, however, deletion perturbs the ag-gregation in a way that is not generally corrected by a single global rescaling. This motivates us to develop a principled framework for deriving expectation-preserving corrections for general weighted-sum aggregators. 
+
+Deletion vs. Addition as Distinct Topology Perturbations. 
+
+Random edge deletion stochastically suppresses existing message pathways and is primarily used as an implicit regu-larizer against overfitting. In contrast, random edge addition, often neglected in the literature, creates new pathways that can improve long-range information flow and mitigate over-                  
+
+> 2For nonlinear GNNs, nonlinearity introduces bias after aggre-gation, so Eq. (5) holds in approximation.
+> 3Ignoring cross-class covariances, Eq. (5) extends to C-class classification as E[ ˜LCE ]≈LCE +12
+> P
+> i
+> PCc=1 pi,c (1 −
+> pi,c ) Var( δi,c ), where pi,c is the predicted probability of class c
+> for node i, and δi,c is the class-clogit perturbation.
+
+squashing while still providing stochastic regularization dur-ing training. Thus, deletion acts on existing edges, whereas addition acts on non-edges, so their effects are generally not interchangeable, even when viewed purely as stochas-tic regularizers. This asymmetry motivates studying edge addition as a complementary perturbation primitive and, more broadly, add-drop augmentations that combine both mechanisms within a unified view-sampling framework. 
+
+## 4. Random Add-Drop Edge 
+
+We propose Random Add-Drop Edge (RADE), a graph aug-mentation strategy with an explicit aggregation correction rule, designed to mitigate overfitting and over-squashing. RADE has two components: (i) perturbation , specifying how a perturbed view G′ is sampled and (ii) aggregation-correction , detailing how message aggregation is corrected to control train-inference aggregation alignment. 
+
+Perturbation . At each epoch of training, RADE samples a perturbed adjacency A′ by independently dropping ex-isting edges with probability p and adding non-edges with probability q:
+
+A′ 
+
+> ij
+
+∼
+
+(
+
+Bernoulli(1 − p), Aij = 1 Bernoulli( q), Aij = 0 , (6) with A′ 
+
+> ji
+
+= A′ 
+
+> ij
+
+and A′ 
+
+> ii
+
+= 0 . Although we use Bernoulli perturbations, the framework can be extended to other dis-tributions. RADE generalizes DropEdge: q = 0 recovers it, while p = 0 yields pure random edge addition. 4
+
+Aggregation-correction mechanism. A topology perturba-tion generally changes the expected aggregated messages, so maintaining train-inference alignment typically requires an explicit correction mechanism. RADE specifies at each layer how aggregation is defined on a perturbed view and how it is aligned with the inference-time aggregation. Under a weighted-sum aggregator, for a sampled view G′, RADE aggregates via 
+
+ea(G′,ℓ ) 
+
+> i
+
+= X 
+
+> j̸=i
+
+αG′ 
+
+> ij
+
+em(ℓ−1)  
+
+> ij
+
+, (7) which corrects the training-time aggregation through the cor-rected message em(ℓ−1)  
+
+> ij
+
+. Together with the inference-time aggregation to which it is aligned, this defines the alignment mechanism. We consider two RADE variants, depending on how the messages are corrected: RADE-OF, which tar-gets only overfitting, and RADE-OFS, which targets both overfitting and over-squashing. 
+
+RADE-OF. When only overfitting is a concern, RADE-OF corrects messages on both existing edges and non-edges so       
+
+> 4In practice, to avoid enumerating all non-edges |E|, we add
+> K=q|E|non-edges sampled uniformly without replacement–the hypergeometric analogue of i.i.d. Bernoulli( q)–so K/ |E| ≈ q.
+
+4RADE: Random Add-Drop Edge as a Regularizer 
+
+that each layer’s training-time aggregation is expectation-preserving with respect to the original inference-time aggre-gation on the input graph. Define 
+
+em(ℓ−1)  
+
+> ij
+
+=
+
+
+
+αG
+
+> ij
+
+EαG′
+
+> ij
+
+ m(ℓ−1)  
+
+> ij
+
+, Aij = 1 ,
+
+m(ℓ−1)  
+
+> ij
+
+− μ(ℓ−1)  
+
+> i
+
+, Aij = 0 ,
+
+(8) where the centering term μ(ℓ−1)  
+
+> i
+
+is the weighted mean over non-neighbor messages: 
+
+μ(ℓ−1)  
+
+> i
+
+= 1
+
+Zi
+
+X 
+
+> j:Aij =0
+
+E
+
+h
+
+αG′
+
+> ij
+
+i
+
+m(ℓ−1)  
+
+> ij
+
+, (9) with Zi = P  
+
+> j:Aij =0
+
+E
+
+h
+
+αG′
+
+> ij
+
+i
+
+. On existing edges ( Aij = 1 ), RADE-OF rescales messages so that each edge’s expected contribution matches the coefficient αG 
+
+> ij
+
+. On non-edges (Aij = 0 ), it centers added messages by μ(ℓ−1)  
+
+> i
+
+, so that the total added contribution is zero in expectation. 
+
+Proposition 4.1 (Expectation-Preservation in RADE-OF) .
+
+Under the RADE perturbation (6) , any weighted-sum ag-gregation (Def. 3.1) corrected by RADE-OF rule (8) is expectation-preserving (Def. 3.2). 
+
+Thus, RADE-OF preserves each layer’s message aggrega-tion in expectation while still injecting stochasticity through the realized perturbations—the setting that underlies the variance-based regularization view, see Eq. (5). 
+
+RADE-OFS. When both overfitting and over-squashing are concerns, RADE-OFS uses stochastic edge deletion and addition during training, while modifying the inference-time aggregation to retain the effect of edge addition for mitigating over-squashing. Accordingly, its train-inference alignment target is a modified inference-time aggregation 
+
+rather than the original input-graph aggregation. During training, both random deletion and addition intro-duce stochasticity for regularization. The correction is de-signed so that, in expectation, the effect of random deletion is canceled, and deletion serves only as a source of stochas-tic regularization. The corrected messages are 
+
+em(ℓ−1)  
+
+> ij
+
+=
+
+
+
+αG
+
+> ij
+
+EαG′
+
+> ij
+
+ m(ℓ−1)  
+
+> ij
+
+, Aij = 1 
+
+m(ℓ−1)  
+
+> ij
+
+, Aij = 0 
+
+(10) Note that the effect of random edge addition is retained dur-ing training and later realized through inference-time aggre-gation, enabling the resulting densification to improve long-range communication. In inference, RADE-OFS aligns the corrected training-time aggregation, in expectation, with the modified aggregation of 
+
+ba(G,ℓ ) 
+
+> i
+
+= a(G,ℓ ) 
+
+> i
+
++ X 
+
+> j:Aij =0
+
+E
+
+h
+
+αG′
+
+> ij
+
+i
+
+m(ℓ−1)  
+
+> ij
+
+, (11)                      
+
+> Table 1. Comparison of graph augmentation settings for mitigating overfitting (OF), over-squashing (OS), or both (OFS).
+> Graph Used Aggregation Correction Goal Training Inference Training Inference
+> OF Stochastic G′GYes No OS Deterministic G′G′No No OFS Stochastic G′GYes Yes
+
+which adds the deterministic expected contribution of non-edges and thereby creates additional communication paths that can mitigate over-squashing. 
+
+Proposition 4.2 (Expectation-Preservation in RADE-OFS) .
+
+Under the RADE perturbation (6) , any weighted-sum aggre-gation (Def. 3.1) corrected by the RADE-OFS rule (10) 
+
+is expectation-preserving with respect to the modified inference-time aggregation in Eq. (11) .
+
+Thus, in RADE-OFS, the expected training-time aggrega-tion matches the modified inference-time aggregation rather than the input-graph aggregation. Both random drop and add regularize training, while the drop effect is corrected in ex-pectation, but the addition effect is retained at the inference aggregation rule to improve long-range communication. Table 1 summarizes three augmentation settings and high-lights where RADE-OF and RADE-OFS fit. RADE-OF cor-responds to the augmentation settings for mitigating overfit-ting (OF), where stochastic perturbed views are used during training, inference uses the input graph, and training-time aggregation correction is required to remove train-inference mismatch. RADE-OFS corresponds to the setting for joint overfitting and over-squashing (OFS) mitigation, where training uses stochastic perturbed views, and inference re-mains on the input graph. However, both training-time and inference-time aggregations are corrected differently: the effect of edge removal (in expectation) is corrected away in training, while the expected effect of edge addition is kept in training and carried into inference through the modified inference-time aggregation. We note that rather than modi-fying/correcting the aggregation in inference, an alternative is to average predictions over multiple randomly perturbed graphs at inference. This would align training and inference through the same stochastic mechanism while defining an ensemble predictor over perturbed graphs. We avoid this approach for computational efficiency. 
+
+Computing Expectation Terms in RADE. For a weighted-sum backbone, RADE requires message-correction rules for aggregation alignment (see, e.g., Eqs. 8–11). These rules require expectation terms involving perturbed aggregation coefficients, such as E[αG′ 
+
+> ij
+
+]. When tractable, these terms can be derived analytically; when exact derivation is dif-ficult, they can be approximated analytically or estimated 5RADE: Random Add-Drop Edge as a Regularizer 
+
+empirically by averaging realized coefficients over sampled perturbed views. Below, we provide analytic expressions or approximations for three common aggregators. 
+
+Sum aggregation (GIN-style). Here, αG 
+
+> ij
+
+= Aij and αG′ 
+
+> ij
+
+=
+
+A′ 
+
+> ij
+
+, so E[αG′ 
+
+> ij
+
+] = 1 − p on edges and q on non-edges. Thus, in RADE-OF, the correction reduces to scalar rescaling on neighbors together with centering over non-neighbors, while in RADE-OFS, neighbors are rescaled in the same way, and non-neighbor contributions are retained and reintroduced at inference through Eq. (11). 
+
+Symmetric normalization (GCN-style). Here, αG 
+
+> ij
+
+=
+
+Aij (didj )− 12 and αG′ 
+
+> ij
+
+= A′ 
+
+> ij
+
+(d′
+
+> i
+
+d′ 
+
+> j
+
+)− 12 , where d′ 
+
+> i
+
+and d′
+
+> j
+
+are perturbed degrees. In this case, the required expectation terms depend on random degrees and are harder to derive exactly. Moreover, they vary across node pairs and therefore do not reduce to a global scaling factor. In Appendix C, we derive analytic approximations via mixed-binomial delta-method expansions. More generally, these terms can also be estimated empirically from sampled perturbed views. 
+
+Attention normalization (GAT-style). For attention aggre-gation, αG 
+
+> ij
+
+= Aij exp( βij )P     
+
+> k̸=iAik exp( βik )
+
+, where βij is raw attention score of i to j. Conditional on the previous-layer represen-tations, the raw attention scores are fixed, but the graph per-turbation changes both the numerator and the denominator. Also, E[αG′ 
+
+> ij
+
+] is pair-dependent. In Appendix C, we present an approximation method for expectation terms combining the delta-method expansion and sampling method. 
+
+Logit Variance. As seen in Eq. (5) , the regularization effect of stochastic graph perturbation is controlled by the logit variance Var( δi). Thus, to understand how RADE regular-izes, we analyze Var( δi) under RADE’s perturbation. 
+
+Proposition 4.3 (Logit perturbation variance) . Assuming for each node i the stochastic aggregation coefficients αG′
+
+> ij
+
+are mutually independent across j,5 then 
+
+Var( δi) = X 
+
+> j̸=i
+
+em 2 
+
+> ij
+
+Var 
+
+
+
+αG′
+
+> ij
+
+
+
+. (12) 
+
+Multiclass results hold coordinate-wise. 
+
+This shows that the variability in aggregation coefficients 
+
+αG′ 
+
+> ij
+
+—induced by graph perturbation—determines logit vari-ance Var( δi), which induces the implicit regularization. 6
+
+From Proposition 4.3, one can decompose Var( δi) into two additive terms with disjoint support: one over neighbors   
+
+> 5This independence assumption holds when the randomness entering the coefficients is separate across j(e.g., sum aggregation), and is an approximation for degree-normalized coefficients where they share randomness through perturbed degrees.
+> 6Proposition 4.3 extends to graph classification, assuming lin-ear graph pooling and prediction head.
+
+and one over non-neighbors. These two terms isolate how deletion and addition contribute to the regularizer, through variability induced by edges and non-edges. This sepa-rability of addition and drop terms also lets us study the relationship between deletion and addition: whether or not they induce interchangeable regularization effects. 
+
+Add-Drop Non-interchangeability . We examine whether each primitive (e.g., Add-only or Drop-only) can subsume the other to understand their interchangeability. 
+
+Proposition 4.4 (Restricted interchangeability of Drop-only and Add-only) . For sum aggregation 7, Drop-only and Add-only only subsume each other by matching their node-wise variances under a restrictive setting in which there should exist a constant κ > 0 such that P  
+
+> j:Aij =0
+
+em 2 
+
+> ij
+
+=
+
+κ P  
+
+> j:Aij =1
+
+m2 
+
+> ij
+
+for every node i.
+
+The proposition identifies major barriers to exact inter-changeability. Drop-only and Add-only act on different node-wise statistics. Drop-only scales the existing-edge statistic P  
+
+> j:Aij =1
+
+m2 
+
+> ij
+
+, whereas Add-only scales a non-edge statistic: P 
+
+> j:Aij =0
+
+(mij − μi)2 for RADE-OF and 
+
+P  
+
+> j:Aij =0
+
+m2 
+
+> ij
+
+for RADE-OFS. Thus, a single global ad-dition rate can match a Drop-only perturbation, node by node, for all nodes only when these two statistics are propor-tional with the same constant for every node in the graph. 8
+
+Our ablation studies confirm that add and drop are not only non-interchangeable, but also complementary in practice. 
+
+Adaptive Control of Regularization Strength. We have shown that RADE regularizes through the variance of the logit perturbation by perturbing the graph. The remaining question is how strongly RADE should regularize during training, which is controlled by perturbation hyperparame-ters p and q for deletions and additions. This is a practical issue in stochastic graph augmentation: if the perturbation is too weak, its regularization effect is negligible; if it is too strong, the sampled views may deviate excessively from the input graph and distort the message-passing structure. Ex-isting augmentation methods typically handle this trade-off through dataset-specific tuning of perturbation hyperparam-eters. In contrast, we propose a principled rule that adapts the deletion and addition rates during training and reduces reliance on costly rate sweeps. We draw inspiration from GradNorm (Chen et al., 2018c), which balances multiple objectives by matching gradient norms on shared parameters. We treat RADE’s variance-
+
+> 7We focus on sum aggregation because the variance separates into a rate-dependent scalar and a node-wise message statistic, yielding a simple condition for comparing Drop- and Add-only.
+> 8Our theory establishes the limited statement that Drop-only and Add-only are generally non-interchangeable. It does not char-acterize the full set of variance profiles attainable by joint add-drop perturbations, which we leave to future work.
+
+6RADE: Random Add-Drop Edge as a Regularizer 
+
+based regularization effect as an (implicit) objective and match its gradient scale to that of the supervised loss by adjusting p and q. For a mini-batch B, define 
+
+R(B, p, q ) = 12
+
+X
+
+> i∈B
+
+zi(1 − zi) Var( δi), (13) as the RADE regularization proxy. We measure the gradient magnitudes of the supervised loss Ldata and the RADE regularization proxy on shared parameters θ: GB 
+
+> data
+
+=
+
+∥∇ θ Ldata (B)∥2, and GB
+
+> reg
+
+(p, q ) = ∥∇ θ R(B, p, q )∥2. The deletion and addition rates are then updated by minimizing 
+
+J (p, q ) = 
+
+"
+
+log GB
+
+> reg
+
+(p, q ) + ϵGB 
+
+> data
+
++ ϵ
+
+!# 2
+
++λ
+
+ qD(G)
+
+2
+
+. (14) The first term is the gradient-matching objective: it is min-imized when the RADE regularization and the supervised loss induce comparable gradient magnitudes on the shared parameters. The logarithmic ratio matches relative scale rather than absolute difference, and ϵ > 0 stabilizes the ob-jective when either gradient norm is zero. The second term penalizes excessive edge addition. Since q is an addition probability over many non-edges, even a small q can add many edges, thus changing the sparse regime of the input graph to dense. Normalizing by the graph density 9 D(G)
+
+makes this penalty depend on the addition rate relative to the original graph density, thus discouraging densification and preserving the inductive bias of the original input graph. The coefficient λ controls the density-normalized penalty of the second term: larger values make the model more conser-vative in adding edges. To avoid introducing dataset-specific hyperparameters, we fix λ at the task level (e.g., graph or node classification) rather than tuning it per dataset; dataset-specific adaptation is through the GradNorm rate updates. 10 
+
+In practice, we take one optimization step on J (p, q ) after each mini-batch, and use the updated rates (p, q ) to sample the perturbation for the next mini-batch. This makes RADE 
+
+adaptive throughout training: the perturbation rates evolve during the optimization rather than being fixed hyperparam-eters. The update increases perturbation strength when the regularization gradient is too weak, and decreases it when the regularization gradient becomes dominant. This directly addresses a key limitation of stochastic graph augmentation: its sensitivity to manually-chosen fixed perturbation rates. Further implementation details are in Appendix G.                
+
+> 9Graph density is the fraction of the number of edges to all possible edges, measuring the extent of sparsity.
+> 10 For optimizing J, we reparameterize the addition rate qby setting ρ=q/D (G)and optimize ρinstead, mapping back via
+> q=ρD (G)when evaluating GB
+> reg (p, q )or sampling edges. This doesn’t change the objective or perturbation rule; it only rescales the optimization coordinate through a variable change (Boyd & Vandenberghe, 2004). Since even a small change in the raw non-
+
+## 5. Experiments 
+
+Our experiments evaluate RADE-OF and RADE-OFS on various node classification and graph classification tasks. 11 
+
+Datasets. For node classification, we evaluate on eight datasets: Cora, CiteSeer, and PubMed (Sen et al., 2008); Computer, CS, and Physics (Shchur et al., 2018); Flickr (Zeng et al., 2020); and ogbn-arxiv (Hu et al., 2020). We use public splits for Cora, CiteSeer, PubMed, Flickr, and ogbn-arxiv; random 60%/20%/20% train/validation/test splits for Computer, CS, and Physics, following (Luo et al., 2024). For graph classification, we evaluate on MUTAG, PRO-TEINS, IMDB-B, and IMDB-M from TU (Morris et al., 2020), ogbg-molhiv from OGB (Hu et al., 2020), and peptides-func from LRGB (Dwivedi et al., 2022). For TU datasets, we follow a 10-fold cross-validation protocol (Xu et al., 2019); ogbg-molhiv and peptides-func use their offi-cial benchmark splits. Dataset statistics are in Appendix I. 
+
+Baselines. We compare RADE to widely-used regulariza-tion and augmentation baselines: Dropout (Srivastava et al., 2014), DropEdge (Rong et al., 2020), DropNode (Feng et al., 2020), and DropMessage (Fang et al., 2023). All methods use the same backbone and training pipeline: GCN, GIN, or GAT. Some results are deferred to Appendix H. 
+
+Experimental Setup. For node classification, we follow recent protocols (Luo et al., 2024; Lee et al., 2025), with mi-nor modifications to isolate the effect of graph augmentation by disabling other auxiliary regularizers (e.g., weight decay, dropout, batch normalization). We use 2-layer backbones, a common setup for node classification (Ju et al., 2023; Fang et al., 2023; Luo et al., 2024). For each dataset, we tune the backbone hidden dimension without augmentation and fix it across all regularizers. For augmentation base-lines, we tune their corresponding augmentation rate (e.g., drop rate for DropEdge). We train with Adam using a learn-ing rate 0.001 , using full-batch training except for Flickr and ogbn-arxiv with mini-batch training. We apply early stopping with a patience of 100 . We report mean ±std over five runs, using accuracy for all node-classification datasets except Flickr, where we report micro-F1. For RADE, we always initialize p = 0 .5 and q with the graph density; during training, p and q are adapted by one Adam step on the GradNorm objective J with learning rate 0.001 . For graph classification, we follow dataset-specific standard pro-tocols. On TU datasets, we follow the GIN protocol (Xu et al., 2019): 4 message-passing layers and 10-fold cross-validation. For ogbg-molhiv, we follow the OGB protocol and hyperparameters (Hu et al., 2020); for peptides-func,        
+
+> edge probability qcan induce substantial densification, optimizing
+> ρinstead makes updates relative to the graph density.
+> 11 Code is available at https://github.com/ Danial-sb/RADE
+
+7RADE: Random Add-Drop Edge as a Regularizer                                                                                                                                                                                                                                                                                                                       
+
+> Table 2. Node classification results (mean ±std over five runs) with GCN backbone. Accuracy (%) on all datasets except Flickr with micro-F1 (%). Best in bold and second underlined. Green and red shading show improvement and degradation over the GCN baseline.
+> Method Cora CiteSeer PubMed CS Computer Physics Flickr ogbn-arxiv
+> GCN 80 .10 ±0.64 69 .12 ±1.10 77 .49 ±0.42 92 .97 ±0.18 89 .63 ±0.24 96 .52 ±0.05 51 .89 ±0.16 70 .51 ±0.14
+> Dropout 80 .76 ±0.85 70 .04 ±0.58 77 .70 ±0.72 92 .92 ±0.10 89 .71 ±0.27 96 .54 ±0.04 52 .02 ±0.10 70 .77 ±0.42
+> DropEdge 80 .28 ±0.34 69 .42 ±1.16 77 .80 ±0.38 92 .10 ±0.27 89 .79 ±0.31 96 .48 ±0.06 52 .08 ±0.10 70 .38 ±0.27
+> DropNode 80 .80 ±0.55 68 .42 ±1.43 77 .68 ±0.64 92 .96 ±0.14 89 .63 ±0.22 96 .46 ±0.06 52 .07 ±0.12 70 .55 ±0.32
+> DropMessage 80 .65 ±1.01 67 .94 ±1.82 77 .57 ±0.40 91 .57 ±0.33 89 .06 ±0.64 96 .50 ±0.05 52 .23 ±0.13 70 .45 ±0.29
+> RADE-OF 81.08 ±1.06 70.20 ±1.31 78 .04 ±0.80 93.26 ±0.72 90.22 ±0.14 96.58 ±0.10 52.25 ±0.25 71.09 ±0.26
+> RADE-OFS 80 .82 ±1.24 70 .12 ±2.25 78.24 ±0.85 93 .21 ±0.15 89 .94 ±0.50 96 .53 ±0.03 51 .92 ±0.12 70 .95 ±0.19
+> Table 3. Graph classification results (mean ±std) with GCN backbone. Accuracy (%) on TU, ROC-AUC (%) on ogbg-molhiv, and AP (%) on peptides-func. Best in bold and second underlined. Green/red shading shows improvements/degradations vs. GCN baseline.
+> Method MUTAG PROTEINS IMDB-B IMDB-M ogbg-molhiv peptides-func
+> GCN 84 .00 ±8.00 75 .37 ±0.15 75 .70 ±3.13 51 .93 ±2.15 75 .21 ±1.24 55 .14 ±0.54
+> Dropout 83 .97 ±4.98 75 .40 ±4.41 75 .80 ±2.40 52 .06 ±2.11 74 .00 ±0.94 54 .84 ±0.45
+> DropEdge 84 .50 ±7.09 75 .29 ±2.74 75 .70 ±3.25 51 .60 ±2.84 76 .01 ±0.54 55 .29 ±0.88
+> DropNode 85 .02 ±5.99 75 .01 ±4.29 76 .20 ±4.12 52 .20 ±3.04 76 .04 ±1.00 54 .21 ±0.76
+> DropMessage 86 .08 ±7.39 75 .45 ±3.80 75 .40 ±3.41 51 .33 ±2.92 74 .21 ±1.07 54 .98 ±0.60
+> RADE-OF 86 .16 ±5.62 75 .62 ±1.86 76 .20 ±3.24 52 .09 ±2.21 76 .09 ±1.24 56 .12 ±0.66
+> RADE-OFS 86.24 ±6.79 75.84 ±3.44 76.60 ±2.25 52.24 ±1.95 76.28 ±1.41 56.97 ±0.82
+
+we follow the LRGB setup (Dwivedi et al., 2022). We report accuracy for TU, ROC-AUC for ogbg-molhiv, and AP for peptides-func. Dataset-specific hyperparameters are provided in Appendix I. 
+
+Results. On node classification (Table 2), both RADE variants improve upon the GCN baseline on all datasets. RADE-OF is the strongest overall variant: it is best on seven datasets and second-best on PubMed. Compared with the strongest non-RADE baseline, its gains range from 
+
+0.02% (Flickr) to 0.43% (Computer). RADE-OFS is best on PubMed and is otherwise below RADE-OF, consistent with its design: retaining the non-edge contribution at infer-ence can help when extra test-time propagation mitigates over-squashing. 12 Overall, since these node-classification datasets are less affected by over-squashing (Saber & Salehi-Abari, 2025), RADE-OF is the more reliable default. On graph classification (Table 3), RADE-OFS is best on all datasets and improves over vanilla GCN on every dataset, with the largest gains on MUTAG ( +2 .24% ) and peptides-func ( +1 .83% ). RADE-OF also improves over GCN on all datasets; it is second-best on MUTAG, PROTEINS, ogbg-molhiv, and peptides-func, ties for second on IMDB-B, and is below DropNode on IMDB-M. These results show that both RADE variants are reliable regularizers, and also sup-port the role of RADE-OFS in graph-level tasks, where over-squashing is more pronounced (Saber & Salehi-Abari, 
+
+> 12 For PubMed, this aligns with its reported moderate over-squashing intensity (Saber & Salehi-Abari, 2025).
+
+2025). By retaining expected non-edge contributions at in-ference, RADE-OFS creates additional propagation paths, aligning with its strongest gains on datasets that require long-range interaction or exhibit over-squashing (Dwivedi et al., 2022; Saber & Salehi-Abari, 2025). 
+
+Ablations: GradNorm, Corrections, and Nonlinearity. 
+
+Table 4 studies three components of RADE-OF: adap-tive rate selection through GradNorm (GN), expectation-preserving correction (EPC), and nonlinear message passing. Removing GradNorm (w/o GN), which fixes the drop/add rates to their default initialization, reduces performance on most datasets, with the largest drop of −0.83% on Flickr. In the fixed-rate setting, removing both GradNorm and the expectation-preserving correction (w/o GN & EPC) typically degrades performance more substantially (e.g., 
+
+−2.90% on Flickr), highlighting the importance of aggrega-tion corrections under stochastic drop/add perturbations. Table 4 also reports RADE-OF-Lin, with a linearized GCN backbone—known as SGC (Wu et al., 2019a)—matching the linear setting in Eq. (5) . RADE-OF-Lin improves SGC on all datasets, showing that RADE remains effective in the linearized setting. However, nonlinear RADE-OF is consistently stronger, especially on Flickr and ogbn-arxiv. Removing GN and EPC from RADE-OF-Lin also weak-ens performance on most datasets. Overall, the ablations confirm the contributing value of adaptive rate selection, expectation-preserving corrections, and nonlinearity (de-spite violating the linearity assumption of Eq. 5). 8RADE: Random Add-Drop Edge as a Regularizer 
+
+Table 4. Node-classification ablations of GradNorm (GN), Expectation-Preserving Correction (EPC), and nonlinearity for RADE-OF (mean ±std over five runs) with GCN backbone. Accuracy (%) is reported for all datasets except Flickr with micro-F1 (%). RADE-OF-Lin and GCN-Lin have the linearized GCN backbone. Best is in bold. 
+
+Method Cora CiteSeer PubMed CS Computer Physics Flickr ogbn-arxiv 
+
+RADE-OF 81.08 ±1.06 70.20 ±1.31 78.04 ±0.80 93.26 ±0.72 90.22 ±0.14 96.58 ±0.10 52.25 ±0.25 71.09 ±0.26 
+
+RADE-OF w/o GN 80 .90 ±1.32 70 .05 ±0.45 77 .43 ±0.88 93 .10 ±0.22 90 .15 ±0.32 96 .53 ±0.12 51 .42 ±0.20 70 .52 ±0.35 
+
+RADE-OF w/o GN & EPC 78 .94 ±0.50 70 .16 ±1.10 77 .18 ±0.76 93 .09 ±0.25 89 .04 ±0.42 96 .52 ±0.12 49 .35 ±0.12 70 .33 ±0.32 
+
+RADE-OF-Lin 80 .42 ±0.54 68 .76 ±1.05 76 .96 ±0.52 93 .22 ±0.13 89 .32 ±0.30 96 .47 ±0.05 50 .65 ±0.18 69 .92 ±0.35 
+
+RADE-OF-Lin w/o GN 80 .06 ±0.75 68 .44 ±0.72 76 .84 ±1.25 93 .07 ±0.21 88 .32 ±0.21 96 .45 ±0.04 50 .12 ±0.25 69 .05 ±0.12 
+
+RADE-OF-Lin w/o GN & EPC 77 .80 ±0.50 68 .91 ±0.66 76 .72 ±1.01 92 .72 ±0.26 88 .25 ±0.25 96 .45 ±0.03 50 .09 ±0.29 68 .72 ±0.18 
+
+GCN-Lin (SGC) 79 .60 ±0.25 68 .62 ±0.41 75 .24 ±0.65 93 .01 ±0.19 88 .28 ±0.31 96 .44 ±0.08 50 .12 ±0.26 68 .67 ±0.32 
+
+Table 5. Drop-only vs. add-only decomposition of RADE-OF on node classification (mean ±std over five runs) with GCN backbone. Accuracy (%) is reported on all datasets except Flickr with micro-F1 (%). Best is in bold. 
+
+Method Cora CiteSeer PubMed CS Computer Physics Flickr ogbn-arxiv 
+
+RADE-OF 81.08 ± 1.06 70.20 ± 1.31 78.04 ± 0.80 93.26 ± 0.72 90.22 ± 0.14 96.58 ± 0.10 52.25 ± 0.25 71.09 ± 0.26 
+
+RADE-OF-Drop 80 .44 ± 1.26 69 .84 ± 0.82 77 .82 ± 1.27 92 .16 ± 0.25 89 .82 ± 0.34 96 .48 ± 0.20 52 .14 ± 0.15 70 .68 ± 0.15 
+
+RADE-OF-Add 80 .68 ± 0.75 69 .34 ± 1.65 77 .96 ± 0.52 92 .94 ± 0.24 90 .09 ± 0.31 96 .49 ± 0.06 51 .85 ± 0.15 70 .12 ± 0.18 
+
+Table 6. Fixed fine-tuned vs. adaptive perturbation rates on node classification (mean ±std over five runs) with GCN backbone. “Tuned” selects a single best rate pair by hyperparameter search, while RADE-OF/RADE-OFS use adaptive GradNorm rule. Best is in bold. 
+
+Method Cora CiteSeer PubMed CS Computer Physics Flickr ogbn-arxiv 
+
+RADE-OF 81.08 ± 1.06 70.20 ± 1.31 78.04 ± 0.80 93.26 ± 0.72 90.22 ± 0.14 96.58 ± 0.10 52.25 ± 0.25 71.09 ± 0.26 
+
+RADE-OF (tuned) 80 .90 ± 1.32 70 .08 ± 0.62 77 .43 ± 0.88 93 .12 ± 0.06 90 .15 ± 0.32 96 .53 ± 0.08 52 .15 ± 0.18 70 .56 ± 0.36 
+
+RADE-OFS 80.82 ± 1.24 70.12 ± 2.25 78.24 ± 0.85 93.21 ± 0.15 89.94 ± 0.50 96.53 ± 0.03 51.92 ± 0.12 70.95 ± 0.19 
+
+RADE-OFS (tuned) 80 .20 ± 0.84 69 .74 ± 1.43 77 .82 ± 0.48 92 .20 ± 0.10 88 .31 ± 0.53 96 .49 ± 0.06 51 .84 ± 0.18 70 .77 ± 0.25 
+
+Decomposing RADE: Drop and Add. Table 5 decomposes RADE-OF into its drop and add components. The combined add-drop variant outperforms both single-component vari-ants on all datasets. The relative strength of drop-only and add-only differs across datasets—add-only is stronger on Cora, PubMed, CS, Computer, and Physics, while drop-only is stronger on CiteSeer, Flickr, and ogbn-arxiv. This sup-ports that deletion and addition are not interchangeable, and combining them yields better results. RADE-OF-Drop also improves over DropEdge in Table 2, since it retains adaptive rate selection and expectation-preserving correction. 
+
+Adaptive vs. Fine-tuned Rates. Table 6 compares adaptive selection of (p, q ) with a fine-tuned fixed pair. GradNorm improves over fixed fine-tuned rates on all datasets for both RADE variants, with modest but consistent gains for RADE-OF and larger gains for RADE-OFS. This supports adapt-ing perturbation strength during training rather than using hyperparameter-tuned rates. 
+
+## 6. Conclusion 
+
+We presented RADE, a stochastic add-drop edge augmen-tation that jointly addresses overfitting and over-squashing. We introduced two variants. RADE-OF targets overfitting by aligning the expected training-time aggregation with the input-graph inference aggregation, so random perturbations act only as regularization. RADE-OFS targets both overfit-ting and over-squashing by correcting deletion effects while retaining expected added-edge contributions at inference. We showed RADE’s deletion and addition components in-duce non-interchangeable regularization effects, and intro-duced a mini-batch GradNorm rule that adapts their rates during training. Across node and graph classification tasks, RADE-OF is a reliable regularizer, while RADE-OFS yields the clearest gains when long-range communication matters. Ablations support the importance of expectation-preserving corrections, adaptive rate selection, and combining deletion with addition. 
+
+## Acknowledgements 
+
+This work was supported by the Natural Sciences and En-gineering Research Council of Canada (NSERC). We also thank the reviewers for their constructive comments and suggestions. 9RADE: Random Add-Drop Edge as a Regularizer 
+
+## Impact Statement 
+
+This paper proposes a graph data augmentation and regu-larization method intended to improve the training of graph neural networks. The method is domain-agnostic and does not target any specific application area. We do not anticipate unique negative societal or ethical impacts arising specifi-cally from this method. 
+
+## References 
+
+Abboud, R., Dimitrov, R., and Ceylan, I. I. Shortest path networks for graph property prediction. In Learning on Graphs Conference (LoG) , pp. 5:1–5:25. PMLR, 2022. Abu-El-Haija, S., Perozzi, B., Kapoor, A., Alipourfard, N., Lerman, K., Harutyunyan, H., Ver Steeg, G., and Gal-styan, A. Mixhop: Higher-order graph convolutional architectures via sparsified neighborhood mixing. In In-ternational Conference on Machine Learning (ICML) , pp. 21–29. PMLR, 2019. Alon, U. and Yahav, E. On the bottleneck of graph neural networks and its practical implications. In International Conference on Learning Representations (ICLR) , 2021. Arnaiz-Rodr ´ıguez, A., Begga, A., Escolano, F., and Oliver, N. DiffWire: Inductive graph rewiring via the Lov ´asz Bound. In Learning on Graphs Conference (LoG) , pp. 15:1–15:27. PMLR, 2022. Arora, S. A survey on graph neural networks for knowl-edge graph completion. arXiv preprint arXiv:2007.12374 ,2020. Barbero, F., Velingker, A., Saberi, A., Bronstein, M., and Di Giovanni, F. Locality-aware graph rewiring in GNNs. In International Conference on Learning Representations (ICLR) , 2024. Bevilacqua, B., Frasca, F., Lim, D., Srinivasan, B., Cai, C., Balamurugan, G., Bronstein, M. M., and Maron, H. Equivariant subgraph aggregation networks. In Interna-tional Conference on Learning Representations (ICLR) ,2022. Bodnar, C., Frasca, F., Otter, N., Wang, Y., Li `o, P., Mont ´ufar, G. F., and Bronstein, M. M. Weisfeiler and Lehman go cellular: CW networks. In Advances in Neural Infor-mation Processing Systems (NeurIPS) , pp. 2625–2640, 2021a. Bodnar, C., Frasca, F., Wang, Y., Otter, N., Mont ´ufar, G. F., Li `o, P., and Bronstein, M. M. Weisfeiler and Lehman go topological: Message passing simplicial networks. In 
+
+International Conference on Machine Learning (ICML) ,pp. 1026–1037. PMLR, 2021b. Boyd, S. and Vandenberghe, L. Convex Optimization . Cam-bridge University Press, 2004. Br ¨uel-Gabrielsson, R., Yurochkin, M., and Solomon, J. Rewiring with positional encodings for graph neural net-works. arXiv preprint arXiv:2201.12674 , 2022. Cai, C., Hy, T. S., Yu, R., and Wang, Y. On the connec-tion between MPNN and graph transformer. In Inter-national Conference on Machine Learning (ICML) , pp. 3408–3430. PMLR, 2023. Chen, J., Ma, T., and Xiao, C. FastGCN: Fast learning with graph convolutional networks via importance sampling. In International Conference on Learning Representations (ICLR) , 2018a. Chen, J., Zhu, J., and Song, L. Stochastic training of graph convolutional networks with variance reduction. In Inter-national Conference on Machine Learning (ICML) , pp. 942–950. PMLR, 2018b. Chen, Z., Badrinarayanan, V., Lee, C.-Y., and Rabinovich, A. GradNorm: Gradient normalization for adaptive loss balancing in deep multitask networks. In International Conference on Machine Learning (ICML) , pp. 794–803. PMLR, 2018c. Dwivedi, V. P., Ramp ´a ˇsek, L., Galkin, M., Parviz, A., Wolf, G., Luu, A. T., and Beaini, D. Long range graph bench-mark. In Advances in Neural Information Processing Systems (NeurIPS) , pp. 22326–22340, 2022. Entezari, N., Al-Sayouri, S. A., Darvishzadeh, A., and Pa-palexakis, E. E. All you need is low (rank) defending against adversarial attacks on graphs. In International Conference on Web Search and Data Mining , pp. 169– 177, 2020. Fang, T., Xiao, Z., Wang, C., Xu, J., Yang, X., and Yang, Y. DropMessage: Unifying random dropping for graph neural networks. In AAAI Conference on Artificial Intelli-gence , pp. 4267–4275, 2023. Feng, F., He, X., Tang, J., and Chua, T.-S. Graph adver-sarial training: Dynamically regularizing based on graph structure. IEEE Transactions on Knowledge and Data Engineering , 33(6):2493–2504, 2019. Feng, W., Zhang, J., Dong, Y., Han, Y., Luan, H., Xu, Q., Yang, Q., Kharlamov, E., and Tang, J. Graph random neural networks for semi-supervised learning on graphs. In Advances in Neural Information Processing Systems (NeurIPS) , pp. 22092–22103, 2020. Gasteiger, J., Weißenberger, S., and G ¨unnemann, S. Dif-fusion improves graph learning. In Advances in Neural Information Processing Systems (NeurIPS) , pp. 12421– 12431, 2019. 10 RADE: Random Add-Drop Edge as a Regularizer 
+
+Gilmer, J., Schoenholz, S. S., Riley, P. F., Vinyals, O., and Dahl, G. E. Neural message passing for quantum chem-istry. In International Conference on Machine Learning (ICML) , pp. 1263–1272. PMLR, 2017. Gori, M., Monfardini, G., and Scarselli, F. A new model for learning in graph domains. In IEEE International Joint Conference on Neural Networks, 2005 , volume 2, pp. 729–734. IEEE, 2005. Gutteridge, B., Dong, X., Bronstein, M. M., and Di Gio-vanni, F. DRew: Dynamically rewired message pass-ing with delay. In International Conference on Machine Learning (ICML) , pp. 12252–12267. PMLR, 2023. Hamilton, W., Ying, Z., and Leskovec, J. Inductive rep-resentation learning on large graphs. In Advances in Neural Information Processing Systems (NeurIPS) , pp. 1024–1034, 2017. Hu, W., Fey, M., Zitnik, M., Dong, Y., Ren, H., Liu, B., Catasta, M., and Leskovec, J. Open graph benchmark: Datasets for machine learning on graphs. In Advances in Neural Information Processing Systems (NeurIPS) , pp. 22118–22133, 2020. Jacob, S. A., Louis, P., and Salehi-Abari, A. Stochastic subgraph neighborhood pooling for subgraph classifica-tion. In International Conference on Information and Knowledge Management (CIKM) , pp. 3963–3967, 2023. Ju, M., Zhao, T., Yu, W., Shah, N., and Ye, Y. GraphPatcher: mitigating degree bias for graph neural networks via test-time augmentation. In Advances in Neural Information Processing Systems (NeurIPS) , pp. 55785–55801, 2023. Karhadkar, K., Banerjee, P. K., and Mont ´ufar, G. FoSR: First-order spectral rewiring for addressing oversquash-ing in GNNs. In International Conference on Learning Representations (ICLR) , 2023. Kearnes, S., McCloskey, K., Berndl, M., Pande, V., and Riley, P. Molecular graph convolutions: moving beyond fingerprints. Journal of Computer-Aided Molecular De-sign , 30(8):595–608, 2016. Kipf, T. N. and Welling, M. Semi-supervised classifica-tion with graph convolutional networks. In International Conference on Learning Representations (ICLR) , 2017. Kreuzer, D., Beaini, D., Hamilton, W., L ´etourneau, V., and Tossou, P. Rethinking graph transformers with spectral attention. In Advances in Neural Information Processing Systems (NeurIPS) , pp. 21618–21629, 2021. Lee, D., Kong, M., Hamid, S., Lee, C., and Yoo, J. Aggre-gation buffer: Revisiting DropEdge with a new parameter block. In International Conference on Machine Learning (ICML) , pp. 33181–33204. PMLR, 2025. Li, G., M ¨uller, M., Thabet, A., and Ghanem, B. DeepGCNs: Can GCNs go as deep as CNNs? In IEEE/CVF Interna-tional Conference on Computer Vision , pp. 9267–9276, 2019. Louis, P., Jacob, S. A., and Salehi-Abari, A. Sampling enclosing subgraphs for link prediction. In International Conference on Information and Knowledge Management (CIKM) , pp. 4269–4273, 2022. Louis, P., Jacob, S. A., and Salehi-Abari, A. Simplifying subgraph representation learning for scalable link predic-tion. arXiv preprint arXiv:2301.12562 , 2023. Luo, Y., Shi, L., and Wu, X.-M. Classic GNNs are strong baselines: Reassessing GNNs for node classification. In Advances in Neural Information Processing Systems (NeurIPS) , pp. 97650–97669, 2024. Micheli, A. Neural network for graphs: A contextual con-structive approach. IEEE Transactions on Neural Net-works , 20(3):498–511, 2009. Morris, C., Kriege, N. M., Bause, F., Kersting, K., Mutzel, P., and Neumann, M. TUDataset: A collection of bench-mark datasets for learning with graphs. In ICML 2020 Workshop on Graph Representation Learning and Beyond ,2020. Nikolentzos, G., Dasoulas, G., and Vazirgiannis, M. K-hop graph neural networks. Neural Networks , 130:195–205, 2020. Papp, P. A., Martinkus, K., Faber, L., and Wattenhofer, R. DropGNN: Random dropouts increase the expressiveness of graph neural networks. In Advances in Neural Infor-mation Processing Systems (NeurIPS) , pp. 21997–22009, 2021. Ramp ´a ˇsek, L., Galkin, M., Dwivedi, V. P., Luu, A. T., Wolf, G., and Beaini, D. Recipe for a general, powerful, scal-able graph transformer. In Advances in Neural Informa-tion Processing Systems (NeurIPS) , pp. 14501–14515, 2022. Rong, Y., Huang, W., Xu, T., and Huang, J. DropEdge: Towards deep graph convolutional networks on node clas-sification. In International Conference on Learning Rep-resentations (ICLR) , 2020. Saber, D. and Salehi-Abari, A. Scalable expressiveness through preprocessed graph perturbations. In Interna-tional Conference on Information and Knowledge Man-agement (CIKM) , pp. 4020–4025, 2024. Saber, D. and Salehi-Abari, A. Empirical study of over-squashing in GNNs and causal estimation of rewiring strategies. In International Conference on Information 
+
+11 RADE: Random Add-Drop Edge as a Regularizer 
+
+and Knowledge Management (CIKM) , pp. 2525–2534, 2025. Scarselli, F., Gori, M., Tsoi, A. C., Hagenbuchner, M., and Monfardini, G. The graph neural network model. IEEE Transactions on Neural Networks , 20(1):61–80, 2008. Sen, P., Namata, G., Bilgic, M., Getoor, L., Galligher, B., and Eliassi-Rad, T. Collective classification in network data. AI Magazine , 29(3):93–93, 2008. Shchur, O., Mumme, M., Bojchevski, A., and G ¨unnemann, S. Pitfalls of graph neural network evaluation. In NeurIPS Workshop on Relational Representation Learning , 2018. Southern, J., Di Giovanni, F., Bronstein, M. M., and Lutzeyer, J. F. Understanding virtual nodes: Oversmooth-ing, oversquashing, and node heterogeneity. In Interna-tional Conference on Learning Representations (ICLR) ,2025. Srivastava, N., Hinton, G., Krizhevsky, A., Sutskever, I., and Salakhutdinov, R. Dropout: A simple way to prevent neural networks from overfitting. Journal of Machine Learning Research , 15(1):1929–1958, 2014. Thakoor, S., Tallec, C., Azar, M. G., Azabou, M., Dyer, E. L., Munos, R., Veli ˇckovi ´c, P., and Valko, M. Large-scale representation learning on graphs via bootstrapping. In International Conference on Learning Representations (ICLR) , 2022. Topping, J., Di Giovanni, F., Chamberlain, B. P., Dong, X., and Bronstein, M. M. Understanding over-squashing and bottlenecks on graphs via curvature. In International Conference on Learning Representations (ICLR) , 2022. Veli ˇckovi ´c, P., Cucurull, G., Casanova, A., Romero, A., Li `o, P., and Bengio, Y. Graph attention networks. In 
+
+International Conference on Learning Representations (ICLR) , 2018. Veli ˇckovi ´c, P., Fedus, W., Hamilton, W. L., Li `o, P., Bengio, Y., and Hjelm, R. D. Deep graph infomax. In Interna-tional Conference on Learning Representations (ICLR) ,2019. Wang, G., Ying, R., Huang, J., and Leskovec, J. Multi-hop attention graph neural networks. In International Joint Conference on Artificial Intelligence (IJCAI) , pp. 3062–3068, 2021. Wu, F., Souza, A., Zhang, T., Fifty, C., Yu, T., and Wein-berger, K. Simplifying graph convolutional networks. In 
+
+International Conference on Machine Learning (ICML) ,pp. 6861–6871. PMLR, 2019a. Wu, H., Wang, C., Tyshetskiy, Y., Docherty, A., Lu, K., and Zhu, L. Adversarial examples on graph data: Deep insights into attack and defense. In International Joint Conference on Artificial Intelligence (IJCAI) , pp. 4816– 4823, 2019b. Wu, S., Sun, F., Zhang, W., Xie, X., and Cui, B. Graph neural networks in recommender systems: a survey. ACM Computing Surveys , 55(5):1–37, 2022. Xu, K., Hu, W., Leskovec, J., and Jegelka, S. How powerful are graph neural networks? In International Conference on Learning Representations (ICLR) , 2019. Yang, L., Zhang, L., and Yang, W. Graph adversarial self-supervised learning. In Advances in Neural Information Processing Systems (NeurIPS) , pp. 14887–14899, 2021. Ying, C., Cai, T., Luo, S., Zheng, S., Ke, G., He, D., Shen, Y., and Liu, T.-Y. Do transformers really perform badly for graph representation? In Advances in Neural Information Processing Systems (NeurIPS) , pp. 28877–28888, 2021. You, Y., Chen, T., Sui, Y., Chen, T., Wang, Z., and Shen, Y. Graph contrastive learning with augmentations. In 
+
+Advances in Neural Information Processing Systems (NeurIPS) , pp. 5812–5823, 2020. You, Y., Chen, T., Shen, Y., and Wang, Z. Graph contrastive learning automated. In International Conference on Ma-chine Learning (ICML) , pp. 12121–12132. PMLR, 2021. Zeng, H., Zhou, H., Srivastava, A., Kannan, R., and Prasanna, V. GraphSAINT: Graph sampling based in-ductive learning method. In International Conference on Learning Representations (ICLR) , 2020. Zhang, X. and Zitnik, M. GNNGuard: Defending graph neural networks against adversarial attacks. In Advances in Neural Information Processing Systems (NeurIPS) , pp. 9263–9275, 2020. 12 RADE: Random Add-Drop Edge as a Regularizer 
+
+## A. Derivation of the Variance-Regularization View 
+
+For completeness, we briefly derive the approximation in Eq. (5), following the same second-order argument used in prior work on stochastic regularization for GNNs (Fang et al., 2023). 
+
+Binary cross-entropy. Let si denote the logit of node i on the input graph, and let ˜si denote the corresponding logit on the perturbed graph. We observe ˜si = si + δi with logit noise of δi. We assume that the graph augmentation/perturbation is expectation-preserving at the logit level, so that E[δi] = 0 . We denote the binary cross-entropy (BCE) loss of the input graph by LBCE , while letting ˜LBCE denote the binary cross-entropy loss evaluated on the perturbed graph. We write 
+
+LBCE = P 
+
+> i
+
+ℓi(si) and ˜LBCE = P 
+
+> i
+
+ℓi(˜ si) by defining 
+
+ℓi(si) = − yi log zi − (1 − yi) log(1 − zi), zi = σ(si),
+
+Using a second-order Taylor expansion of ℓi(si + δi) around si, we have ℓi(si + δi) ≈ ℓi(si) + ℓ′
+
+> i
+
+(si)δi + 12 ℓ′′  
+
+> i
+
+(si)δ2 
+
+> i
+
+.Taking the expectation over the augmentation randomness gives 
+
+E[ℓi(si + δi)] ≈ ℓi(si) + ℓ′
+
+> i
+
+(si)E[δi] + 12 ℓ′′  
+
+> i
+
+(si)E[δ2 
+
+> i
+
+].
+
+Since E[δi] = 0 , E[δ2 
+
+> i
+
+] = Var( δi), and ℓ′′  
+
+> i
+
+(si) = zi(1 − zi) for BCE, we have E[ℓi(˜ si)] ≈ ℓi(si) + 12 zi(1 − zi) Var( δi).
+
+Summing over i yields 
+
+E[ ˜LBCE ] ≈ LBCE + 12
+
+X
+
+> i
+
+zi(1 − zi) Var( δi),
+
+which is Eq. (5). This shows that stochastic expectation-preserving augmentation acts as a variance-based regularizer. 
+
+Multi-class cross-entropy. The same argument extends to C-class classification. Let si ∈ RC be the logits of node i on the input graph, and let ˜si denote the corresponding logits on the perturbed graph. We write ˜si = si + δi, with the assumption of expectation-preservation at the logit level, so that E[δi] = 0. Letting pi = softmax( si), we consider the cross-entropy (CE) losses of LCE = P 
+
+> i
+
+ℓi(si) and eLCE = P 
+
+> i
+
+ℓi(esi), with ℓi(si) = − log pi,y i . Using a second-order Taylor expansion of ℓi(si + δi) around si, we have 
+
+ℓi(si + δi) ≈ ℓi(si) + ∇ℓi(si)⊤δi + 12 δ⊤ 
+
+> i
+
+Hiδi,
+
+where Hi = diag( pi) − pip⊤ 
+
+> i
+
+. Taking expectation and using E[δi] = 0, we have E[ℓi(˜ si)] ≈ ℓi(si) + 12 E
+
+h
+
+δ⊤ 
+
+> i
+
+Hiδi
+
+i
+
+. As the perturbation is mean-zero, we have E
+
+h
+
+δ⊤ 
+
+> i
+
+Hiδi
+
+i
+
+= Tr( HiΣi), where Σi = Cov( δi) is the covariance matrix. Thus, 
+
+E[ ˜LCE ] ≈ LCE + 12
+
+X
+
+> i
+
+Tr( HiΣi).
+
+Ignoring cross-class covariances, we approximate Σi = diag  Var( δi, 1), . . . , Var( δi,C ), then Tr( HiΣi) = PCc=1 pi,c (1 −
+
+pi,c ) Var( δi,c ), and thus 
+
+E[ ˜LCE ] ≈ LCE + 12
+
+X
+
+> iC
+
+X
+
+> c=1
+
+pi,c (1 − pi,c ) Var( δi,c ).
+
+## B. Proofs of Expectation-Preserving Aggregation of RADE-OF and RADE-OFS 
+
+Throughout this section, expectations are taken over G′ ∼ Q (· | G ) conditional on H(ℓ−1) . Thus, the messages {m(ℓ−1)  
+
+> ij
+
+}j̸ =i
+
+are deterministic under the expectation. For notational brevity, we omit this conditioning in the proofs below. We first provide two lemmas and their proofs, which are used to prove our results. 
+
+Lemma B.1 (Existing-edge correction) . Fix a node i and layer ℓ. Consider that each message from the existing edge (i, j )
+
+is corrected by em(ℓ−1)  
+
+> ij
+
+= αG  
+
+> ij
+> E[αG′
+> ij ]
+
+m(ℓ−1)  
+
+> ij
+
+, with E[αG′ 
+
+> ij
+
+]̸ = 0 . Then E
+
+hP  
+
+> j:Aij =1
+
+αG′ 
+
+> ij
+
+em(ℓ−1) 
+
+> ij
+
+i
+
+= P  
+
+> j:Aij =1
+
+αG 
+
+> ij
+
+m(ℓ−1)  
+
+> ij
+
+.
+
+13 RADE: Random Add-Drop Edge as a Regularizer 
+
+Proof. Using linearity of expectation and the definition of em(ℓ−1)  
+
+> ij
+
+,
+
+E
+
+ X 
+
+> j:Aij =1
+
+αG′ 
+
+> ij
+
+em(ℓ−1) 
+
+> ij
+
+ = X 
+
+> j:Aij =1
+
+E
+
+"
+
+αG′
+
+> ij
+
+αG
+
+> ij
+
+E[αG′ 
+
+> ij
+
+] m(ℓ−1) 
+
+> ij
+
+#
+
+= X 
+
+> j:Aij =1
+
+E[αG′ 
+
+> ij
+
+] αG
+
+> ij
+
+E[αG′ 
+
+> ij
+
+] m(ℓ−1)  
+
+> ij
+
+= X 
+
+> j:Aij =1
+
+αG 
+
+> ij
+
+m(ℓ−1)  
+
+> ij
+
+.
+
+Lemma B.2 (Weighted centering identity) . Fix a node i and layer ℓ. Let Zi = P  
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+], and, when Zi > 0, let 
+
+μ(ℓ−1)  
+
+> i
+
+= 1
+
+> Zi
+
+P  
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]m(ℓ−1)  
+
+> ij
+
+. Then P  
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]
+
+
+
+m(ℓ−1)  
+
+> ij
+
+− μ(ℓ−1) 
+
+> i
+
+
+
+= 0.
+
+Proof. Substituting the definition of μ(ℓ−1)  
+
+> i
+
+,
+
+X 
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]
+
+
+
+m(ℓ−1)  
+
+> ij
+
+− μ(ℓ−1) 
+
+> i
+
+
+
+= X 
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]m(ℓ−1)  
+
+> ij
+
+−
+
+ X 
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]
+
+ μ(ℓ−1)  
+
+> i
+
+expand the sum 
+
+= X 
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]m(ℓ−1)  
+
+> ij
+
+− Zi
+
+ 1
+
+Zi
+
+X 
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]m(ℓ−1) 
+
+> ij
+
+ definition of Zi and μ(ℓ−1) 
+
+> i
+
+= 0.
+
+Proposition 4.1 (Expectation-Preservation in RADE-OF) . Under the RADE perturbation (6) , any weighted-sum aggregation (Def. 3.1) corrected by the RADE-OF rule (8) is expectation-preserving (Def. 3.2). 
+
+Proof. Fix a node i and layer ℓ. The corrected training-time aggregation is ea(G′,ℓ ) 
+
+> i
+
+= P  
+
+> j̸=i
+
+αG′ 
+
+> ij
+
+em(ℓ−1)  
+
+> ij
+
+. Splitting the expectation into existing-edge and non-edge terms gives 
+
+E
+
+hea(G′,ℓ )
+
+> i
+
+i
+
+= E
+
+ X 
+
+> j:Aij =1
+
+αG′ 
+
+> ij
+
+em(ℓ−1) 
+
+> ij
+
+ + E
+
+ X 
+
+> j:Aij =0
+
+αG′ 
+
+> ij
+
+em(ℓ−1) 
+
+> ij
+
+ .
+
+For existing edges, based on Lemma B.1, we have E
+
+hP  
+
+> j:Aij =1
+
+αG′ 
+
+> ij
+
+em(ℓ−1) 
+
+> ij
+
+i
+
+= P  
+
+> j:Aij =1
+
+αG 
+
+> ij
+
+m(ℓ−1)  
+
+> ij
+
+. For non-edges, RADE-OF uses em(ℓ−1)  
+
+> ij
+
+= m(ℓ−1)  
+
+> ij
+
+− μ(ℓ−1)  
+
+> i
+
+, Thus, by Lemma B.2, 
+
+E
+
+ X 
+
+> j:Aij =0
+
+αG′ 
+
+> ij
+
+em(ℓ−1) 
+
+> ij
+
+ = X 
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]
+
+
+
+m(ℓ−1)  
+
+> ij
+
+− μ(ℓ−1) 
+
+> i
+
+
+
+= 0.
+
+Combining the two parts and using that αG 
+
+> ij
+
+= 0 when Aij = 0 give us 
+
+E
+
+hea(G′,ℓ )
+
+> i
+
+i
+
+= X 
+
+> j:Aij =1
+
+αG 
+
+> ij
+
+m(ℓ−1)  
+
+> ij
+
+= X 
+
+> j̸=i
+
+αG 
+
+> ij
+
+m(ℓ−1)  
+
+> ij
+
+= a(G,ℓ ) 
+
+> i
+
+,
+
+which proves that RADE-OF is expectation-preserving. 
+
+Proposition 4.2 (Expectation-Preservation in RADE-OFS) . Under the RADE perturbation (6) , any weighted-sum aggregation (Def. 3.1) corrected by the RADE-OFS rule (10) is expectation-preserving with respect to the modified inference-time aggregation in Eq. (11). 14 RADE: Random Add-Drop Edge as a Regularizer 
+
+Proof. Fix a node i and layer ℓ. The corrected training-time aggregation is ea(G′,ℓ ) 
+
+> i
+
+= P  
+
+> j̸=i
+
+αG′ 
+
+> ij
+
+em(ℓ−1)  
+
+> ij
+
+. Splitting the expectation into existing-edge and non-edge terms gives 
+
+E
+
+hea(G′,ℓ )
+
+> i
+
+i
+
+= E
+
+ X 
+
+> j:Aij =1
+
+αG′ 
+
+> ij
+
+em(ℓ−1) 
+
+> ij
+
+ + E
+
+ X 
+
+> j:Aij =0
+
+αG′ 
+
+> ij
+
+em(ℓ−1) 
+
+> ij
+
+ .
+
+The existing-edge correction in RADE-OFS is the same as in RADE-OF, so based on Lemma B.1 we have 
+
+E
+
+hP  
+
+> j:Aij =1
+
+αG′ 
+
+> ij
+
+em(ℓ−1) 
+
+> ij
+
+i
+
+= P  
+
+> j:Aij =1
+
+αG 
+
+> ij
+
+m(ℓ−1)  
+
+> ij
+
+. For non-edges, RADE-OFS leaves messages uncentered: em(ℓ−1)  
+
+> ij
+
+=
+
+m(ℓ−1)  
+
+> ij
+
+. Thus, E
+
+hP  
+
+> j:Aij =0
+
+αG′ 
+
+> ij
+
+em(ℓ−1) 
+
+> ij
+
+i
+
+= P  
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]m(ℓ−1)  
+
+> ij
+
+. Combining the two parts, 
+
+E
+
+hea(G′,ℓ )
+
+> i
+
+i
+
+= X 
+
+> j:Aij =1
+
+αG 
+
+> ij
+
+m(ℓ−1)  
+
+> ij
+
++ X 
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]m(ℓ−1)  
+
+> ij
+
+= a(G,ℓ ) 
+
+> i
+
++ X 
+
+> j:Aij =0
+
+E[αG′ 
+
+> ij
+
+]m(ℓ−1)  
+
+> ij
+
+= ba(G,ℓ ) 
+
+> i
+
+.
+
+Thus, RADE-OFS is expectation-preserving with respect to the modified inference-time aggregation in Eq. (11). 
+
+## C. Coefficient Expectations for Common Weighted-sum Aggregators 
+
+The results in Appendix B apply to any weighted-sum aggregator once the coefficients αG 
+
+> ij
+
+and the expectations E[αG′ 
+
+> ij
+
+]
+
+are specified. Here, we instantiate these quantities for sum aggregation, GCN-style symmetric degree normalization, and GAT-style attention normalization. In the following, we denote di as the degree of node i, including a self-loop, and n as the number of nodes. 
+
+(I) Sum aggregation 
+
+For sum aggregation, αG 
+
+> ij
+
+= Aij , and under the RADE perturbation (Eq. (6) ), we have E[αG′ 
+
+> ij
+
+] = E[A′ 
+
+> ij
+
+], which is 1 − p for dropping edges, and q for adding non-edges. For existing edges, the correction factor in RADE-OF and RADE-OFS (see Eqs. (8) and (10) ) becomes αG  
+
+> ij
+> E[αG′
+> ij ]
+
+= 11−p . Thus, for sum aggregation, the neighbor-side correction reduces to the usual inverted-drop scaling. For non-edges, E[αG′ 
+
+> ij
+
+] = q is constant over all j. Hence the weighted mean in Eq. (9) reduces to the uniform non-neighbor mean: μ(ℓ−1)  
+
+> i
+
+= 1
+
+> n−di
+
+P  
+
+> j:Aij =0
+
+m(ℓ−1)  
+
+> ij
+
+. Therefore, RADE-OF centers added non-edge messages around this uniform mean. RADE-OFS instead retains its expected contribution in the modified inference-time aggregation of ba(G,ℓ ) 
+
+> i
+
+= a(G,ℓ ) 
+
+> i
+
++ q P  
+
+> j:Aij =0
+
+m(ℓ−1)  
+
+> ij
+
+.
+
+(II) Symmetric-degree aggregation 
+
+For GCN-style symmetric degree normalization, αG 
+
+> ij
+
+= Aij 
+
+√didj
+
+. Thus, the required expectation is E[αG′ 
+
+> ij
+
+] = E
+
+ A′
+
+> ij
+
+√d′
+
+> id′
+> j
+
+
+
+.Since the coefficient is zero whenever A′ 
+
+> ij
+
+= 0 ,
+
+E[αG′ 
+
+> ij
+
+] = P(A′ 
+
+> ij
+
+= 1) E
+
+ 1
+
+q
+
+d′
+
+> i
+
+d′
+
+> j
+
+A′ 
+
+> ij
+
+= 1 
+
+ = P(A′ 
+
+> ij
+
+= 1) E
+
+h
+
+(d′
+
+> i
+
+)−1/2 A′ 
+
+> ij
+
+= 1 
+
+i
+
+E
+
+h
+
+(d′ 
+
+> j
+
+)−1/2 A′ 
+
+> ij
+
+= 1 
+
+i
+
+. (15) The main challenge for computing E[αG′ 
+
+> ij
+
+] is the expectation term of endpoint degree-normalization E(d′
+
+> i
+
+)−1/2 A′ 
+
+> ij
+
+= 1 ,for which we use the following delta-approximation method. 
+
+Lemma C.1 (Endpoint degree-normalization approximation) . Fix a pair (i, j ) and condition on A′ 
+
+> ij
+
+= 1 . Let μi = E[d′ 
+
+> i
+
+|
+
+A′ 
+
+> ij
+
+= 1] , and σ2 
+
+> i
+
+= Var( d′ 
+
+> i
+
+| A′ 
+
+> ij
+
+= 1) . Then 
+
+E
+
+h
+
+(d′
+
+> i
+
+)−1/2 A′ 
+
+> ij
+
+= 1 
+
+i
+
+≈ μ−1/2 
+
+> i
+
++ 38 σ2 
+
+> i
+
+μ−5/2 
+
+> i
+
+.
+
+Proof. Let f (x) = x−1/2. The second-order delta method gives 
+
+E[f (d′
+
+> i
+
+) | A′ 
+
+> ij
+
+= 1] ≈ f (μi) + 12 f ′′ (μi)σ2 
+
+> i
+
+.
+
+15 RADE: Random Add-Drop Edge as a Regularizer 
+
+Since f ′′ (x) = 34 x−5/2, we obtain 
+
+E
+
+h
+
+(d′
+
+> i
+
+)−1/2 A′ 
+
+> ij
+
+= 1 
+
+i
+
+≈ μ−1/2 
+
+> i
+
++ 38 σ2 
+
+> i
+
+μ−5/2 
+
+> i
+
+.
+
+Thus, to approximate Eq. (15), it remains only to specify μi = E[d′ 
+
+> i
+
+| A′ 
+
+> ij
+
+= 1] and σ2 
+
+> i
+
+= Var( d′ 
+
+> i
+
+| A′ 
+
+> ij
+
+= 1) under the two possible cases that the pair (i, j ) is in the input graph (i.e., Aij = 1 ) or not (i.e., Aij ̸ = 1 ). 
+
+Case Aij = 1 . Conditional on A′ 
+
+> ij
+
+= 1 , the self-loop and the retained edge (i, j ) contribute 2 to d′
+
+> i
+
+. Among the remaining nodes k̸ = i, j , node i has di − 2 input-graph neighbors (excluding self and node j) and n − di input-graph non-neighbors. Hence, μi = 2 + ( di − 2)(1 − p) + ( n − di)q, and σ2 
+
+> i
+
+= ( di − 2)(1 − p)p + ( n − di)q(1 − q). The terms for μj and σ2
+
+> j
+
+are similar. Given these terms and since P(A′ 
+
+> ij
+
+= 1) = 1 − p, we can now approximate: 
+
+E[αG′ 
+
+> ij
+
+] ≈ (1 − p)
+
+
+
+μ−1/2 
+
+> i
+
++ 38 σ2 
+
+> i
+
+μ−5/2
+
+> i
+
+  
+
+μ−1/2 
+
+> j
+
++ 38 σ2 
+
+> j
+
+μ−5/2
+
+> j
+
+
+
+.
+
+Thus, for existing edges, the correction factor is αG  
+
+> ij
+> E[αG′
+> ij ]
+
+≈ 1/√didj  
+
+> E[αG′
+> ij ]
+
+. Unlike sum aggregation, this correction is pair-dependent because the expected perturbed normalization depends on the endpoint degrees. 
+
+Case Aij = 0 . Conditional on A′ 
+
+> ij
+
+= 1 , the self-loop and the added edge (i, j ) contribute 2 to d′
+
+> i
+
+. Among the remaining nodes k̸ = i, j , node i has di −1 input-graph neighbors (excluding itself) and n−1−di input-graph non-neighbors excluding self and node j. Hence, μi = 2 + ( di − 1)(1 − p) + ( n − 1 − di)q, and σ2 
+
+> i
+
+= ( di − 1)(1 − p)p + ( n − 1 − di)q(1 − q).The terms for μj and σj 2 are similar. Given these terms, and since P(A′ 
+
+> ij
+
+= 1) = q, we can approximate 
+
+E[αG′ 
+
+> ij
+
+] ≈ q
+
+
+
+μ−1/2 
+
+> i
+
++ 38 σ2 
+
+> i
+
+μ−5/2
+
+> i
+
+  
+
+μ−1/2 
+
+> j
+
++ 38 σ2 
+
+> j
+
+μ−5/2
+
+> j
+
+
+
+.
+
+For RADE-OF, the non-edge expectations define the weighted centering mean in Eq. (9) . Unlike sum aggregation, this centering is not uniform over non-neighbors: under GCN normalization, E[αG′ 
+
+> ij
+
+] depends on the perturbed degree moments of both endpoints. Thus, the RADE-OF centering mean is computed by substituting the non-edge approximation into Eq. (9) .RADE-OFS uses the same coefficient expectations in its modified inference-time aggregation. 
+
+(III) Attention aggregation 
+
+For GAT-style attention aggregation, the coefficient on graph G can be written as αG 
+
+> ij
+
+= Aij exp( βij )P     
+
+> k̸=iAik exp( βik )
+
+, where βij is the raw attention score before softmax. Conditional on H(ℓ−1) , the raw scores are fixed. Thus, on the perturbed graph, 
+
+αG′ 
+
+> ij
+
+= A′     
+
+> ij wij
+> P
+> k̸=iA′
+> ik wik
+
+with wik = exp( βik ) being constant. Since αG′ 
+
+> ij
+
+= 0 whenever A′ 
+
+> ij
+
+= 0 , we can write 
+
+E[αG′ 
+
+> ij
+
+] = P(A′ 
+
+> ij
+
+= 1) wij E
+
+ 1
+
+wij + Sij 
+
+A′ 
+
+> ij
+
+= 1 
+
+
+
+, (16) where Sij = P  
+
+> k̸=i,j
+
+A′
+
+> ik
+
+wik . Now, we focus on approximating the expectation term through the combination of delta-expansion and sampling methods. 
+
+Lemma C.2 (Attention-denominator approximation) . Let Sij = P  
+
+> k̸=i,j
+
+A′
+
+> ik
+
+wik , one can approximate 
+
+E
+
+ 1
+
+wij + Sij 
+
+
+
+≈ 1
+
+wij + μij 
+
++ σ2
+
+> ij
+
+(wij + μij )3 ,
+
+where μij = (1 − p) P k̸ =i,j Aik =1 
+
+wik + q P k̸ =i,j Aik =0 
+
+wik , and σ2 
+
+> ij
+
+= p(1 − p) P k̸ =i,j Aik =1 
+
+w2 
+
+> ik
+
++ q(1 − q) P k̸ =i,j Aik =0 
+
+w2
+
+> ik
+
+.Proof. For f (x) = ( wij + x)−1, the second-order delta method gives E[f (Sij )] ≈ f (μij ) + 12 f ′′ (μij )σ2 
+
+> ij
+
+, where μij =
+
+E[Sij ] and σ2 
+
+> ij
+
+= Var( Sij ). Since f ′′ (x) = 2( wij + x)−3, the approximation is derived. 16 RADE: Random Add-Drop Edge as a Regularizer 
+
+Applying this approximation in Eq. (16), and considering P(A′ 
+
+> ij
+
+= 1) for add and drop cases, we obtain 
+
+E[αG′ 
+
+> ij
+
+] ≈
+
+
+
+(1 − p)wij 
+
+ 1  
+
+> wij +μij
+
++ σ2  
+
+> ij
+> (wij +μij )3
+
+
+
+, Aij = 1 ,qw ij 
+
+ 1  
+
+> wij +μij
+
++ σ2  
+
+> ij
+> (wij +μij )3
+
+
+
+, Aij = 0 .
+
+(17) For existing edges, the RADE-OF and RADE-OFS correction factors become αG 
+
+> ij
+
+/E[αG′ 
+
+> ij
+
+]. Thus, as in GCN-style normaliza-tion, the correction is pair-dependent. For non-edges, the same expectation terms define the weighted centering mean μ(ℓ−1) 
+
+> i
+
+in RADE-OF, while RADE-OFS retains the expected non-edge contribution in the modified inference-time aggregation. The computational bottleneck in Eq. (17) is the computation of pair-specific μij , σ2 
+
+> ij
+
+; specifically, the bottleneck is in the computation of their non-edge part. In practice, we compute the input-edge terms exactly and estimate only the non-edge terms by sampling. We sample once per target node i, not once per pair (i, j ). We uniformly sample s non-neighbors of node i, denoted by r1, . . . , r s, through rejection sampling, which rejects existing edges and the self-node i. Since the same sample is reused for all pairs (i, j ), we do not reject the candidate j during sampling. Instead, we first estimate bμi =(1 − p) P k̸ =iAik =1 
+
+wik + q |{ k:k̸ =i, A ik =0 }| 
+
+> s
+
+Pst=1 wir t , and bσ 2 
+
+> i
+
+= p(1 − p) P k̸ =iAik =1 
+
+w2 
+
+> ik
+
++ q(1 − q) |{ k:k̸ =i, A ik =0 }| 
+
+> s
+
+Pst=1 w2 
+
+> ir t
+
+.Then, for each pair (i, j ), we form the pair-excluded estimates by subtraction: bμij = bμi − (1 − p)wij for Aij = 1 ,
+
+bμij = bμi − qw ij for Aij = 0 , and bσ 2 
+
+> ij
+
+= bσ 2 
+
+> i
+
+− p(1 − p)w2 
+
+> ij
+
+for Aij = 1 , bσ 2 
+
+> ij
+
+= bσ 2 
+
+> i
+
+− q(1 − q)w2 
+
+> ij
+
+for Aij = 0 . Substituting these estimates into the approximation above gives the sampled version of E[αG′ 
+
+> ij
+
+]. The same sampling idea is used for the non-edge centering term in RADE-OF and the modified inference-time non-edge contribution in RADE-OFS. 
+
+## D. Proof of Proposition 4.3 
+
+Proposition 4.3 (Logit perturbation variance) . Assume that, for each node i, the stochastic aggregation coefficients {αG′ 
+
+> ij
+
+}j̸ =i
+
+are mutually independent across j. Then Var( δi) = P  
+
+> j̸=i
+
+em 2 
+
+> ij
+
+Var 
+
+
+
+αG′
+
+> ij
+
+
+
+. Multiclass results hold coordinate-wise. 
+
+Proof. Condition on H(L−1) , so that the scalar message contributions { emij }j̸ =i are deterministic with respect to the augmentation randomness. At the final layer, the perturbed logit can be written as esi = P  
+
+> j̸=i
+
+αG′ 
+
+> ij
+
+emij , where δi = esi − si.Since si is deterministic under the conditioning, 
+
+Var( δi) = Var( esi − si) = Var( esi) = Var 
+
+X 
+
+> j̸=i
+
+αG′ 
+
+> ij
+
+emij 
+
+ = X 
+
+> j̸=i
+
+Var 
+
+
+
+αG′ 
+
+> ij
+
+emij 
+
+
+
+= X 
+
+> j̸=i
+
+em 2 
+
+> ij
+
+Var 
+
+
+
+αG′
+
+> ij
+
+
+
+For multiclass classification with a linear head, the same argument applies to each logit coordinate. For class c, let 
+
+esi,c = P  
+
+> j̸=i
+
+αG′ 
+
+> ij
+
+emij,c , where δi,c = esi,c − si,c . Then Var( δi,c ) = P  
+
+> j̸=i
+
+em 2
+
+> ij,c
+
+Var 
+
+
+
+αG′
+
+> ij
+
+
+
+.
+
+## E. Logit Variance for RADE-OF and RADE-OFS 
+
+Proposition 4.3 shows that, conditioned on H(L−1) , the logit perturbation variance is Var( δi) = P  
+
+> j̸=i
+
+em 2 
+
+> ij
+
+Var 
+
+
+
+αG′
+
+> ij
+
+
+
+,where emij is the scalar corrected contribution of message j to i for the final layer. Thus, the computation of Var( δi)
+
+requires computing Var( αG′ 
+
+> ij
+
+) for any chosen aggregation rule. Below, we derive this term for sum aggregation (in GIN), GCN-style symmetric normalization, and GAT-style attention aggregation. When possible, we also simplify the logit variance expression for different aggregation rules by first decomposing it into two sums corresponding to existing edges and non-edges: 
+
+Var( δi) = X 
+
+> j:Aij =1
+
+em2 
+
+> ij
+
+Var 
+
+
+
+αG′
+
+> ij
+
+
+
++ X 
+
+> j:Aij =0
+
+em2 
+
+> ij
+
+Var 
+
+
+
+αG′
+
+> ij
+
+
+
+,
+
+17 RADE: Random Add-Drop Edge as a Regularizer 
+
+(I) Sum aggregation 
+
+For sum aggregation, αG 
+
+> ij
+
+= Aij . Under the RADE perturbation (Eq. (6) ), we have E[αG′ 
+
+> ij
+
+] = E[A′ 
+
+> ij
+
+], which is 1 − p for dropping edges, and q for adding non-edges. Then, Var 
+
+
+
+αG′
+
+> ij
+
+
+
+= p(1 − p) for Aij = 1 and q(1 − q) for Aij = 0 . For the existing-edge term, both RADE-OF and RADE-OFS give 
+
+X 
+
+> j:Aij =1
+
+em2 
+
+> ij
+
+Var 
+
+
+
+αG′
+
+> ij
+
+
+
+= X 
+
+> j:Aij =1
+
+ αG
+
+> ij
+
+2m2
+
+> ij
+
+ E[αG′ 
+
+> ij
+
+]2 Var 
+
+
+
+αG′
+
+> ij
+
+
+
+= X 
+
+> j:Aij =1
+
+m2
+
+> ij
+
+(1 − p)2 p(1 − p) = p
+
+1 − p
+
+X 
+
+> j:Aij =1
+
+m2 
+
+> ij
+
+.
+
+For non-edges, E[αG′ 
+
+> ij
+
+] = q is constant over all j such that Aij = 0 . Thus, the RADE-OF weighted mean reduces to the uniform non-neighbor mean: μi = 1
+
+> n−di
+
+P  
+
+> j:Aij =0
+
+mij . Then, the addition-induced term is q(1 − q) P 
+
+> j:Aij =0
+
+(mij − μi)2
+
+for RADE-OF, and q(1 − q) P  
+
+> j:Aij =0
+
+m2 
+
+> ij
+
+for RADE-OFS. Thus, under sum aggregation, 
+
+Var( δi) = p
+
+1 − p
+
+X 
+
+> j:Aij =1
+
+m2 
+
+> ij
+
++ q(1 − q) X 
+
+> j:Aij =0
+
+(mij − μi)2
+
+for RADE-OF, while 
+
+Var( δi) = p
+
+1 − p
+
+X 
+
+> j:Aij =1
+
+m2 
+
+> ij
+
++ q(1 − q) X 
+
+> j:Aij =0
+
+m2
+
+> ij
+
+for RADE-OFS. The difference between the two variants is exactly the centering of the non-edge messages. Since P  
+
+> j:Aij =0
+
+m2 
+
+> ij
+
+= P 
+
+> j:Aij =0
+
+(mij − μi)2 + ( n − di) μ2 
+
+> i
+
+, RADE-OFS has an additional non-edge variance contribution of 
+
+q(1 − q) ( n − di) μ2 
+
+> i
+
+relative to RADE-OF under sum aggregation. 
+
+(II) Symmetric degree normalization 
+
+For GCN-style symmetric normalization, αG 
+
+> ij
+
+= Aij 
+
+√didj
+
+. The coefficient expectations E[αG′ 
+
+> ij
+
+] were derived in Appendix C. To obtain the variance terms, we need the second moment E[( αG′ 
+
+> ij
+
+)2], since Var 
+
+
+
+αG′
+
+> ij
+
+
+
+= E
+
+h
+
+(αG′ 
+
+> ij
+
+)2
+
+i
+
+−
+
+
+
+E[αG′ 
+
+> ij
+
+]
+
+2
+
+. As 
+
+(A′ 
+
+> ij
+
+)2 = A′ 
+
+> ij
+
+, (αG′ 
+
+> ij
+
+)2 = A′
+
+> ij
+> d′
+> id′
+> j
+
+. Thus, conditioning on A′ 
+
+> ij
+
+= 1 gives 
+
+E
+
+h
+
+(αG′ 
+
+> ij
+
+)2i
+
+= P(A′ 
+
+> ij
+
+= 1) E(d′
+
+> i
+
+)−1 A′ 
+
+> ij
+
+= 1  E(d′ 
+
+> j
+
+)−1 A′ 
+
+> ij
+
+= 1  .
+
+The factorization uses the same conditional-independence argument as in Appendix C. We use the following delta-method approximation for each endpoint inverse-degree term. 
+
+Lemma E.1 (Endpoint inverse-degree approximation) . Fix a pair (i, j ) and condition on A′ 
+
+> ij
+
+= 1 . Let μi = E[d′ 
+
+> i
+
+| A′ 
+
+> ij
+
+= 1] ,and σ2 
+
+> i
+
+= Var( d′ 
+
+> i
+
+| A′ 
+
+> ij
+
+= 1) . Then E(d′
+
+> i
+
+)−1 A′ 
+
+> ij
+
+= 1  ≈ μ−1 
+
+> i
+
++ σ2 
+
+> i
+
+μ−3 
+
+> i
+
+.
+
+Proof. Let g(x) = x−1. The second-order delta method gives 
+
+E[g(d′
+
+> i
+
+) | A′ 
+
+> ij
+
+= 1] ≈ g(μi) + 12 g′′ (μi)σ2 
+
+> i
+
+= μ−1 
+
+> i
+
++ 12
+
+ 2μ−3
+
+> i
+
+ σ2 
+
+> i
+
+= μ−1 
+
+> i
+
++ σ2 
+
+> i
+
+μ−3 
+
+> i
+
+.
+
+For an existing edge Aij = 1, we use the case Aij = 1 conditional moments μi, σ 2 
+
+> i
+
+, μ j , σ 2 
+
+> j
+
+from Appendix C. Since P(A′ 
+
+> ij
+
+= 1) = 1 − p, E
+
+h
+
+(αG′ 
+
+> ij
+
+)2
+
+i
+
+≈ (1 − p)  μ−1 
+
+> i
+
++ σ2 
+
+> i
+
+μ−3
+
+> i
+
+   μ−1 
+
+> j
+
++ σ2 
+
+> j
+
+μ−3
+
+> j
+
+, and Var 
+
+
+
+αG′
+
+> ij
+
+
+
+≈ (1 −
+
+p)  μ−1 
+
+> i
+
++ σ2 
+
+> i
+
+μ−3
+
+> i
+
+   μ−1 
+
+> j
+
++ σ2 
+
+> j
+
+μ−3
+
+> j
+
+ −
+
+
+
+E[αG′ 
+
+> ij
+
+]
+
+2
+
+.For a non-edge Aij = 0 , we use the Case Aij = 0 conditional moments from Appendix C. Since P(A′ 
+
+> ij
+
+= 1) = q,
+
+E
+
+h
+
+(αG′ 
+
+> ij
+
+)2
+
+i
+
+≈ q  μ−1 
+
+> i
+
++ σ2 
+
+> i
+
+μ−3
+
+> i
+
+   μ−1 
+
+> j
+
++ σ2 
+
+> j
+
+μ−3
+
+> j
+
+, Var 
+
+
+
+αG′
+
+> ij
+
+
+
+≈ q  μ−1 
+
+> i
+
++ σ2 
+
+> i
+
+μ−3
+
+> i
+
+   μ−1 
+
+> j
+
++ σ2 
+
+> j
+
+μ−3
+
+> j
+
+ −
+
+
+
+E[αG′ 
+
+> ij
+
+]
+
+2
+
+.Substituting this coefficient variance into the generic RADE-OF and RADE-OFS logit-variance forms above gives the GCN variance instantiations. 18 RADE: Random Add-Drop Edge as a Regularizer 
+
+(III) Attention normalization 
+
+For GAT-style attention aggregation, the coefficient on graph G can be written as αG 
+
+> ij
+
+= Aij exp( βij )P     
+
+> k̸=iAik exp( βik )
+
+, where βij is the raw attention score before softmax. Conditional on H(L−1) , the raw scores are fixed. Then, on the perturbed graph, 
+
+αG′ 
+
+> ij
+
+= A′     
+
+> ij wij
+> P
+> k̸=iA′
+> ik wik
+
+with wik = exp( βik ) being constant. As in Appendix C, fix a pair (i, j ), condition on A′ 
+
+> ij
+
+= 1 , and write Sij = P  
+
+> k̸=i,j
+
+A′
+
+> ik
+
+wik . Let μij = (1 − p) P k̸ =i,j Aik =1 
+
+wik + q P k̸ =i,j Aik =0 
+
+wik , and σ2 
+
+> ij
+
+= p(1 − p) P k̸ =i,j Aik =1 
+
+w2 
+
+> ik
+
++ q(1 −
+
+q) P k̸ =i,j Aik =0 
+
+w2
+
+> ik
+
+. The first moment E[αG′ 
+
+> ij
+
+] is given by Eq. (17) . To compute the coefficient variance, we also need the second moment: 
+
+E[( αG′ 
+
+> ij
+
+)2] = P(A′ 
+
+> ij
+
+= 1) w2 
+
+> ij
+
+E
+
+ 1(wij + Sij )2 | A′ 
+
+> ij
+
+= 1 
+
+
+
+, (18) where we use the following lemma for its approximation. 
+
+Lemma E.2 (Attention second-moment approximation) . With Sij , μij , and σ2 
+
+> ij
+
+defined above, 
+
+E
+
+ 1(wij + Sij )2
+
+
+
+≈ 1(wij + μij )2 + 3σ2
+
+> ij
+
+(wij + μij )4 .
+
+Proof. For g(x) = ( wij + x)−2, the second-order delta method gives E[g(Sij )] ≈ g(μij ) + 12 g′′ (μij )σ2 
+
+> ij
+
+, where μij =
+
+E[Sij ], and σ2 
+
+> ij
+
+= Var( Sij ). Since g′′ (x) = 6( wij + x)−4, the result follows. Applying Lemma E.2 to Eq. (18), and considering P(A′ 
+
+> ij
+
+= 1) for add and drop cases, we obtain 
+
+E
+
+h
+
+(αG′ 
+
+> ij
+
+)2i
+
+≈
+
+
+
+(1 − p)w2
+
+> ij
+
+ 1(wij +μij )2 + 3σ2  
+
+> ij
+> (wij +μij )4
+
+
+
+, Aij = 1 ,qw 2
+
+> ij
+
+ 1(wij +μij )2 + 3σ2  
+
+> ij
+> (wij +μij )4
+
+
+
+, Aij = 0 .
+
+Thus, 
+
+Var 
+
+
+
+αG′
+
+> ij
+
+
+
+≈ E
+
+h
+
+(αG′ 
+
+> ij
+
+)2i
+
+−
+
+
+
+E[αG′ 
+
+> ij
+
+]
+
+2
+
+.
+
+The computational bottleneck is again the computation of μij and σ2 
+
+> ij
+
+, in Var( αG′ 
+
+> ij
+
+), especially for their non-edge part. Thus, we compute the input-edge terms exactly and estimate only the non-edge terms by sampling. We uniformly sample s non-neighbors for node i, denoted by r1, . . . , r s, through rejection sampling, which rejects existing edges and the self-node i. Since the same sample is reused for all pairs (i, j ), we do not reject the candidate j during sampling. Instead, we first estimate bμi = (1 − p) P k̸ =iAik =1 
+
+wik + q |{ k:k̸ =i, A ik =0 }| 
+
+> s
+
+Pst=1 wir t , and bσ 2 
+
+> i
+
+= p(1 − p) P k̸ =iAik =1 
+
+w2 
+
+> ik
+
++
+
+q(1 − q) |{ k:k̸ =i, A ik =0 }| 
+
+> s
+
+Pst=1 w2 
+
+> ir t
+
+. Then, for each pair (i, j ), we form the pair-excluded estimates by subtraction: 
+
+bμij = bμi − (1 − p)wij for Aij = 1 , bμij = bμi − qw ij for Aij = 0 , and bσ2 
+
+> ij
+
+= bσ2 
+
+> i
+
+− p(1 − p)w2 
+
+> ij
+
+for Aij = 1 ,
+
+bσ2 
+
+> ij
+
+= bσ 2 
+
+> i
+
+− q(1 − q)w2 
+
+> ij
+
+for Aij = 0 . Substituting these estimates into the moment approximations above gives the sampled version of Var( αG′ 
+
+> ij
+
+). Substituting this coefficient variance into Proposition 4.3 gives the GAT variance instantiation. The same sampling idea is used for the final non-edge sums in Var( δi): for RADE-OF, we estimate P j̸ =iAij =0 
+
+(mij −
+
+μi)2Var( αG′ 
+
+> ij
+
+), while for RADE-OFS, we estimate P j̸ =iAij =0 
+
+m2 
+
+> ij
+
+Var( αG′ 
+
+> ij
+
+).
+
+## F. Proof of Proposition 4.4 
+
+Proposition 4.4 (Restricted interchangeability of Drop-only and Add-only) . For sum aggregation, Drop-only and Add-only only subsume each other by matching their node-wise variances under a restrictive setting in which there should exist a constant κ > 0 such that P  
+
+> j:Aij =0
+
+em 2 
+
+> ij
+
+= κ P  
+
+> j:Aij =1
+
+m2 
+
+> ij
+
+for every node i.19 RADE: Random Add-Drop Edge as a Regularizer 
+
+Proof. Under sum aggregation, the RADE variance decomposition gives the node-wise variances for the two pure strategies. Drop-only, obtained by setting q = 0 , gives Var( δi) q=0 = p
+
+> 1−p
+
+P  
+
+> j:Aij =1
+
+m2 
+
+> ij
+
+. Add-only, obtained by setting the deletion rate to zero, gives Var( δi) p=0 = q(1 − q) P  
+
+> j:Aij =0
+
+em 2 
+
+> ij
+
+. For exact node-by-node matching with single global rates, one requires that these two quantities be equal for every node i: p
+
+> 1−p
+
+P  
+
+> j:Aij =1
+
+m2 
+
+> ij
+
+= q(1 − q) P  
+
+> j:Aij =0
+
+em 2 
+
+> ij
+
+. For a single node, this equality may be satisfied by choosing an appropriate rate. However, there is a restriction that the same rates must match all nodes. For two nodes i and k, matching requires 
+
+P  
+
+> j:Aij =0
+
+em 2
+
+> ij
+
+P  
+
+> j:Aij =1
+
+m2
+
+> ij
+
+=
+
+> p
+> 1−p
+
+q(1 − q) =
+
+P  
+
+> j:Akj =0
+
+em 2
+
+> kj
+
+P  
+
+> j:Akj =1
+
+m2
+
+> kj
+
+,
+
+whenever the edge-message statistics in the denominators are nonzero. Thus, the ratio between the non-edge and edge message statistics must be the same for both nodes. Extending this argument to all nodes, exact global matching is possible only if there exists a constant κ > 0 such that P  
+
+> j:Aij =0
+
+em 2 
+
+> ij
+
+= κ P  
+
+> j:Aij =1
+
+m2 
+
+> ij
+
+for every node i. This proportionality condition is restrictive because Drop-only message statistic for each node i is impacted by node i’s existing edges, whereas its Add-only counterpart depends on a distinct set of non-edges. Even these sets change from one node to another. 
+
+## G. Adaptive (p, q ) via Gradient-Norm Balancing 
+
+We describe the procedure to adapt the RADE augmentation rates (p, q ) during training. The goal is to choose perturbation rates whose variance-based regularization effect has a gradient scale comparable to that of the supervised objective, while avoiding excessive graph densification from edge addition. The training procedure is summarized in Algorithm 1. Let θs denote the shared trainable parameters. For a mini-batch B, let Ldata (B) denote the supervised objective on batch 
+
+B. We measure the supervised gradient norm by GB 
+
+> data
+
+= ∥∇ θs Ldata (B)∥2. For a candidate pair (p, q ), we define the RADE regularization proxy as R(B, p, q ) = 12
+
+P 
+
+> i∈B
+
+zi(1 − zi) Var( δi), with zi = σ(si), si the logit from the input-graph forward pass, and Var( δi) the RADE logit-variance expression under rates (p, q ). For multi-class classification, with pi = softmax( si), we use the coordinate-wise analogue R(B, p, q ) = 12
+
+P
+
+> i∈B
+
+PCc=1 pi,c (1 − pi,c ) Var( δi,c ). The corresponding regularization gradient norm is GB
+
+> reg
+
+(p, q ) = ∥∇ θs R(B, p, q )∥2. We update (p, q ) by minimizing the mini-batch objective 
+
+J (p, q ) = 
+
+"
+
+log GB
+
+> reg
+
+(p, q ) + ϵGB 
+
+> data
+
++ ϵ
+
+!# 2
+
++ λ
+
+ qD(G)
+
+2
+
+.
+
+The first term matches the regularization and supervised gradient magnitudes in relative scale. The stabilizer ϵ > 0 prevents numerical instability when either norm is small. The second term penalizes edge addition relative to the input-graph density 
+
+D(G). This is important because q is applied over non-edges, so even a small raw value of q can add many edges to sparse graphs. The parameter λ controls this trade-off: λ = 0 recovers pure gradient-norm matching, while larger λ yields more conservative edge addition. We fix λ at the task level, using λ = 1 for node classification and λ = 0 .1 for graph classification, rather than tuning it per dataset. In practice, after each mini-batch, we take one Adam step on J (p, q ) with respect to the rate variables. The updated rates are then used to sample RADE perturbations for the next mini-batch. In full-batch training, there is only one batch per epoch, so the same update rule reduces to one rate update per epoch. 
+
+Density-normalized addition coordinate. To make the addition rate comparable across graphs with different densities, we optimize the density-normalized coordinate ρ = qD(G) , where D(G) is the graph density. Thus, Adam updates act on relative edge addition rather than raw non-edge probability. This is only a change of optimization coordinate: the RADE variance formulas and the edge-sampling procedure are still evaluated using the actual addition probability q. The penalty term λ(q/D (G)) 2 = λρ 2 therefore directly discourages excessive densification relative to the input graph density. After each update, we project (p, ρ ) to the feasible range and map back to q = D(G)ρ for sampling. 
+
+Detached-variance convention. To keep the GradNorm computation lightweight, we use a detached-variance convention when computing GB
+
+> reg
+
+(p, q ). The message statistics entering Var( δi) are computed from a forward pass on the input graph and are treated as fixed when differentiating R(B, p, q ) with respect to θs. Thus, gradients in ∇θs R(B, p, q ) flow through the uncertainty weights zi(1 − zi), or pi,c (1 − pi,c ) in the multi-class case, while the variance term acts as a nonnegative coefficient controlled by (p, q ). The variance expression remains a function of (p, q ) for the rate update. 20 RADE: Random Add-Drop Edge as a Regularizer 
+
+Algorithm 1 RADE Training with Mini-batch PQ-GradNorm Updates 
+
+Require: training loader producing mini-batches B; epochs E
+
+Require: model parameters θ with shared parameters θs; model optimizer Opt θ
+
+Require: rate optimizer Opt p,ρ for (p, ρ )
+
+Require: initial rates (p, ρ ); graph density D(G); penalty weight λ; numerical constant ϵ 
+
+> 1:
+
+for e = 1 , . . . , E do  
+
+> 2:
+
+for mini-batch B in the training loader do  
+
+> 3:
+
+set q = D(G)ρ 
+
+> 4:
+
+sample RADE perturbation on the current batch using current (p, q ) 
+
+> 5:
+
+compute supervised loss Ldata (B) 
+
+> 6:
+
+update model parameters: θ ← Opt θ (θ, ∇θ Ldata (B))  
+
+> 7:
+
+compute GB 
+
+> data
+
+and GB
+
+> reg
+
+(p, q ), with q = D(G)ρ 
+
+> 8:
+
+form 
+
+J (p, ρ ) = 
+
+"
+
+log GB 
+
+> reg
+
+(p, D (G)ρ) + ϵGB 
+
+> data
+
++ ϵ
+
+!# 2
+
++ λρ 2 
+
+> 9:
+
+take one Adam step on J (p, ρ ) with respect to (p, ρ ) 
+
+> 10:
+
+project (p, ρ ) to the feasible range and set q = D(G)ρ 
+
+> 11:
+
+end for  
+
+> 12:
+
+end for GIN, GCN, and GAT evaluation. For GIN-style sum aggregation, the variance proxy separates into deletion and addition components, and for a fixed batch, R(B, p, q ) = p 
+
+> 1−p
+
+Rdrop (B) + q(1 − q)Radd (B). Once the two base gradients 
+
+∇θs Rdrop (B) and ∇θs Radd (B) are computed, the regularization gradient norm for any (p, q ) can be evaluated analytically: 
+
+ GB
+
+> reg
+
+(p, q )2 = p
+
+1 − p ∇θs Rdrop (B) + q(1 − q)∇θs Radd (B)
+
+> 22
+
+=
+
+ p
+
+1 − p
+
+2
+
+∥∇ θs Rdrop (B)∥22 +  q(1 − q)2 ∥∇ θs Radd (B)∥22
+
++ 2 p
+
+1 − p q(1 − q) ⟨∇ θs Rdrop (B), ∇θs Radd (B)⟩ .
+
+This makes the GIN case inexpensive: after computing the two base gradients once, the regularization gradient norm for any candidate (p, q ) is obtained by an algebraic combination, without an additional backward pass. For GCN and GAT, this fixed decomposition is unavailable. In GCN, (p, q ) changes the degree-normalization moments entering Var( δi). In GAT, (p, q ) changes the attention-denominator moments, and thus the coefficient expectations and variances. Therefore, for each current or candidate (p, q ) considered by the rate optimizer, we recompute the corresponding variance expression, form R(B, p, q ) under the same detached-variance convention, and differentiate it to obtain GB
+
+> reg
+
+(p, q ).
+
+Graph classification. Graph classification follows the same principle, except that the supervised logit is graph-level. RADE perturbs node representations through message passing, and the readout pools these perturbations into a graph-level logit perturbation. Thus, δi denotes the perturbation of the graph-level logit for graph i, after readout and prediction, rather than a node-level logit perturbation. With linear readout and a linear prediction head, this perturbation is obtained by pooling the node-level perturbation contributions; under sum pooling, this corresponds to summing node-level variance contributions. 
+
+Mini-batch semantics. For neighbor-sampling node classification, the supervised loss is taken over the labeled seed nodes, while the RADE variance proxy is constructed from the corresponding sampled computation graph; the GradNorm objective is then evaluated on those same seed nodes. For graph classification, complement-based quantities, such as non-edge centering statistics, are computed separately within each graph in the batch, not across different graphs. 
+
+## H. Additional Experiments 
+
+We report experimental results under GIN and GAT backbones for node- and graph-classification tasks. 21 RADE: Random Add-Drop Edge as a Regularizer 
+
+Table 7. Node classification results (mean ±std over five runs) with GIN and GAT backbones. Accuracy (%) on all datasets except Flickr with micro-F1 (%). Best in bold, second underlined. Green and red shading show improvement and degradation over the backbone. 
+
+Method Cora CiteSeer PubMed CS Computer Physics Flickr ogbn-arxiv Backbone: GIN 
+
+GIN 77 .96 ±2.66 64 .04 ±2.64 75 .88 ±0.19 91 .79 ±0.38 87 .58 ±3.15 95 .77 ±0.02 52 .98 ±0.19 70 .46 ±0.19 
+
+Dropout 76 .66 ±1.19 64 .44 ±1.32 75 .12 ±1.32 92 .88 ± 0.28 90.76 ± 0.17 96 .01 ±0.12 53 .25 ± 0.13 70 .77 ±0.42 
+
+DropEdge 77 .56 ±1.77 65 .02 ±1.73 76 .54 ±0.71 91 .97 ±0.11 89 .64 ±0.52 95 .96 ±0.07 52 .74 ±0.30 71 .00 ±0.32 
+
+DropNode 77 .20 ±0.80 65 .66 ±1.01 75 .88 ±0.66 91 .73 ±0.20 89 .72 ±0.32 95 .97 ±0.15 52 .83 ±1.23 71 .49 ±0.24 
+
+DropMessage 78 .20 ±1.83 64 .70 ±1.70 77 .14 ± 0.70 92 .64 ±0.35 90 .38 ±0.90 96 .20 ± 0.09 52 .98 ±0.19 71 .55 ± 0.20 
+
+RADE-OF 78.64 ± 0.68 65.94 ± 1.45 77 .09 ±0.95 93.01 ± 0.14 90 .50 ± 0.15 96.25 ± 0.10 53.35 ± 0.08 71.85 ± 0.32 
+
+RADE-OFS 78 .22 ± 2.17 65 .69 ± 1.85 77.52 ± 1.19 92 .75 ±0.25 89 .82 ±0.48 96 .24 ±0.05 53 .02 ±0.15 70 .85 ±0.65 
+
+Backbone: GAT 
+
+GAT 77 .44 ±1.03 65 .12 ±0.80 73 .46 ±0.96 90 .75 ±0.68 88 .86 ±0.48 95 .90 ±0.06 51 .40 ±0.24 69 .51 ±0.42 
+
+Dropout 78 .04 ±1.00 66.70 ± 1.26 74 .78 ±1.72 91 .44 ±0.18 89 .67 ±0.28 95 .95 ±0.09 51 .41 ±0.42 70 .63 ±0.10 
+
+DropEdge 78 .10 ±1.06 65 .44 ±1.02 74 .06 ±1.08 91 .23 ±0.34 90 .13 ±0.13 96 .01 ±0.09 51 .92 ±0.16 69 .72 ±0.14 
+
+DropNode 79 .22 ±2.29 64 .34 ±1.79 74 .16 ±0.98 91 .41 ±0.39 82 .70 ±1.57 96 .01 ± 0.05 51 .95 ±0.10 70 .18 ±0.34 
+
+DropMessage 79 .72 ±1.30 63 .78 ±1.51 75 .82 ±1.45 88 .44 ±0.69 89 .99 ±0.30 95 .96 ±0.05 51 .30 ±0.18 69 .83 ±0.27 
+
+RADE-OF 80.32 ± 0.78 66 .34 ± 0.85 76 .96 ± 0.60 92.08 ± 0.13 90.40 ± 0.36 96.03 ± 0.25 51.98 ± 0.21 70.98 ± 0.12 
+
+RADE-OFS 80 .22 ± 1.44 66 .10 ±0.72 77.02 ± 1.15 92 .07 ± 0.24 90 .24 ± 0.12 95 .93 ±0.14 51 .94 ± 0.15 70 .66 ± 0.16 
+
+Table 8. Graph classification results (mean ±std) with GIN and GAT backbones. Accuracy (%) on TU, ROC-AUC (%) on ogbg-molhiv, and AP (%) on peptides-func. Best in bold and second underlined. Green/red shading shows gains/losses vs. the backbone. 
+
+Method MUTAG PROTEINS IMDB-B IMDB-M ogbg-molhiv peptides-func Backbone: GIN 
+
+GIN 84 .22 ± 6.12 75 .19 ± 5.27 72 .40 ± 2.93 48 .66 ± 4.40 73 .84 ± 1.25 55 .63 ± 1.24 
+
+Dropout 84 .41 ± 8.94 74 .74 ± 3.81 71 .10 ± 7.68 48 .73 ± 4.83 73 .98 ± 1.66 55 .65 ± 0.82 
+
+DropEdge 85 .05 ± 6.28 75 .14 ± 4.62 71 .70 ± 3.46 47 .73 ± 2.68 74 .02 ± 1.01 58 .18 ± 0.68 
+
+DropNode 85 .02 ± 8.95 75 .73 ± 4.14 72 .60 ± 3.13 50 .13 ± 3.58 73 .90 ± 1.20 55 .12 ± 0.72 
+
+DropMessage 84 .50 ± 6.69 74 .39 ± 3.15 74.30 ± 3.37 47 .60 ± 2.93 74 .18 ± 1.62 58 .48 ± 0.84 
+
+RADE-OF 85.55 ± 8.19 75 .82 ± 2.98 73 .70 ± 3.52 50 .15 ± 4.62 74 .30 ± 1.02 58 .82 ± 0.65 
+
+RADE-OFS 85 .32 ± 7.75 75.95 ± 3.10 74 .10 ± 2.80 50.32 ± 2.96 74.52 ± 1.34 59.12 ± 0.91 Backbone: GAT 
+
+GAT 83 .45 ± 5.71 75 .64 ± 5.12 74 .10 ± 2.73 50 .46 ± 2.34 68 .41 ± 1.43 53 .16 ± 3.14 
+
+Dropout 83 .97 ± 5.99 74 .56 ± 4.96 74 .30 ± 2.57 50 .46 ± 2.00 69 .35 ± 1.65 51 .72 ± 1.24 
+
+DropEdge 85 .55 ± 6.07 72 .86 ± 4.60 74 .60 ± 2.72 49 .93 ± 3.75 69 .63 ± 1.11 53 .40 ± 0.57 
+
+DropNode 85 .02 ± 7.24 75 .01 ± 4.99 76 .10 ± 2.77 50 .60 ± 2.52 70 .01 ± 1.33 52 .92 ± 0.82 
+
+DropMessage 85 .60 ± 6.94 74 .80 ± 4.52 75 .50 ± 1.56 50 .46 ± 1.88 69 .82 ± 1.12 53 .34 ± 0.76 
+
+RADE-OF 85 .86 ± 8.13 75 .68 ± 5.18 76.30 ± 2.42 50 .64 ± 3.31 70 .48 ± 1.22 53 .90 ± 0.81 
+
+RADE-OFS 86.10 ± 7.19 75.82 ± 4.92 76 .20 ± 2.85 50.78 ± 2.22 70.55 ± 1.09 54.48 ± 0.76 
+
+H.1. Results Node Classification. Table 7 reports node-classification results with GIN and GAT backbones. With GIN, RADE-OF is the strongest overall: it is best on six of the eight datasets (Cora, CiteSeer, CS, Physics, Flickr, and ogbn-arxiv) and second on Computer. PubMed is the main exception, where RADE-OFS is best, while RADE-OF remains close to the strongest non-RADE baseline. On the datasets where RADE-OF is best, its gains over the strongest non-RADE baseline range from 
+
+0.05% on Physics to 0.44% on Cora. RADE-OFS also improves over the GIN backbone on all datasets, but is typically below RADE-OF except on PubMed. 22 RADE: Random Add-Drop Edge as a Regularizer 
+
+Table 9. Node-classification ablations of GradNorm (GN), Expectation-Preserving Correction (EPC), and nonlinearity for RADE-OF (mean ±std over five runs) under GIN and GAT backbones. Accuracy (%) is reported on all datasets except Flickr with micro-F1 (%). RADE-OF-Lin and GIN-Lin have the linearized GIN backbone. Best is in bold. 
+
+Variant Cora CiteSeer PubMed CS Computer Physics Flickr ogbn-arxiv Backbone: GIN 
+
+RADE-OF 78.64 ±0.68 65.94 ±1.45 77.09 ±0.95 93.01 ±0.14 90.50 ±0.15 96.25 ±0.10 53.35 ±0.08 71.85 ±0.32 
+
+RADE-OF w/o GN 78 .24 ±2.26 63 .74 ±1.87 76 .60 ±0.68 92 .73 ±0.25 89 .72 ±0.33 96 .24 ±0.04 52 .74 ±0.31 71 .04 ±0.14 
+
+RADE-OF w/o GN & EPC 78 .20 ±0.78 63 .60 ±2.07 76 .46 ±0.79 92 .42 ±0.44 88 .94 ±0.71 96 .22 ±0.10 52 .55 ±0.23 70 .90 ±0.35 
+
+RADE-OF-Lin 76 .48 ±1.18 63 .72 ±1.10 76 .64 ±0.26 91 .58 ±0.27 87 .80 ±0.48 95 .59 ±0.12 50 .62 ±0.30 65 .95 ±0.30 
+
+RADE-OF-Lin w/o GN 76 .32 ±1.03 61 .45 ±2.88 76 .36 ±0.84 91 .54 ±0.11 87 .52 ±0.41 95 .57 ±0.16 50 .30 ±0.26 65 .73 ±0.41 
+
+RADE-OF-Lin w/o GN & EPC 75 .98 ±1.30 61 .85 ±1.30 76 .20 ±0.98 91 .49 ±0.14 86 .24 ±0.55 95 .50 ±0.12 50 .32 ±0.37 65 .55 ±0.45 
+
+GIN-Lin 75 .84 ±1.69 62 .56 ±1.23 75 .92 ±1.05 91 .34 ±0.18 84 .56 ±1.22 95 .43 ±0.13 50 .16 ±0.16 67 .19 ±0.18 
+
+Backbone: GAT 
+
+RADE-OF 80.32 ±0.78 66.34 ±0.85 76.96 ±0.60 92.08 ±0.13 90.40 ±0.36 96.03 ±0.25 51 .98 ±0.21 70.98 ±0.12 
+
+RADE-OF w/o GN 79 .46 ±1.56 65 .62 ±2.15 76 .78 ±0.98 88 .52 ±3.00 90 .27 ±0.16 95 .95 ±0.16 52.04 ±0.27 70 .92 ±0.15 
+
+RADE-OF w/o GN & EPC 77 .54 ±0.94 62 .68 ±2.14 76 .64 ±0.32 88 .28 ±1.24 90 .25 ±0.20 95 .92 ±0.10 51 .82 ±0.18 70 .83 ±0.20 
+
+With GAT, RADE variants are best on seven of the eight datasets. RADE-OFS is best on PubMed, while RADE-OF is best on Cora, CS, Computer, Physics, Flickr, and ogbn-arxiv. CiteSeer is the only exception, where Dropout is best and RADE-OF is second. Both RADE variants improve over the GAT backbone, with RADE-OF again serving as the stronger default and RADE-OFS being most competitive on PubMed. These results show that the gains of RADE are not specific to GCN and extend to both sum-aggregation and attention-based backbones. 
+
+Graph Classification. Table 8 reports graph-classification results with GIN and GAT backbones. With GIN, both RADE variants improve over the backbone on all datasets. RADE-OFS is best on four of the six datasets (PROTEINS, IMDB-M, ogbg-molhiv, and peptides-func), while RADE-OF is best on MUTAG. The exception is IMDB-B, where DropMessage is best and RADE-OFS is second. The gains are largest on peptides-func, where RADE-OFS improves over the strongest non-RADE baseline by 0.64 AP, consistent with peptides-func requiring long-range interactions (Dwivedi et al., 2022). With GAT, one of the RADE variants is best on every dataset. RADE-OFS is best on five datasets (MUTAG, PROTEINS, IMDB-M, ogbg-molhiv, and peptides-func), while RADE-OF is best on IMDB-B. Both RADE variants improve over the GAT backbone on all datasets. Overall, these graph-classification results support the same pattern observed with GCN: RADE-OF is a reliable regularizer, while RADE-OFS is especially effective when additional inference-time propagation benefits graph-level prediction. 
+
+H.2. Ablation Studies under GIN and GAT Backbones GradNorm, Corrections, and Nonlinearity. Table 9 studies the RADE-OF components under GIN and GAT backbones. We use w/o GN to denote removing GradNorm rate adaptation and w/o GN & EPC to denote removing both GradNorm and the expectation-preserving aggregation correction. Under GIN, removing GradNorm weakens RADE-OF on all datasets, with larger drops on CiteSeer, Computer, Flickr, and ogbn-arxiv. Removing both GradNorm and the expectation-preserving correction degrades performance more broadly, supporting the importance of controlling both perturbation strength and train-inference aggregation mismatch. The same pattern largely holds under GAT: removing GradNorm hurts RADE-OF on seven of eight datasets, with Flickr as the only small exception, while removing both GradNorm and the expectation-preserving correction is worse than full RADE-OF on all datasets. For GIN, we also report RADE-OF-Lin, a linearized backbone that removes nonlinearities and matches the linear setting used in the variance-regularization derivation in Eq. (5) . RADE-OF-Lin improves over the linear GIN baseline on seven of eight datasets, showing that RADE remains effective in the linearized setting. However, nonlinear RADE-OF is consistently stronger, with especially large gaps on CiteSeer, Flickr, and ogbn-arxiv. Removing GradNorm from RADE-OF-Lin also weakens performance on most datasets. Overall, these ablations show that adaptive rate selection and expectation-preserving correction remain useful beyond GCN, while nonlinear expressivity is important in practice. We do not report an analogous linearized GAT variant because, even without activation functions, GAT still uses representation-dependent softmax attention 23 RADE: Random Add-Drop Edge as a Regularizer                                                                                                                                                          
+
+> Table 10. Drop-only vs. add-only decomposition of RADE-OF on node classification (mean ±std over five runs) with GIN and GAT backbones. Accuracy (%) is reported on all datasets except Flickr, where we report micro-F1 (%). Best is in bold.
+> Method Cora CiteSeer PubMed CS Computer Physics Flickr ogbn-arxiv Backbone: GIN
+> RADE-OF 78.64 ±0.68 65.94 ±1.45 77.09 ±0.95 93.01 ±0.14 90.50 ±0.15 96.25 ±0.10 53.35 ±0.08 71.85 ±0.32
+> RADE-OF-Drop 78 .14 ±0.94 64 .82 ±2.74 76 .54 ±1.06 91 .98 ±0.19 89 .70 ±1.12 95 .98 ±0.05 52 .82 ±0.12 71 .09 ±0.43
+> RADE-OF-Add 78 .54 ±1.10 64 .40 ±1.62 76 .98 ±0.85 92 .31 ±0.20 89 .92 ±0.51 96 .02 ±0.06 52 .72 ±0.19 71 .08 ±0.50
+> Backbone: GAT
+> RADE-OF 80.32 ±0.78 66.34 ±0.85 76.96 ±0.60 92.08 ±0.13 90.40 ±0.36 96.03 ±0.25 51.98 ±0.21 70.98 ±0.12
+> RADE-OF-Drop 79 .54 ±0.87 66 .28 ±1.19 76 .58 ±1.34 91 .53 ±0.78 90 .12 ±0.14 95 .84 ±0.09 51 .93 ±0.12 70 .26 ±0.32
+> RADE-OF-Add 79 .14 ±1.12 65 .56 ±1.49 76 .72 ±0.75 91 .97 ±0.28 90 .37 ±0.24 95 .80 ±0.12 51 .84 ±0.08 70 .51 ±0.26
+
+and therefore does not reduce to a straightforward linear message-passing model. 
+
+Decomposing RADE: Drop and Add. Table 10 decomposes RADE-OF into drop-only and add-only components under GIN and GAT backbones. The full add-drop variant is best on all datasets for both backbones, improving over the better single-component variant by up to 1.12% under GIN (CiteSeer) and 0.78% under GAT (Cora). The better single component also varies across datasets and backbones: e.g., add-only is stronger on GIN PubMed, while drop-only is stronger on GIN CiteSeer. Thus, neither primitive consistently dominates the other, and combining deletion with addition gives the most reliable performance. 
+
+Adaptive vs. Fine-tuned Rates. Table 11 compares GradNorm-adaptive rate selection with fixed tuned rates under GIN and GAT backbones. Adaptive selection is stronger in 27 of the 32 method-backbone-dataset comparisons. Under GIN, RADE-OF improves over its tuned counterpart on all datasets, while RADE-OFS improves on six of eight, with small exceptions on Physics and Flickr. Under GAT, RADE-OF improves on six of eight datasets, except PubMed and Flickr, and RADE-OFS improves on seven of eight, except Computer. Overall, these results support GradNorm-based rate selection over using a single dataset-specific fixed pair (p, q ).                                                                                                                                                                 
+
+> Table 11. Fixed fine-tuned vs. adaptive perturbation rates on node classification (mean ±std over five runs) under GIN/GAT backbones. “Tuned” selects the best rate pair by hyperparameter search, while RADE-OF/RADE-OFS use adaptive GradNorm rule. Best is in bold.
+> Method Cora CiteSeer PubMed CS Computer Physics Flickr ogbn-arxiv Backbone: GIN
+> RADE-OF 78.64 ±0.68 65.94 ±1.45 77.09 ±0.95 93.01 ±0.14 90.50 ±0.15 96.25 ±0.10 53.35 ±0.08 71.85 ±0.32
+> RADE-OF (tuned) 78 .50 ±0.42 64 .84 ±1.90 76 .60 ±0.68 92 .85 ±0.18 89 .72 ±0.33 96 .24 ±0.04 53 .00 ±0.16 71 .40 ±0.18
+> RADE-OFS 78.22 ±2.17 65.69 ±1.85 77.52 ±1.19 92.75 ±0.25 89.82 ±0.48 96 .24 ±0.05 53 .02 ±0.15 70.85 ±0.65
+> RADE-OFS (tuned) 78 .18 ±1.08 65 .00 ±1.42 77 .04 ±0.77 92 .70 ±0.21 89 .05 ±0.44 96.29 ±0.05 53.05 ±0.22 70 .56 ±0.47
+> Backbone: GAT
+> RADE-OF 80.32 ±0.78 66.34 ±0.85 76 .96 ±0.60 92.08 ±0.13 90.40 ±0.36 96.03 ±0.25 51 .98 ±0.21 70.98 ±0.12
+> RADE-OF (tuned) 80 .06 ±1.20 65 .76 ±1.96 76.98 ±0.52 90 .06 ±0.18 90 .27 ±0.16 96 .01 ±0.16 52.06 ±0.20 70 .92 ±0.15
+> RADE-OFS 80.22 ±1.44 66.10 ±0.72 77.02 ±1.15 92.07 ±0.24 90 .24 ±0.12 95.93 ±0.14 51.94 ±0.15 70.66 ±0.16
+> RADE-OFS (tuned) 79 .94 ±0.68 65 .96 ±0.50 76 .84 ±0.91 91 .90 ±0.30 90.28 ±0.15 95 .89 ±0.08 51 .80 ±0.10 70 .52 ±0.19
+
+H.3. Runtime Analysis 
+
+We report the runtime overhead of RADE-OF on node classification with the GCN backbone. Compared with GCN, RADE adds three sources of computation: sampling perturbed graphs, applying expectation-preserving aggregation corrections, and adapting (p, q ) with the GradNorm objective. Edge deletion is sampled over observed edges, while edge addition samples a fixed number of non-edges without constructing a dense complement. For GCN, the correction terms require degree-moment quantities under the perturbed graph. These are computed from node-wise degree statistics, cached graph statistics, global sums, and sparse scatter operations, rather than by enumerating all non-edges. Thus, RADE increases the 24 RADE: Random Add-Drop Edge as a Regularizer 
+
+constant factor relative to GCN, but does not require dense n × n complement matrices. Table 12 reports the average training time per epoch. RADE-OF w/o GN fixes the rates, so its gap from RADE-OF reflects the overhead of adaptive rate selection. RADE-OF w/o GN & EPC further removes the correction, so its gap from RADE-OF w/o GN reflects the overhead of expectation-preserving correction. The remaining runtime corresponds to the underlying stochastic add-drop sampling and training pipeline. 
+
+Table 12. Runtime analysis on node classification with the GCN backbone. We report mean ±std training time per epoch in seconds. RADE-OF includes sampling, Expectation-Preserving Correction (EPC), and GradNorm (GN) rate adaptation. 
+
+Method Cora CiteSeer PubMed CS Computer Physics Flickr ogbn-arxiv 
+
+RADE-OF 0.103 ±0.035 0.111 ±0.036 0.295 ±0.036 0.195 ±0.043 0.460 ±0.035 0.423 ±0.030 10 .263 ±0.888 18 .986 ±1.489 
+
+RADE-OF w/o GN 0.051 ±0.032 0.050 ±0.034 0.159 ±0.030 0.146 ±0.014 0.288 ±0.012 0.290 ±0.017 8.770 ±0.265 15 .400 ±0.463 
+
+RADE-OF w/o GN & EPC 0.042 ±0.033 0.046 ±0.034 0.139 ±0.030 0.138 ±0.012 0.263 ±0.019 0.277 ±0.035 8.394 ±0.225 14 .561 ±0.589 
+
+GCN 0.018 ±0.033 0.025 ±0.038 0.052 ±0.031 0.035 ±0.015 0.068 ±0.011 0.079 ±0.015 4.577 ±0.141 7.143 ±0.358 
+
+The results show that stochastic add-drop sampling and GradNorm-based rate adaptation account for most of the added runtime. EPC adds a smaller cost: RADE-OF w/o GN remains close to RADE-OF w/o GN & EPC across datasets. Full RADE-OF is slower because it additionally computes the GradNorm objective and updates (p, q ) during training. Even with this cost, RADE-OF does not check or store all missing edges. It samples only the added edges it uses and computes correction terms from graph summary statistics. Thus, RADE-OF is slower than GCN, but avoids the much higher cost of dense all-pairs computation. 
+
+## I. Experimental Details 
+
+Hardware Specification and Environment. We ran all our experiments on a server with 40 CPU cores, 377 GB RAM and 11 GB GTX 1080 Ti GPU. The code is written in Python 3.8.0, PyTorch 2.0.0, and PyTorch Geometric 2.2.0. 
+
+Dataset Statistics. Table 13 reports the statistics of node- and graph-classification datasets. 
+
+Dataset-Specific Hyperparameters. We report dataset-specific backbone hyperparameters in Table 14 for node classification and Table 15 for graph classification, and the selected augmentation rates in Table 16 and Table 17. To ensure a controlled comparison, we use the same backbone configuration across all augmentation methods. For node classification, we select the hidden dimension from {64 , 128 , 256 , 512 }. For TU graph-classification datasets, we search over hidden dimensions 
+
+{16 , 32 , 64 } and batch sizes {16 , 32 , 64 }, and train with Adam using a StepLR scheduler. For ogbg-molhiv and peptides-func, we use the hidden dimensions and batch sizes reported in their respective benchmark protocols. For augmentation baselines, we tune the augmentation rate over {0.2, 0.3, 0.5, 0.7, 0.8, 0.9}. For graph classification, all models are trained with Adam, except peptides-func, for which we use AdamW with a ReduceLROnPlateau scheduler following the LRGB protocol (Dwivedi et al., 2022). 25 RADE: Random Add-Drop Edge as a Regularizer 
+
+Table 13. Dataset statistics for node classification and graph classification. 
+
+Node Classification Dataset #Nodes #Edges #Feats #Classes Train/Val/Test Training Metric 
+
+Cora 2, 708 5, 429 1, 433 7 Official Full-batch Acc CiteSeer 3, 327 4, 732 3, 703 6 Official Full-batch Acc PubMed 19 , 717 44 , 338 500 3 Official Full-batch Acc Computer 13 , 752 245 , 861 767 10 60/20/20 Full-batch Acc CS 18 , 333 81 , 894 6, 805 15 60/20/20 Full-batch Acc Physics 34 , 493 247 , 962 8, 415 5 60/20/20 Full-batch Acc Flickr 89 , 250 899 , 756 500 7 Official Mini-batch Micro-F1 ogbn-arxiv 169 , 343 1, 166 , 243 128 40 Official Mini-batch Acc 
+
+Graph Classification Dataset #Graphs Avg #Nodes Avg #Edges #Feats #Classes/Tasks Train/Val/Test Metric 
+
+MUTAG 188 17 .9 39 .6 7 2 10-fold CV Acc PROTEINS 1,113 39 .1 145 .6 3 2 10-fold CV Acc IMDB-B 1,000 19 .8 193 .1 65 ∗ 2 10-fold CV Acc IMDB-M 1,500 13 .0 65 .9 59 ∗ 3 10-fold CV Acc ogbg-molhiv 41 ,127 25 .5 27 .5 9 1 Official ROC-AUC peptides-func 15 ,535 150 .94 307 .30 9 10 Official AP * IMDB-BINARY and IMDB-MULTI have no raw node attributes; we use one-hot degree features following the convention. 
+
+Table 14. Node classification backbone/training hyperparameters. Hidden dimensions can differ by backbone. 
+
+Dataset Hidden channels Training Batching GCN GIN GAT LR Epochs 
+
+Cora 512 512 256 0.001 500 Full CiteSeer 512 512 512 0.001 500 Full PubMed 512 512 256 0.001 500 Full CS 64 256 128 0.001 1500 Full Computer 128 128 128 0.001 1000 Full Physics 64 64 64 0.001 1500 Full Flickr 256 256 256 0.001 1000 Mini ( 2,048 nodes/batch) ogbn-arxiv 256 256 256 0.001 2000 Mini ( 2,048 nodes/batch) 
+
+Table 15. Graph classification backbone/training hyperparameters. Hidden dimensions and batch sizes can differ by backbone. 
+
+Dataset Hidden channels Training Batch size GCN GIN GAT LR Epochs GCN GIN GAT 
+
+MUTAG 32 32 32 0.001 350 16 32 16 PROTEINS 64 32 64 0.001 350 32 32 16 IMDB-B 32 16 32 0.001 350 64 32 64 IMDB-M 32 16 32 0.001 350 64 32 64 ogbg-molhiv 300 300 300 0.001 350 256 256 32 peptides-func 300 300 300 0.001 350 128 128 128 
+
+26 RADE: Random Add-Drop Edge as a Regularizer 
+
+Table 16. Node classification augmentation hyperparameters. The table summarizes the augmentation-specific rates used by each baseline. For RADE variants, we report the initialization (p0, q 0); GradNorm then adapts (p, q ) during training. 
+
+Dataset Dropout rate DropEdge rate DropNode rate DropMessage rate RADE p0 RADE q0
+
+Cora 0.70 0.50 0.90 0.50 0.50 0.000721 CiteSeer 0.50 0.20 0.90 0.90 0.50 0.000410 PubMed 0.70 0.20 0.20 0.90 0.50 0.000114 CS 0.30 0.20 0.50 0.90 0.50 0.000239 Computer 0.50 0.50 0.50 0.50 0.50 0.001300 Physics 0.30 0.20 0.20 0.20 0.50 0.000208 Flickr 0.50 0.20 0.20 0.50 0.50 0.000056 ogbn-arxiv 0.20 0.20 0.50 0.50 0.50 0.000040 
+
+Table 17. Graph classification augmentation hyperparameters. The table summarizes the augmentation-specific rates used by each baseline. For RADE variants, we report the initialization (p0, q 0); GradNorm then adapts (p, q ) during training. 
+
+Dataset Dropout rate DropEdge rate DropNode rate DropMessage rate RADE p0 RADE q0
+
+MUTAG 0.50 0.20 0.20 0.20 0.50 0.0605 PROTEINS 0.50 0.80 0.50 0.80 0.50 0.0203 IMDB-B 0.50 0.20 0.50 0.50 0.50 0.2044 IMDB-M 0.80 0.20 0.80 0.20 0.50 0.2884 ogbg-molhiv 0.50 0.20 0.20 0.50 0.50 0.0355 peptides-func 0.50 0.20 0.50 0.50 0.50 0.0052 
+
+27
