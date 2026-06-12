@@ -6,85 +6,88 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-06-11
-- 运行时间：2026-06-11 21:17:43 UTC
+- 最新运行日期：2026-06-12
+- 运行时间：2026-06-12 21:09:24 UTC
 - 运行状态：成功
-- 本次总论文数：21
-- 精读区：9
+- 本次总论文数：22
+- 精读区：10
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读9篇、速读12篇AI生成内容检测与合成技术论文  
-精读论文聚焦AI生成内容跨模态检测工具DetectZoo与深度伪造识别技术IRIS-GAN，均获9.0高分  
-建议普通读者优先精读DetectZoo与IRIS-GAN以了解前沿检测方法，并关注SynCred-Bench等速读论文探索合成信息可信度评估
-- 详情：[/202606/11/README](/202606/11/README)
+今日精读10篇、速读12篇论文，聚焦AI生成与优化领域突破  
+高分论文揭示并行解码加速图像生成及大模型对抗鲁棒性提升路径  
+建议关注并行解码技术与视觉提示工程，探索AI生成效率与鲁棒性的优化路径
+- 详情：[/202606/12/README](/202606/12/README)
 
 ### 精读区论文标签
-1. [DetectZoo: A Unified Toolkit for AI-Generated Content Detection Across Text, Audio, and Image Modalities](/202606/11/2606.04205v1-detectzoo-a-unified-toolkit-for-ai-generated-content-detection-across-text-audio-and-image-modalities)  
+1. [Parallel Jacobi Decoding for Fast Autoregressive Image Generation](/202606/12/2606.05703v1-parallel-jacobi-decoding-for-fast-autoregressive-image-generation)  
    标签：评分：9.0/10、query:image-generation
-   evidence：AI生成内容检测工具
-2. [IRIS-GAN: Staged Specialist Detection of Deepfake Faces](/202606/11/2606.04863v1-iris-gan-staged-specialist-detection-of-deepfake-faces)  
+   evidence：图像生成方法
+2. [Adversarial Robustness of Activation Steering in Large Language Models](/202606/12/2606.07696v1-adversarial-robustness-of-activation-steering-in-large-language-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-3. [Faithful, Enriched, and Precise: Benchmarking Natural-Science Illustration Generation by T2I models](/202606/11/2606.05949v2-faithful-enriched-and-precise-benchmarking-natural-science-illustration-generation-by-t2i-models)  
+   evidence：对抗攻击对生成模型的影响
+3. [Where the Score Lives: A Wavelet View of Diffusion](/202606/12/2606.08309v1-where-the-score-lives-a-wavelet-view-of-diffusion)  
    标签：评分：9.0/10、query:image-generation
-   evidence：图像合成方法与技术
-4. [When Do Local Score Models Extrapolate Across Size? A Diagnostic Theory and Benchmark](/202606/11/2606.09705v1-when-do-local-score-models-extrapolate-across-size-a-diagnostic-theory-and-benchmark)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-5. [Overlapped Wavelet Diffusion for Low-Light Image Enhancement](/202606/11/2606.10280v1-overlapped-wavelet-diffusion-for-low-light-image-enhancement)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-6. [Improving Adversarial Transferability on Vision-Language Pre-training Models via Surrogate-Specific Bias Correction](/202606/11/2606.10571v1-improving-adversarial-transferability-on-vision-language-pre-training-models-via-surrogate-specific-bias-correction)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-7. [i1: A Simple and Fully Open Recipe for Strong Text-to-Image Models](/202606/11/2606.11289v1-i1-a-simple-and-fully-open-recipe-for-strong-text-to-image-models)  
+   evidence：扩散模型在图像生成中的研究
+4. [CSFlow: Aligning Flow Matching with Human Contrast Sensitivity](/202606/12/2606.08833v1-csflow-aligning-flow-matching-with-human-contrast-sensitivity)  
    标签：评分：9.0/10、query:image-generation
-   evidence：扩散模型用于图像生成
-8. [Modeling the impact of filter-substrate refraction in the Roman point spread function](/202606/11/2606.11305v1-modeling-the-impact-of-filter-substrate-refraction-in-the-roman-point-spread-function)  
+   evidence：生成对抗网络在图像生成中的应用
+5. [Bypassing Copyright Protection in Diffusion-based Customization via Two-Stage Latent Feature Optimization](/202606/12/2606.09909v1-bypassing-copyright-protection-in-diffusion-based-customization-via-two-stage-latent-feature-optimization)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-9. [VOID: Defeating Unauthorized Mimicry in Latent Diffusion Models](/202606/11/2606.12263v1-void-defeating-unauthorized-mimicry-in-latent-diffusion-models)  
+   evidence：与对抗扰动对生成模型的影响相关
+6. [Dissect and Prune: Enhancing Robustness in AI-Generated Image Detection](/202606/12/2606.10309v1-dissect-and-prune-enhancing-robustness-in-ai-generated-image-detection)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动下的图像检测
+7. [Test-time Adversarial Takeover: A Real-time Hijacking Interface against Robotic Diffusion Policies](/202606/12/2606.10371v1-test-time-adversarial-takeover-a-real-time-hijacking-interface-against-robotic-diffusion-policies)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+8. [Defense Against Prompt Inversion Attacks: An Information-Theoretic Approach for LLM Collaborative Inference](/202606/12/2606.11592v1-defense-against-prompt-inversion-attacks-an-information-theoretic-approach-for-llm-collaborative-inference)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：对抗攻击防御方法
+9. [Dummy Backdoor as a Defense: Removing Unknown Backdoors via Shared Internal Mechanisms for Generative LLMs](/202606/12/2606.11648v1-dummy-backdoor-as-a-defense-removing-unknown-backdoors-via-shared-internal-mechanisms-for-generative-llms)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击下的生成模型保护
+10. [Reinforcement Learning Disrupts Gradient-Based Adversarial Optimization](/202606/12/2606.12251v1-reinforcement-learning-disrupts-gradient-based-adversarial-optimization)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：图像对抗扰动生成技术
 
 ### 速读区论文标签
-1. [$A^2$: Smaller Self-Supervised ViTs Localize Better than Larger Ones](/202606/11/2606.03148v1-a2-smaller-self-supervised-vits-localize-better-than-larger-ones)  
+1. [CLAW: Learning Continuous Latent Action World Models via Adversarial Latent Regularization](/202606/12/2606.04130v1-claw-learning-continuous-latent-action-world-models-via-adversarial-latent-regularization)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动下的模型鲁棒性分析
-2. [SynCred-Bench: Benchmarking Synthetic Credibility in AI-Generated Visual Misinformation](/202606/11/2606.03348v1-syncred-bench-benchmarking-synthetic-credibility-in-ai-generated-visual-misinformation)  
+   evidence：对抗攻击的图像防御策略
+2. [Imagine Before You Draw: Visual Prompt Engineering for Image Generation](/202606/12/2606.04457v1-imagine-before-you-draw-visual-prompt-engineering-for-image-generation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：图像生成中的视觉提示工程
+3. [ParetoPilot: Zero-Surrogate Offline Multi-Objective Optimization via Infer-Perturb-Guide Diffusion](/202606/12/2606.04468v1-paretopilot-zero-surrogate-offline-multi-objective-optimization-via-infer-perturb-guide-diffusion)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的防御技术
-3. [Ghost: Plausible Yet Unlearnable Trajectories via On-Manifold Substitution for Next-POI Privacy](/202606/11/2606.03711v1-ghost-plausible-yet-unlearnable-trajectories-via-on-manifold-substitution-for-next-poi-privacy)  
+   evidence：无代理多目标优化方法
+4. [Evaluating Reasoning Fidelity in Visual Text Generation](/202606/12/2606.04479v1-evaluating-reasoning-fidelity-in-visual-text-generation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动生成方法
-4. [Adaptive Causal Alignment for High-Confidence Adversarial Training](/202606/11/2606.03925v1-adaptive-causal-alignment-for-high-confidence-adversarial-training)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：因果对齐训练方法
-5. [Dream.exe: Can Video Generation Models Dream Executable Robot Manipulation?](/202606/11/2606.04811v2-dreamexe-can-video-generation-models-dream-executable-robot-manipulation)  
+   evidence：视觉文本生成的推理评估
+5. [Beyond Waveform Robustness: Robust Feature-Vocoder Adversarial Attacks on Automatic Speech Recognition](/202606/12/2606.05678v1-beyond-waveform-robustness-robust-feature-vocoder-adversarial-attacks-on-automatic-speech-recognition)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对图像篡改的影响
-6. [Anti-Hyperspectral Anomaly Detection: A First Study on Stealthy Lipschitz-Forcing Perturbations Against Unknown Detectors](/202606/11/2606.05369v1-anti-hyperspectral-anomaly-detection-a-first-study-on-stealthy-lipschitz-forcing-perturbations-against-unknown-detectors)  
+   evidence：对抗攻击的图像防御策略
+6. [Beyond Generative Decoding: Discriminative Hidden-State Readout from a Native Omni-Modal LLM for Multimodal Sentiment Analysis](/202606/12/2606.05713v1-beyond-generative-decoding-discriminative-hidden-state-readout-from-a-native-omni-modal-llm-for-multimodal-sentiment-analysis)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的高光谱检测防御
-7. [PAC-Bayesian Adversarially Robust Generalization for Message Passing Graph Neural Networks: A Sensitivity Analysis](/202606/11/2606.06293v1-pac-bayesian-adversarially-robust-generalization-for-message-passing-graph-neural-networks-a-sensitivity-analysis)  
+   evidence：研究生成式图像对抗鲁棒性
+7. [SentinelRAG: Synthetic Sentinel Knowledge for RAG Database Copyright Protection](/202606/12/2606.05787v1-sentinelrag-synthetic-sentinel-knowledge-for-rag-database-copyright-protection)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的鲁棒性分析
-8. [From Vision to Text: A Compact Multimodal Approach for Robust, Cross-Domain Presentation Attack Detection on ID Cards](/202606/11/2606.06966v1-from-vision-to-text-a-compact-multimodal-approach-for-robust-cross-domain-presentation-attack-detection-on-id-cards)  
+   evidence：对抗攻击的图像防御策略
+8. [Consistency Training Along the Transformer Stack](/202606/12/2606.05817v1-consistency-training-along-the-transformer-stack)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-9. [MM-BizRAG: Rethinking Multimodal Retrieval-Augmented Generation for General Purpose Enterprise Q&A](/202606/11/2606.04231v1-mm-bizrag-rethinking-multimodal-retrieval-augmented-generation-for-general-purpose-enterprise-qa)  
-   标签：评分：6.0/10、query:image-generation
-   evidence：多模态检索增强生成方法
-10. [A New Angle on Bones: Robust Pose Estimation in X-Ray and Ultrasound](/202606/11/2606.04700v1-a-new-angle-on-bones-robust-pose-estimation-in-x-ray-and-ultrasound)  
+   evidence：对抗扰动下的模型一致性训练
+9. [SB-RF: Schrödinger Bridge Rectified Flow for One-Step Robust Speech Enhancement](/202606/12/2606.05575v1-sb-rf-schrdinger-bridge-rectified-flow-for-one-step-robust-speech-enhancement)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：使用鲁棒拟合技术提高模型鲁棒性
-11. [Optimizing Irreversible Perturbations of the Unadjusted Langevin Algorithm](/202606/11/2606.05324v1-optimizing-irreversible-perturbations-of-the-unadjusted-langevin-algorithm)  
+   evidence：对抗攻击防御方法
+10. [CoFi-UCGen: Coarse-to-Fine Unsupervised Conditional Generation without Label Priors](/202606/12/2606.05652v1-cofi-ucgen-coarse-to-fine-unsupervised-conditional-generation-without-label-priors)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动优化方法
-12. [Balancing Image Compression and Generation with Bootstrapped Tokenization](/202606/11/2606.05552v1-balancing-image-compression-and-generation-with-bootstrapped-tokenization)  
+   evidence：生成对抗扰动方法
+11. [Emotion-Aware Image Generation from Korean Diary Text via LLM-based Prompt Translation and LoRA Fine-Tuning](/202606/12/2606.05816v2-emotion-aware-image-generation-from-korean-diary-text-via-llm-based-prompt-translation-and-lora-fine-tuning)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
+   evidence：情感感知图像生成方法
+12. [ReverseEOL: Improving Training-free Text Embeddings via Text Reversal in Decoder-only LLMs](/202606/12/2606.05858v1-reverseeol-improving-training-free-text-embeddings-via-text-reversal-in-decoder-only-llms)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗攻击下的生成模型鲁棒性
 
 
 ### ⚡ 这个站点能做什么
