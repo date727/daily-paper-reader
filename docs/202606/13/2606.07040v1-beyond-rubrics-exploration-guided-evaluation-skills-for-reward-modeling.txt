@@ -1,0 +1,809 @@
+Title: Beyond Rubrics: Exploration-Guided Evaluation Skills for Reward Modeling
+
+URL Source: https://arxiv.org/pdf/2606.07040v1
+
+Published Time: Mon, 08 Jun 2026 00:45:08 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# Beyond Rubrics: Exploration-Guided Evaluation Skills for Reward Modeling 
+
+Xing Yue 1 Linjuan Wu 1,2* Daoxin Zhang 2 Yongliang Shen 1 Weiming Lu 1†
+
+> 1
+
+Zhejiang University 2Xiaohongshu Inc. 
+
+{yue_xing, wulinjuan525, syl, luwm}@zju.edu.cn tangxiaohui@xiaohongshu.com 
+
+Abstract 
+
+Open-ended reward modeling requires judges that can follow subtle, domain-specific pref-erences when verifiable answers are unavail-able. Existing rubric-based methods often ad-dress this by generating criteria online for each query, but the extra generation step can add inference overhead and produce rigid or mis-aligned guidance. We introduce Eval-Skill ,an exploration-guided method that synthesizes reusable evaluation skills for reward modeling and reframes reward guidance as context evolu-tion rather than parameter training or per-query rubric generation. Using only 100 cases per domain for skill evolution, Eval-Skill syn-thesizes reusable domain-level evaluation skills through two progressive stages, workflow gen-eration followed by principle generation, with exploration and selection interleaved across both stages. Once generated, a skill is directly injected into the judge context. Across multi-ple RM benchmarks, Eval-Skill consistently improves diverse judge backbones; on Reward-Bench 2, it yields significant gains over vanilla judging for each main backbone (+13.44% for Qwen3-8B, and 18.51% for DeepSeek-V4-Flash). Further analyses of evolution-time scal-ing, generalizability, and transferability show that compact evaluation skills offer an effi-cient new paradigm for LLM-based evalua-tion. Code is available at https://github. com/xing-stellus-yue/Eval-Skill .
+
+1 Introduction 
+
+Reliable evaluation has become a central bottleneck for large language models (LLMs), especially in open-ended tasks where answers cannot be verified automatically. LLM-as-a-judge (LAAJ) methods are widely used as benchmark evaluators (Zheng et al., 2023), reward models (RMs) for reinforce-ment learning and preference alignment (Ouyang   
+
+> *Work done during internship at Xiaohongshu.
+> †Corresponding author.
+
+Figure 1: Comparison of (a) vanilla evaluation, (b) rubric-based evaluation, and (c) our skill-based eval-uation. 
+
+et al., 2022), and verifiers for test-time scaling methods such as sequential self-reflexion (Shinn et al., 2023). Yet strong judging requires more than a capable backbone: the judge must apply the right evaluation criteria, comparison procedure, and preference priorities for each task. Rubrics have been used in two related but dis-tinct ways. In benchmark design, human-written rubrics are part of the evaluation specification and can improve evaluation in specialized benchmarks (Arora et al., 2025; Sharma et al., 2025). In con-trast, online rubric-augmented reward modeling is an RM method: it generates a fresh rubric from each query at inference time and then asks a down-stream judge to score or compare responses under that rubric (Liu et al., 2025; Xu et al., 2026; Dhole and Agichtein, 2026). Our critique targets this second paradigm, not benchmark-provided rubrics. Although online rubric generation is intuitive, it has two limitations for practical reward modeling. First, generating a new rubric for every query introduces an additional inference step. Second, because the rubric is usually generated from the query alone, it 
+
+> arXiv:2606.07040v1 [cs.CL] 5 Jun 2026
+
+can miss response-dependent differentiators, over-specify surface-level requirements, or impose rigid criteria that mislead the judge. In our preliminary experiments, such generated rubrics can even make judges underperform vanilla one-step baselines on RewardBench (Lambert et al., 2025) and Reward-Bench 2 (Malik et al., 2025). Motivated by the RIFT taxonomy (Qi et al., 2026), we analyze these failures in § 2. We instead ask whether reward-model guidance can be evolved once and reused. Inspired by recent skill-based methods (Anthropic, 2026; Xia et al., 2026; Wang et al., 2026a; Li et al., 2026b; Ouyang et al., 2026; Wang et al., 2026b), we study skill-based reward modeling . A skill is a domain-level context artifact generated offline from rollouts on a small evolving set and then directly injected into the judge prompt at test time. Unlike a case-specific rubric, a skill can encode not only criterion-like principles, but also an evaluation workflow: how to compare candidates, when to prioritize factuality or instruction following, how to handle ties, and how to apply conditional rules. This makes skills a more expressive and efficient form of guidance: once a skill is synthesized, no additional rubric model or per-query generation step is needed. However, skill quality is critical. We find that a naive skill can already outperform online rubrics, but a poorly aligned workflow can also degrade per-formance. Moreover, simple iterative refinement, which is effective in some other skill-based settings (Zhang et al., 2026a), does not reliably improve reward modeling. Preference-sensitive evaluation requires searching over competing judgment pro-cedures rather than merely accumulating more in-structions. We therefore argue that exploration and selection are essential for synthesizing strong RM skills. We introduce Eval-Skill , an exploration-guided method for synthesizing reusable evalua-tion skills for reward modeling without parameter training. Eval-Skill constructs each skill progres-sively in two stages, workflow generation followed by principle generation, while interleaving explo-ration and selection across both stages. Since skill evolution is performed offline, this design separates skill-improvement compute from inference-time judging. For each domain, we synthesize a skill from only 100 evolving cases and evaluate it on held-out test cases. Across RewardBench 2, RewardBench, and RM-Bench (Liu et al., 2024), Eval-Skill 
+
+improves diverse judge backbones and transfers across related domains and models. On Reward-Bench 2, it improves over vanilla one-step judging by 11.75, 13.44, and 18.51 percentage points for Qwen3-4B, Qwen3-8B, and DeepSeek-V4-Flash, respectively. Indeed, scaling the offline sampling and selection process can further improve per-formance without increasing inference-time cost (§ 4.3). We also find that generated skills transfer across judge backbones, allowing a skill evolved from one model’s rollouts to benefit other models (§ 5.1). Together, these results show that com-pact, reusable evaluation skills provide a high-performing and inference-efficient paradigm for reward modeling. Our contributions can be summarized as follows: • We identify limitations of online rubric genera-tion for reward modeling and recast evaluation guidance as reusable domain-level skills that can be directly injected into the judge context. • We introduce Eval-Skill , a skill-based reward modeling method that automati-cally synthesizes high-quality evaluation skills through two-stage construction and exploration-selection. • We show that Eval-Skill delivers 10+ percentage-point gains across main judge backbones, improves multiple RM bench-marks, and also benefits reward-guided best-of-N inference. Our analyses of evolution-time scaling, transferability, and mixed-domain settings provide insights for skill-based evaluation methods and beyond. 
+
+2 From Rubrics to Skills 
+
+2.1 Task Formulation and Online Rubric-Based Reward Modeling 
+
+Reward modeling can be pointwise, pairwise, or listwise; in this work, we focus on pairwise and listwise settings. Formally, given a query q and a set of candidate responses Y = {y1, y 2, . . . , y n}, a reward model Mreward selects the best response yr
+
+from Y :
+
+yr = Mreward (q, Y )
+
+For an online rubric-based RM method, reward modeling proceeds in two steps: a rubric model 
+
+Mrubric first generates a query-specific rubric, and then Mjudge selects yr under the guidance of that generated rubric: 
+
+R = Mrubric (q), y r = Mjudge (q, Y, R )
+
+Ideally, the rubric R, composed of a set of criteria 
+
+ci, should help Mjudge make a better judgment. 
+
+2.2 Weakness of Online Rubric Generation 
+
+Although online rubric generation is promising as an RM method, our experiments show that it can also substantially degrade LAAJ performance. As shown in Table 1, directly adding generated rubrics often lowers accuracy on RewardBench 2 and Re-wardBench. For example, Qwen3-8B’s accuracy on RewardBench 2 drops from 57.04% to 50.63% when it is guided by self-generated rubrics. Simi-larly, for Rubric-ARM-8B, a fine-tuned two-model system composed of a rubric model and a judge model, using the judge alone performs better than using the full rubric-guided system.                         
+
+> Judge Model Rubric Model RB 2 RB
+> Qwen3-8B w/o 57.04 82.39
+> Qwen3-8B Qwen3-8B 50.63 78.01 Qwen3-8B Rubric-ARM-8B 51.57 78.60 Rubric-ARM-8B w/o 62.01 85.46
+> Rubric-ARM-8B Rubric-ARM-8B 60.79 79.37 DS-V4-Flash w/o 68.27 89.66
+> DS-V4-Flash DS-V4-Flash 68.69 88.00
+> Table 1: Comparison of the vanilla method (without rubric) and online rubric-based RM methods. DS de-notes DeepSeek, and RB denotes RewardBench.
+
+Following the RIFT taxonomy for analyzing rubric failures (Qi et al., 2026), we sample 200 failed rollouts from each RewardBench 2 domain, all produced by a Qwen3-8B judge with Qwen3-8B-generated rubrics, and use DeepSeek-V4-Flash to categorize their failure modes. The results in Figure 7 show that “Missing Criteria” (34.2%) and “Misaligned or Rigid” (24.1%) are frequent fail-ure modes. Through case analysis, we find that these failures are mainly caused by the response-agnostic design of the rubric generator: because the rubric is generated from the query alone, it can over-specify surface-level requirements, miss response-dependent differentiators, or impose rigid criteria that do not match the actual candidate re-sponses. We tried many prompt variants, such as specifying that the LAAJ should treat the rubrics as “merely an AI-generated reference”. However, these changes are not sufficient to prevent mislead-ing guidance. Beyond response agnosticism, we also find that the criterion-list format commonly used by online rubric generation is not sufficiently expressive for reward modeling. Such a generated rubric con-sists of a set of criteria, which are usually applied individually and unconditionally. This format sup-ports criterion-by-criterion scoring of candidate responses, but makes more complex LAAJ work-flows difficult to express, such as conditional appli-cation, branching by query type, or head-to-head comparison. It also lacks accompanying compo-nents such as examples. 
+
+2.3 A Naive Skill-Based Method 
+
+Inspired by recent work on skills (Ni et al., 2026; Zhang et al., 2026a), we investigate skill-based methods for reward modeling. We frame a skill as a superset of a rubric: it can include criterion-like principles as well as a proper workflow 1 that guides the judge to perform reward modeling in a task-appropriate way. Whereas online generated rubrics are case-specific and must be regenerated for new cases, skills are domain-specific, generated offline, and maintained as one skill per domain: 
+
+yr = Mreward (q, Y, s )
+
+where s denotes the domain-level skill. This de-sign mitigates several limitations of online rubric-generation methods: (1) the increased latency caused by two-step generation for new cases; (2) the risk of generating misleading rubrics; and (3) the limited expressivity of the criterion-list rubric structure. Although both rubrics and skills are forms of guidance injected into the judge prompt, a static domain-level skill, even a naive one, can significantly outperform seemingly more dynamic online rubrics, as shown in Table 2. 
+
+3 Methodology 
+
+3.1 Skill System Design Skill Structure For compatibility, we follow the skill template introduced by Anthropic (Anthropic, 2026): a Markdown file containing YAML front matter and a body. Based on our analysis in § 2.3, the body of our skill mainly consists of two parts: (1) a high-level Workflow , which instructs the judge on how to evaluate, and (2) low-level 
+
+Principles , which tell the judge what to do under       
+
+> 1In fact, a skill could also contain a workflow specifying that the judge should first generate a rubric itself and then apply it to the candidate responses. kgenskillskselskills(branches)ksmpskills
+> skillfromthebestbranch
+> thef inalskilljudge
+> Usel ocalskillsasreferencestogenerated iverseg lobalskills
+> localskillsextracted/refinedu singe volving-setrollouts
+> Stage1 Stage2
+> Samplem oref ullskillsfromtheb est-performingb ranch
+> Selecttheb est-performings killont hee ntiree volvings et
+> Augmentskillswithp rincipleslearnedfromrollouts(andt henm erge)
+> Wo rkflow-OnlyS kill
+> FullSkill(withP rinciples)
+> Wo rkflow
+> SkillforXX
+> Principle#1
+> Principle#2
+> Principle#3
+
+TheS killSynthesisProcessofE val-Skill     
+
+> kgenskillskselskills(branches)
+> ←crossover
+> ksmpskills
+> skillfromthebestbranch
+> thef inalskilljudge
+> Usel ocalskillsasreferencestogenerated iverseg lobalskills
+> localskillsextracted/refinedu singe volving-setrollouts
+> Stage1 Stage2
+> Samplem oref ullskillsfromtheb est-performingb ranch
+> Selecttheb est-performings killont hee ntiree volvings et
+> Augmentskillswithp rincipleslearnedfromrollouts(andt henm erge)
+> Wo rkflow-OnlyS kill
+> FullSkill(withP rinciples)
+> Wo rkflow
+> SkillforXX
+> Principle#1
+> Principle#2
+> Principle#3
+
+TheS killSynthesisProcessofE val-SkillFigure 2: Eval-Skill synthesizes skills in two stages, workflow followed by principles, while interleaving exploration and selection. 
+
+specific conditions. We also include a one-sentence overview at the start of the body. Decoupling Workflow and Principles enables different generation strategies, as described below. 
+
+One Skill Per Domain Some prior work main-tains a skill library composed of multiple skills and retrieves skills at inference time. Because skills are often generated from a single rollout or a small batch of rollouts, such “local skills” can be spe-cific and informative, but they can also misalign with test queries. Current retrieval methods based on embedding similarity may match skills from cases that are lexically similar but require different evaluation priorities, leading to ineffective or mis-leading guidance. We therefore follow Trace2Skill (Ni et al., 2026) by merging local skills and main-taining one global domain-level skill. This design avoids additional embedding or reranker models and empirically performs well. 
+
+3.2 Eval-Skill 
+
+Different workflows can encode different priorities or evaluation styles, especially for reward model-ing, where an ideal workflow may be harder to infer from rollouts than in agent tasks (Ni et al., 2026). It is therefore useful to explore multiple workflows and select the best one. At the same time, merging is suitable for consolidating a set of principles or rubrics, but not necessarily for work-flows: two workflows with contrasting priorities or different first steps can be difficult to merge with-out distortion, and merging alone does not provide the exploration we need. Inspired by genetic algorithms, we introduce 
+
+Eval-Skill , an exploration-guided method that generates skills progressively in two stages, first workflows and then principles, while interleaving both stages with exploration and selection (see Fig-ure 2). 
+
+Workflow Generation We start by using the judge model Mjudge (without a skill) to generate rollouts on a small evolving set Sevo . We divide these rollouts into batches and use them to ex-tract batch-level local skills. Specifically, we use a stronger model Mskill for skill generation, con-ditioned on the query qi, the candidate responses 
+
+Yi, the rollout rol i, the ground truth gt i, and an LLM-generated answer explanation ei for each case. Skills generated in this stage are workflow-only. Instead of simply merging these skills into a global one, we use their workflows as references and instruct Mskill to generate kgen diverse new workflows, encouraging exploration of different priorities and processes while solving the same task 2. After wrapping each generated workflow into a workflow-only skill, we select the top k′
+
+> sel
+
+skills based on their performance on the full Sevo .
+
+> 2
+
+We discuss the methodology of consolidation in § 5.4. Similar to the crossover process in genetic algo-rithms, we create one additional skill by merging the k′ 
+
+> sel
+
+selected skills. This yields ksel = k′ 
+
+> sel
+
++ 1 
+
+workflow-only skills SW in total, each forming an independent candidate branch for later selection. 
+
+Principle Generation For each branch sW ∈
+
+SW, we again generate rollouts on Sevo using 
+
+Mjudge equipped with sW, and divide the rollouts into batches. Based on the rollouts from each batch, we instruct Mskill to refine sW by adding 
+
+Principles while preserving the Workflow . Since principles are list-like and merge-friendly, we hier-archically merge the locally refined skills of each branch into a global skill. Because the merging pro-cess introduces significant variation in global-skill performance, we additionally resample by shuffling and merging the refined local skills from the branch whose global skill performs best on Sevo , thus ob-taining ksmp full skills SFull . A concise workflow-only skill can sometimes outperform full skills, so we select the best-performing skill from the union of SW and SFull as our final skill ˆs.
+
+4 Experiments 
+
+4.1 Datasets and Experiment Settings Datasets We conduct our main experiments on three multi-domain RM benchmarks: Reward-Bench 2, RewardBench, and RM-Bench. For each domain, we randomly sample 100 cases 3 as the evolving set for skill generation and reserve the remaining cases for testing. We further analyze 
+
+Eval-Skill ’s application to JudgeBench (§ 5.2) and HealthBench (§ 5.3). 
+
+Backbones In the main experiments, we use Qwen3-4B, Qwen3-8B (Yang et al., 2025), DeepSeek-V4-Flash (DeepSeek-AI, 2026), and the post-trained RM Rubric-ARM-8B-Judge as Mjudge 
+
+backbones. For each setting, we use the same back-bone for both evolution rollout generation and test-ing. We use DeepSeek-V4-Flash (with thinking enabled) as Mskill for skill management, including generation, refinement, and merging. For an anal-ysis of Eval-Skill ’s applicability to other back-bones, see § 5.1. We set kgen to 5, ksel to 3, and 
+
+ksmp to 5 for the main experiments, and we explore scaling these hyperparameters in § 4.3. 
+
+Baselines For reward modeling, we compare against four types of baselines: 
+
+> 3The chat domain from RM-Bench has only 129 unique cases, so we use 50 cases for skill evolution.
+
+• Vanilla one-step method: the judge model evaluates without any rubric or skill. • Rubric-based methods: naive self-generation and post-trained methods, including Rubric-RM (Liu et al., 2025) and Rubric-ARM (Xu et al., 2026), both of which include a post-trained rubric model and a post-trained RM. • Post-trained RMs: RRM (Guo et al., 2025) and RM-R1 (Chen et al., 2025). • Naive skill method: as introduced in § 2.3. Additional implementation details are provided in Appendix B. 
+
+4.2 Main Experiment Results 
+
+We report the results on RewardBench 2 and Re-wardBench in Table 2, and the results on RM-Bench in Table 6 in Appendix C.1. 
+
+Strong Performance across Models As shown in Table 2, Eval-Skill outperforms all baseline types within each judge group, surpassing the vanilla one-step method by about 10% on Re-wardBench 2 and 5% on RewardBench on aver-age. Although DeepSeek-V4-Flash itself serves as the skill manager, it is still notably improved by 
+
+Eval-Skill , suggesting that Eval-Skill ’s gains are not bounded by the skill manager’s standalone ability. These results demonstrate that Eval-Skill 
+
+can substantially improve RM performance across models with diverse capabilities and across diverse domains. 
+
+Further Improvement on Post-trained RMs 
+
+Eval-Skill is plug-and-play and can be applied directly to post-trained RMs. When applied to Rubric-ARM-8B-Judge, it improves the Reward-Bench 2 average by 13.22 percentage points, out-performing both the direct Rubric-ARM-8B-Judge and Qwen3-8B+ Eval-Skill settings. This result shows that Eval-Skill can further boost post-trained models. 
+
+Superiority over the Naive Skill Method Al-though the naive skill method already demonstrates strong performance, Eval-Skill further improves it, especially on weaker models such as Qwen3-4B and Qwen3-8B. This highlights the importance of skill quality and shows that Eval-Skill can substantially improve the robustness of skill gener-ation. Judge Model Rubric Model RewardBench 2 RewardBench Fact. Foc. Math PIF Safe. Avg. Chat Hard Safe. Rsn. Avg. Judge Backbone: Qwen3-4B and Variants 
+
+Qwen3-4B w/o 48.80 74.77 57.43 26.67 71.33 55.80 93.54 61.42 84.48 82.06 80.38 Qwen3-4B Rubric-RM-4B 44.27 76.20 50.60 31.67 35.43 47.63 91.47 64.33 60.16 81.19 74.29 Qwen3-4B DSV4 45.78 76.79 63.86 34.44 51.33 54.44 91.99 70.88 82.55 83.56 82.25 Rubric-RM-4B Rubric-RM-4B 45.33 78.73 56.63 41.67 34.29 51.33 91.09 67.98 46.72 81.05 71.71 Q3-4B + Naive Skill w/o 57.96 72.41 59.44 38.33 83.43 62.31 92.12 52.06 87.55 83.86 78.90 Q3-4B + Eval-Skill w/o 59.02 85.06 62.25 40.56 90.86 67.55 93.67 70.79 88.23 89.40 85.52 Judge Backbone: Qwen3-8B and Variants 
+
+Qwen3-8B w/o 52.18 74.35 59.04 30.00 69.62 57.04 94.44 64.61 86.41 84.09 82.39 Qwen3-8B Rubric-RM-8B 43.12 76.71 56.63 37.78 42.38 51.32 88.76 68.82 65.62 77.14 75.09 Qwen3-8B Rubric-ARM-8B 47.73 77.72 51.81 39.44 41.14 51.57 91.73 72.94 68.12 81.61 78.60 Qwen3-8B DSV4 50.49 77.38 62.65 41.11 53.43 57.01 91.73 71.35 83.49 84.31 82.72 Rubric-RM-8B Rubric-RM-8B 43.90 84.98 61.85 43.89 37.24 54.37 92.25 74.16 57.66 83.61 76.92 Rubric-ARM-8B Rubric-ARM-8B 51.79 89.01 63.13 57.33 42.69 60.79 91.32 77.98 62.84 85.37 79.38 Q3-8B + Naive Skill w/o 54.22 73.33 63.05 33.33 90.67 62.92 93.02 67.98 88.02 85.01 83.51 Q3-8B + Eval-Skill w/o 64.27 80.51 71.49 42.78 93.33 70.48 93.67 72.66 89.11 92.43 86.97 Rubric-ARM-8B + Eval-Skill w/o 65.69 90.04 67.47 89.89 94.67 75.35 95.09 80.24 88.59 89.80 88.43 Judge Backbone: DeepSeek-V4-Flash 
+
+DSV4 w/o 69.07 88.61 70.68 45.00 68.00 68.27 94.96 80.06 88.12 95.49 89.66 DSV4 DSV4 64.98 87.43 73.49 56.67 60.86 68.69 91.34 82.02 83.28 95.36 88.00 DSV4 + Naive Skill w/o 80.71 90.97 83.53 73.89 95.43 84.91 94.19 84.55 93.02 98.02 92.45 DSV4 + Eval-Skill w/o 84.36 92.32 84.74 76.11 96.38 86.78 95.87 87.55 92.55 99.02 93.75 Judge Backbone: Other Post-Trained RMs 
+
+RM-R1-Qwen2.5-7B w/o 39.82 70.80 44.58 36.67 44.38 47.25 82.95 65.17 76.35 82.86 76.83 RM-R1-DS-Qwen-7B w/o 36.36 64.39 61.45 21.67 31.52 43.08 79.33 66.67 74.06 90.10 77.54 RRM-7B w/o 36.00 64.64 56.63 20.56 43.43 44.25 84.63 67.60 79.38 88.17 79.95 RRM-32B w/o 55.38 78.90 76.71 35.00 55.14 60.23 94.70 73.31 85.00 97.79 87.70 
+
+Table 2: Main experiment results on RewardBench 2 and RewardBench. Within each non-final judge group, the highest score is bolded and the second-highest score is underlined. 
+
+4.3 Skill Evolution-Time Scaling 
+
+We define Skill Evolution-Time Scaling (SETS) as a paradigm for improving a skill-based method’s performance by allocating additional compute dur-ing the skill evolution phase. Because skill quality is critical and compute spent during skill evolu-tion typically does not add inference-time over-head, SETS can be an efficient way to improve performance. We conduct both sequential and parallel SETS experiments. In sequential scaling, the skill is it-eratively refined based on rollouts generated using the previous-round skill. In parallel scaling, we control the sample size used to generate multiple skills in Eval-Skill before choosing the best one according to performance on the evolving set. 
+
+4.3.1 Sequential Scaling 
+
+For sequential scaling, we use the one-stage setting and remove first-round supervision (as in § 5.4) to isolate the effect of iteration. We vary the num-ber of refinement rounds kiter from 0 to 6 for both pre-merge and post-merge iteration. In contrast to observations in other domains, we find that, for reward modeling, iterative skill refinement does not produce consistent improvement . As shown in Figure 3, accuracy quickly reaches a sim-ilar range and then fluctuates rather than increasing monotonically. By analyzing generated skills across iterations, we attribute this behavior to two factors: (1) for reward modeling tasks, preference alignment typ-ically matters more than accumulating additional task knowledge, so creating a workable workflow is not difficult, but finding a better-aligned one is; and (2) selecting iterative refinements on a small evolv-ing set can overfit to that set. More details on the experimental setting and discussion are provided in Appendix C.2. 0 1 2 3 4 5 6
+
+kiter 
+
+> 52
+> 54
+> 56
+> 58
+> 60
+> 62
+> 64
+> 66
+> Accuracy (%)
+
+Pre-Merge Iteration       
+
+> Last-in-kiter
+> Best-in-kiter
+> Avg. Final Skill Length
+> 0123456
+
+kiter 
+
+> 52
+> 54
+> 56
+> 58
+> 60
+> 62
+> 64
+> 66
+> Accuracy (%)
+
+Post-Merge Iteration 
+
+> Last-in-kiter
+> Best-in-kiter
+> Avg. Final Skill Length
+> 0
+> 5000
+> 10000
+> 15000
+> 20000
+> Skill Length (chars)
+> 0
+> 5000
+> 10000
+> 15000
+> 20000
+> Skill Length (chars)
+
+# Sequential Scaling of Skill Evolution Figure 3: Sequential scaling of skill evolution on RewardBench 2 under pre-merge and post-merge iteration. For post-merge iteration, we set the pre-merge kiter is set to 1 (best-in-1). Accuracy is measured on the test set using the merged skill. 
+
+4.3.2 Parallel Scaling 
+
+For parallel scaling, we use the same setting as 
+
+Eval-Skill and scale the three hyperparameters 
+
+kgen , ksel , and ksmp . The results in Figure 4 show two trends: (1) scaling all three hyperparameters can improve performance, with kgen having the largest effect; and (2) when kgen is already high, the gains from scaling ksel and ksmp are small (from 69.95% for ksmp = 1 to 70.18% for ksmp = 32 ), because performance quickly plateaus, indicating a soft upper bound. More details on the experi-mental setting and discussion are provided in Ap-pendix C.3. 
+
+4.4 Reward-Guided Best-of-N Performance 
+
+The preceding experiments use responses provided by the benchmarks. Here, following RRM (Guo et al., 2025), we use Eval-Skill as a verifier to guide best-of-N inference for an actor model. This setting serves as a proxy task for evaluating 
+
+Eval-Skill ’s ability to serve as an RM for rein-forcement learning. For each case, we instruct an actor model to generate N = 8 candidate re-sponses. We then ask judges, with and without 
+
+Eval-Skill , to select the best response through hierarchical pairwise selection. When the two set-tings choose different responses, we ask a final judge, DeepSeek-V4-Pro, to select a winner from their chosen responses or mark a tie when neither is clearly better. Figure 5 shows that Eval-Skill 
+
+generally achieves a higher win rate than the base-line, although some settings and domains are more challenging. We attribute these weaker cases to the relative scarcity of substantive distinctions between candidate responses and to the mismatch between the task preference encoded in the skill and the preference of the final judge, which is guided only by a one-sentence domain description to avoid bias. 
+
+5 Analyses and Discussion                              
+
+> Method Qwen3-4B Qwen3-8B RB-2 RB RB-2 RB
+> Two-Stage Paradigm
+> Eval-Skill 67.55 85.52 70.48 86.97 – first-round supervision 65.38 81.84 70.41 85.37 – stage 1 exploration 62.55 83.12 66.96 83.38
+> Single-Stage Paradigm
+> workflow-only 61.28 82.96 68.05 83.80 principle-only 66.59 84.25 69.84 87.21
+> full 63.97 80.89 65.55 85.19
+
+Table 3: Ablation results for the two-stage design and alternative single-stage recipes on RewardBench 2 and RewardBench. 
+
+5.1 How does Eval-Skill work with other backbones and across backbones? Performance on Other Backbones To further test Eval-Skill ’s generalizability, we evaluate it on three additional types of backbone models: (1) models from other families, including Llama-3.1-8B-Instruct, Qwen3.6-35B-A3B, and Gemma-4-E4B-IT; (2) Qwen3-8B with thinking mode en-abled; and (3) another post-trained generative RM, 1 2 4 8 16 
+
+Scaling of kgen     
+
+> 58
+> 60
+> 62
+> 64
+> 66
+> 68
+> 70
+> Accuracy (%)
+> 124816
+
+Scaling of ksel        
+
+> 58
+> 60
+> 62
+> 64
+> 66
+> 68
+> 70
+> Accuracy (%)
+> kgen = 4
+> kgen = 16
+> 124816 32
+
+Scaling of ksmp       
+
+> 58
+> 60
+> 62
+> 64
+> 66
+> 68
+> 70
+> Accuracy (%)
+> kgen =ksel = 4
+> kgen =ksel = 16
+
+Parallel Scaling of Eval-Skill Figure 4: Scaling the hyperparameters kgen , ksel , and ksmp in Eval-Skill shows that more samples lead to better performance, although performance eventually plateaus. Accuracy is measured on the test set using the chosen skill after each sampling round. Factuality 
+
+> Focus
+> Math
+> PIF
+> Safety
+> Avg.
+> Actor: Qwen3-8B
+> Judge: Qwen3-8B
+> 44.5
+> 23.9
+> 12.8
+> 17.1
+> 24.4
+> 24.5
+> 25.2
+> 49.7
+> 72.2
+> 63.7
+> 59.1
+> 54
+> 30.3
+> 26.4
+> 15
+> 19.2
+> 16.5
+> 21.5
+> Actor: Qwen2.5-7B-Instruct
+> Judge: Qwen3-8B
+> 41.3
+> 23.6
+> 19.2
+> 31.5
+> 19.9
+> 27.1
+> 26.8
+> 47
+> 64.2
+> 53.1
+> 64.1
+> 51
+> 31.9
+> 29.4
+> 16.6
+> 15.4
+> 16
+> 21.8
+> Actor: Qwen3-8B
+> Judge: Qwen3.6-35B-A3B
+> 43
+> 22.3
+> 10.6
+> 19.5
+> 23.1
+> 23.7
+> 29.8
+> 57.4
+> 80
+> 64.6
+> 65.6
+> 59.5
+> 28.2
+> 20.2
+> 9.4
+> 15.9
+> 11.3
+> 17
+
+Skill-Eval vs Baseline   
+
+> Win Tie Lose
+
+Figure 5: Reward-guided best-of-N inference. Win, tie, and lose indicate the comparison between the Eval-Skill -guided verifier and the baseline verifier, as judged by DeepSeek-V4-Pro (with thinking enabled). 
+
+RRM-7B. Results in Tables 7 and 8 show that 
+
+Eval-Skill generalizes well across backbones. As discussed in Appendix C.4, we also observe that models with weaker instruction-following abil-ity, including Llama-3.1-8B-Instruct and RRM-7B, may not follow skills reliably. For these models, a shorter, workflow-only skill can perform better than a full skill. 
+
+Transferability Across Backbones We test whether Eval-Skill skills transfer across back-bone models. As shown in Table 9, skills generated from rollouts of one model can bring similar gains to models with different capabilities, and they sig-nificantly outperform the no-skill baseline. This highlights the efficiency of Eval-Skill : gener-ated skills are often model-transferable, so a skill evolved from one model’s rollouts can be applied to multiple models. 
+
+5.2 How do skills work across domains and in mixed-domain settings? Transferability Across Domains We heuristi-cally construct two domain groups based on po-tential domain similarity: the Chat Group and the Reasoning Group. We use these groups to investi-gate skill transfer across domains. Table 4 reports OOD performance relative to the no-skill baselines. Performance is strongly influenced by the match be-tween the source and target domains. For example, we observe noticeable transferability among the Chat domain from RewardBench, the Chat domain from RM-Bench, and the Factuality domain from RewardBench 2, whereas mismatched skills can significantly degrade performance in other cases. This suggests that skills capture domain-specific evaluation priorities rather than acting as univer-sally beneficial prompts. 
+
+Performance on Mixed Domains We test 
+
+Eval-Skill on JudgeBench, an RM benchmark with four domains: general knowledge, reasoning, mathematics, and coding. Instead of creating one skill per domain as in the main experiments (see § 4.1), we mix cases from different domains and generate a single mixed-domain skill. The results in Figure 6 show that while this skill can still bene-fit stronger models, it does not improve the perfor-mance of weaker models such as Qwen3-4B and Qwen3-8B, and can even slightly decrease it. By inspecting the generated skills, we find that the workflow part typically contains branching structures tailored to different task domains (e.g., see Figure 10), showing the adaptability of the skill generation process. We attribute the limited im-provement on weaker models to their difficulty in following the complex branching and conditions specified in the skills. 
+
+5.3 A Stress Test on HealthBench 
+
+To test Eval-Skill on more challenging tasks and settings, we conduct experiments on Health-Bench, a benchmark measuring the performance and safety of LLMs in healthcare. Because Health-Bench is not an RM benchmark, we adapt it by iteratively generating responses with Qwen3-8B for each query, scoring them with the ground-truth rubrics, and retaining a pair once two responses for the same query differ by at least 0.1. We evalu-ate judge models by providing the prompt and two responses without the rubrics. The results in Ta-ble 10 indicate that, except for DeepSeek-V4-Flash, 
+
+Eval-Skill does not yield significant gains. We attribute this to the knowledge-intensive nature of HealthBench and the intrinsic difficulty of discrim-inating between two Qwen3-8B responses. Qwen3-4B Qwen3-8B Qwen3.6- 
+
+> 35B
+> DS-V4-
+> Flash
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> 100
+> Accuracy (%)
+> 62.4 63.3
+> 78.5
+> 70.6
+> 60.0
+> 62.6
+> 88.4
+> 81.0
+
+Performance on Mixed Domains       
+
+> w/o skill w skill
+> Random guess
+> Figure 6: Performance on the mixed-domain JudgeBench setting.
+
+5.4 Ablation Experiments Alternative Single-Stage Recipes Eval-Skill 
+
+is designed as a two-stage method: it first generates a workflow and then derives principles. We also test alternative one-stage settings: (1) workflow-only , i.e., the stage-1-only version of Eval-Skill ;(2) principle-only , i.e., the stage-2-only version of 
+
+Eval-Skill ; and (3) full , which directly generates a full skill in one stage. The results in Table 3 show that these variants typically achieve similar performance, only slightly lagging behind the full 
+
+Eval-Skill method. This demonstrates that both the workflow component and the principle com-ponent are highly expressive for guiding judges, while sharing certain expressive capabilities, such as the ability to encode conditional logic through if-clauses. 
+
+Others We also verify the effects of (1) first-round supervision and (2) reference-guided gen-eration in stage 1, as shown in Table 3. 
+
+6 Related Work 
+
+Rubric-Based Reward Modeling Recent re-ward modeling has expanded from scalar reward prediction toward generative judging, especially for open-ended tasks where verifiable answers are unavailable. In this setting, rubrics and checklists provide explicit evaluation standards for LLM-as-a-judge (LAAJ) systems, much like human teachers grading exam answers against predefined criteria (Kim et al., 2024). A rubric or checklist typically consists of multiple criteria and can be specified at the task level or case level. Several benchmarks provide human-crafted case-level rubrics to sup-port LAAJ evaluation (Arora et al., 2025; Sharma et al., 2025; Starace et al., 2025). Online rubric generation has also been used as an intermediate step in reward modeling systems, where a rubric model first generates evaluation cri-teria and a downstream judge then applies them. When reference answers are available, they can be incorporated into rubric generation to improve re-ward modeling for reinforcement learning (Gunjal et al., 2025; Huang et al., 2025; Liu et al., 2025). In many open-ended settings, however, reference answers are unavailable, so the rubric is generated from the user query alone (Xu et al., 2026; He et al., 2025; Dou et al., 2025; Dhole and Agichtein, 2026). RubricBench (Zhang et al., 2026c) further evaluates the ability of models to generate rubrics, highlighting rubric self-generation as a standalone Target\Source RB.Chat RB.CH RMB.Chat RB2.Fact RB2.Focus RB.Chat -0.82 -13.27 -4.51 -9.02 -14.22                             
+
+> RB.CH -0.43 12.46 4.06 5.94 1.73
+> RMB.Chat -7.84 12.25 11.13 11.13 -5.39
+> RB2.Fact -6.65 -0.69 13.80 23.17 -21.29
+> RB2.Focus -2.17 3.05 -9.66 -7.72 8.29
+> Target\Source RB. Reason. RB2. Math RMB. Math RB.Reason. 9.92 9.74 9.80
+> RB2.Math 21.09 21.09 10.87
+> RMB.Math 32.26 16.15 16.99
+> Table 4: Cross-domain transfer performance relative to the no-skill baselines. Left: the Chat Group. Right: the Reasoning Group.
+
+capability. Although generated rubrics can in prin-ciple reduce surface-level biases and help judges attend to task-specific criteria, our results show that they can also hurt judge performance and even underperform vanilla baselines. RIFT (Qi et al., 2026) provides a taxonomy of rubric failure modes; building on this perspective, we empirically verify related failures on RM benchmarks and extend the representational space from rubrics to skills, which leads to stronger RM performance. 
+
+Skill-Based Methods Prior work has studied how experiences or insights extracted from roll-outs on related cases can guide LLM behavior (Wang et al., 2023; Zhao et al., 2024; Fang et al., 2025; Ouyang et al., 2025; Wu et al., 2025). Since Anthropic introduced Skills (Anthropic, 2026), skill-based methods have emerged across domains, including agents (Xia et al., 2026; Jiang et al., 2026; Ouyang et al., 2026), mathematics (Li et al., 2026b), coding (Wang et al., 2026b), routing (Wang et al., 2026), and LLM memory management (Zhang et al., 2026b). Some methods use public or human-crafted skills (Zheng et al., 2026; Chen et al., 2026), and SkillsBench (Li et al., 2026a) pro-vides a benchmark for this paradigm. Other meth-ods automatically extract domain-specific skills from rollouts on an evolving set (Xia et al., 2026; Ni et al., 2026; Jiang et al., 2026; Tu et al., 2026; Wang et al., 2026a; Zhang et al., 2026a), often find-ing that automatically generated skills outperform human-curated ones (Ni et al., 2026; Zhang et al., 2026a). Existing skill-based systems differ in how they store and deploy skills. Some maintain a skill li-brary and retrieve relevant skills at inference time (Xia et al., 2026), whereas others retain a single domain-level skill and inject it directly into the context of the executor model (Ni et al., 2026). Because retrieval quality is a major bottleneck for skill-library methods, strongly affecting down-stream performance (Zheng et al., 2026), and be-cause additional retriever models introduce extra overhead and complexity, we adopt the one global skill pattern in this work. We further emphasize the role of exploration and selection in RM skill gen-eration: for preference-sensitive evaluation tasks, different workflows can encode different judgment priorities, so simply accumulating or iterating skills is not always sufficient. The most closely related works are two concurrent skill-based evaluation methods: RewardHarness (Zhang et al., 2026d) and Skill-RM (Chen et al., 2026). RewardHarness focuses on image editing, whereas we study general RM scenarios across diverse domains. Skill-RM is closer in scope, but it relies on manually crafted RM skills and emphasizes agentic orchestration over a resource bank. In contrast, Eval-Skill 
+
+emphasizes automatic skill synthesis and uses a rel-atively simple skill system, reducing overhead and placing lower demands on the backbone model. 
+
+7 Conclusion 
+
+We study the limitations of rubric-based reward modeling and show that online rubric generation can degrade reward model performance due to rigid criteria and misalignment with reward model ca-pabilities. To address these issues, we explore an alternative paradigm that directly extracts reusable evaluation skills from model rollouts, without re-lying on online rubric generation. We further in-troduce Eval-Skill , which develops high-quality domain-level evaluation skills through two-stage progressive generation with exploration and selec-tion interleaved across both workflow and principle construction. Experiments and analyses show that high-quality skills can consistently improve reward models and transfer across backbones and relevant domains, providing an efficient alternative to two-step rubric-based evaluation. 
+
+Limitations 
+
+First, although we explored pairwise and listwise reward modeling, we did not include pointwise RM tasks into our scope. Second, while we validated Eval-Skill on reward modeling benchmarks and best-of-N inference, its effectiveness for down-stream reinforcement learning remains to be veri-fied. Third, as discussed in § 5.2 and § 5.3, mixed-domain settings and more challenging tasks can remain difficult, especially for smaller backbones. 
+
+Ethical Considerations 
+
+Eval-Skill is designed to improve the reliabil-ity of reward-model-based evaluation. However, stronger evaluators may also reinforce objectives, biases, or omissions present in their training data, evolution sets, and skill prompts. When applying 
+
+Eval-Skill to safety-critical or socially sensitive domains, practitioners should audit both the se-lected skills and the resulting reward model out-puts, and should not treat skill-guided judgments as substitutes for expert human review. 
+
+Artifacts and Licenses We use publicly avail-able research artifacts, including benchmark datasets, baseline methods, and open-source mod-els, in accordance with their original licenses and terms of use. All artifacts are used solely for re-search and evaluation purposes. We will release our code, prompts, and generated skills under the Apache-2.0 license, and provide references to the original sources and licenses of all external artifacts used in our experiments. 
+
+Use of AI Assistants We used AI assistants, in-cluding ChatGPT, to support writing polishing, code and debugging assistance, and illustration gen-eration. The authors reviewed, edited, and verified all AI-assisted outputs, and take full responsibility for the final content, experiments, analysis, and claims in this paper. 
+
+References 
+
+Anthropic. 2026. Skills: Public Repository for Agent Skills. https://github.com/anthropics/ skills . Accessed: 2026-05-25. Rahul K. Arora, Jason Wei, Rebecca Soskin Hicks, Pre-ston Bowman, J. Q. Candela, Foivos Tsimpourlas, Michael Sharman, Meghan Shah, Andrea Vallone, Alex Beutel, Johannes Heidecke, and Karan Sing-hal. 2025. Healthbench: Evaluating Large Language Models Towards Improved Human Health. arXiv.org ,abs/2505.08775. Tao Chen, Gangwei Jiang, Pengyu Cheng, Siyuan Huang, Yihao Liu, Jingwei Ni, Jiaqing Guo, Mengyu Zhou, Kaiyu Tang, Junling Liu, Qinliang Su, Xiaoxi Jiang, and Guanjun Jiang. 2026. Skill-RM: Unifying Heterogeneous Evaluation Criteria via Agent Skill. 
+
+arXiv .Xiusi Chen, Gaotang Li, Ziqi Wang, Bowen Jin, Cheng Qian, Yu Wang, Hongru Wang, Yu Zhang, Denghui Zhang, Tong Zhang, Hanghang Tong, and Heng Ji. 2025. Rm-R1: Reward Modeling as Reasoning. 
+
+arXiv.org , abs/2505.02387. DeepMind. 2026. Gemma 4. DeepSeek-AI. 2026. Deepseek-V4: Towards Highly Efficient Million-Token Context Intelligence. 
+
+github.com .Kaustubh D. Dhole and E. Agichtein. 2026. Rubricrag: Towards Interpretable and Reliable LLM Evaluation via Domain Knowledge Retrieval for Rubric Genera-tion. arXiv .Chengfeng Dou, Chong Liu, Fan Yang, Fei Li, Jiyuan Jia, Mingyang Chen, Qiang Ju, Shuai Wang, Shunya Dang, Tianpeng Li, Xiangrong Zeng, Yijie Zhou, Chenzheng Zhu, Dawei Pan, Fei Deng, Guangwei Ai, Guosheng Dong, Hongda Zhang, Jinyang Tai, Jixiang Hong, Kai Lu, Lin-lin Sun, Peidong Guo, Qian Ma, Rihui Xin, Shihui Yang, Shusen Zhang, Yichuan Mo, Zheng Liang, Zhishou Zhang, et al. 2025. Baichuan-M2: Scaling Medical Capability with Large Verifier System. arXiv.org , abs/2509.02208. Runnan Fang, Yuan Liang, Xiaobin Wang, Jialong Wu, Shuofei Qiao, Pengjun Xie, Fei Huang, Huajun Chen, and Ningyu Zhang. 2025. Memp: Exploring Agent Procedural Memory. arXiv.org , abs/2508.06433. Anisha Gunjal, Anthony Wang, Elaine Lau, Vaskar Nath, Bing Liu, and Sean M. Hendryx. 2025. Rubrics as Rewards: Reinforcement Learning Beyond Verifi-able Domains. arXiv.org , abs/2507.17746. Jiaxin Guo, Zewen Chi, Li Dong, Qingxiu Dong, Xun Wu, Shaohan Huang, and Furu Wei. 2025. Reward Reasoning Model. arXiv.org , abs/2505.14674. Yun He, Wenzhe Li, Hejia Zhang, Songlin Li, Kar-ishma Mandyam, S. Khosla, Yuanhao Xiong, Nan-shu Wang, Selina Peng, Beibin Li, Shengjie Bi, Shishir Patil, Qi Qi, Shengyu Feng, Julian Katz-Samuels, R. Pang, Sujan Kumar Gonugondla, Hunter Lang, Yue Yu, Yundi Qian, Maryam Fazel-Zarandi, Licheng Yu, Amine Benhalloum, H. Awadalla, and Manaal Faruqui. 2025. Advancedif: Rubric-Based Benchmarking and Reinforcement Learning for Ad-vancing LLM Instruction Following. arXiv.org ,abs/2511.10507. Zenan Huang, Yihong Zhuang, Guoshan Lu, Zeyu Qin, Haokai Xu, Tianyu Zhao, Ru Peng, Jiaqi Hu, Zhan-ming Shen, Xiaomeng Hu, Xijun Gu, Peiyi Tu, Jiaxin Liu, Wenyu Chen, Yuzhuo Fu, Zhiting Fan, Yanmei Gu, Yuanyuan Wang, Zhengkai Yang, Jianguo Li, and Junbo Zhao. 2025. Reinforcement Learning with Rubric Anchors. arXiv.org , abs/2508.12790. OpenAI Aaron Hurst, Adam Lerer, Adam P. Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Rad-ford, Aleksander Mkadry, Alex Baker-Whitcomb, Alex Beutel, A. Borzunov, A. Carney, Alex Chow, Alexander Kirillov, Alex Nichol, A. Paino, Alex Ren-zin, Alexandre Passos, Alexander Kirillov, Alexi Christakis, Alexis Conneau, Ali Kamali, A. Jabri, et al. 2024. Gpt-4o System Card. arXiv ,abs/2410.21276. Guanyu Jiang, Zhaochen Su, Xiaoye Qu, and Yi R. Fung. 2026. Xskill: Continual Learning from Experience and Skills in Multimodal Agents. arXiv .Seungone Kim, Juyoung Suk, Shayne Longpre, Bill Yuchen Lin, Jamin Shin, S. Welleck, Graham Neubig, Moontae Lee, Kyungjae Lee, and Min-joon Seo. 2024. Prometheus 2: An Open Source Language Model Specialized in Evaluating Other Language Models. In Conference on Empirical Methods in Natural Language Processing , volume abs/2405.01535. Nathan Lambert, Valentina Pyatkin, Jacob Morrison, LJ Miranda, Bill Yuchen Lin, Khyathi Chandu, Nouha Dziri, Sachin Kumar, Tom Zick, Yejin Choi, Noah A. Smith, and Hannaneh Hajishirzi. 2025. Re-wardbench: Evaluating Reward Models for Language Modeling. In Findings of the Association for Compu-tational Linguistics: NAACL 2025 , pages 1755–1797. Association for Computational Linguistics. Xiangyi Li, Wenbo Chen, Yiming Liu, Shenghan Zheng, Xiaokun Chen, Yifeng He, Yubo Li, B. You, Hao-tian Shen, Jiankai Sun, Shuyi Wang, Qunhong Zeng, Di Wang, Xuandong Zhao, Yuanli Wang, Roey Ben Chaim, Zonglin Di, Yi Gao, Junwei He, Yizhuo He, Liqiang Jing, Luyang Kong, Xin Lan, Jiachen Li, Songlin Li, Yijiang Li, Yue Lin, Xinyi Liu, Xuan-qing Liu, et al. 2026a. Skillsbench: Benchmarking How Well Agent Skills Work Across Diverse Tasks. 
+
+arXiv.org , abs/2602.12670. Yu Li, Rui Miao, Zhengling Qi, and Tian Lan. 2026b. Arise: Agent Reasoning with Intrinsic Skill Evolu-tion in Hierarchical Reinforcement Learning. arXiv .Tianci Liu, Ran Xu, Tony Yu, Ilgee Hong, Carl Yang, Tuo Zhao, and Haoyu Wang. 2025. Openrubrics: Towards Scalable Synthetic Rubric Generation for Reward Modeling and LLM Alignment. arXiv.org ,abs/2510.07743. Yantao Liu, Zijun Yao, Rui Min, Yixin Cao, Lei Hou, and Juanzi Li. 2024. Rm-Bench: Benchmarking Reward Models of Language Models with Subtlety and Style. In International Conference on Learning Representations , volume abs/2410.16184. Saumya Malik, Valentina Pyatkin, Sander Land, Ja-cob Daniel Morrison, Noah A. Smith, Hanna Ha-jishirzi, and Nathan Lambert. 2025. Rewardbench 2: Advancing Reward Model Evaluation. arXiv.org ,abs/2506.01937. Meta. 2024. Introducing llama 3.1: Our most capable models to date. Jingwei Ni, Yihao Liu, Xinpeng Liu, Yutao Sun, Mengyu Zhou, Pengyu Cheng, Dexin Wang, Xiaoxi Jiang, and Guanjun Jiang. 2026. Trace2skill: Dis-till Trajectory-Local Lessons into Transferable Agent Skills. arXiv .Ouyang, Siru, Yan, Jun, Chen, Yanfei, Han, Rujun, Wang, Zifeng, Mishra, Bhavana Dalvi, Meng, Rui, Li, Chun-Liang, Jiao, Yizhu, Zha, Kaiwen, Shen, Mao-hao, Tirumalashetty, Vishy, Lee, George, Han, Jiawei, Pfister, Tomas, Lee, and Chen-Yu. 2026. Skillos: Learning Skill Curation for Self-Evolving Agents. 
+
+arXiv .Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Gray, John Schulman, Jacob Hilton, Fraser Kelton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike, and Ryan Lowe. 2022. Training language models to follow instructions with human feedback. In Advances in Neural Information Processing Systems , volume abs/2203.02155. Siru Ouyang, Jun Yan, I-Hung Hsu, Yanfei Chen, Ke Jiang, Zifeng Wang, Rujun Han, Long T. Le, Samira Daruki, Xiangru Tang, Vishy Tirumalashetty, George Lee, Mahsan Rofouei, Hangfei Lin, Jiawei Han, Chen-Yu Lee, and Tomas Pfister. 2025. Reason-ingbank: Scaling Agent Self-Evolving with Reason-ing Memory. arXiv.org , abs/2509.25140. Zhengyang Qi, Charles Dickens, Derek Pham, A. Dsouza, Armin Parchami, Frederic Sala, and P. Varma. 2026. Rift: A RubrIc Failure Mode Tax-onomy and Automated Diagnostics. ICLR Workshop DATA-FM .Qwen Team. 2026. Qwen3.6-35B-A3B: Agentic coding power, now open to all. Manasi Sharma, Chen Bo Calvin Zhang, Chaithanya Bandi, Clinton Wang, Ankit Aich, Huy Nghiem, Tahseen Rabbani, Ye Htet, Brian Jang, Sumana Basu, Aishwarya H. Balwani, Denis Peskoff, Mar-cos Ayestaran, Sean M. Hendryx, Brad Kenstler, and Bing Liu. 2025. Researchrubrics: A Benchmark of Prompts and Rubrics For Evaluating Deep Research Agents. arXiv.org , abs/2511.07685. Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu Yao. 2023. Re-flexion: language agents with verbal reinforcement learning. In Conference on Neural Information Pro-cessing Systems (NeurIPS) .Giulio Starace, Oliver Jaffe, Dane Sherburn, James Aung, Jun Shern Chan, Leon Maksin, Rachel Dias, Evan Mays, Benjamin Kinsella, Wyatt Thompson, Johannes Heidecke, Amelia Glaese, and Tejal Pat-wardhan. 2025. Paperbench: Evaluating AI’s Ability to Replicate AI Research. In International Confer-ence on Machine Learning , volume abs/2504.01848. Sijun Tan, Siyuan Zhuang, Kyle Montgomery, William Y. Tang, Alejandro Cuadron, Chenguang Wang, Raluca A. Popa, and Ion Stoica. 2024. Judgebench: A Benchmark for Evaluating LLM-based Judges. In International Conference on Learn-ing Representations , volume abs/2410.12784. Songjun Tu, Chengdong Xu, Qichao Zhang, Yaocheng Zhang, Xiangyuan Lan, Linjing Li, and Dongbin Zhao. 2026. Dynamic Dual-Granularity Skill Bank for Agentic RL. arXiv .Wang, Jiayu, Ming, Yifei, Ke, Zixuan, Joty, Shafiq, Albarghouthi, Aws, Sala, and Frederic. 2026. Skil-lorchestra: Learning to Route Agents via Skill Trans-fer. arXiv .Chenxi Wang, Zhuoyun Yu, Xinghong Xie, Wuguan-nan Yao, Runnan Fang, Shuofei Qiao, Kexin Cao, Guozhou Zheng, Xiang Qi, Peng Zhang, and Shumin Deng. 2026a. Skillx: Automatically Constructing Skill Knowledge Bases for Agents. arXiv .Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Man-dlekar, Chaowei Xiao, Yuke Zhu, Linxi (Jim) Fan, and Anima Anandkumar. 2023. Voyager: An Open-Ended Embodied Agent with Large Language Mod-els. In Second Agent Learning in Open-Endedness Workshop , volume abs/2305.16291. Zimu Wang, Yuling Shi, Mengfan Li, Zijun Liu, Jie M. Zhang, Chengcheng Wan, and Xiaodong Gu. 2026b. Effiskill: Agent Skill Based Automated Code Effi-ciency Optimization. arXiv .Rong Wu, Xiaoman Wang, Jianbiao Mei, Pinlong Cai, Daocheng Fu, Cheng Yang, Licheng Wen, Xue-meng Yang, Yufan Shen, Yuxin Wang, and Botian Shi. 2025. Evolver: Self-Evolving LLM Agents through an Experience-Driven Lifecycle. arXiv.org ,abs/2510.16079. Peng Xia, Jianwen Chen, Han Wang, Jiaqi Liu, Kaide Zeng, Yu Wang, Siwei Han, Yiyang Zhou, Xujiang Zhao, Haifeng Chen, Zeyu Zheng, Cihang Xie, and Huaxiu Yao. 2026. Skillrl: Evolving Agents via Recursive Skill-Augmented Reinforcement Learning. 
+
+ICLR Workshop RSI Poster .Ran Xu, Tianci Liu, Zihan Dong, T. You, Ilgee Hong, Carl Yang, Linjun Zhang, Tao Zhao, and Haoyu Wang. 2026. Alternating Reinforcement Learning for Rubric-Based Reward Modeling in Non-Verifiable LLM Post-Training. arXiv.org , abs/2602.01511. An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayi-heng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, Jian Yang, Jian-hong Tu, Jianwei Zhang, Jianxin Yang, Jiaxin Yang, Jingren Zhou, Jingren Zhou, Junyan Lin, K. Dang, Keqin Bao, KePei Yang, et al. 2025. Qwen3 Techni-cal Report. arXiv , abs/2505.09388. Qwen An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Guanting Dong, Hao-ran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxin Yang, Jingren Zhou, Jun-yang Lin, K. Dang, Keming Lu, Keqin Bao, Kexin Yang, Le Yu, Mei Li, Mingfeng Xue, Pei Zhang, Qin Zhu, Rui Men, Runji Lin, et al. 2024. Qwen2.5 Technical Report. arXiv.org , abs/2412.15115. Hanrong Zhang, Shichen Fan, Henry Peng Zou, Yankai Chen, Zhenting Wang, Jiayuan Zhou, Chengze Li, Wei-Chieh Huang, Yifei Yao, Kening Zheng, Xue Liu, Xiaoxiao Li, and Philip S. Yu. 2026a. Coevoskills: Self-Evolving Agent Skills via Co-Evolutionary Verification. arXiv .Haozhen Zhang, Quanyu Long, Jianzhu Bao, Tao Feng, Weizhi Zhang, Haodong Yue, and Wenya Wang. 2026b. Memskill: Learning and Evolving Mem-ory Skills for Self-Evolving Agents. arXiv.org ,abs/2602.02474. Qiyuan Zhang, Jun Zhou, Yufei Wang, Fuyuan Lyu, Yi-dong Ming, Can Xu, Qingfeng Sun, Kai Zheng, Peng Kang, Xue Liu, and Chen Ma. 2026c. Rubricbench: Aligning Model-Generated Rubrics with Human Standards. arXiv.org , abs/2603.01562. Yuxuan Zhang, Peng Du, Bo Li, Cong Wei, Junwen Miao, Huaisong Zhang, Songcheng Cai, Yubo Wang, Dongfu Jiang, Yuyu Zhang, Ping Nie, Wenhu Chen, Changqian Yu, and Kelsey R. Allen. 2026d. Re-wardharness: Self-Evolving Agentic Post-Training. 
+
+arXiv .Andrew Zhao, Daniel Huang, Quentin Xu, Matthieu Lin, Yong-Jin Liu, and Gao Huang. 2024. Expel: Llm Agents Are Experiential Learners. Proceedings of the AAAI Conference on Artificial Intelligence ,38(17):19632–19642. Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica. 2023. Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena. In Conference on Neural Information Processing Sys-tems (NeurIPS) .Yanzhao Zheng, Zhentao Zhang, Chao Ma, Yuanqiang Yu, Jihua Zhu, Baohua Dong, and Hangcheng Zhu. 2026. Skillrouter: Retrieve-and-Rerank Skill Selec-tion for LLM Agents at Scale. arXiv .
+
+A Weakness of Rubric-Based Methods 
+
+A.1 Detailed Comparison between Rubric-Based Methods and Baselines 
+
+The detailed comparison between rubric-based methods and baselines on RewardBench 2 and Re-wardBench are shown in Table 5. Judge Model Rubric Model RewardBench 2 RewardBench Fact. Focus Math PIF Safety Avg. Chat Chat-Hard Safety Rsn. Avg. 
+
+Qwen3-4B w/o 48.80 74.77 57.43 26.67 71.33 55.80 93.54 61.42 84.48 82.06 80.38 Qwen3-4B Qwen3-4B 42.22 73.84 48.59 32.22 33.62 46.10 92.76 65.54 64.58 82.31 76.30 Qwen3-4B Rubric-RM-4B 44.27 76.20 50.60 31.67 35.43 47.63 91.47 64.33 60.16 81.19 74.29 Qwen3-4B DS-V4-Flash 45.78 76.79 63.86 34.44 51.33 54.44 91.99 70.88 82.55 83.56 82.25 
+
+Rubric-RM-4B w/o 50.93 79.07 56.63 43.33 52.48 56.49 94.57 66.76 73.12 80.45 78.73 
+
+Rubric-RM-4B Rubric-RM-4B 45.33 78.73 56.63 41.67 34.29 51.33 91.09 67.98 46.72 81.05 71.71 Qwen3-8B w/o 52.18 74.35 59.04 30.00 69.62 57.04 94.44 64.61 86.41 84.09 82.39 Qwen3-8B Qwen3-8B 45.28 73.97 58.07 34.67 41.14 50.63 90.70 69.01 70.89 81.43 78.01 Qwen3-8B Rubric-RM-8B 43.12 76.71 56.63 37.78 42.38 51.32 88.76 68.82 65.62 77.14 75.09 Qwen3-8B Rubric-ARM-8B 47.73 77.72 51.81 39.44 41.14 51.57 91.73 72.94 68.12 81.61 78.60 Qwen3-8B DS-V4-Flash 50.49 77.38 62.65 41.11 53.43 57.01 91.73 71.35 83.49 84.31 82.72 
+
+Rubric-RM-8B w/o 50.67 82.95 57.83 42.22 45.62 55.86 92.89 71.07 76.61 85.09 81.42 
+
+Rubric-RM-8B Rubric-RM-8B 43.90 84.98 61.85 43.89 37.24 54.37 92.25 74.16 57.66 83.61 76.92 Rubric-ARM-8B w/o 56.53 88.02 58.23 45.00 62.29 62.01 93.67 77.25 84.53 86.37 85.46 
+
+Rubric-ARM-8B Rubric-ARM-8B 51.79 89.01 63.13 57.33 42.69 60.79 91.32 77.98 62.84 85.37 79.38 Qwen3-8B-think w/o 57.60 82.87 85.14 46.67 65.62 67.58 93.80 81.18 87.55 97.94 90.12 
+
+Qwen3-8B-think Qwen3-8B-think 52.80 80.42 79.12 46.67 43.90 60.58 91.60 79.12 68.07 97.09 83.97 Qwen3-8B-think DS-V4-Flash 55.11 80.51 79.12 41.67 56.29 62.54 91.34 81.93 85.05 97.39 88.93 Qwen3.6-35B-A3B w/o 75.29 85.32 85.14 63.33 77.14 77.24 93.02 83.15 91.98 98.67 91.71 
+
+Qwen3.6-35B-A3B Qwen3.6-35B-A3B 71.20 82.03 84.74 67.78 73.24 75.80 91.09 82.49 88.75 98.77 90.28 Qwen3.6-35B-A3B DS-V4-Flash 68.89 81.69 84.74 73.89 64.95 74.83 89.53 82.58 87.03 98.62 89.44 DS-V4-Flash w/o 69.07 88.61 70.68 45.00 68.00 68.27 94.96 80.06 88.12 95.49 89.66 
+
+DS-V4-Flash DS-V4-Flash 64.98 87.43 73.49 56.67 60.86 68.69 91.34 82.02 83.28 95.36 88.00 
+
+Table 5: Detailed comparison between rubric-based methods and baselines on RewardBench 2 and RewardBench. The highest score within each judge group is bolded for each column. 33.0% 
+
+15.5% 
+
+32.5% 
+
+19.5% 
+
+9.5% 
+
+30.5% 
+
+Factuality 
+
+(n=200) 
+
+42.0% 
+
+31.0% 
+
+17.5% 
+
+9.5% 
+
+30.5% 
+
+Focus 
+
+(n=200) 
+
+13.0% 
+
+13.5% 21.0% 
+
+9.5% 
+
+57.5% 
+
+Math 
+
+(n=200) 
+
+6.5% 
+
+7.0% 
+
+5.0% 5.5% 
+
+77.5% 
+
+Precise IF 
+
+(n=200) 
+
+76.5% 
+
+56.0% 
+
+7.0% 
+
+8.5% 
+
+Safety 
+
+(n=200) 
+
+34.2% 24.1% 
+
+13.0% 
+
+11.7% 
+
+5.9% 40.9% 
+
+Average 
+
+(n=1,000) 
+
+## Rubric Failure Mode Analysis 
+
+Missing Criteria 
+
+Misaligned or Rigid 
+
+Ungrounded 
+
+Low Signal 
+
+Subjective 
+
+Hackable 
+
+Redundant Criteria 
+
+Non-Rubric Cause 
+
+Figure 7: Rubric failure mode distribution on RewardBench 2, following the taxonomy of RIFT, with an additional non-rubric cause category. A.2 Rubric Failure Mode Analysis 
+
+The results in Figure 7 show that “Missing Crite-ria” (34.2%) and “Misaligned or Rigid” (24.1%) are frequent rubric-related failure modes. These errors are especially prominent in Factuality, Fo-cus, and Safety, where response-agnostic rubrics often miss the decisive response-level distinction or impose criteria that do not match the candidates. For Math and Precise IF, many failures fall into the non-rubric category: even when the rubric asks for verification, the judge can still fail to verify the answer correctly. 
+
+B Implementation Details 
+
+B.1 Benchmark Details RewardBench 2 RewardBench 2 (Malik et al., 2025) is a benchmark designed to provide new and challenging data for accuracy-based reward model evaluation. It contains 1,865 cases, divided into six subsets: Factuality, Focus, Math, Precise In-struction Following, Safety, and Tie. Except for the Tie subset, each case contains a prompt, one chosen response, and three rejected responses ,generated by multiple LLMs. Because the Tie subset does not fit our evaluation setting, we exclude it, leaving 1,763 cases. We split 100 cases from each of the five remaining subsets as the evolving set and use the rest as the test set. We provide judges with the prompt and the shuffled four responses, optionally accompanied by a skill, and ask them to choose the best response. 
+
+RewardBench RewardBench (Lambert et al., 2025) is a benchmark designed to evaluate the ca-pabilities and safety of reward models. It contains 2,984 cases, divided into four domains: Chat, Chat-Hard, Safety, and Reasoning. Each case contains aprompt, one chosen response, and one rejected response , generated by multiple LLMs. We split 100 cases from each of the four domains as the evolving set and use the rest as the test set. We provide judges with the prompt and the shuffled two responses, optionally accompanied by a skill, and ask them to choose the best response. 
+
+RM-Bench RM-Bench (Liu et al., 2024) is a benchmark designed to evaluate RMs’ sensitivity to subtle content differences and resistance to style biases. It contains 1,327 cases, divided into four domains: Chat, Code, Math, and Safety. Each case contains a prompt, three chosen responses, and three rejected responses , generated by mul-tiple LLMs with style control. Each prompt has responses in three styles: concise, detailed, and detailed with Markdown formatting. Combining chosen and rejected responses yields nine response pairs per prompt with different levels of difficulty. We split 50 cases from the Chat subset, due to its small size of 129 cases, and 100 cases from each of the other three subsets as the evolving set, using the rest as the test set. For the evolving set, we ran-domly select one chosen response and one rejected response for each case for skill generation. For the test set, we evaluate each judge on every response-pair combination by providing the prompt and the shuffled two responses, optionally accompanied by a skill, and asking the judge to choose the better response. 
+
+JudgeBench JudgeBench (Tan et al., 2024) is a benchmark for evaluating LLM-based judges on challenging response pairs spanning knowledge, reasoning, math, and coding. It contains 350 cases generated by GPT-4o (Hurst et al., 2024) and 270 cases generated by Claude-3.5-Sonnet. The cases come from varied sources, and each subset is small, so we treat the whole benchmark as one mixed domain to test Eval-Skill in heterogeneous set-tings. Each case contains a prompt, one chosen response, and one rejected response , generated by multiple LLMs. We merge and shuffle the cases from both source models, split 100 cases as the evolving set, and use the rest as the test set, while ensuring that the same prompt does not appear in both sets. We provide judges with the prompt and the shuffled two responses, optionally accompanied by a skill, and ask them to choose the better response. 
+
+HealthBench HealthBench (Arora et al., 2025) is a benchmark designed to evaluate LLMs on healthcare-related tasks. It contains 5,000 cases, divided into seven themes: Global health, Respond-ing under uncertainty, Expertise-tailored commu-nication, Context seeking, Emergency referrals, Health data tasks, and Response depth. This bench-mark is not a reward modeling benchmark, and each case contains a single-turn or multi-turn prompt, one human-verified rubric, and various tags . Each rubric contains multiple criteria, each with a positive or negative score; the final case score is divided by the maximum possible score, so the maximum score is 1. We adapt the benchmark for reward modeling evaluation by iteratively generating candidate re-sponses with Qwen3-8B for each query and scoring each response with a strong grader using the pro-vided HealthBench rubric. If the current responses differ by less than 0.1, we continue generating and scoring new responses until we obtain at least two responses for the same query whose scores differ by at least 0.1. In this way, we obtain one cho-sen response with a higher score and one rejected response with a lower score for each retained case. For the resulting adapted dataset, we split 100 cases from each of the seven themes as the evolv-ing set and use the rest as the test set. We provide judges with the prompt and the shuffled two re-sponses, optionally accompanied by a skill, and ask them to choose the better response. We do not provide judges with the rubrics, since the criteria should be inferred by the judge or hinted by the skill. 
+
+B.2 Baseline Details B.3 Model Implementation 
+
+In our experiments, we use the following open-weight models: • General Models : Qwen3-4B (Yang et al., 2025), Qwen3-8B, Qwen3.6-35B-A3B (Qwen Team, 2026), Qwen2.5-7B-Instruct (Yang et al., 2024), Llama-3.1-8B (Meta, 2024), Gemma-4-E4B-IT (DeepMind, 2026), DeepSeek-V4-Flash (DeepSeek-AI, 2026), DeepSeek-V4-Pro. • Post-Trained RMs : RRM-7B (Guo et al., 2025), RRM-32B, RM-R1-Qwen2.5-Instruct-7B (Chen et al., 2025), RM-R1-DeepSeek-Distilled-Qwen-7B, Rubric-RM-Judge-4B (Liu et al., 2025), Rubric-RM-Judge-8B 4, and Rubric-ARM-Judge-8B. • Post-Trained Rubric Generators : Rubric-RM-Rubric-4B and Rubric-RM-Rubric-8B. Except for the DeepSeek models, which are called via the official API, all models are deployed locally via vLLM and downloaded from Hugging Face . We use non-thinking mode for evaluation unless otherwise specified, and use DeepSeek-V4-Flash with thinking enabled for skill management. 
+
+> 4For Rubric-RM models, we use the v2 version from
+> https://huggingface.co/collections/OpenRubrics/ rubricrm-v2 .
+
+We set the temperature to 0.7 for all models. Be-cause we observe occasional repetition in some cases, we set max_completion_tokens to 10,000. Depending on model size, we use NVIDIA RTX A6000, NVIDIA RTX PRO 6000 Blackwell, and Ascend 910B for our experiments. With the 
+
+Eval-Skill pipeline, generating a skill typically takes 1 to 2 hours using 1 to 2 GPUs, due to the small evolving set size. 
+
+C Experimental Details 
+
+C.1 Main Experiment 
+
+Due to space constraints, § 4.2 reports the main re-sults on RewardBench 2 and RewardBench, while Table 6 provides the RM-Bench results. These re-sults show that Eval-Skill also brings substantial improvements on RM-Bench. 
+
+C.2 Sequential Scaling 
+
+For sequential scaling, we use the one-stage setting described in § 5.4 and vary the number of refine-ment iterations kiter from 0 to 6. In the pre-merge setting, each additional iteration refines local skills before they are merged. In the post-merge setting, each additional iteration refines an already merged global skill. Figure 3 shows that neither Best-in-
+
+kiter nor Last-in-kiter yields a stable monotonic gain on the test set. 
+
+C.3 Parallel Scaling 
+
+For simplicity, we use the same skill system design introduced in § 3.1, with the one-stage setting de-scribed in § 5.4. We independently scale kgen , ksel ,and ksmp to isolate where additional skill-evolution compute is most useful. As shown in Figure 4, gen-erating a more diverse candidate pool brings the largest gain, while later-stage selection and merge sampling show smaller marginal returns once the candidate pool is already strong. 
+
+C.4 Performance on Other Backbones 
+
+In addition to Qwen3-4B, Qwen3-8B, and DeepSeek-V4-Flash, which we use in our main experiments, we test Eval-Skill on several other backbone models: (1) Llama-3.1-8B-Instruct, Qwen3.6-35B-A3B, and Gemma-4-E4B-IT, which come from model families other than Qwen3 and DeepSeek; (2) Qwen3-8B with thinking enabled; and (3) RRM-7B, another post-trained model. The results are shown in Table 7 and 8. Judge Model Rubric Model RM-Bench Chat Code Math Safety Avg. Judge Backbone: Qwen3-4B and Variants                                                                                                                                           
+
+> Qwen3-4B w/o 67.93 54.17 70.14 85.24 69.37 Qwen3-4B Rubric-RM-4B 63.71 55.47 66.23 69.01 63.61 Qwen3-4B DSV4 62.17 57.81 71.38 87.68 69.76 Rubric-RM-4B Rubric-RM-4B 48.10 51.82 48.59 63.83 53.09 Qwen3-4B + Naive Skill w/o 65.68 56.86 72.57 88.53 70.91 Qwen3-4B + Eval-Skill w/o 67.65 62.84 79.67 87.88 74.51 Judge Backbone: Qwen3-8B and Variants
+> Qwen3-8B w/o 66.95 59.98 70.40 90.22 71.89 Qwen3-8B Rubric-RM-8B 63.43 56.94 67.91 75.53 65.95 Qwen3-8B Rubric-ARM-8B 63.63 57.29 67.68 77.48 66.52 Qwen3-8B DSV4 62.73 58.33 71.72 89.41 70.55 Rubric-RM-8B Rubric-RM-8B 64.70 60.50 69.85 54.19 62.31 Rubric-ARM-8B Rubric-ARM-8B 71.17 63.98 70.73 68.33 69.06 Qwen3-8B + Naive Skill w/o 70.89 57.81 72.05 90.52 72.82 Qwen3-8B + Eval-Skill w/o 74.40 59.98 82.36 92.60 77.34 Rubric-ARM-8B + Eval-Skill w/o 77.78 62.41 79.07 91.10 77.59 Judge Backbone: DeepSeek-V4-Flash
+> DSV4 w/o 74.96 72.05 78.30 92.60 79.48 DSV4 DSV4 76.79 76.48 79.69 90.00 80.74 DSV4 + Naive Skill w/o 78.06 83.33 91.66 96.68 87.43 DSV4 + Eval-Skill w/o 79.61 79.95 95.60 96.12 87.82 Judge Backbone: Other Post-Trained RMs
+> RM-R1-Qwen2.5-7B w/o 61.74 53.30 58.64 80.51 63.55 RM-R1-DS-Qwen-7B w/o 67.09 54.86 81.59 80.03 70.89 RRM-7B w/o 62.31 53.73 75.24 80.06 67.84 RRM-32B w/o 71.03 71.44 88.19 91.82 80.62
+
+Table 6: Main experiment results on RM-Bench. Within each non-final judge group, the highest score is bolded and the second-highest score is underlined. 
+
+Backbone Models from Other Families We se-lect three backbone models of similar size but different model families and release times for analysis. Eval-Skill brings large gains on both Qwen3-8B and the more recent Qwen3.6-35B-A3B (April 2026) and Gemma-4-E4B-IT (May 2026), but the improvement on Llama-3.1-8B-Instruct is less prominent. Through rollout analysis, we find that Llama-3.1-8B-Instruct, a model released in July 2024, does not follow the workflow specified in the skill as reliably, indicating that the back-bone’s instruction-following ability contributes to the performance of skill-based methods. 
+
+Thinking Mode The comparison between the non-thinking and thinking modes of Qwen3-8B in-dicates that, although the gain is less prominent, a skill can still significantly improve judge per-formance by clarifying task priorities and steering evaluation. 
+
+Post-Trained Model In addition to Rubric-ARM-8B-Judge, which is used in our main experi-ment, we test Eval-Skill on another post-trained model: RRM-7B. In contrast to other backbones, the workflow-only version of Eval-Skill almost consistently outperforms the final full-skill version. We attribute this to the fact that RRM-7B has been post-trained to produce relatively rigid paragraph-style reasoning (e.g., it almost always starts with “Okay, so I need to evaluate . . . ”), which adapts poorly to the skill. By contrast, Rubric-ARM-8B-Judge is designed to evaluate based on a set of rubrics and can adapt to our skill more easily. 
+
+Takeaway Our skill-based method applies across diverse model types, but stronger instruction-following ability helps models use skills more reli-ably. 
+
+C.5 Transferability across Backbones 
+
+Table 9 evaluates whether a skill evolved with one backbone can be reused by another backbone. The Judge Model RewardBench 2 RewardBench Fact. Foc. Math PIF Safe. Avg. Chat Hard Safe. Rsn. Avg. Judge Backbone: Llama-3.1-8B-Instruct 
+
+Direct 33.60 39.66 43.78 28.33 40.86 37.25 91.86 51.03 44.22 83.23 67.59 Eval-Skill (workflow-only) 41.69 59.49 42.57 32.78 66.48 48.60 87.47 45.60 65.52 75.19 68.45 Eval-Skill (full) 40.89 42.11 44.58 26.11 83.05 47.35 87.73 53.65 74.06 73.76 72.30 Eval-Skill (adaptive) 40.89 59.49 42.57 26.11 83.05 50.42 87.73 53.65 74.06 75.19 72.66 Judge Backbone: Gemma-4-E4B-IT 
+
+Direct 47.73 79.16 68.67 42.22 58.48 59.25 95.61 70.69 87.29 86.51 85.03 Eval-Skill (workflow-only) 57.78 84.14 82.33 37.78 80.95 68.60 95.22 77.34 89.48 97.42 89.87 Eval-Skill (full) 60.53 84.73 83.13 62.22 88.48 75.82 95.61 79.40 90.73 97.44 90.80 
+
+Eval-Skill (adaptive) 60.53 84.73 83.13 62.22 88.48 75.82 95.22 79.40 90.73 97.44 90.70 
+
+Judge Backbone: Qwen3.6-35B-A3B 
+
+Direct 75.29 85.32 85.14 63.33 77.14 77.24 93.02 83.15 91.98 98.67 91.71 Eval-Skill (workflow-only) 80.71 89.37 88.76 78.33 94.10 86.25 94.06 82.12 93.96 99.42 92.39 Eval-Skill (full) 77.24 86.16 85.94 78.33 95.71 84.68 95.61 84.55 94.11 99.32 93.40 
+
+Eval-Skill (adaptive) 80.71 86.16 85.94 78.33 95.71 85.37 95.61 84.55 94.11 99.32 93.40 Judge Backbone: Qwen3-8B-think 
+
+Direct 57.60 82.87 85.14 46.67 65.62 67.58 93.80 81.18 87.55 97.94 90.12 Eval-Skill (workflow-only) 69.07 84.73 82.33 49.44 93.05 75.72 95.61 83.80 87.92 98.42 91.44 Eval-Skill (full) 67.38 87.00 84.74 47.22 94.86 76.24 93.80 78.65 91.20 98.35 90.50 Eval-Skill (adaptive) 69.07 87.00 84.74 47.22 94.86 76.58 93.80 83.80 91.20 98.35 91.79 Judge Backbone: RRM-7B 
+
+Direct 36.00 64.64 56.63 20.56 43.43 44.25 84.63 67.60 79.38 88.17 79.95 Eval-Skill (workflow-only) 41.51 68.86 59.84 32.22 76.29 55.74 85.92 69.38 82.60 88.92 81.71 Eval-Skill (full) 35.20 61.77 57.83 23.33 68.10 49.25 83.20 67.70 83.18 88.67 80.69 Eval-Skill (adaptive) 41.51 68.86 59.84 32.22 68.10 54.11 85.92 69.38 83.18 88.67 81.79 
+
+Table 7: Performance of Eval-Skill across additional judge backbones on RewardBench 2 and RewardBench. Within each judge group, the highest score is bolded and the second-highest score is underlined. 
+
+results show that skills are generally not tied to a single generator: skills generated from rollouts of one model can bring similar gains to models with different capabilities, and they significantly outperform the no-skill baseline. 
+
+C.6 Experiment on HealthBench 
+
+Table 10 shows that Eval-Skill does not yield consistent gains on HealthBench. For Qwen3-8B and Qwen3.6-35B-A3B, the average gain is small, and performance decreases on several themes. Still, the skill transferred from Qwen3-8B improves the performance of DeepSeek-V4-Flash, although to a smaller degree than in the main experiments. These results suggest that HealthBench, combined with the “choose candidates from the same actor model” setting, remains difficult for skill-guided reward modeling. 
+
+C.7 Skill Template and Examples 
+
+We show the full skill template and several skills generated by Eval-Skill to clarify the skill struc-ture and the effect of Eval-Skill .• The full skill template is shown in Figure 8. • The skill from Qwen3-8B on the Factuality domain of RewardBench 2 is shown in Fig-ure 9. • The skill snippet from Qwen3-4B on JudgeBench is shown in Figure 10. Judge Model RM-Bench Chat Code Math Safe. Avg. Judge Backbone: Llama-3.1-8B-Instruct 
+
+Direct 52.74 50.43 59.52 38.09 50.20 Eval-Skill (workflow-only) 58.37 47.57 59.44 67.64 58.26 Eval-Skill (full) 63.01 49.83 57.24 69.99 60.02 
+
+Eval-Skill (adaptive) 63.01 47.57 59.44 69.99 60.00 
+
+Judge Backbone: Gemma-4-E4B-IT 
+
+Direct 64.84 69.79 78.27 91.53 76.11 Eval-Skill (workflow-only) 76.79 79.86 88.58 93.74 84.74 Eval-Skill (full) 74.96 79.43 90.65 94.20 84.81 Eval-Skill (adaptive) 76.79 79.86 90.65 94.20 85.38 Judge Backbone: Qwen3.6-35B-A3B 
+
+Direct 77.78 80.90 89.74 94.17 85.65 Eval-Skill (workflow-only) 84.11 87.50 96.17 94.69 90.62 
+
+Eval-Skill (full) 82.28 85.59 96.37 95.73 89.99 Eval-Skill (adaptive) 82.28 85.59 96.37 95.73 89.99 
+
+Judge Backbone: Qwen3-8B-think 
+
+Direct 66.53 59.38 70.71 90.03 71.66 Eval-Skill (workflow-only) 77.64 75.17 94.82 91.53 84.79 Eval-Skill (full) 77.22 76.22 94.95 91.82 85.05 
+
+Eval-Skill (adaptive) 77.22 76.22 94.95 91.82 85.05 Judge Backbone: RRM-7B 
+
+Direct 62.31 53.73 75.24 80.06 67.84 Eval-Skill (workflow-only) 62.45 54.34 78.43 84.62 69.96 Eval-Skill (full) 58.79 56.68 80.78 83.87 70.03 
+
+Eval-Skill (adaptive) 58.79 56.68 80.78 83.87 70.03 
+
+Table 8: Performance of Eval-Skill across additional judge backbones on RM-Bench. Within each judge group, the highest score is bolded and the second-highest score is underlined. 
+
+Judge\Skill from RewardBench 2 RewardBench Direct Q3-4B Q3-8B Q3.5-35B DS-V4-Flash Direct Q3-4B Q3-8B Q3.5-35B DS-V4-Flash Q3-4B 55.80 67.55 68.24 61.04 63.07 80.38 85.52 84.86 81.80 78.71 
+
+Q3-8B 57.04 72.17 70.48 62.25 69.46 82.39 87.11 86.97 83.64 83.11 
+
+Q3.5-35B 77.24 86.64 86.07 85.37 87.09 91.71 93.41 93.14 93.40 94.22 DS-V4-Flash 68.27 84.51 87.06 81.59 86.78 89.66 93.35 92.91 92.47 93.75 
+
+Table 9: Transferability of skills generated by Eval-Skill across different backbone reward models on RewardBench 2 and RewardBench. Within each row and benchmark block, the highest score is bolded and the second-highest score is underlined. Methods HealthBench Comm. Complex Responses Context Seeking Emergency Referrals Global Health Health Data Tasks Hedging Avg. Qwen3-8B 51.60 53.75 55.38 51.31 57.17 51.30 54.02 53.50 
+
+Qwen3-8B + Eval-Skill 52.84 54.97 53.16 52.53 56.82 53.37 56.41 54.30 
+
+Qwen3.6-35B-A3B 60.99 59.51 57.26 56.37 58.72 55.44 54.87 57.59 
+
+Qwen3.6-35B-A3B (Rubric-Based) 60.46 59.51 52.82 57.42 55.79 55.09 59.32 57.20 
+
+Qwen3.6-35B-A3B + Skill from Qwen3-8B 
+
+58.16 56.20 56.58 61.08 57.51 59.24 62.91 58.81 DeepSeek-V4-Flash 53.55 51.31 49.57 48.52 58.55 52.68 56.75 52.99 
+
+DeepSeek-V4-Flash + Skill from Qwen3-8B 61.35 56.37 55.38 61.08 60.62 57.17 56.58 58.36 
+
+Table 10: Performance on HealthBench across its seven themes. To simplify the setup and leverage cross-backbone skill transfer (§ 5.1), we use the skill generated from Qwen3-8B for all models. The rubric model uses self-generated rubrics rather than the ground-truth HealthBench rubrics, which are not provided to any judge at evaluation time. Full Skill Template 
+
+name: [SkillName] description: [Clear, concise description of what this skill does and when to use it. 1-2 sentences focusing on the core purpose and benefits.] version: 1.0.0 ---# [Skill Title] ## Overview [1-2 sentences on the core approach] ## Workflow 1. **Analysis**: [Instruct the RM to conduct its detailed analysis under the `--- Analysis ---` section. DO NOT just copy this hint; specify the exact step-by-step format and output layout the RM should use (e.g., examining each candidate response or criteria one by one, applying this skill 's principles and the generated rubric, while following the core intent of the user instruction).] 2. **Final Judgment**: [Instruct the RM to aggregate findings under the `--- Final Judgment ---` section and explicitly select exactly ONE winner (never "None" or "Neither"). DO NOT just copy this hint; provide concrete guidance on how to weigh the criteria and aggregate findings to pick the winner, generating the exact fields `Aggregation Summary: `, `Justification: `, and 
+
+`Winner: `.] ## Principles 1. **[Short Name]** **Condition**: [Trigger condition for the principle] **Principle**: [How to implement the principle in evaluating candidate responses. Must not contradict the forced-choice rule.] **Example**: [One or more concise example(s) illustrating the condition and the principle. Don 't include case IDs or specific options. ] **Anti-Pattern**: [What to avoid when applying this principle] 2. ... 
+
+Figure 8: Full skill template. Skill Generated for Qwen3-8B on Factuality Domain of RewardBench 2 
+
+name: Factual-Integrity and Adherence Evaluator description: Evaluates candidate responses by prioritizing verifiable factual accuracy, strict instruction compliance, domain relevance, and appropriate hedging, with logical coherence as a tiebreaker. Ideal for knowledge-based, technical, or instruction-following queries where objective correctness and precise fulfillment of user intent are critical. version: 1.0.0 ---# Factual-Integrity and Adherence Evaluator ## Overview A systematic evaluation that first verifies every factual claim, rejects hallucinations, and enforces explicit user constraints. Only after primary criteria are satisfied do we compare logical structure, clarity, and context relevance. The factually sound, compliant, and honest response wins, even if shorter or less polished than alternatives tainted by errors. ## Workflow 1. **Analysis**: Under the `--- Analysis ---` section, evaluate each candidate independently using the following step-by-step criteria in order of priority. For each response, write: - ** `Response [Letter]: `** Justification: [Factual Integrity & Hallucination Check (verify every claim, flag major/minor errors, fabricated details, implausible technical claims, anachronisms); Safety & Ethical Boundaries (for sensitive topics, note safe refusal vs harmful speculation); Instruction Compliance (check explicit constraints: counts, format, date ranges, “no explanations”, language, literal interpretation – violations heavily penalized); Domain & Context Relevance (tailored to implied audience/field/culture; overly technical or off-topic is weakness); Hedging & Uncertainty (prefer cautious language for unverifiable topics; separate verifiable from unverifiable; flag confident falsehoods); Logical Coherence & Clarity (tie-breaker; note contradictions, fallacies, organization)] Example: **Response A:** Justification: Factual: two major hallucinations (fabricated entity, wrong date); Safety: safe refusal on harmful query; Compliance: violated “no explanations” rule; Domain: off-topic for nursing research; Hedging: overconfident on unverifiable claim; Logic: clear but based on false premises. Summary: heavily flawed, cannot win. 2. **Final Judgment**: Under `--- Final Judgment ---`:- `Aggregation Summary: ` Compare all candidates primarily by factual integrity and safety. Eliminate any with major factual errors or hallucinations. Among remaining, prioritize instruction compliance and domain relevance. Then consider hedging/honesty. If tied, use logical coherence. Highlight which response is most reliable and fulfills user intent. - `Justification: ` Explain why the chosen response is superior, referencing specific errors (hallucinations, instruction violations) in others. Address why a shorter or less polished response wins if factually sound and compliant. - `Winner: ` Exactly one letter (e.g., `Winner: Response C `). Never "None" or "Neither". If two responses are equally good, choose the one with best factual integrity then instruction fidelity. The analysis must support a clear decision. ## Principles 1. **Factual Primacy and Hallucination Rejection** **Condition**: When a response makes specific factual claims. 
+
+(continue on next page) (continue from previous page) 
+
+**Principle**: Factual accuracy is the gatekeeper. A response with any hallucinated detail (fabricated dates, entities, events, sources) or verifiable major error is automatically inferior to one without such flaws, regardless of style or length. Minor imprecisions acceptable only if no better response exists. Treat implausible or unsupported specifics as hallucinations. For technical topics, check plausibility. **Example**: For "What is the main ingredient in chocolate?", a short "cocoa beans" beats a long essay claiming "cocoa beans and coconut oil" (error). For a query about iPhone 6s Plus, a claim of 10x zoom via software update is a hallucination. **Anti-Pattern**: Do not reward elaborate detail or confident tone that masks errors. Do not accept technical specifics at face value. 2. **Strict Instruction Compliance** **Condition**: When user gives explicit commands, constraints, or uses strong modifiers. **Principle**: Evaluate compliance rigorously. Violations of explicit constraints (count, format, date range, "no explanations", literal interpretation) are heavily penalized. Prefer responses that consistently apply rules (e.g., antonym replacement, verbatim quotes). A single instruction violation can disqualify if a compliant alternative exists. **Example**: For "List 20 musical groups from the 2000s in random order", a response with 20 correct groups in random order beats one that includes 2010s groups or lists chronologically. For "write literal opposites of movie titles", a response that changes "The Silence of the Lambs" to "The Loudness of the Lions" beats one that injects a new character. **Anti-Pattern**: Do not ignore a constraint violation because the response looks comprehensive or polished. Do not favor a well-structured list if examples violate the rule. 3. **Safety and Ethical Boundaries** **Condition**: When query involves sensitive, harmful, or exploitative content. **Principle**: Prioritize safe refusal over speculative or fabricated responses. A response that refuses to engage with harmful content is superior to one that invents details. Safety violations (e.g., generating misinformation about a person) are critical errors. **Example**: For a query about a person with exploitative content, a response stating "I cannot answer that as it may be harmful" beats one that fabricates a biography. **Anti-Pattern**: Do not penalize a safe refusal as evasive. 4. **Domain & Context Relevance** **Condition**: When user implies a specific audience, field, or cultural perspective. **Principle**: Prefer responses directly relevant to that context. Overly technical details from a different specialty or generic explanations ignoring cultural specifics are weaknesses. Domain alignment is a primary criterion after factual accuracy and instruction compliance. **Example**: For "give 10 topics for spinal anesthesia research in nursing", a response focusing on patient education and interprofessional collaboration wins over one focusing on drug dosage comparisons (anesthesiology domain). **Anti-Pattern**: Do not favor a response that is "more detailed" if it does not address user 's implied role or context. 5. **Temporal and Definitional Precision** **Condition**: When query specifies a time period, decade, or asks for a definition/trend. **Principle**: Strictly enforce the given time window – any item clearly outside the period is a major anachronism. For definitions, verify standard scientific wording. Inverted trends are major errors. **Example**: Query "List similar things in the 1990s." A response includes Roblox (2006) – anachronism; the response that only lists 1990s items wins. **Anti-Pattern**: Do not dismiss an anachronism as minor; it indicates unreliability. 
+
+(continue on next page) (continue from previous page) 
+
+6. **Appropriate Hedging for Unverifiable Content** **Condition**: When query asks about supernatural, subjective, or legendary topics. **Principle**: Favor responses using cautious language ("it is said", "many believe") over those presenting such claims as established facts. However, hedging does not excuse factual errors in verifiable details (geography, history). Separate unverifiable from verifiable claims. **Example**: For "Montserrat is a center of teluric energy", a response with "some consider" is better than without hedging. But including Mallorca when asked for Catalonia is a factual error even if hedged. **Anti-Pattern**: Do not assume all hedging is equal; verify that response does not contain implicit factual assertions. 7. **Logical Coherence and Clarity as Tie-Breakers** **Condition**: After factual accuracy, safety, compliance, domain relevance, and hedging are satisfied, multiple responses remain equally correct. **Principle**: Use logical structure, clarity, absence of contradictions, and conciseness as tie-breakers. Prefer the response with clear thesis and well-organized reasoning. Among factually equal candidates, a concise correct answer beats a verbose correct one. **Example**: Two factually correct responses both list the same data; the one with clear headings and logical flow wins over a jumbled paragraph. **Anti-Pattern**: Do not use coherence to override factual errors. 8. **Forced-Choice Enforcement** **Condition**: Always at final judgment. **Principle**: RM must explicitly pick exactly one candidate as winner. Never output "None" or "Neither". If two responses are equally good, choose the one that best follows the first principle (factual integrity) and then instruction fidelity. The analysis must support a clear decision. **Example**: In a four-option comparison, if three contain major factual errors and one is factually sound but less detailed, the accurate one wins. **Anti-Pattern**: Do not leave judgment ambiguous. 
+
+Figure 9: Generated skill for Qwen3-8B on the Factuality domain of RewardBench 2. Skill Snippet Generated for Qwen3-4B on JudgeBench Mixed 
+
+... 
+
+## Workflow 1. **Analysis**: Under the `--- Analysis ---` section, for each candidate response, perform the evaluation in the following strict order. Record findings in a concise per-candidate summary. - **Mandatory Requirements Compliance**: Identify all explicit format, output structure, and process instructions from the user query (e.g., "use a box", "repeat exactly five times", "think step by step"). Assess whether the response exactly complies. Classify any deviation as: - **Critical** - missing required output, wrong count by more than 1, completely wrong structure, ambiguous output, omission of required reasoning when explicitly demanded, or violation of a format that is the primary deliverable (e.g., "output exactly five `A`s"). - **Minor** - extra punctuation, slight extra descriptive text, off-by-one character if the intended answer remains unambiguous, or minor formatting discrepancies (e.g., bold vs. asterisks) when format is not the primary requirement. - **Core Correctness (with Internal Consistency & Premise Fidelity)**: Determine the correct answer or expected outcome **before** examining the candidate 's answer, using the method best suited to the query: - *Domain factual* - recall authoritative ground truth. - *Algorithmic / code* - manually simulate at least one sample input step-by-step. - *Multi-part / constraint-heavy* - verify coverage of all parts and respect for every given constraint. - *Math / numeric* - compute independently with appropriate precision. Then compare the candidate 's final answer against that ground truth. Additionally, check the reasoning for any self-contradictions, misinterpretation of premises, or logical leaps. A candidate whose final answer matches ground truth but whose reasoning contains a contradiction or violates given premises is deemed incorrect (critical error). Document whether the core answer is correct and whether the reasoning is logically sound. - **Precision & Domain Alignment**: If the query involves domain-specific definitions, formulas, or standard test design, verify that the candidate uses precise, standard terminology and correct derivations. Favor responses that align with typical educational or professional context. A vague or imprecise answer (e.g., guessing a numeric value without derivation) loses to a precise one when both are otherwise equal. - **Contextual Alignment**: If the query specifies a particular perspective, domain, or framing (e.g., "from a behaviorist view", "main purpose of licensing"), evaluate whether the response correctly adopts that specific angle over a general statement. - **Constraint & Feasibility** (algorithmic tasks only): Verify that no disallowed external packages are used; check that time/space complexity is feasible given constraints. For other tasks, ensure no unwarranted assumptions. - **Justification**: Write a concise summary for each candidate covering: mandatory requirement status (with severity), core correctness verdict (including any internal inconsistency), precision, contextual alignment, and any critical errors. 2. **Final Judgment**: Under the `--- Final Judgment ---` section, aggregate findings using the following ordered hierarchy. **Always output exactly three fields**: `Aggregation Summary: `,
+
+`Justification: `, and `Winner: ` (e.g., `Winner: A `). Never output “None” or “Neither”. 
+
+... 
+
+Figure 10: Generated skill for Qwen3-4B on JudgeBench Mixed. The workflow adaptively requires the RM to determine the correct evaluation procedure based on the query type.

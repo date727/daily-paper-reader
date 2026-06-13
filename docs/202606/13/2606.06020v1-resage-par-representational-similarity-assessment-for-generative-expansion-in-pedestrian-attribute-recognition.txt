@@ -1,0 +1,2349 @@
+Title: ReSAGE-PAR: Representational Similarity Assessment for Generative Expansion in Pedestrian Attribute Recognition
+
+URL Source: https://arxiv.org/pdf/2606.06020v1
+
+Published Time: Fri, 05 Jun 2026 01:16:17 GMT
+
+Number of Pages: 28
+
+Markdown Content:
+> 1
+
+# ReSAGE-PAR: Representational Similarity Assessment for Generative Expansion in Pedestrian Attribute Recognition 
+
+Pablo Ayuso-Albizu, Pablo Carballeira, Juan C. SanMiguel, Paula Moral, Universidad Aut´ onoma de Madrid, Madrid, Spain, pablo.ayuso@estudiante.uam.es, juancarlos.sanmiguel@uam.es, pablo.carballeira@uam.es, paula.moral@uam.es 
+
+Abstract —To address the limited diversity and data scarcity in Pedestrian Attribute Recognition (PAR), we explore im-age synthesis using diffusion models guided by attribute-based prompts. While this enables the controlled generation of pedes-trian images, it faces two critical challenges: (i) the domain gap between high-quality pre-training data and low-resolution, non-standard surveillance crops, and (ii) the need for reliable attribute verification to prevent generative hallucinations. In this paper, we introduce a robust generate-score-autolabel pipeline called ReSAGE-PAR (REpresentational Similarity Assessment for Generative Expansion in PAR) that bridges this domain gap and enables scalable, high-fidelity dataset expansion. First, we adapt pre-trained diffusion models to native PAR resolutions using a tailored LoRA-based Image-to-Image approach. Sec-ond, we extract vision-language alignment scores between the generated images and their conditioning prompts, utilizing a comprehensive prompting strategy that includes label-consistent and inconsistent complements. Finally, we formulate a Bayesian classifier that converts these continuous scores into reliable binary pseudo-labels. Extensive evaluations demonstrate the effective-ness of ReSAGE-PAR in preserving spatial priors and verifying attributes. When integrated into PAR training, ReSAGE-PAR consistently yields significant improvements—achieving gains of up to 8.7% on standard backbones and pushing state-of-the-art frameworks to new performance levels. This proves its value as an architecture-agnostic solution for scalable PAR enhancement. The complete codebase for ReSAGE-PAR is publicly available at http://www-vpu.eps.uam.es/publications/ReSAGE-PAR. 
+
+Index Terms —Pedestrian attribute recognition, synthetic data generation, vision-language models, video surveillance. 
+
+I. I NTRODUCTION 
+
+Pedestrian Attribute Recognition (PAR) is a critical com-ponent in surveillance and re-identification systems, aiming to predict semantic properties like clothing, accessories, or viewpoint from a single image. However, this task remains inherently challenging because attributes are typically small, occluded, long-tailed, and captured under diverse illumination conditions [1]. While benchmarks like PETA [2], RAP [3], and RAPv2 [4] provide essential data, their reliance on low-resolution, noisy surveillance frames intrinsically im-poses a severe barrier. Furthermore, existing data splits suf-fer from identity overlap, motivating zero-shot variants like 
+
+PA100K [5], PETAzs , and RAPzs [6], where disjoint identities make generalization significantly harder (e.g., mA drops of 9–17% [6]).           
+
+> This work has been submitted to the IEEE for possible publication. Copyright may be transferred without notice, after which this version may no longer be accessible. This work has been partially supported by the Regional Government of Madrid of Spain (grant TEC 2024/COM-322).
+
+Collectively, characteristics such as low resolution, occlu-sion, and viewpoint variations severely hinder standard recog-nition, amplifying the inherent problem of data scarcity in surveillance datasets. To tackle this scarcity, generative models are increasingly employed to synthesize additional pedestrian samples. While early approaches relied on Generative Adver-sarial Networks (GANs) [7], [8], their limited diversity and lack of photorealism [9] have paved the way for Text-to-Image Diffusion Models as a superior alternative [10]. Yet, naively applying these powerful diffusion models to PAR remains extremely difficult. The drastic visual gap between the high-quality web images these models were originally trained on and the noisy surveillance domain introduces two major unmet challenges largely ignored by previous literature. The first major challenge arises from the profound domain gap existing between the high-quality images used to pre-train foundation models and the specific constraints of surveillance data. Foundation models like Stable Diffusion are pretrained on high-quality images (e.g., LAION [11]), which differs drastically from the low-resolution, blurred, and oddly-angled surveillance frames in PAR datasets. Simply prompting a standard model yields realistic portraits that fail to match the PAR target distribution. The second obstacle involves the inherent uncertainty of generative labeling, where relying exclusively on text prompts proves insufficient due to the tendency of diffusion models to hallucinate or omit specific attributes. Generating images is not enough; training a supervised PAR model requires accurate labels. Relying solely on the generation prompt is risky because diffusion models can generate unprompted features or ignore parts of complex prompts (e.g., generating a “backpack” when requested, but missing “glasses”). Manual annotation is unscalable for synthetic expansion. This creates a need for an automated verification mechanism. In this paper, we propose ReSAGE-PAR, a novel generate-score-autolabel framework tailored for PAR. To address the aforementioned challenges, we structure ReSAGE-PAR by explicitly separating the dataset-specific generative adapta-tion from the score-driven label verification. First, we lever-age Low-Rank Adaptation (LoRA) to bridge the visual gap between generic text-to-image models and the surveillance domain. By injecting trainable rank-decomposition matrices into the frozen backbone, LoRA efficiently captures the spe-cific ’surveillance style’ and resolution of each PAR dataset. Second, we introduce a Bayesian verification stage that con-verts continuous vision-language alignment scores into reliable pseudo-labels. This mechanism filters generative hallucina-
+
+> arXiv:2606.06020v1 [cs.CV] 4 Jun 2026 2
+
+tions by explicitly evaluating the semantic consistency between the synthetic image and its conditioning prompt. We demon-strate that ReSAGE-PAR serves as a model-agnostic data aug-mentation module, delivering consistent improvements across diverse backbones and state-of-the-art (SOTA) frameworks. Our main contributions are summarized as follows:  
+
+> •
+
+Domain-Specific Generative Adaptation: We present the first application of LoRA for Image-to-Image (img2img) diffusion in the PAR domain. Unlike previous generative baselines, our approach effectively bridges the dataset do-main gap by adapting to the non-standard resolutions and noise profiles of surveillance while efficiently preserving the rich spatial priors of the original model.  
+
+> •
+
+Score-Driven Autolabeling and Metric Evaluation: We provide the first comprehensive evaluation of multiple Vision-Language metrics (e.g., CLIP, BLIP, ImageRe-ward) for fine-grained pedestrian attribute verification. We identify BLIPScore as the most robust signal for detecting prompt-image misalignment in low-resolution contexts.  
+
+> •
+
+Model-Agnostic Performance and Synthetic Scaling: We introduce a principled Bayesian framework that trans-forms continuous alignment scores into discrete pseudo-labels. This method enables effective dataset scaling by prioritizing label precision over raw volume, achieving SOTA results through verified synthetic expansion. The rest of this article is structured as follows. Section II re-views the related literature in text-image representational simi-larity metrics, generative augmentation, and automatic annota-tion. In Section III, we introduce our proposed ReSAGE-PAR method for domain-aware image generation and score-driven autolabeling. Section IV explores the internal stages of our framework, validating the intrinsic accuracy and robustness of the Bayesian filter as a standalone autolabeling mechanism. Section V evaluates the application of our verified synthetic data to downstream PAR, providing an extensive empirical analysis that demonstrates the superiority of our generative augmentation, its scalability across diverse backbones, and its ability to push SOTA frameworks to new performance levels. Finally, conclusions are discussed in Section VI, followed by limitations and future work in Section VII. II. R ELATED WORK 
+
+Our research sits at the intersection of multimodal evalu-ation, generative data synthesis, and automated supervision. First, we review Text-Image Representational Similarity Met-rics (Section II-A), which serve as the core mechanism for our verification strategy. Second, we discuss the evolution of 
+
+Data Augmentation for Pedestrian-Centric Recognition (Sec-tion II-B), positioning our diffusion-based approach against classical augmentation and earlier generative methods. Finally, we examine Automatic Annotation strategies (Section II-C), highlighting the shift towards scalable, model-assisted labeling to mitigate the scarcity of annotated surveillance data. 
+
+A. Text-image Representational similarity metrics 
+
+Recent research on text-image alignment provides scores to verify whether a prompt is faithfully expressed in an image. CLIPScore [12] builds on CLIP and measures cosine similarity between jointly trained image/text embeddings. It is widely adopted for filtering synthetic data in recent works [10], [13], despite being biased toward broad topical matches rather than fine details. BLIPScore [14] utilizes caption-style pretraining, making it potentially more sensitive to attribute visibility. Preference-based metrics like ImageReward [15] and HPSv2Score [16] rank images based on human aesthetic judg-ment, capturing plausibility. More recently, decompositional approaches like VQAScore [17] and DSG [18] leverage visual question answering for fine-grained compositional constraints. Crucially, while these metrics have been benchmarked on general high-quality generic images, their comparative ef-fectiveness for verifying fine-grained attributes in the low-resolution, noisy surveillance domain remains unexplored. Most existing PAR augmentation pipelines naively adopt CLIP without evaluating whether it accurately perceives attributes like ”glasses” or ”backpacks” in surveillance frames. In this work, we bridge this gap by systematically evaluating these metrics to identify the most reliable autolabeling signal for the PAR domain. 
+
+B. Data augmentation for Pedestrian-Centric Recognition 
+
+Data augmentation is a critical yet challenging necessity in pedestrian-centric recognition, where long-tailed attribute distributions, frequent occlusions, and surveillance-specific domain shifts severely limit generalization [1]. While tradi-tional pipelines rely heavily on label-preserving transforma-tions (e.g., random erasing, cropping) to improve invariance, these methods are fundamentally limited to the information present in the original pixels and cannot increase diversity along high-level semantic axes. Consequently, diffusion-based generative augmentation represents an emerging and under-explored frontier in PAR. It offers a complementary mech-anism to synthesize realistic pedestrians with controllable variation (appearance, pose, accessories), rebalancing scarce concepts beyond what hand-crafted policies can achieve. 
+
+1) Classical augmentation policies: Automatic policy methods such as AutoAugment [19], RandAugment [20], and TrivialAugment [21] select stronger transform combinations beyond hand-crafted pipelines. To simulate occlusions and encourage part-based reasoning, region-dropout strategies like Cutout [22] and Random Erasing [23] remove random patches during training. Mixing-based regularizers (Mixup [24], Cut-Mix [25]) further reduce overfitting by blending samples or regions. While effective, these techniques mainly preserve the original semantics and therefore provide limited control over rare compositional attribute combinations, motivating complementary generative augmentation. 
+
+2) GANs: Prior to the rise of diffusion models, GANs were the dominant paradigm for generative augmentation. Seminal works like DG-Net [7] and SPGAN [8] utilized adversarial training to disentangle identity from appearance or transfer domain styles, yielding improvements in re-identification. Despite these advances, GAN-based synthesis suffers from inherent training instability and, crucially, lacks fine-grained semantic controllability. Unlike text-driven models, GANs 3
+
+struggle to generate specific, complex attribute combinations on demand, a limitation that paved the way for the flexible conditioning of diffusion models [9]. 
+
+3) Diffusion-based augmentation: a) Diffusion-based synthetic augmentation for pedestrian analysis: Recent work leverages diffusion models as realistic pedestrian generators to augment training data in pedestrian-centric recognition. MALS [26] synthesizes large-scale pedes-trian images with text-to-image diffusion and derives attribute vectors from captions, showing that synthetic pedestrians can pre-train retrieval models at competitive levels on real bench-marks, albeit with labels tied to a fixed attribute vocabulary. In a broader context, DAFUSION [10] introduced a general framework for fine-tuning diffusion models for effective data augmentation. This strategy was subsequently adapted to the PAR domain by [13], who utilized it to generate surveillance-style images conditioned on attributes to improve zero-shot PAR performance. Other data-centric approaches [27] tackle the domain gap by generating high-resolution synthetic images to maximize attribute fidelity, followed by explicit degrada-tion transformations (e.g., blurring, downsampling) to simu-late surveillance quality. Unlike these multi-stage degradation heuristics, ReSAGE-PAR utilizes LoRA to learn and generate directly within the target dataset’s native resolution and style. Related evidence from person re-identification further supports diffusion as a controllable data augmenter, where synthesis can preserve identity and vary pose or appearance (e.g., Diffusion-ReID [28] and Pose-dIVE [29]), suggesting diffusion-based augmentation is broadly useful for downstream pedestrian understanding. 
+
+b) Prompting and controllable conditioning for attribute fidelity: beyond generating more samples, diffusion augmen-tation is only effective if synthetic images faithfully realize fine-grained and compositional attributes. To improve control-lability, composable/grounded conditioning enriches prompts with additional structure and spatial cues (e.g., multi-condition adapters and grounded generation) [30] [31] [32]. Comple-mentary, prompt editing and faithfulness methods manipulate cross-attention to enforce attribute presence and reduce omis-sions [33] [34], while automatic prompt optimization rewrites templates into more attribute-complete prompts without chang-ing semantics [35]. These directions are compatible with PAR-style synthesis, where structured, dataset-aware templates can improve coverage of clothing, accessories, and actions. 
+
+c) Dataset/domain adaptation via parameter-efficient fine-tuning: a practical challenge is that off-the-shelf diffusion models are not specialized for surveillance images or dataset-specific attribute taxonomies. Parameter-efficient adaptation [36] enables tailoring the generator to the target domain while keeping training lightweight, and can be combined with structured prompts to reduce the surveillance domain gap and increase coverage of rare attribute combinations. In our work, we follow this motivation and adopt dataset-aware diffusion adaptation together with structured prompts designed for PAR. 
+
+C. Automatic annotation of synthetic data 
+
+Autolabeling has been explored across modalities to mit-igate data scarcity. In 3D settings, differentiable rendering of Signed Distance Function (SDF) priors aligns synthetic predictions to real RGB/LiDAR for detector supervision [37], while Vision Language Model (VLM)-assisted pipelines re-duce human effort in point cloud annotation [38]. In 2D domains, AutoLabel methods learn confidence-aware soft la-bels for strongly augmented samples [39]. More recently, the rise of Multimodal LLMs (MLLMs) has shifted the paradigm towards zero-shot annotation, where models like LLaVA or SharedGPT-4V generate fine-grained descriptions directly from raw images [40], [41]. Complementary lines study synthetic data generation itself, including controllable diffusion models for distribution-aligned synthesis [42], self-improving training loops [43], and the use of AI-labeled synthetic data for evaluation [44]. ReSAGE-PAR differs from these heavy MLLM-based approaches by prioritizing compu-tational efficiency alongside accuracy. Instead of relying on resource-intensive Large Models for inference on every sam-ple, we (i) fine-tune diffusion with LoRA to generate dataset-aware pedestrian samples, and (ii) assign pseudo-labels using a lightweight ensemble of scoring functions. This allows for scalable high-throughput data generation while avoiding the latency and compute costs associated with large-scale MLLM deployment. III. M ETHOD 
+
+The general objective of ReSAGE-PAR is to generate synthetic images similar to real data and automatically label them for PAR. To achieve this, the framework is divided into three stages as shown in Fig. 1: (a) dataset-aware synthetic image generation, (b) prompt-based similarity scoring, and (c) similarity-aware pseudo-labeling. We name our method ReSAGE-PAR (REpresentational Similarity Assessment for Generative Expansion in PAR). 
+
+A. Stage A: Dataset-aware synthetic image generation 
+
+Let D = {(xi, y i)}Ni=1 be the dataset of PAR real images, where xi ∈ X denotes a real image and yi ∈ { 0, 1}K is its associated ground-truth label vector with K attributes. This first stage aims to generate synthetic samples from the target dataset by conditioning the generative process on a set of target attributes, while using the original sample xi as a structural prior to maintain the coarse spatial layout. We decompose this stage into three modules: 
+
+a) Attribute Selector: This module guides how the orig-inal image is semantically edited to generate the synthetic data. This requires defining an editing policy that determines the specific visual characteristics we want to add or modify (e.g., adding a ”backpack”). Specifically, the selector takes the original ground-truth labels yi and applies this policy to yield the target attribute vector ai ∈ {0, 1}K , which explicitly represents the final set of attributes requested for the new image. In this work, as a first approach, we adopt an identity policy where no modifications are introduced, meaning the target attributes strictly match the original ground-truth, i.e., ai = yi. While the semantic labels remain constant, the diffusion prior inherently introduces critical diversity in pedestrian pose, background, and illumination that traditional 4Stage A: Dataset-aware synthetic image generation                                 
+
+> Target attributes ( )Attribute-Selector
+> Generation prompt ()Generation-prompt constructor
+> Img2Img Generation pipeline adapted
+> GT attributes
+> Target attribute editing policy
+> Stage B: Prompt-based Similarity Scoring
+> Target attributes
+> GT attributes Probe-prompts ( )Probe-Prompt Strategy
+> Similarity indicator(s) ( )
+> Text-Image Representational Similarity
+> Posterior ( )SI-Classifier Labeling Policy
+> Stage C: Similarity-aware Pseudo-Labeling
+> Generated Image ( )Real Image ( )Pseudo-labels ( )
+> T-shirt Man Backpack Skirt
+> 1100
+> Generate backpacks
+> T-shirt Man Backpack Skirt
+> 1110
+> T-shirt Man Backpack Skirt
+> 111-1
+> A man wearing a t-shirt 2.2 0.8
+> A man wearing a t-shirt with backpack
+> A man with backpack A photo of a woman -3.5 1.7
+
+Fig. 1. ReSAGE-PAR overview. Stage A-dataset-aware synthetic image generation: Given a real image xi and a target attribute-editing policy, this stage generates a synthetic image xgen ,i that preserves the coarse spatial layout of the original sample while enforcing the presence of target attributes ai. Stage B-Prompt-based Similarity Scoring: Given the target attributes and the real labels yi, this stage constructs probe prompts pprobe ,i and utilizes a text–image similarity metric S to produce similarity indicator(s) si that quantify the alignment between the synthetic image and the desired attributes. Stage C-Similarity-aware Pseudo-Labeling: Using the similarity indicators, a Bayesian classifier estimates the posterior probability P (·| si) of alignment. Finally, a labeling policy applies a threshold τ to convert these probabilities into a definitive attribute-level pseudo-label vector ˜yi, masking out uncertain or non-target attributes. Real Syn Autolabels 
+
+> Male
+> Blackhair
+> T-shirt
+> Glasses
+> Female
+> LongHair
+> FootwearShoes
+> Casual
+> Female
+> Long hair
+> Sneakers
+> MessengerBag
+> Female
+> Back
+> Handbag
+> Backpack
+
+Fig. 2. Qualitative results of ReSAGE-PAR. Each triplet shows a real image (Real), its dataset-aware synthetic counterpart (Syn) generated with Stable Diffusion + LoRA at the dataset resolution, and the prompt attributes (Autolabels). Green terms are confirmed by our score-based autolabeler; red terms are flagged as mismatched. The ✓/ ✗summarizes whether the whole attribute set is consistent with the image. 
+
+pixel-level augmentations cannot achieve. A key strength of ReSAGE-PAR is the high structural diversity maintained across all domains. As qualitatively demonstrated in Fig. 2, the generative prior introduces massive non-trivial spatial vari-ations beyond simple pixel perturbations, highlighting how our LoRA-based adaptation effectively overrides high-definition priors to generate diverse surveillance-style samples. 
+
+b) Generation-Prompt Constructor: This module defines as a mapping T : {0, 1}K → P to translate the target attribute vector into a generation prompt pgen i = T (ai). In this work, we implement T as a deterministic, template-based function 
+
+to ensure strict semantic adherence to the target attributes. The exact templates are summarized in TABLE I. Further implementation details and qualitative examples are detailed in the accompanying supplementary material. 
+
+c) Img2Img Generation Pipeline: To synthesize new pedestrian samples, this module leverages the real image xi
+
+as an initial structural anchor, preserving the overall layout, background, and pedestrian pose. Guided by the prompt pgen i ,a conditional generator Gϕ iteratively denoises the latent representation to sample a synthetic image xgen i that reflects the target attributes: 
+
+xgen i = Gϕ(xi, p gen i ) = Gϕ(xi, T (ai)) . (1) To instantiate this conditional generator Gϕ, we combine the strong natural image priors of a base text-to-image diffusion model (e.g., Stable Diffusion) with a domain-specific adap-tation via LoRA. While the base model provides the funda-mental synthesis capabilities and text comprehension, standard diffusion models struggle with the unique characteristics of surveillance footage (such as low resolution, motion blur, and specific lighting). Therefore, the LoRA parameters within Gϕ
+
+are fine-tuned exclusively on real PAR images. In this work, we apply LoRA for each dataset adaptation to effectively bridge the visual domain gap, as detailed in Section IV-B. 
+
+B. Stage B: Prompt-based Similarity Scoring 
+
+This stage quantifies the alignment between the generated image xgen i and its target attributes ai.
+
+a) Probe-Prompt Builder: This module constructs a set of N probe prompts Pprobe i = {p(1) 
+
+probe i , . . . , p (j)
+
+probe i } ⊂ P
+
+designed to verify the visual content of the synthetic image. 
+
+b) Text–Image Similarity Computing.: The core objec-tive of this module is to explicitly quantify the semantic alignment between the synthesized pedestrian image and its corresponding textual description. This step is crucial for 5                                                 
+
+> TABLE I DATASET -SPECIFIC PROMPT TEMPLATES . D OUBLE UNDERSCORES ()
+> INDICATE ATTRIBUTES AND PREFIXES EMITTED ONLY IF PRESENT IN THE TARGET VECTOR . T HE S T A R T AND G E N D E R TOKENS ARE FOUNDATIONAL . A BBREV .: H S =HAIR STYLE ,U B =UPPER BODY ,
+> L B =LOWER BODY .
+> Dataset Template sketch
+> RAPv1 / v2 / zs start gender __with hs__ __is action__ __att__ __wearing ub__ __lb__ __shoes__ __attachment__
+> Example of RAPv1 there is a man with black hair sinlge shoulder bag other wearing t-shirt jacket jeans PETA / PETAzs start gender __with hair-color__ __with hair__ __carrying item__ __with accessory__ __wearing ub-color ub__ __lb-color lb__ __shoe-color shoe__
+> Example of PETA a man with black short hair carrying backpack with nothing wearing black casual grey casual trousers grey shoes PA100k start gender __from view__ __with attr__ __wearing upper-wear/a upper-type__ __lower-wear/a lower-type__ __boots__
+> Example of PA100k there is a woman from front wearing short sleeve a plaid skirt or dress
+
+detecting potential prompt-image misalignments, ensuring that the generative model successfully rendered the requested at-tributes. To achieve this, let S : X × P → R be a Text-Image Representational Similarity metric. We compute the alignment score sij for the synthetic data-prompt as: 
+
+sij = S(xgen i , p (j) 
+
+> probe i
+
+). (2) Here, higher values of sij indicate stronger semantic consis-tency between the generated image xgen i and its generation prompt p(j) 
+
+> probe i
+
+. The resulting alignment scores sij serve as a quantitative measures of prompt fidelity and act as the primary criteria for evaluating the quality of synthetic samples in the subsequent autolabeling stage. Based on our comprehensive analysis in Section IV-C, we adopt BLIPScore as our metric 
+
+S.
+
+C. Stage C: Similarity-aware Pseudo-Labeling 
+
+This stage aims to transform the continuous similarity indicators sij into reliable supervision signals, mitigating the impact of potential generative hallucinations. To ensure that only semantically consistent samples guide the learning process, we employ a labeling policy that maps these scores into an attribute-level pseudo-label vector ˜yi = [˜ yi, 1, . . . , ˜yi,K ]
+
+, where K denotes the total number of attributes. While the framework conceptually supports soft-label probabilities in the interval [0 , 1] , we discretize the output to explicitly distinguish between certain and ambiguous predictions. Specifically, each element ˜yi,k ∈ { 0, 1, −1} represents the confident presence (1), absence ( 0), or an ignore flag ( −1) for uncertain attributes. This formulation may allow for a masked Binary Cross-Entropy (BCE) loss, effectively neutralizing the influence of mismatched attributes on gradient updates and prioritizing label precision over raw data volume. 
+
+a) Labeling Policy: This policy converts the probabilistic output into hard pseudo-labels. The final pseudo-label vector 
+
+˜yi is assigned element-wise as: 
+
+˜y(k) 
+
+> i
+
+=
+
+( ˆd(k) 
+
+> i
+
+if y(k) 
+
+> i
+
+= 1 (if attribute k ∈ probe) ,
+
+−1 if y(k) 
+
+> i
+
+= 0 (if attribute k / ∈ probe) . (3) This formulation explicitly distinguishes between attributes evaluated in the probe-prompt and those that were not. Since the visual state of unprompted attributes remains unverified, they are assigned a value of −1 to act as an ignore flag. Con-sequently, only the target attributes actively confirmed by the Similarity-Indicator Classifier contribute to the downstream training loss. Let ˆd(k) 
+
+> i
+
+= I[P (aligned | sij ) > τ ] be the binary decision indicating whether the generated image successfully reflects the target attributes, where τ ∈ [0 , 1] is a decision threshold. The parameter τ dictates the restrictiveness of the acceptance policy. While thresholds approaching 1 enforce strict attribute fidelity at the cost of discarding many viable samples, and values near 0 act as a highly permissive filter that admits generative noise, we adopt a neutral decision boundary of 
+
+τ = 0 .5 to optimally balance semantic accuracy with synthetic data yield. 
+
+b) Similarity-Indicator Classifier: We propose aBayesian classifier that estimates the posterior probability of the synthetic image xgen i being aligned with the probe prompt 
+
+p(1)  
+
+> probe i
+
+. This posterior probability of alignment is defined using the function σ(·) applied to the Log-Likelihood Ratio (LLR): 
+
+P (aligned | sij ) = σ(LLR( sij )) = 11 + e−LLR( sij ) . (4) Since raw output probabilities lack an absolute scale, we must explicitly discern whether a given score represents true visual alignment with the image or visual misalignment. To model this LLR and establish this discriminative baseline, we instantiate Stage B to generate a contrastive pair (N = 2 )for calibration. Specifically, for each positive prompt p(j) 
+
+> probe i
+
+,we define the positive probe p(1)  
+
+> pos i
+
+by setting the probe prompt directly to the generation prompt used in Stage A, such that 
+
+p(1)  
+
+> pos i
+
+= p(1)  
+
+> probe i
+
+= p(1)  
+
+> gen i
+
+. Similarly, we construct a negative probe pneg (1) 
+
+> i
+
+by flipping a fraction ρ ∈ (0 , 1] of the active attributes in p(1)  
+
+> probe i
+
+to their attribute-family complementaries defined by the dataset (e.g., swapping ”long hair” for ”short hair”). In our primary contrastive setup, we apply full com-plementation ( ρ = 1 ). Using the similarity scores from both the positive prompt (sij ) and the negative complemented prompt (¯sij =
+
+S(xgen i , p (j) 
+
+> neg i
+
+)), the LLR is formulated based on their respec-tive distributions, P (s | p(j) 
+
+> pos
+
+) and P (s | p(j)
+
+> neg
+
+):
+
+LLR( sij ) = ln P (sij | p(j) 
+
+> pos
+
+)
+
+P (sij | p(j)
+
+> neg
+
+) + ln πpos 
+
+1 − πpos 
+
+, (5) where πpos represents the prior probability of alignment. Given our contrastive design which yields an equal number of posi-tive and negative probes and the absence of empirical knowl-edge regarding the generative model’s exact success rate, we 6
+
+naturally adopt an uninformative balanced prior ( πpos = 0 .5). Consequently, the log-prior term vanishes ( ln 1 = 0 ), ensuring that the LLR is driven purely by the observational visual-semantic likelihoods. IV. E XPERIMENTAL RESULTS 
+
+This section focuses on the empirical validation of the internal components and intermediate stages of the ReSAGE-PAR framework. First, we investigate the impact of the LoRA rank during generative fine-tuning to determine the optimal configuration for each dataset (Section IV-B). Second, we evaluate various text-image representational similarity metrics (Section IV-C) to identify the most reliable scoring function. Finally, we conduct an in-depth analysis of the Bayesian autolabeling pipeline (Section IV-D), validating its intrinsic accuracy, threshold robustness, and capacity to effectively filter semantic noise prior to any downstream application. 
+
+A. Implementation Details a) Datasets: We evaluate ReSAGE-PAR on four widely used PAR benchmarks: PETA [2], PA100K [5], and RAP (v1 [3] and v2 [4]). Specifically, PETA consists of 19,000 images with 61 binary attributes, while PA100K—the largest in terms of volume—contains 100,000 images captured from 26 outdoor surveillance cameras. The RAP series provides high-resolution samples (31,268 for v1 and 84,928 for v2) with fine-grained annotations. Furthermore, we evaluate gen-eralization performance using the zero-shot variants (PETAzs, RAPzs) introduced in [6], which test the models’ ability to recognize unseen attribute combinations in diverse surveillance environments. 
+
+b) Implementation and Base Code: For the generative augmentation phase, we utilize the pre-trained weights of Stable Diffusion v2.1 [45]. A key technical contribution of our framework is the custom adaptation of the LoRA frame-work [46] for img2img tasks, a configuration not natively sup-ported in standard LoRA-based PAR generation scripts. This modification, implemented via the Hugging Face diffusers library [47], allows for precise domain steering while strictly preserving the spatial and structural priors of the original pedestrian crops. To compute the alignment scores ( s), we integrate a comprehensive suite of vision-language models, including BLIP [14], CLIPScore [12], ImageReward [15], and HPSv2 [16]. For the downstream PAR evaluation, we adapted the standard experimental framework to natively incorporate our synthetically generated data. Specifically, we modified the data loading pipeline to ingest hybrid batches of real and synthetic samples, and we adapted the objective function by introducing a masked loss that explicitly ignores unannotated or unprompted attributes (labeled as −1) during backpropaga-tion. To demonstrate the broad compatibility of our approach, we integrated this adapted framework into several state-of-the-art architectures, including the Rethinking baseline [6], PromptPAR [48], and SequencePAR [49]. 
+
+c) Training Hyperparameters: For the generative fine-tuning phase (Stage A), we optimize the diffusion model using LoRA via the diffusers library, applying a constant learning rate of 1 × 10 −4 and a batch size of 16. To prevent the degradation of spatial features caused by standard square cropping, we configure the training to strictly respect the aspect ratios of pedestrian crops by fixing the resolution to 
+
+256 × 192 pixels ( H × W ), a standard resizing dimension in PAR [6]. We performed a grid search over the LoRA rank r, selecting the optimal dimension for each benchmark based on attribute fidelity. The generation is conducted within an img2img framework, utilizing the original real images as spatial conditioning. For the automated pseudo-labeling phase (Stage B), we establish the contrastive evaluation parameters by applying full attribute complementation ( ρ = 1 .0). The Bayesian classifier is configured with an uninformative prior (πpos = 0 .5) and adopts a neutral decision boundary threshold of τ = 0 .5, optimally balancing semantic precision with syn-thetic data yield. For the downstream PAR models, we strictly adhere to the default hyperparameter settings specified for each architecture (Rethinking, PromptPAR, and SequencePAR) to ensure a fair evaluation of the data augmentation impact. When experimenting with different real-to-synthetic data ratios (e.g., 1:1 or 1:2), we construct each training batch by dynamically sampling from both the real and our verified synthetic datasets according to the specified proportion. All experiments, in-cluding generative fine-tuning, automated thresholding, and downstream PAR model training, were conducted on a single NVIDIA A40 GPU. 
+
+B. Effect of LoRA Rank on Synthetic Image Generation a) Objective: We quantify how the LoRA rank affects the realism and domain similarity of the generation in Stage A (see Fig. 1). 
+
+b) Experimental protocol: For each benchmark, we fine-tune the Stable Diffusion model using the training split of the corresponding dataset across four LoRA rank configura-tions: r ∈ { 4, 8, 16 , 32 }. Following adaptation, we generate synthetic samples using the img2img pipeline conditioned on the training set’s ground-truth labels and the prompts defined in Section III-A. To identify the optimal rank for each dataset, we evaluate the distributional similarity between the synthetic outputs and the real training data using four complemen-tary metrics: FID [50], FD-DINO [51], CMMD [52], and CFID [53]. The final selection is determined by the mean ranking aggregation across these indicators, identifying the configuration that yields the best overall balance between visual fidelity and domain alignment. 
+
+c) Results: In TABLE II, we observe a clear relation between dataset image resolution and the best LoRA rank. For RAPv1 and RAPv2, whose average real resolutions are around 128 × 324 , the optimal ranks are relatively small (4-8). These sizes are closer to the native resolution (512x512) at which the diffusion model was pretrained, so only a modest low-rank update is needed to capture their style. In contrast, PA100K and PETA have smaller average resolutions, roughly 
+
+85 × 227 for PA100K and 73 × 171 for PETA/PETAzs, and the pedestrians are often farther away, and of lower visual quality than the RAP streams. Because these datasets are both farther in resolution and appearance from the Stable Diffusion 7                                                                 
+
+> TABLE II BEST LORA RANK rPER DATASET WITH AVERAGE IMAGE RESOLUTION
+> (IN PIXELS )AND DISTRIBUTION DISTANCES (↓LOWER IS BETTER ). T HE SYNTHETIC DATASETS PETA ZS AND RAP ZS WERE GENERATED USING THE LORA MODELS TRAINED ON THEIR RESPECTIVE PARENT DATASETS
+> (PETA AND RAP V2). Dataset Best rw(px) h(px) CFID ↓FID ↓FD-DINO ↓CMMD ↓
+> PA100K 32 85.6 227.4 25.11 48.54 1194.83 1.36 PETA 32 72.3 170.7 97.51 52.98 1516.49 1.36 PETAzs 32 72.9 171.5 92.93 57.07 1520.99 1.39 RAPv1 4130.2 325.7 46.33 37.43 911.91 1.36 RAPv2 8126.4 322.8 35.89 43.74 1125.52 1.50 RAPzs 8133.9 333.6 70.19 45.81 1134.79 1.54
+
+training samples, they benefit from a higher LoRA rank (32), which gives the adapter more capacity to bridge the gap to the target surveillance style, for further information check the supplementary material. Finally, the zero-shot variants (RAPzs and PETAzs) inherit the best ranks of their parent datasets (RAPv2 and PETA, respectively), since they share the same acquisition conditions and resolution characteristics. Please refer to the supplementary material for additional details regarding the metric saturation and the extended analysis of the LoRA rank metric analysis. We use the selected the rank per dataset in the following experiments. 
+
+C. Text-Image Representational similarity metrics analysis a) Objective: This experiment explores the optimal Text-Image representational similarity metric S for Stage B (see Fig. 1) by identifying the function that best captures semantic alignment. 
+
+b) Experimental Protocol: To evaluate the discriminative power of each similarity indicator S, we analyze the separa-bility between aligned P (s | ppos ) and misaligned P (s | pneg )
+
+score distributions across all training splits. Following the strategy detailed in Section III-C, we generate positive probes 
+
+ppos i and contrast them with negative probes pneg i created through attribute-flipping. We explicitly quantify the statistical distance and discriminative capacity between these distribu-tions using the Bhattacharyya distance and the Area Under the Receiver Operating Characteristic curve (AUROC). For graphical clarity, we primarily visualize the results using the PETAzs dataset. Since it contains the highest density of active attributes per image, it provides the most comprehensive and representative scenario for analyzing prompt-length dynamics. However, the observed trends remain strictly consistent across all other evaluated datasets, as detailed in the supplementary material. 
+
+c) Sensitivity to Image-Text Semantic Misalignment: We first evaluate the metrics’ sensitivity to the degree of semantic contradiction by systematically varying the complementation ratio ρ ∈ {0.25 , 0.50 , 0.75 , 1.0}. For clarity of presenta-tion, TABLE III highlights the representative thresholds of partial ( ρ = 0.50 ) and full ( ρ = 1.0) complementation. As observed, BLIPScore consistently provides the highest separability, which increases monotonically as a larger fraction of attributes is inverted. An exhaustive breakdown of the per-formance across all ρ values is provided in the supplementary material. 4 6 8 10 12 14               
+
+> Number of attributes in prompt
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> Bhattacharyya (  )
+> BLIPScore
+> CLIPScore
+> HPSv2
+> ImageReward
+> Fig. 3. Impact of prompt length on metric separability. We report the Bhattacharyya distance (higher is better) between the BLIPScore distributions of the positive prompts ( ρ= 0 ) and fully complemented negative prompts (ρ=1). By fixing the complementation to its maximum (ρ=1), this evaluation isolates how the total number of active attributes affects separability. Evaluated on the PETAzs testing split.
+
+d) Impact of Prompt Length: We further analyze the impact of the number of active attributes L by fixing ρ = 1 .0
+
+(fully complemented prompts) and grouping contrastive pairs by length. To ensure statistical robustness and prevent skew, each length group is balanced to 1,000 samples. As shown in Fig. 3, the discriminative capacity of the BLIPScore is highly dependent on L. The BLIPScore curve demonstrate that the separability between positive and negative samples as more attributes are added to the prompt. Extremely short prompts yield ambiguous scores due to insufficient semantic context, while an optimal range between 6 and 13 attributes is identified where BLIPScore achieves its most stable and discriminative behavior. For a detailed analysis of how prompt length impacts metric separability across all evaluated datasets, we direct the reader to the supplementary document. 
+
+D. Autolabeling Performance a) Objective: This section evaluates the accuracy of our Bayesian framework as a classifier. Specifically, we assess the precision of the posterior probability P (aligned | s) to serve as a reliable, high-fidelity autolabeling mechanism prior to downstream model training. 
+
+b) Experimental Protocol: To establish a consistent base-line for the following experiments, we train the Bayesian clas-sifier independently for each dataset using its respective real training split. We define two distinct sets of alignment scores: positive scores ( s+) extracted from label-consistent probes (pprobe , ρ = 0), and negative scores ( s−) extracted from fully complemented inconsistent probes ( pprobe , ρ = 1 ). As illustrated in Fig. 4, these empirical score distributions exhibit unimodal and smooth characteristics with clear separability. This behavior directly justifies our two-component Gaussian formulation (Section III-C), providing a stable, closed-form approximation to effectively isolate valid generative attributes from semantic noise. Once the likelihood distributions are estimated and the model is calibrated, we evaluate its gen-eralization and practical efficacy through three progressive analyses: (i) Alignment Classification and Attribute Labeling 8
+
+TABLE III SEPARABILITY OF REPRESENTATIONAL SIMILARITY METRICS UNDER PROMPT COMPLEMENTATION . F OR EACH DATASET , WE COMPARE THE SCORES OF THE ORIGINAL POSITIVE PROMPT (ρ = 0 .00 , NO ALTERED ATTRIBUTES ) AGAINST NEGATIVE PROMPTS WITH PARTIAL (ρ = 0 .50 , HALF OF THE ATTRIBUTES FLIPPED ) AND FULL (ρ = 1 .0, ALL ACTIVE ATTRIBUTES FLIPPED ) COMPLEMENTATION . W E REPORT AUROC ↑ AND BHATTACHARYYA DISTANCE (BHAT ↑) FOR FOUR SCORERS . H IGHER IS BETTER .                                                                                                                              
+
+> BLIPScore [14] CLIPScore [12] ImgReward [15] HPSv2Score [16] Dataset p-0.50 p-1.00 p-0.50 p-1.00 p-0.50 p-1.00 p-0.50 p-1.00 AUROC BHAT AUROC BHAT AUROC BHAT AUROC BHAT AUROC BHAT AUROC BHAT AUROC BHAT AUROC BHAT PA100K 0.72 0.08 0.84 0.26 0.56 0.01 0.74 0.11 0.64 0.03 0.79 0.19 0.69 0.06 0.84 0.26
+> PETA 0.85 0.28 0.98 1.09 0.63 0.04 0.73 0.11 0.69 0.10 0.81 0.29 0.69 0.07 0.72 0.11 PETAzs 0.89 0.39 0.98 0.99 0.64 0.04 0.70 0.08 0.71 0.13 0.78 0.24 0.69 0.07 0.66 0.06 RAPv1 0.86 0.29 0.96 0.75 0.66 0.06 0.67 0.05 0.68 0.06 0.82 0.22 0.85 0.27 0.83 0.23 RAPv2 0.89 0.38 0.98 0.97 0.67 0.06 0.72 0.08 0.71 0.08 0.85 0.27 0.86 0.31 0.87 0.33 RAPzs 0.89 0.39 0.97 0.92 0.68 0.07 0.71 0.09 0.71 0.08 0.84 0.26 0.86 0.32 0.87 0.33
+
+6 4 2 0 2 4
+
+Alignment score s
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+> Density
+
+ppos 
+
+pneg 
+
+Fig. 4. BLIPScore ( s) distributions on the PETAzs training split. The histogram compares the scores obtained for the same generated images when evaluated against their label-consistent prompt ppos (ρ = 0 ) (green) versus the fully complemented ( ρ = 1 ) prompt pneg (red). 
+
+Performance , (ii) Attribute Verification , and (iii) Threshold Sensitivity Analysis . While we illustrate the score distribu-tion exclusively for PETAzs, the comprehensive empirical distributions demonstrating consistent separability for all other benchmarks can be found in the supplementary material. 
+
+c) Alignment Classification and Attribute Labeling Per-formance: We first assess the classifier’s core ability to accu-rately distinguish between s+ and s− samples derived from the real test splits. As reported in TABLE IV, the Bayesian classi-fier achieves a high global alignment accuracy exceeding 90% across most datasets, with PA100K presenting a moderately lower but solid performance ( ∼75%). This strong macro-level classification successfully translates to an exceptionally high attribute-level pseudo-label mean Accuracy (mA), stabilizing around 0.90 for the PETA and RAP benchmarks, and reaching 0.75 for PA100K. Crucially, this reported mA is calculated exclusively on the target attributes ai. This targeted evaluation specifically reflects the framework’s capacity to detect only the subset of target attributes it was instructed to synthesize. Consequently, this metric is not directly comparable to stan-dard PAR evaluations that predict the full set of attributes, since our approach intentionally filters out the non targeted attributes ai. These results demonstrate that the Bayesian filter detects the presence of target attributes ai within the generated images with high precision, producing highly reliable pseudo-labels for dataset expansion. A comprehensive breakdown of the autolabeling accuracy for each individual attribute is provided in the supplementary material. Furthermore, we provide qualitative examples to offer visual insight into the decision boundaries of our method, with a detailed visual analysis available in the supplementary material. 
+
+d) Threshold Sensitivity Analysis: To determine the op-timal decision threshold τ , we analyze its direct impact on the classification error rates during the autolabeling process. As quantified by the annotated percentages in Fig. 5, varying 
+
+τ controls the fundamental trade-off between false positives and false negatives. Our evaluation identifies τ = 0.5 as the optimal operating point, preserving approximately 93% of the true positive samples while keeping the false positive rate at merely 5%. Furthermore, empirical tests varying τ ∈{0.3, 0.5, 0.7, 0.9} revealed only marginal differences in the final pseudo-label assignments, demonstrating the robustness of the posterior probabilities. To validate that this threshold stability holds beyond the labeling phase, Section V-B provides a dedicated analysis on how these variations in τ specifically impact the final mA of the downstream PAR models. Please refer to the supplementary material for the complete empirical posterior distributions and the extended threshold sensitivity analysis across the remaining datasets. 0.0 0.2 0.4 0.6 0.8 1.0     
+
+> Posterior p=P(aligned score )
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> Fraction of samples
+> Pos:100%
+> Neg:41%
+> Pos:99%
+> Neg:23%
+> Pos:98%
+> Neg:14%
+> Pos:96%
+> Neg:9%
+> Pos:93%
+> Neg:5%
+> Pos:89%
+> Neg:3%
+> Pos:83%
+> Neg:2%
+> GT = 0 (negative)
+> GT = 1 (positive)
+> t=0.05
+> t=0.10
+> t=0.20
+> t=0.30
+> t=0.50
+> t=0.70
+> t=0.90
+
+Fig. 5. Posterior P (aligned | s) from the Bayesian filter for ground-truth negatives and positives under varying decision thresholds τ . The annotated percentages explicitly illustrate the filtering trade-off at each threshold: retaining valid generative attributes (Pos) versus blocking semantic noise (Neg). Scores are extracted from the PETAzs testing split. 9
+
+TABLE IV GLOBAL PSEUDO -LABELING PERFORMANCE ACROSS DATASETS . T HE TABLE REPORTS THE VALIDATION /TEST ACCURACY OF THE BAYESIAN CLASSIFIER , THE OVERALL MEAN ACCURACY (MA) OF THE GENERATED PSEUDO -LABELS FOR REAL DATA , AND THE MEDIAN ACTIVE ATTRIBUTES EVALUATED PER PROMPT .Metric PETA PETAzs RAPv1 RAPv2 RAPzs PA100K Bayes acc. (val/test) 0.91/0.92 0.93/0.94 0.90/0.90 0.92/0.92 0.91/0.92 0.75/0.73 Pseudo-label mA 0.90 0.93 0.89 0.91 0.90 0.75 Median Active Attr. 14 15 6 5 5 5
+
+V. A PPLICATION TO DOWNSTREAM PAR The primary objective of this section is to determine whether synthetic data, generated and verified through ReSAGE-PAR, effectively enhances downstream PAR performance. To com-prehensively assess this, our analysis is structured to vali-date four key hypotheses: (i) that generative augmentation outperforms standard pixel-level transformations; (ii) that our score-driven verification is the primary driver of performance gains; (iii) that these benefits are architecture-agnostic and scale efficiently with data volume; and (iv) that ReSAGE-PAR can push state-of-the-art frameworks. We adopt a standardized experimental protocol. Specifically, we construct augmented training sets by mixing real samples with our Bayesian-verified synthetic data, while strictly preserving the original hyperparameters and optimization settings (e.g., optimizer type, learning rate, and scheduler) of each evaluated PAR architecture. 
+
+A. Evaluating ReSAGE-PAR as a Data Augmentation Strategy a) Objective: We assess whether ReSAGE-PAR outper-forms existing data augmentation techniques ranging from standard pixel-level transformations to recent generative ap-proaches when applied to PAR tasks. 
+
+b) Experimental Protocol: We constructed an augmented training set for each dataset by generating synthetic samples at a 1:1 ratio relative to the original training size. Following our proposed pseudo-labeling, we retrain the downstream PAR models using the Rethinking [6] framework as our standard-ized baseline. 
+
+c) Results: As summarized in TABLE V, ReSAGE-PAR achieves consistent mean Accuracy (mA) improvements across all datasets when training the baseline PAR model with the combined data. Notably, it yields the largest gains on PETAzs, RAPv1, and RAPzs. Our approach demonstrates stronger and more consistent performance across the board than prior references, confirming that ReSAGE-PAR is signif-icantly more effective than standard pixel-level perturbations or naive generative augmentations. To provide deeper insight into these performance gains, TABLE VI reports metrics on the autolabeling pipeline. The results demonstrate that ReSAGE-PAR significantly en-hances attribute recognition. For instance, on RAPv2, 95.5% of attributes show improved performance over the baseline. This success stems from our conservative refinement strategy, which systematically mitigates generative noise by neutral-izing unverified attributes (setting pseudo-labels to 0) rather 
+
+TABLE V COMPARISON OF AUGMENTATION METHODS FOR PAR ( MA↑, %). A LL ARE OUR RUNS OF EACH METHOD WITH RETHINKING AS PAR METHOD 
+
+[6]. R ESAGE-PAR ( NAIVE LABELLING ) MIXES GENERATED IMAGES WITH REAL ONES BUT COPIES THE FULL LABEL VECTOR FROM THE CONDITIONING REAL IMAGE [13]; R ESAGE-PAR USES OUR SCORE -BASED AUTOLABELS . “–” INDICATES NOT EVALUATED .Method PETA PETAzs RAPv1 RAPv2 RAPzs PA100K Base [6] 84.10 71.47 79.60 78.50 71.98 80.44 AutoAug [19] 84.48 71.19 79.93 78.56 72.56 80.98 CutMix [25] 83.47 69.66 78.25 77.99 69.78 78.44 Mixup [24] 81.70 69.13 76.79 77.19 69.41 77.83 RandAug [20] 84.50 71.61 79.92 78.59 72.98 81.14 Trivial [21] 84.25 71.48 80.05 78.75 73.10 80.93 AugMix [54] 84.31 71.71 79.79 78.48 73.02 80.73 EnhancingZeroShot [13] – 73.07 – – 75.23 81.58 DataCentric [27] – – 81.14 79.75 74.57 –            
+
+> ReSAGE-PAR (naive labelling) 84.40 72.90 79.80 78.48 72.70 81.30
+> ReSAGE-PAR 85.30 75.30 82.40 80.94 76.20 83.00
+
+TABLE VI IMPACT OF THE AUTOLABELING PIPELINE ACROSS DATASETS . T HE 
+
+ACCURACY BLOCK DETAILS THE NUMBER OF ATTRIBUTES WHERE OUR GENERATIVE AUGMENTATION IMPROVES THE RETHINKING BASELINE [6]  
+
+> PERFORMANCE
+
+(Imp. ), ALONGSIDE THE OVERALL SUCCESS RATE (%). THE DATA REFINEMENT BLOCK REPORTS THE TOTAL GENERATED SAMPLES , THE PERCENTAGE OF SAMPLES NEUTRALIZED BY OUR 
+
+BAYESIAN DECISION THRESHOLD (τ = 0 .5) ( Neut. ), AND THE AVERAGE NUMBER OF LABEL CORRECTIONS APPLIED PER RETAINED IMAGE (Corr. ). Metric PETA PETAzs RAPv1 RAPv2 RAPzs PA100K 
+
+Accuracy 
+
+Imp. 20 27 35 42 35 14 No Imp. 10 4 8 2 7 4% 66.7 87.1 81.4 95.5 83.3 77.8 
+
+Data Refinement Actions 
+
+Total Syn. 9.5K 11K 33K 51K 17K 80K Neut.(%) 10.8 9.9 13.5 9.1 9.9 27.6 Corr. 7 7 5 5 4 4
+
+than discarding entire images. As shown in the ”Data Refine-ment Actions” block, this process results in the systematic neutralization of an average of 4 to 7 unverified attributes per generated sample. Notably, ReSAGE-PAR consistently improves the vast majority of attributes while safely filtering only a small fraction of noisy samples. 
+
+B. The Role of Score-Driven Verification in ReSAGE-PAR a) Objective: Building upon the overall gains reported in Section V-A, we isolate the exact source of these im-provements by evaluating the critical role of the score-driven verification Stage C. Specifically, we aim to demonstrate two key points: (i) that the selective neutralization of misaligned attributes (setting pseudo-labels to 0) and active label correc-tion are the primary drivers of performance, rather than mere data volume; and (ii) that this autolabeling process is highly robust to the specific choice of the decision threshold τ .
+
+b) Experimental Protocol: To establish a direct com-parison, both the full pipeline and the ReSAGE-PAR (naive labelling) variant utilize a fixed 1:1 real-to-synthetic initial generation ratio. Using the Rethinking [6] framework as our baseline, we conduct an ablation study to isolate the impact of ours Stage B and Stage C (see Sections III-B and III-C). The 10 
+
+TABLE VII ABLATION STUDY ON THE DECISION THRESHOLD τ DURING STAGE C. PERFORMANCE IS REPORTED IN MEAN ACCURACY (MA, %). T HE RESULTS DEMONSTRATE THAT THE AUTOLABELING PROCESS IS HIGHLY ROBUST , MAINTAINING STABLE DOWNSTREAM PAR PERFORMANCE ACROSS A WIDE RANGE OF THRESHOLD VALUES . B EST RESULTS IN BOLD .Threshold ( τ ) PETA PETAzs RAPv1 RAPv2 RAPzs PA100K 0.3 85.43 75.05 82.79 81.03 75.12 82.82 0.5 85.30 75.30 82.40 80.94 76.20 83.00 0.7 85.60 75.21 82.03 80.92 75.41 83.06 
+
+0.9 85.41 74.79 82.31 81.05 75.46 82.40 
+
+ReSAGE-PAR (naive labelling) variant follows the strategy of prior generative methods [13], where each synthetic sample is trained using the full attribute vector copied directly from its conditioning real image x(k) being ˜y(k) = y(k). This approach completely bypasses the verification and refinement logic of Stage B and Stage C (see Sections III-B and III-C). To evaluate the sensitivity of this Stage C, we test our framework across a range of thresholds τ ∈ { 0.3, 0.5, 0.7, 0.9}, using the equilibrium point τ = 0 .5 (established in Section IV-D) as our reference. 
+
+c) Results: As shown in Section V-A, the ReSAGE-PAR (naive labelling) variant provides only marginal benefits over the baseline, clearly indicating that image generation alone is insufficient due to partial misalignment in the fine-grained attribute rendering of the synthesized output. Incorporating our score-driven autolabeling explicitly solves this bottleneck. As detailed in TABLE VII, the downstream performance remains remarkably stable across a wide range of values for 
+
+τ . Operating at the reference τ = 0 .5 successfully neutral-izes misaligned attributes by setting their pseudo-labels to 0, ensuring that the supervision signal remains semantically grounded. This systematic validation effectively transforms raw generative outputs into reliable supervision, significantly improving per-attribute accuracy without requiring sensitive hyperparameter tuning. 
+
+C. Synthetic Data Expansion and Backbone Generalization a) Objective: A robust data augmentation module must not only provide gains for a specific setup, but also generalize across different network architectures and scale effectively with increasing volumes of synthetic data. We evaluate both the architectural versatility of our pipeline and the effect of scaling for synthetic data expansion. 
+
+b) Experimental Protocol: Using the Rethinking pipeline, we evaluate our autolabeled synthetic data across three distinct backbones architectures: ResNet50, BN-Inception, and Swin Transformer. To analyze synthetic data volume, testing real-to-synthetic ratios of 1:0.5, 1:1, and 1:2. 
+
+c) Results: As detailed in TABLE VIII, our augmen-tation consistently improves mA across all three evaluated backbones, confirming that the benefits of our ReSAGE-PAR are architecture-agnostic. Scaling the verified synthetic data further to a 1:2 ratio yields additional gains. For instance, using ResNet50, even a conservative ratio of 1:0.5 with ReSAGE-PAR outperforms a 1:1 ratio with naive labeling from Sec-tion V-A. Notably, the results demonstrate that progressively scaling the amount of our verified synthetic data consistently improves downstream performance across all evaluated archi-tectures. Those results demonstrate that quality control matters significantly more than raw quantity. 
+
+TABLE VIII 
+
+> M
+
+A RESULTS PER DATASET FOR Rethinking [6] WITH DIFFERENT BACKBONES AND REAL :SYNTHETIC RATIOS . B OLD INDICATES BEST RESULTS PER BACKBONE .                                                                               
+
+> Backbone Ratio (Real:Syn) PETA PETAzs RAPv1 RAPv2 RAPzs PA100K
+> ResNet50
+> 1:0 84.10 71.47 79.60 78.50 71.98 80.44 1:0.5 84.87 73.85 81.41 80.00 74.48 81.56 1:1 85.30 75.30 82.40 80.94 76.20 83.00 1:2 85.75 75.58 83.10 81.82 76.91 83.07 BN-Inception
+> 1:0 83.47 70.95 78.49 77.85 70.68 79.60 1:0.5 84.17 73.34 80.55 79.45 73.42 81.65 1:1 85.15 75.29 81.92 80.41 74.65 82.20 1:2 85.49 75.76 82.33 81.38 76.44 82.42 Swin
+> 1:0 73.01 59.69 68.24 70.00 62.58 72.06 1:0.5 77.47 65.00 73.35 73.15 67.72 74.85 1:1 78.67 66.25 74.88 74.60 69.92 75.76 1:2 79.19 68.21 75.98 76.04 71.31 76.29
+
+TABLE IX COMPARISON WITH SOTA PAR METHODS . W E INTEGRATE OUR 
+
+RESAGE-PAR SYNTHETIC DATA (✓) AT A 1:2 ( REAL :SYNTHETIC ) RATIO INTO REPRESENTATIVE ARCHITECTURES . B OLD INDICATES THE BEST RESULTS PER DATASET /SOTA METHOD .                                              
+
+> Method ReSAGE-PAR PETA PETAzs RAPv1 RAPv2 RAPzs PA100K
+> Rethinking [6] 84.10 71.47 79.60 78.50 71.98 80.44 Rethinking [6] ✓85.75 75.58 83.10 81.82 76.91 83.08
+> SequencePAR [49] 82.52 73.83 79.05 76.95 75.49 83.91
+> SequencePAR [49] ✓84.01 73.04 79.46 78.40 75.54 83.77 PromptPAR [48] 88.32 79.11 86.33 83.83 80.91 87.67 PromptPAR [48] ✓89.02 80.94 87.71 85.94 83.47 89.37
+
+D. Integration with SOTA PAR Frameworks a) Objective: Since our ReSAGE-PAR is inherently architecture-agnostic, the objective of this final evaluation is to benchmark its ultimate potential by integrating it into modern SOTA PAR pipelines. 
+
+b) Experimental Protocol: To benchmark the scalability and architectural compatibility of ReSAGE-PAR, we inte-grate our verified synthetic data into three representative PAR frameworks: the optimized Rethinking baseline [6], the sequence-based SequencePAR [49], and the transformer-based 
+
+PromptPAR [48]. For each architecture, we strictly adhere to its original training configurations and hyperparameters, adopting a 1:2 real-to-synthetic ratio as suggested by the scaling trends in Section V-C. 
+
+c) Results: the results summarized in TABLE IX demon-strate the consistent efficacy of ReSAGE-PAR across diverse PAR architectures. When integrated at a 1:2 ratio, our verified synthetic data yields significant performance gains for both the Rethinking baseline and the transformer-based PromptPAR across all evaluated datasets. Notably, the combination with PromptPAR achieves the highest mean Accuracy (mA) in every benchmark, reaching up to 89.37% on PA100K and 83.47% on the challenging RAPzs split. While the augmentation proves highly beneficial for the majority of configurations, we observe a slight performance 11 
+
+when using SequencePAR. In this specific architecture, al-though ReSAGE-PAR improves performance in four out of six datasets (PETA, RAPv1, RAPv2, and RAPzs), it shows a marginal decrease on the PETAzs and PA100K splits. Nevertheless, the consistent gains achieved in Rethinking and PromptPAR confirm that our framework successfully improves both standard and SOTA models by providing more reliable supervision for the synthetic samples. VI. C ONCLUSIONS 
+
+In this work, we addressed the dual challenge of domain adaptation and label reliability in synthetic data generation for PAR. We presented ReSAGE-PAR, which efficiently adapts Stable Diffusion to low-resolution surveillance domains using LoRA, coupled with a Bayesian verification mechanism to filter generative hallucinations. Our extensive experiments yield three key insights. First, alignment matters more than scale: we demonstrated that a smaller, verified synthetic subset (ratio 1:0.5) consistently outperforms larger, naively labeled sets (1:1), proving that rigorous quality control is the bottleneck for effective data expansion. Second, our proposed Bayesian autolabeler is ro-bust and effective, showing insensitivity to threshold varia-tions while effectively separating aligned from misaligned at-tributes. Third, the method is architecture-agnostic and SOTA-compatible; it acts as a plug-and-play augmentation module that yields consistent gains across diverse backbones (ResNet, Inception, Swin) and pushes SOTA frameworks like Prompt-PAR to new performance highs on challenging zero-shot benchmarks. Unlike resource-intensive MLLM-based annota-tion, ReSAGE-PAR offers a scalable, computationally efficient path for massive dataset expansion. VII. L IMITATIONS AND FUTURE WORK 
+
+While our pipeline effectively generates synthetic PAR data with reliable labels, certain limitations remain. First, our gener-ation relies on the semantic knowledge of the pretrained Stable Diffusion model. Although LoRA adapts the visual style, extremely rare or fine-grained attributes not well-represented in the base model’s pretraining data (e.g., specific logo types or obscure clothing patterns) may suffer from low generation fidelity, limiting the effectiveness of autolabeling in long-tail scenarios. Second, our autolabeling mechanism operates at the prompt-level granularity. Because the LLR is computed based on the similarity between the full set of active attributes and the image, the Bayesian filter effectively assesses the global alignment of the generated sample. Consequently, if a generated image fails to render a specific attribute, our conser-vative neutralization strategy may suppress the labels for other, correctly rendered attributes within the same prompt, thereby limiting our ability to reclaim valid supervision signals from partially successful generations. Third, our Bayesian classifier binarizes the continuous alignment scores into hard labels (0 or 1). This simplification ignores the inherent uncertainty of ambiguous samples, which, while beneficial for training stability, discards potential nuance that could be valuable for more complex learning objectives. Future work will focus on addressing the long-tailed dis-tribution of pedestrian attributes by leveraging our pipeline to synthesize rare classes. Additionally, we plan to extend our Bayesian framework to support fine-grained, per-attribute verification, allowing for more granular control over label neutralization. This will involve investigating attribute inter-dependencies to explore how our scoring mechanism can se-lectively validate co-occurring features, preserving supervision signals even when specific attributes are missing while others are visually present. REFERENCES [1] E. Yaghoubi, F. Khezeli, D. Borza, S. A. Kumar, J. Neves, and H. Proenc ¸a, “Human attribute recognition—a comprehensive survey,”                                                           
+
+> Appl. Sci. , vol. 10, no. 16, p. 5608, 2020. [2] Y. Deng, P. Luo, C. C. Loy, and X. Tang, “Pedestrian attribute recogni-tion at far distance,” in Proc. ACM Int. Conf. Multimedia (ACM MM) ,2014, pp. 789–792. [3] D. Li, Z. Zhang, X. Chen, H. Ling, and K. Huang, “A richly annotated dataset for pedestrian attribute recognition,” arXiv:1603.07054 , 2016. [4] D. Li, Z. Zhang, X. Chen, and K. Huang, “A richly annotated pedestrian dataset for person retrieval in real surveillance scenarios,” IEEE Trans. Image Process. , vol. 28, no. 4, pp. 1575–1590, 2019. [5] X. Liu, H. Zhao, M. Tian, L. Sheng, J. Shao, S. Yi, J. Yan, and X. Wang, “HydraPlus-Net: Attentive deep features for pedestrian analysis,” in
+> Proc. IEEE Int. Conf. Comput. Vis. (ICCV) , 2017, pp. 350–359. [6] J. Jia, H. Huang, X. Chen, and K. Huang, “Rethinking of pedestrian attribute recognition: A reliable evaluation under zero-shot pedestrian identity setting,” arXiv:2107.03576 , 2021. [7] Z. Zheng, X. Yang, Z. Yu, L. Zheng, Y. Yang, and J. Kautz, “Joint discriminative and generative learning for person re-identification,” in
+> Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2019, pp. 2138–2147. [8] W. Deng, L. Zheng, Q. Ye, G. Kang, Y. Yang, and J. Jiao, “Image-image domain adaptation with preserved self-similarity and domain-dissimilarity for person re-identification,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2018, pp. 994–1003. [9] P. Dhariwal and A. Nichol, “Diffusion models beat GANs on image synthesis,” in Adv. Neural Inform. Process. Syst. (NeurIPS) , vol. 34, 2021, pp. 8780–8794. [10] B. Trabucco et al. , “Effective data augmentation with diffusion models,”
+> arXiv:2302.07944 , 2023. [11] C. Schuhmann, R. Beaumont, R. Vencu, C. Gordon, R. Wightman, M. Cherti, T. Coombes, A. Katta, C. Mullis, M. Wortsman et al. ,“LAION-5b: An open large-scale dataset for training next genera-tion image-text models,” in Proc. Adv. Neural Inform. Process. Syst. (NeurIPS) Datasets Benchmarks Track , 2022. [12] J. Hessel, A. Holtzman, M. Forbes, R. L. Bras, and Y. Choi, “CLIPScore: A reference-free evaluation metric for image captioning,” in Proceedings of the Conference on Empirical Methods in Natural Language Process-ing (EMNLP) , 2021. [13] P. Ayuso-Albizu, J. C. SanMiguel, and P. Carballeira, “Enhancing zero-shot pedestrian attribute recognition with synthetic data generation: A comparative study with image-to-image diffusion models,” in Proc. IEEE Int. Conf. Adv. Visual Signal-Based Syst. (AVSS) , 2025, pp. 1– 6. [14] J. Li, D. Li, C. Xiong, and S. Hoi, “BLIP: Bootstrapping language-image pre-training for unified vision-language understanding and generation,” in Proceedings of the International Conference on Machine Learning (ICML) , 2022, pp. 12 888–12 900. [15] J. Xu, X. Liu, Y. Wu, Y. Tong, Q. Li, M. Ding, J. Tang, and Y. Dong, “ImageReward: Learning and evaluating human preferences for text-to-image generation,” Adv. Neural Inform. Process. Syst. (NeurIPS) , vol. 36, pp. 15 903–15 935, 2023. [16] X. Wu, Y. Hao, K. Sun, Y. Chen, F. Zhu, R. Zhao, and H. Li, “Human preference score v2: A solid benchmark for evaluating human preferences of text-to-image synthesis,” arXiv:2306.09341 , 2023. [17] Z. Lin, S. Yu, K.-H. Lee, P. Verga, R. Doddapaneni, P. K. A. Vasu, F. Faghri, K. Knight, J. E. Gonzalez, D. Pathak, and D. Ramanan, “VQAScore: Evaluating text-to-visual generation with image-to-text generation,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2024. 12
+
+[18] J. Cho, Y. Yu, T. Vang, and M. Bansal, “Davidsonian scene graph: Improving reliability in fine-grained evaluation,” in Proc. Int. Conf. Learn. Represent. (ICLR) , 2024. [19] E. D. Cubuk et al. , “AutoAugment: Learning augmentation strategies from data,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2019, pp. 113–123. [20] ——, “RandAugment: Practical automated data augmentation with a reduced search space,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW) , 2020, pp. 702–703. [21] S. M¨ uller et al. , “TrivialAugment: Tuning-free yet state-of-the-art data augmentation,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) ,2021, pp. 774–782. [22] T. DeVries and G. W. Taylor, “Improved regularization of convolutional neural networks with cutout,” arXiv:1708.04552 , 2017. [23] Z. Zhong, L. Zheng, G. Kang, S. Li, and Y. Yang, “Random erasing data augmentation,” in Proc. AAAI Conf. Artif. Intell. (AAAI) , vol. 34, no. 7, 2020, pp. 13 001–13 008. [24] H. Zhang et al. , “mixup: Beyond empirical risk minimization,” 
+
+arXiv:1710.09412 , 2017. [25] S. Yun et al. , “CutMix: Regularization strategy to train strong classifiers with localizable features,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2019, pp. 6023–6032. [26] S. Yang et al. , “Towards unified text-based person retrieval: A large-scale multi-attribute and language search benchmark,” in Proc. ACM Int. Conf. Multimedia (ACM MM) , 2023, pp. 4492–4501. [27] A. Alonso, S. A. Chaudhry, J. C. SanMiguel, ´A. Garc´ ıa-Mart´ ın, P. Ayuso-Albizu, and P. Carballeira, “A data-centric approach to pedes-trian attribute recognition: Synthetic augmentation via prompt-driven diffusion models,” in Proc. IEEE Int. Conf. Adv. Visual Signal-Based Syst. (AVSS) , 2025, pp. 1–6. [28] L. Niu et al. , “Synthesizing efficient data with diffusion models for person re-identification pre-training,” Mach. Learn. , vol. 114, no. 3, pp. 1–25, 2025. [29] M. Kim et al. , “Pose-dive: Pose-diversified augmentation with diffusion model for person re-identification,” arXiv:2406.16042 , 2024. [30] C. Mou, X. Wang, L. Xie, Y. Wu, J. Zhang, Z. Qi, and Y. Shan, “T2i-adapter: Learning adapters to dig out more controllable ability for text-to-image diffusion models,” in Proc. AAAI Conf. Artif. Intell. (AAAI) ,vol. 38, no. 5, 2024, pp. 4296–4304. [31] L. Huang, D. Chen, Y. Liu, Y. Shen, D. Zhao, and J. Zhou, “Composer: Creative and controllable image synthesis with composable conditions,” 
+
+arXiv:2302.09778 , 2023. [32] Y. Li, H. Liu, Q. Wu, F. Mu, J. Yang, J. Gao, C. Li, and Y. J. Lee, “Gligen: Open-set grounded text-to-image generation,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 22 511–22 521. [33] A. Hertz, R. Mokady, J. Tenenbaum, K. Aberman, Y. Pritch, and D. Cohen-Or, “Prompt-to-prompt image editing with cross attention control,” arXiv:2208.01626 , 2022. [34] H. Chefer, Y. Alaluf, Y. Vinker, L. Wolf, and D. Cohen-Or, “Attend-and-excite: Attention-based semantic guidance for text-to-image diffusion models,” ACM Trans. Graph. , vol. 42, no. 4, pp. 1–10, 2023. [35] Y. Hao, Z. Chi, L. Dong, and F. Wei, “Optimizing prompts for text-to-image generation,” Adv. Neural Inform. Process. Syst. (NeurIPS) , vol. 36, pp. 66 923–66 939, 2023. [36] Z. Han, C. Gao, J. Liu, J. Zhang, and S. Q. Zhang, “Parameter-efficient fine-tuning for large models: A comprehensive survey,” 
+
+arXiv:2403.14608 , 2024. [37] S. Zakharov, W. Kehl, A. Bhargava, and A. Gaidon, “Autolabeling 3d objects with differentiable rendering of SDF shape priors,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2020, pp. 12 224–12 233. [38] L. Tempfli, E. Rivera, and M. Lienkamp, “VESPA: Towards un-supervised open-world pointcloud labeling for autonomous driving,” 
+
+arXiv:2507.20397 , 2025. [39] Y. Qin, X. Wang, B. Lakshminarayanan, E. H. Chi, and A. Beutel, “What are effective labels for augmented data? improving calibration and robustness with autolabel,” in Proc. IEEE Conf. Secure Trustworthy Mach. Learn. (SaTML) , 2023, pp. 365–376. [40] L. Chen, J. Li, X. Dong, P. Zhang, C. He, J. Wang, F. Zhao, and D. Lin, “ShareGPT4V: Improving large multi-modal models with better captions,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2024. [41] H. Liu, C. Li, Q. Wu, and Y. J. Lee, “Visual instruction tuning,” in Adv. Neural Inform. Process. Syst. (NeurIPS) , 2024. [42] Y. Zhou, X. Wang, Y. Niu, Y. Shen, L. Tang, F. Chen, B. He, L. Sun, and L. Wen, “Difflm: Controllable synthetic data generation via diffusion language models,” in Proc. Findings Assoc. Comput. Linguist. (ACL) ,2025, pp. 20 638–20 658. [43] S. Alemohammad, A. I. Humayun, S. Agarwal, J. Collomosse, and R. Baraniuk, “Self-improving diffusion models with synthetic data,” 
+
+arXiv:2408.16333 , 2024. [44] P. Boyeau, A. N. Angelopoulos, N. Yosef, J. Malik, and M. I. Jordan, “Autoeval done right: Using synthetic data for model evaluation,” 
+
+arXiv:2403.07008 , 2024. [45] R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer, “High-resolution image synthesis with latent diffusion models,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2022, pp. 10 674–10 685. [46] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen, “LoRA: Low-rank adaptation of large language models,” in International Conference on Learning Representations (ICLR) , 2022. [47] P. von Platen, S. Patil, A. Lozhkov, P. Cuenca, N. Lambert, K. Rasul, M. Daware, and T. Wolf, “Diffusers: State-of-the-art diffusion models,” https://github.com/huggingface/diffusers, 2022. [48] X. Wang, J. Jin, C. Li, J. Tang, C. Zhang, and W. Wang, “Pedestrian attribute recognition via CLIP-based prompt vision-language fusion,” 
+
+IEEE Trans. Circuits Syst. Video Technol. , 2024. [49] J. Jin, X. Wang, Y. Lin, C. Li, L. Huang, A. Zheng, and J. Tang, “Sequen-cepar: Understanding pedestrian attributes via a sequence generation paradigm,” Pattern Recognit. , vol. 112, p. 112356, 2025. [50] M. Heusel, H. Ramsauer, T. Unterthiner, B. Nessler, and S. Hochreiter, “GANs trained by a two time-scale update rule converge to a local nash equilibrium,” in Advances in Neural Information Processing Systems (NeurIPS) , vol. 30, 2017. [51] G. Stein, J. C. Cresswell, R. Hosseinzadeh, Y. Sui, B. L. Ross, V. Villecroze, Z. Liu, A. L. Caterini, J. E. T. Taylor, and G. Loaiza-Ganem, “Exposing flaws of generative model evaluation metrics and their unfair treatment of diffusion models,” in Advances in Neural Information Processing Systems (NeurIPS) , vol. 36, 2023. [52] S. Jayasumana, S. Ramalingam, A. Veit, D. Glasner, A. Chakrabarti, and S. Kumar, “Rethinking FID: Towards a better evaluation metric for image generation,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 9307–9315. [53] M. Soloveitchik, T. Diskin, E. Morin, and A. Wiesel, “Conditional frechet inception distance,” arXiv:2103.11521 , 2022. [54] D. Hendrycks et al. , “AugMix: A simple data processing method to improve robustness and uncertainty,” arXiv:1912.02781 , 2019. 
+
+Pablo Ayuso-Albizu received the B.S. degree in Computer Engineering in 2021, and the M.S. de-gree in Deep Learning for Audio and Video Sig-nal Processing in 2022, both from the Universidad Aut´ onoma de Madrid (UAM), Madrid, Spain. In 2024, he began pursuing his Ph.D. degree with the Video Processing and Understanding (VPU) Lab at UAM. His current research interests include deep learning, pedestrian attribute recognition, vision-language models, and generative data augmentation. 
+
+Pablo Carballeira received the Telecommunica-tion Engineering degree (five years engineering pro-gram), ommunications Technologies and Systems Master degree (two year MS program) and the Ph.D. degree in Telecommunication from the Universidad Polit´ ecnica de Madrid (UPM) in 2007, 2010 and 2014 respectively. From 2008 to 2017 he has been a member of the Grupo de Tratamiento de Im´ agenes (Image Processing Group) at the UPM. Since 2017 he is a member of the Video Processing and Un-derstanding Lab, at the Universidad Aut´ onoma de Madrid (UAM), and Associate Professor at UAM since 2022. His research interests include computer vision, video coding, and quality of experience evaluation for immersive visual media. He has been actively involved in European projects, national projects, and standardization activities from ISO's Moving Picture Experts Group (MPEG) related to lightfield and free-navigation video, technologies. 13 
+
+Juan C. SanMiguel received the Ph.D. degree in computer science and telecommunication from the Autonomous University of Madrid (UAM), Madrid, Spain, in 2011. From 2013 to 2014, he was a Post-doctoral Researcher with Queen Mary University of London, London, U.K., under a Marie Curie IAPP Fellowship. Since 2025, he has served as Institu-tional Delegate for Artificial Intelligence at UAM. He is currently an Associate Professor with the Autonomous University of Madrid and a Researcher with the Video Processing and Understanding Labo-ratory. He is also an Associate Editor of The Visual Computer. He has authored more than 70 journal and conference papers. His research interests include computer vision, with a focus on domain adaptation, synthetic data reliability estimation, and multi-camera activity understanding for video segmentation and tracking. 
+
+Paula Moral de Eusebio received the degree in Telecommunications Engineering in 2017 at the Uni-versidad Aut´ onoma de Madrid. In 2019 she ob-tained the titles belonging to the International Joint Master Program in Image Processing and Computer Vision (IPCV) at the Universidad Aut´ onoma de Madrid (Spain), the P´ azm´ any P´ eter Catholic Uni-versity (Hungary) and the Universit´ e de Bordeaux (France). In 2024, she obtained her PhD in Computer Engineering and Telecommunications. From 2017 to the present, she has been with the Video Processing and Understanding Lab (VPU-Lab) at the Universidad Aut´ onoma de Madrid as a researcher. Throughout her career, she has been the recipient of a doctoral research initiation grant (2019–2022) and an FPI-UAM doctoral fellowship (2022–2025). Following her role as a Substitute Professor in 2025, she now serves as an Assistant Professor. Her lines of research are focused on object detection and association in multiview scenarios. 14 
+
+# Supplementary Material for ReSAGE-PAR: Representational Similarity Assessment for Generative Expansion in PAR 
+
+This supplementary material provides additional technical details, extended empirical evaluations, and comprehensive quantitative results to support the findings presented in the main manuscript of ReSAGE-PAR. The document is structured as follows. First, Section S-I details the generation-prompt construction process and outlines the dataset-specific attribute complementation strategy used to generate negative probes. 
+
+Section S-II expands on the Dataset-Aware Generative Fine-Tuning phase, providing further insights into the LoRA adapta-tion and its impact on image resolution and style. Section S-III 
+
+presents the extended Text-Image Representational Similarity Metrics Analysis, including the exhaustive evaluation of sepa-rability across different complementation ratios. Section S-IV visualizes the complete Analysis of BLIPScore Distri-butions for all evaluated datasets, confirming the unimodal and separable nature of the scores. Section S-V provides the comprehensive Autolabeling Accuracy per Attribute, detailing the precise pseudo-labeling performance for every individual attribute and visual results. Finally, Section S-VI contains the extended Threshold Sensitivity Analysis, demonstrating the robustness of our Bayesian decision boundary across the remaining benchmarks. S-I. P ROMPT CONSTRUCTION 
+
+This section details how we build the generation prompts 
+
+pgen deterministically from binary attributes (emitting a clause if and only if the attribute is active), using dataset-aware templates that control attribute ordering and a single wearing 
+
+gate for clothing tokens. We also describe how the neg-ative probes pneg are constructed via intra-group attribute substitution specifically, by replacing a target attribute with another randomly sampled from the same mutually exclusive family (e.g., hs, ub, lb) and how partial complementation (ρ ∈ {0.25 , 0.50 , 0.75 , 1.0}) is applied. For concreteness, TABLE S-I lists the positive probes ppos (where ppos = pgen )and their corresponding fully complemented negative probes 
+
+pneg ρ = 100% for each dataset. 
+
+a) Prompt construction: We deterministically synthesize the generation prompt pgen from binary attributes: a clause is emitted if and only if the attribute is 1, and omitted otherwise; the prompt begins with a random stub from {a, there is a}. For RAPzs/RAPv2/RAPv1 , if gender is available we emit 
+
+woman /man , then append attribute groups in a fixed order: hair style ( hs-* ) as “ with <hair> ”, actions ( action-* )as “ is <action> ”, and attachments ( attachment-* ) as bare tokens. Clothing uses a single wearing word, af-ter which we concatenate upper-body ( ub-* ), lower-body (lb-* ), and footwear ( shoes-* ) items that are active. For 
+
+PETA/PETAzs , we emit gender (if present), then hair color 
+
+and type (both under “ with ”), carrying items (“ carrying <item> ”) and accessories (“ with <accessory> ”), fin-ishing with a single wearing gate for colors/types of upper/lower garments and footwear. PA100K adds a view 
+
+clause (“ from <front/side/back> ”) before the generic “with ” attributes and the gated wearing for upper/lower items and boots; some type slots take the article “ a” (e.g., “wearing a <upper-type> ”). 
+
+b) Negative probes: To form the complemented neg-ative probes pneg , we modify a fraction ρ of the emitted clauses using an intra-group attribute substitution strategy. Attributes are partitioned into mutually exclusive families (e.g., gender , hair style/color , upper/lower garment types ,
+
+footwear , view , roles , actions ), and for each attribute a we define C(a) ⊆ A as the set of admissible alternatives within the same family, excluding a itself (e.g., woman →man ,
+
+long hair →short /bald , jeans →skirt /trousers ,
+
+front →back /side ). For each selected active clause, we replace a with an element drawn from C(a), preserving the original template token ( with/is/wearing/from ), the attribute order, and the single wearing gate. Families are processed independently; when |C(a)| > 1, we select one alternative using a uniform random distribution. S-II. E XTENDED ANALYSIS OF DATASET -A WARE 
+
+GENERATIVE FINE -T UNING 
+
+Following the experimental protocol detailed in the main manuscript, this section provides a comprehensive quantitative evaluation of the Stable Diffusion adaptation process across varying LoRA ranks ( r ∈ {4, 8, 16 , 32 }). While the main text summarizes the optimal rank selection driven by dataset resolution and target surveillance style, here we present the full numerical breakdown. Specifically, TABLE S-II reports the complete results for CFID, FID, FD-DINO, and CMMD across all datasets, detailing the mean values over five independent seeds and the ranking aggregation used to determine the optimal configuration per benchmark. 
+
+a) Metric Saturation: To further understand how the synthetic sample size affects the stability of these distributional metrics, we analyze their convergence as the number of generated images ( N ) increases. Since this evaluation benefits significantly from large sample volumes to reliably measure distances, we provide these saturation plots exclusively for PA100K, which, as the largest benchmark, offers the most robust scenario. We plot CFID, FID, FD-DINO, and CMMD (↓) as a function of the number of samples employed (N) from the training split available. For every N , we draw synthetic populations from five independent random seeds and report the aggregated distance. As illustrated in Fig. S2 and Fig. S3, both FID ↓ and FD-DINO ↓ improve rapidly and largely saturate by N ≈ 5000 . In Fig. S4, CMMD ↓ continues to decrease until about N ≈ 10000 before flattening. In contrast, Fig. S1 shows that CFID ↓ decays much more slowly; because it is heavily tied to text-image conditioning, it requires comparison against the full synthetic population (ensuring comprehensive 15 
+
+TABLE S-I EXAMPLES OF POSITIVE PROBES (pPOS ) AND THEIR FULLY COMPLEMENTED NEGATIVE COUNTERPARTS (pNEG ρ = 100% ) PER DATASET . T EXT REFLECTS THE DATASET VOCABULARY .
+
+Dataset Aligned prompt (ppos ) Complemented (pneg )
+
+PA100K there is a woman from front wearing short sleeve a plaid skirt or dress there is a man from side wearing long sleeve a logo trousers 
+
+PETA there is a woman with black short hair carrying messenger bag with nothing wearing black casual other black casual long skirt there is a man with white long hair carrying luggage case with muffler wearing yellow formal logo white jeans shorts 
+
+PETAzs there is a woman with brown long hair carrying nothing with nothing wearing blue long sleeve casual jacket grey casual trousers white shoes there is a man with black bald carrying luggage case with muffler wearing pink sweater no sleeve logo white shorts shortskirt pink boots 
+
+RAPv1 a man with black hair is carrying by hand plastic bag wearing jacket jeans sports shoes a woman with bald head is calling hand trunk wearing sweater long trousers casual shoes 
+
+RAPv2 there is a woman with long hair with black hair is carrying by hand shoulder bag paper bag wearing tight long trousers sports shoes a man with bald head with glasses is holding backpack plastic bag wearing sweater tight trousers boots 
+
+RAPzs there is a woman with long hair with black hair is carrying by hand hand bag wearing cotton tight trousers boots a man with bald head with glasses is talking backpack wearing shirt skirt sports shoes 
+
+semantic and attribute coverage) to fully stabilize and reach its plateau. 16 100 500 1000 5000 10000 15000 80000 
+
+Number of Samples (N) from the training split available 
+
+40 
+
+60 
+
+80 
+
+100 
+
+120 
+
+140 
+
+> CFID
+
+153.0 147.5 
+
+133.0 
+
+83.7 
+
+59.0 
+
+47.3 
+
+26.7 
+
+rank 4 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 80000 
+
+Number of Samples (N) from the training split available 
+
+40 
+
+60 
+
+80 
+
+100 
+
+120 
+
+140 
+
+> CFID
+
+151.1 146.0 
+
+131.6 
+
+82.8 
+
+58.3 
+
+46.8 
+
+26.3 
+
+rank 8 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 80000 
+
+Number of Samples (N) from the training split available 
+
+40 
+
+60 
+
+80 
+
+100 
+
+120 
+
+140 
+
+> CFID
+
+151.9 147.0 
+
+132.4 
+
+83.3 
+
+58.9 
+
+47.2 
+
+26.7 
+
+rank 16 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 80000 
+
+Number of Samples (N) from the training split available 
+
+40 
+
+60 
+
+80 
+
+100 
+
+120 
+
+140 
+
+> CFID
+
+152.0 146.6 
+
+132.3 
+
+83.5 
+
+59.0 
+
+47.3 
+
+26.6 
+
+rank 32 
+
+avg(med) 
+
+avg(min..max) 
+
+CFID LoRA ranks 
+
+Fig. S1. CFID ( ↓) vs. synthetic sample size N for the PA100K dataset across LoRA ranks r ∈ { 4, 8, 16 , 32 }. We report avg. median and the avg. min–max envelope over five seeds per N . All ranks converge to similar CFID at large N , with small rank effects; increasing N drives most of the gain. 100 500 1000 5000 10000 15000 50957 80000 
+
+Number of Samples (N) from the training split available 
+
+60 
+
+80 
+
+100 
+
+120 
+
+140 
+
+160 
+
+> FID
+
+166.5 
+
+102.8 
+
+83.9 
+
+65.1 63.0 62.4 61.5 61.4 
+
+rank 4 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+60 
+
+80 
+
+100 
+
+120 
+
+140 
+
+160 
+
+180 
+
+> FID
+
+172.9 
+
+105.7 
+
+86.0 
+
+67.0 64.9 64.3 63.4 
+
+rank 8 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+60 
+
+80 
+
+100 
+
+120 
+
+140 
+
+160 
+
+180 
+
+> FID
+
+173.5 
+
+106.6 
+
+87.8 
+
+69.0 66.8 66.4 65.4 
+
+rank 16 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+60 
+
+80 
+
+100 
+
+120 
+
+140 
+
+160 
+
+> FID
+
+158.3 
+
+91.1 
+
+71.4 
+
+52.5 50.3 49.6 48.7 
+
+rank 32 
+
+avg(med) 
+
+avg(min..max) 
+
+FID LoRA ranks 
+
+Fig. S2. FID ( ↓) vs. synthetic sample size N for the PA100K dataset across LoRA ranks r ∈ { 4, 8, 16 , 32 }. Each point averages across five seeded populations per N ; we plot the avg. median and the avg. min–max envelope. Distance improves (decreases) as N grows, saturating at large N ; the highest rank ( r=32 ) consistently achieves the lowest FID. 100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+1500 
+
+1750 
+
+2000 
+
+2250 
+
+2500 
+
+2750 
+
+> FDDINO
+
+2863.9 
+
+1715.9 
+
+1566.2 
+
+1452.4 1441.4 1436.8 1430.2 
+
+rank 4 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+1600 
+
+1800 
+
+2000 
+
+2200 
+
+2400 
+
+2600 
+
+2800 
+
+3000 
+
+> FDDINO
+
+2900.6 
+
+1835.4 
+
+1694.7 
+
+1585.0 1574.8 1567.9 1563.4 
+
+rank 8 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+1500 
+
+1750 
+
+2000 
+
+2250 
+
+2500 
+
+2750 
+
+> FDDINO
+
+2816.0 
+
+1673.5 
+
+1528.1 
+
+1418.1 1411.4 1402.6 1399.5 
+
+rank 16 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+1250 
+
+1500 
+
+1750 
+
+2000 
+
+2250 
+
+2500 
+
+2750 
+
+> FDDINO
+
+2661.8 
+
+1477.5 
+
+1325.8 
+
+1215.6 1206.2 1199.3 1197.1 
+
+rank 32 
+
+avg(med) 
+
+avg(min..max) 
+
+FDDINO LoRA ranks 
+
+Fig. S3. FD-DINO distance ( ↓) vs. synthetic sample size N for the PA100K dataset across LoRA ranks r ∈ { 4, 8, 16 , 32 }. Each curve aggregates five seeds per N (solid = avg. median across seeds; faint envelope = avg. min–max across seeds). Reference distribution is the full training split of the dataset. Larger N reduces distance with diminishing returns; higher ranks tend to yield lower FD-DINO overall. 100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+0.70 
+
+0.75 
+
+0.80 
+
+0.85 
+
+0.90 
+
+> CMDD
+
+0.8 
+
+0.8 0.8 0.8 0.8 0.8 0.8 
+
+rank 4 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+1.100 
+
+1.125 
+
+1.150 
+
+1.175 
+
+1.200 
+
+1.225 
+
+1.250 
+
+1.275 
+
+> CMDD
+
+1.2 
+
+1.1 
+
+1.1 
+
+1.1 1.1 1.1 1.1 
+
+rank 8 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+0.84 
+
+0.86 
+
+0.88 
+
+0.90 
+
+0.92 
+
+0.94 
+
+0.96 
+
+> CMDD
+
+0.9 
+
+0.9 0.9 
+
+0.9 0.9 0.9 0.9 
+
+rank 16 
+
+avg(med) 
+
+avg(min..max) 
+
+100 500 1000 5000 10000 15000 50957 
+
+Number of Samples (N) from the training split available 
+
+0.66 
+
+0.68 
+
+0.70 
+
+0.72 
+
+0.74 
+
+> CMDD
+
+0.7 
+
+0.7 
+
+0.7 0.7 0.7 0.7 0.7 
+
+rank 32 
+
+avg(med) 
+
+avg(min..max) 
+
+CMDD LoRA ranks 
+
+Fig. S4. CMMD ( ↓) vs. synthetic sample size N for the PA100K dataset across LoRA ranks r ∈ { 4, 8, 16 , 32 }. Curves show avg. median and avg. min–max across five seeds per N . Distances decrease as N grows; higher ranks, especially r=32 , reach lower CMMD values across the range. 17                                                                                                                                                                                                                                                                    
+
+> TABLE S-II FILTERED METRICS WITH PER -METRIC Value AND Pos (RANK POSITION ; 1 = BEST ). AVERAGE POS IS THE AVERAGE RANK ACROSS THE FOUR METRICS ,I.E., SUM =14
+>  POS CFID +POS FID +POS FD-DINO +POS CMMD
+> (LOWER IS BETTER ). RANK INDICATES THE LORA RANK SELECTED BY THE
+> SUM CRITERION (BOLD =SELECTED ).
+> Dataset CFID [53] FID [50] FD-DINO [51] CMMD [52] AVERAGE POS ↓Rank Value ↓Pos ↓Value ↓Pos ↓Value ↓Pos ↓Value ↓Pos ↓
+> RAPzs 71.11 462.61 41445.10 31.94 43.75 470.19 245.81 11134.79 11.54 31.75 8
+> 70.28 357.63 21440.72 21.44 22.25 16 70.17 161.06 31537.66 41.41 12.25 32 RAPv1 46.33 137.43 1911.91 11.36 11.00 4
+> 46.73 239.41 21218.43 21.89 32.25 847.02 355.36 41458.15 41.95 43.75 16 47.05 450.11 31238.25 31.46 23.00 32 RAPv2 36.19 459.09 41371.07 21.89 43.50 435.89 143.74 11125.52 11.50 31.50 8
+> 36.12 353.55 21382.29 31.44 22.50 16 35.93 258.14 31484.03 41.36 12.50 32 PA100K 25.03 261.35 21428.91 31.89 42.75 424.81 163.30 31563.60 41.50 32.75 825.06 365.27 41396.94 21.44 22.75 16 25.11 448.54 11194.83 11.36 11.75 32
+> PETAzs 94.93 467.00 41727.25 21.72 23.00 493.80 257.16 21750.16 31.83 32.50 894.43 361.50 31902.65 41.89 43.50 16 92.86 153.46 11530.62 11.37 11.00 32
+> PETA 99.75 466.28 41713.72 21.72 23.00 498.27 257.09 21753.26 31.85 32.50 899.10 361.47 31885.71 41.89 43.50 16 97.51 152.98 11516.49 11.36 11.00 32
+
+S-III. E XTENDED TEXT -I MAGE REPRESENTATIONAL 
+
+SIMILARITY METRICS ANALYSIS 
+
+In this annex, we expand the analysis of text-image rep-resentational similarity metrics (BLIPScore, CLIPScore, Im-ageReward, HPSv2Score). We organize the evaluation into two main aspects. (i) Degree of complementation : for the same generated images, we compare the positive probe ppos against the negative probe pneg at varying complementation ratios 
+
+ρ ∈ { 25% , 50% , 75% , 100% }. (ii) Prompt length : focusing on the full complementation scenario ( ρ = 100% ), we extend the experiments for the other datasets. Together, these setups aim to clarify how each metric behaves when faced with stronger counterfactual probes and varying attribute list lengths. 
+
+a) Separability analysis by complementation ratio: As detailed in TABLE S-III and TABLE S-IV, both AUROC and Bhattacharyya distance increase monotonically as the negated fraction ρ in pneg grows, indicating stronger sepa-rability when the negative probe diverges more significantly from the original generation prompt ( pgen ). Across all values of 
+
+ρ, BLIPScore exhibits the strongest discriminative capacity— consistently outperforming the other scorers. Most gains oc-cur between ρ = 50% and ρ = 100% , where the score distributions for the positive and negative probes pull apart most clearly. While all metrics benefit from a larger ρ, the dominance of BLIPScore across the entire range supports its selection as the primary calibrated signal for autolabeling. 
+
+b) Prompt length: Regarding the impact of prompt length, Fig. S5 illustrate the Bhattacharyya distance as a function of the number of active attributes L. Focusing on the fully complemented scenario ( ρ = 100% ), we observe that the discriminative capacity of BLIPS CORE consistently dominates and grows as the text complexity increases. Specif-ically, separability peaks and saturates around L ≈ 11 −12 for dense datasets like PETA, and between L ≈ 4−7 for the RAP benchmarks and PA100K. The variance or drops observed at the extreme right of some curves (e.g., in PA100K for L ≥ 5)correspond directly to the annotation limits of the datasets; notably, PA100K is among the benchmarks with the fewest annotated attributes per image, resulting in a natural scarcity of samples at those extreme lengths. Overall, the consistent upward trend prior to these dataset-specific limits confirms that the metric maintains its discriminative capacity as prompt complexity increases. To ensure statistical significance when calculating the Bhattacharyya distance, we cap the evaluation at the maximum prompt length that naturally contains at least 1,000 samples (indicated in bold in TABLE S-V). For specific lengths within this range that fail to meet the 1,000-sample threshold, we guarantee robust populations by randomly sam-pling from the immediate higher length and systematically pruning a single attribute. 18 
+
+TABLE S-III SEPARABILITY OF REPRESENTATIONAL SIMILARITY METRICS (AUROC ↑) UNDER PROMPT COMPLEMENTATION . F OR EACH DATASET , WE SCORE THE SAME IMAGES BUT WITH THE POSITIVE PROBE pPOS COMPARED AGAINST pNEG WITH ρ ∈ { 0.25 , 0.50 , 0.75 , 1.00 }. H IGHER IS BETTER .
+
+BLIPScore CLIPScore ImgReward HPSv2Score 
+
+Dataset ρ = 0 .25 ρ = 0 .50 ρ = 0 .75 ρ = 1 .00 ρ = 0 .25 ρ = 0 .50 ρ = 0 .75 ρ = 1 .00 ρ = 0 .25 ρ = 0 .50 ρ = 0 .75 ρ = 1 .00 ρ = 0 .25 ρ = 0 .50 ρ = 0 .75 ρ = 1 .00 
+
+PA100K 0.56 0.66 0.74 0.82 0.53 0.58 0.64 0.71 0.54 0.60 0.66 0.73 0.54 0.61 0.67 0.72 PETA 0.79 0.89 0.92 0.94 0.66 0.74 0.78 0.81 0.64 0.70 0.73 0.76 0.57 0.62 0.66 0.69 PETAzs 0.80 0.90 0.93 0.95 0.64 0.71 0.75 0.77 0.64 0.69 0.72 0.75 0.54 0.57 0.59 0.61 RAPv1 0.60 0.72 0.79 0.86 0.55 0.61 0.65 0.71 0.55 0.61 0.66 0.71 0.59 0.71 0.81 0.90 
+
+RAPv2 0.67 0.84 0.91 0.97 0.55 0.61 0.66 0.72 0.60 0.72 0.79 0.86 0.54 0.61 0.67 0.74 RAPzs 0.67 0.83 0.91 0.96 0.54 0.61 0.66 0.72 0.60 0.71 0.78 0.85 0.54 0.60 0.66 0.74 TABLE S-IV SEPARABILITY OF REPRESENTATIONAL SIMILARITY METRICS (B HATTACHARYYA DISTANCE , BHAT ↑) UNDER PROMPT COMPLEMENTATION . F OR EACH DATASET , WE SCORE THE SAME IMAGES BUT WITH THE POSITIVE PROBE pPOS COMPARED AGAINST pNEG WITH ρ ∈ { 0.25 , 0.50 , 0.75 , 1.00 }. H IGHER IS BETTER .
+
+BLIPScore CLIPScore ImgReward HPSv2Score 
+
+Dataset ρ = 0 .25 ρ = 0 .50 ρ = 0 .75 ρ = 1 .00 ρ = 0 .25 ρ = 0 .50 ρ = 0 .75 ρ = 1 .00 ρ = 0 .25 ρ = 0 .50 ρ = 0 .75 ρ = 1 .00 ρ = 0 .25 ρ = 0 .50 ρ = 0 .75 ρ = 1 .00 
+
+PA100K 0.01 0.05 0.10 0.21 0.00 0.02 0.03 0.08 0.00 0.02 0.05 0.11 0.00 0.02 0.05 0.08 PETA 0.17 0.38 0.51 0.60 0.04 0.10 0.15 0.18 0.04 0.11 0.14 0.19 0.01 0.02 0.04 0.07 PETAzs 0.18 0.40 0.55 0.66 0.03 0.08 0.11 0.14 0.06 0.11 0.14 0.19 0.00 0.01 0.01 0.02 RAPv1 0.02 0.08 0.16 0.30 0.01 0.02 0.04 0.08 0.00 0.02 0.04 0.08 0.02 0.09 0.19 0.42 
+
+RAPv2 0.05 0.23 0.46 0.81 0.01 0.02 0.04 0.09 0.02 0.08 0.16 0.28 0.01 0.03 0.05 0.11 RAPzs 0.05 0.22 0.43 0.75 0.01 0.02 0.04 0.08 0.02 0.07 0.15 0.27 0.01 0.03 0.05 0.11 TABLE S-V DISTRIBUTION OF IMAGES BASED ON THE NUMBER OF CONCURRENTLY ACTIVE ATTRIBUTES PRESENT IN THEIR CORRESPONDING GENERATION PROMPTS . B OLD VALUES INDICATE THE MAXIMUM NUMBER OF SIMULTANEOUS ATTRIBUTES THAT STILL MAINTAIN A MINIMUM SUPPORT OF 1,000 
+
+IMAGE SAMPLES , ENSURING SUFFICIENT DATA TO ROBUSTLY PERFORM THE REPRESENTATIONAL SIMILARITY ANALYSIS .Active Attributes RAPzs PA100K RAPv1 RAPv2 PETA PETAzs 0 0 0 3 2 0 01 0 0 0 0 1 02 2 0 29 34 0 03 234 0 456 659 0 04 820 22098 1696 2619 0 05 5033 45318 8982 15161 0 06 4674 11460 8765 14114 0 07 3514 1077 7089 10581 0 08 1795 47 4037 5281 0 09 689 0 1598 1878 3 010 242 0 480 520 297 211 50 0 108 88 318 333 12 8 0 23 16 2376 313 13 1 0 2 4 4377 2342 14 0 0 0 0 1671 5412 15 0 0 0 0 387 2077 
+
+16 0 0 0 0 65 632 17 0 0 0 0 4 119 18 0 0 0 0 1 10 19 0 0 0 0 0 119 1 2 3 4 5 6 7
+
+Number of attributes in prompt 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+> Bhattacharyya (  )
+> BLIPScore
+> HPSv2
+> ImageReward
+> CLIPScore
+
+(a) PA100K 1 2 3 4 5 6 7 8 9
+
+Number of attributes in prompt 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2  
+
+> Bhattacharyya (  )
+> ImageReward
+> BLIPScore
+> HPSv2
+> CLIPScore
+
+(b) RAPv1 1 2 3 4 5 6 7 8 9
+
+Number of attributes in prompt 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+> Bhattacharyya (  )
+> CLIPScore
+> HPSv2
+> ImageReward
+> BLIPScore
+
+(c) RAPv2 1 2 3 4 5 6 7 8
+
+Number of attributes in prompt 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4  
+
+> Bhattacharyya (  )
+> CLIPScore
+> ImageReward
+> BLIPScore
+> HPSv2
+
+(d) RAPzs 4 6 8 10 12 14 
+
+Number of attributes in prompt 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+> Bhattacharyya (  )
+> HPSv2
+> ImageReward
+> BLIPScore
+> CLIPScore
+
+(e) PETA 
+
+Fig. S5. BHATT ( ↑) vs. number of attributes in the prompt. For the same images, we score the positive probes ppos against the fully complemented negative probes pneg with ρ = 100% and report the Bhattacharyya distance for four scorers as the prompt length increases. 20 
+
+S-IV. E XTENDED ANALYSIS OF BLIPS CORE 
+
+DISTRIBUTIONS 
+
+As introduced in Section IV-C of the main manuscript, the effectiveness of our Bayesian autolabeling framework relies heavily on the underlying stability of the representational similarity scores. While the main text visualizes this behavior exclusively for the PETAzs dataset, this section provides the comprehensive empirical distributions for all remaining benchmarks (RAPv1, RAPv2, RAPzs, PA100K, and PETA). Following the established experimental protocol, we plot the density of the BLIPS CORE evaluated on the testing splits for each dataset. As illustrated in Fig. S6, Fig. S7, Fig. S8, Fig. S9, Fig. S10 a pervasive structural trend is evident across all domains: the score distributions exhibit unimodal and smooth characteristics with clear separability be-tween the positive probes ( ppos ) and their fully complemented counterparts ( pneg with ρ = 100% ). Crucially, demonstrating this robust separability directly on test data proves that the metric’s discriminative capacity generalizes effectively beyond the training calibration phase. This widespread consistency empirically validates our choice of a two-component Gaussian formulation for the generative likelihoods, confirming it as a dataset-agnostic solution for isolating valid attributes from semantic noise. 4 2 0 2
+
+Alignment score s
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Density
+> ppos
+> pneg
+
+Fig. S6. PA100K: BLIPScore density distribution on the testing set. The metric maintains strong separability between the positive ( ppos ) and fully complemented negative ( pneg ) probes. 6 4 2 0 2 4
+
+Alignment score s
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Density
+> ppos
+> pneg
+
+Fig. S7. RAPv1: BLIPScore density distribution on the testing set. The metric maintains strong separability between the positive ( ppos ) and fully complemented negative ( pneg ) probes. 6 4 2 0 2 4
+
+Alignment score s
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Density
+> ppos
+> pneg
+
+Fig. S8. RAPv2: BLIPScore density distribution on the testing set. The metric maintains strong separability between the positive ( ppos ) and fully complemented negative ( pneg ) probes. 6 4 2 0 2 4
+
+Alignment score s
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Density
+> ppos
+> pneg
+
+Fig. S9. RAPzs: BLIPScore density distribution on the testing set. The metric maintains strong separability between the positive ( ppos ) and fully complemented negative ( pneg ) probes. 6 4 2 0 2 4
+
+Alignment score s
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Density
+> ppos
+> pneg
+
+Fig. S10. PETA: BLIPScore density distribution on the testing set. The metric maintains strong separability between the positive ( ppos ) and fully complemented negative ( pneg ) probes. 21 
+
+S-V. D ETAILED AUTOLABELING ACCURACY PER 
+
+ATTRIBUTE 
+
+This appendix details how our score-based autolabeler be-haves across different datasets and individual attributes. We first recap the labeling protocol: alignment scores extracted from positive probes ( ppos ) versus fully complemented negative probes ( p(100%)  
+
+> neg
+
+) are used to train a 1D Bayesian classifier on 
+
+real images. This calibrated model is then frozen and applied to synthetic images to generate pseudo-labels using a standard MAP decision threshold ( τ = 0 .50 ). To understand the practical capabilities and limitations of this vision-language grounding, we analyze the per-attribute accuracy of the generated pseudo-labels against the ground-truth annotations. As shown in the following tables, the inherent difficulty of fine-grained attribute recognition in gen-erative contexts yields a moderate average attribute accu-racy ( ≈ 45 −54% ). The complete attribute-level test accuracy breakdown for all datasets is provided in TABLE S-VI and TABLE S-VII. To illustrate the decision behavior of our Bayesian filter, Fig. S11, Fig. S12, Fig. S13, Fig. S14, Fig. S16, Fig. S15 presents representative qualitative results across our datasets. We showcase four distinct scenarios: (a) successful attribute alignment with positive prompts, (b) successful neutralization with negative prompts, (c) failure on positive prompts (false negatives), and (d) failure on negative prompts (false posi-tives). This comparison clarifies the filter’s behavior, highlight-ing its effectiveness in identifying high-confidence attributes while also identifying specific cases where ambiguous visual features lead to misclassification. 22 
+
+TABLE S-VI PER -ATTRIBUTE ACCURACY (%) ON THE TEST SPLIT FOR PA100K , PETA , AND PETA ZS . E ACH DATASET IS SHOWN IN ITS OWN COLUMN ; WITHIN EACH , WE LIST (A TTRIBUTE , A CCURACY ). 
+
+PA100K Attribute %
+
+LongCoat 95.74 LowerStripe 90.30 Skirt&Dress 80.57 HoldObjectsInFront 80.46 Shorts 80.06 Back 77.70 UpperSplice 77.61 Trousers 77.04 Backpack 76.76 ShortSleeve 73.88 Female 73.65 Front 72.55 HandBag 72.13 ShoulderBag 71.46 LongSleeve 71.14 Side 70.68 LowerPattern 70.65 UpperLogo 65.36 UpperPlaid 53.93 
+
+PETA Attribute %
+
+footwearYellow 99.08 hairOrange 98.26 lowerBodyPlaid 98.03 lowerBodyOrange 97.85 lowerBodyGreen 97.41 footwearRed 96.97 lowerBodyRed 96.79 footwearPink 96.63 hairGreen 96.50 footwearPurple 96.02 lowerBodyThinStripes 95.99 footwearGreen 95.58 upperBodyRed 95.24 footwearOrange 95.24 upperBodyLogo 94.97 lowerBodyPurple 94.97 accessoryKerchief 94.78 hairBlue 94.68 lowerBodyBrown 94.46 upperBodyGreen 94.30 upperBodyTshirt 94.29 hairPink 94.12 hairWhite 94.09 accessoryHeadphone 93.93 footwearBrown 93.92 carryingOther 93.82 upperBodyYellow 93.58 carryingBackpack 93.41 upperBodyJacket 93.27 upperBodyOrange 93.21 lowerBodyShorts 92.96 lowerBodyYellow 92.82 footwearBlue 92.79 carryingNothing 92.52 footwearSneaker 92.47 upperBodyWhite 92.47 hairBrown 92.44 footwearSandals 92.35 upperBodyPlaid 92.26 lowerBodySuits 92.25 hairBald 92.03 upperBodyThinStripes 92.03 lowerBodyLongSkirt 91.91 carryingPlasticBags 91.91 footwearWhite 91.79 footwearShoes 91.76 personalMale 91.71 
+
+PETA Attribute %
+
+hairShort 91.67 upperBodyPink 91.66 hairLong 91.64 upperBodyPurple 91.64 carryingBabyBuggy 91.64 lowerBodyWhite 91.52 lowerBodyJeans 91.44 lowerBodyGrey 91.28 footwearBlack 91.05 hairYellow 90.99 personalFemale 90.92 carryingFolder 90.89 lowerBodyTrousers 90.84 hairBlack 90.84 upperBodyBlack 90.80 footwearLeatherShoes 90.66 footwearGrey 90.60 upperBodyGrey 90.57 lowerBodyHotPants 90.57 upperBodyOther 90.47 hairGrey 90.43 upperBodyBlue 90.29 lowerBodyCapri 90.28 lowerBodyBlack 90.26 lowerBodyFormal 90.22 footwearStocking 90.02 lowerBodyShortSkirt 89.94 accessorySunglasses 89.27 lowerBodyBlue 89.24 upperBodyFormal 89.23 accessoryMuffler 89.14 carryingShoppingTro 87.96 upperBodyVNeck 87.50 accessoryHat 87.40 accessoryNothing 87.16 carryingSuitcase 86.62 carryingLuggageCase 85.90 lowerBodyPink 85.48 upperBodyCasual 83.95 upperBodyBrown 83.87 carryingUmbrella 83.49 accessoryHairBand 83.22 carryingMessengerBag 82.77 lowerBodyCasual 74.78 hairRed 72.29 hairPurple 47.70 
+
+PETAzs Attribute %
+
+footwearOrange 100.00 hairPurple 99.59 lowerBodyRed 98.71 lowerBodyPurple 98.47 footwearPurple 98.34 lowerBodyYellow 98.32 lowerBodyGreen 98.25 footwearYellow 98.11 hairWhite 98.06 footwearRed 97.96 upperBodyThickStripes 97.82 lowerBodyPlaid 97.36 footwearBlue 97.35 hairBald 97.25 lowerBodyOrange 97.06 footwearGreen 96.88 footwearPink 96.88 lowerBodyShorts 96.82 accessoryKerchief 96.75 lowerBodyCasual 96.63 upperBodyGreen 96.49 upperBodyPurple 96.42 carryingNothing 96.26 upperBodyOrange 96.00 hairBlue 95.95 upperBodyRed 95.69 upperBodyLogo 95.64 lowerBodyThinStripes 95.62 accessorySunglasses 95.24 upperBodyBlack 95.20 personalMale 94.99 footwearShoes 94.95 upperBodyPink 94.58 hairShort 94.58 accessoryMuffler 94.43 carryingUmbrella 94.39 lowerBodyBlue 94.36 lowerBodyJeans 94.34 upperBodyTshirt 94.21 upperBodyLongSleeve 94.10 lowerBodySuits 94.07 lowerBodyWhite 94.07 hairGrey 94.03 lowerBodyLongSkirt 94.01 upperBodyOther 93.99 hairBlack 93.95 footwearBlack 93.88 upperBodyShortSleeve 93.82 lowerBodyTrousers 93.70 upperBodySweater 93.41 
+
+PETAzs Attribute %
+
+hairLong 93.34 upperBodyBlue 93.33 upperBodyYellow 93.27 footwearLeatherShoes 93.26 upperBodyJacket 93.20 carryingOther 93.19 footwearWhite 93.07 carryingBackpack 93.06 lowerBodyBlack 93.04 footwearSandals 92.98 carryingPlasticBags 92.88 upperBodyCasual 92.81 upperBodyFormal 92.50 upperBodyWhite 92.45 personalFemale 92.45 upperBodySuit 92.35 lowerBodyShortSkirt 92.12 footwearSneaker 92.02 footwearStocking 92.01 carryingBabyBuggy 91.87 footwearGrey 91.85 accessoryHat 91.78 hairPink 91.67 upperBodyThinStripes 91.58 accessoryNothing 91.41 upperBodyGrey 91.03 lowerBodyGrey 90.81 carryingMessengerBag 90.73 lowerBodyFormal 90.71 lowerBodyCapri 90.51 hairOrange 90.14 footwearBrown 90.09 carryingFolder 89.92 hairYellow 89.41 accessoryHeadphone 89.07 carryingSuitcase 89.04 upperBodyVNeck 89.00 upperBodyPlaid 88.63 hairRed 88.57 lowerBodyBrown 87.53 footwearBoots 87.51 hairGreen 86.96 upperBodyBrown 86.49 accessoryHairBand 86.11 lowerBodyHotPants 84.77 upperBodyNoSleeve 84.75 carryingLuggageCase 84.65 lowerBodyPink 79.78 carryingShoppingTro 72.92 hairBrown 64.27 23          
+
+> TABLE S-VII PER -ATTRIBUTE ACCURACY (%) ON THE TEST SPLIT FOR RAP V1,RAP V2,AND RAP ZS . E ACH DATASET OCCUPIES ONE COLUMN ;WITHIN EACH ,WE LIST (A TTRIBUTE , A CCURACY ).
+
+RAPv1 Attribute %
+
+ub-ShortSleeve 99.71 action-CarrybyHand 96.10 action-Calling 95.33 hs-BaldHead 95.08 ub-Vest 94.43 hs-BlackHair 93.99 shoes-Casual 93.70 attach-HandTrunk 93.57 ub-SuitUp 93.47 hs-Glasses 93.08 hs-Muffler 91.95 ub-Sweater 91.83 shoes-Sport 91.46 lb-Jeans 91.11 ub-Tight 90.84 attach-PaperBag 90.55 ub-TShirt 90.50 shoes-Boots 89.85 ub-Shirt 89.74 hs-LongHair 89.56 attach-PlasticBag 88.99 lb-LongTrousers 88.88 attach-HandBag 88.27 ub-Jacket 88.09 Female 87.95 lb-TightTrousers 87.94 attach-Backpack 87.80 action-Talking 87.76 shoes-Cloth 87.74 action-CarrybyArm 87.74 action-Gathering 87.52 shoes-Leather 87.14 lb-Skirt 86.74 lb-Dress 86.32 attach-SingleShoulderBag 85.94 lb-ShortSkirt 84.44 attach-Other 84.16 action-Pusing 82.78 ub-Cotton 81.82 action-Pulling 81.45 hs-Hat 81.29 attach-Box 77.62 action-Holding 74.79 
+
+RAPv2 Attribute %
+
+action-Pulling 98.28 ub-Vest 96.57 ub-ShortSleeve 95.80 shoes-Other 95.53 hs-Glasses 95.13 shoes-Casual 95.04 hs-BaldHead 94.17 lb-Dress 94.11 lb-Jeans 93.72 ub-Sweater 93.44 ub-SuitUp 93.12 ub-Others 93.04 ub-TShirt 92.74 attachment-HandBag 92.71 ub-Tight 92.60 shoes-Sports 92.37 hs-LongHair 92.15 attachment-ShoulderBag 91.97 action-Calling 91.76 attachment-Box 91.68 attachment-Backpack 91.63 ub-Shirt 91.42 attachment-Other 91.40 attachment-HandTrunk 91.15 shoes-Boots 91.09 hs-BlackHair 90.88 lb-LongTrousers 90.74 Femal 90.68 attachment-PlasticBag 90.55 attachment-PaperBag 90.32 action-Holding 89.90 shoes-Cloth 89.85 action-Gathering 89.70 action-Pushing 89.48 action-Talking 88.78 shoes-Leather 88.72 ub-Jacket 88.65 lb-ShortSkirt 88.26 lb-TightTrousers 88.01 lb-Skirt 87.04 action-CarryingByHand 86.97 action-CarryingByArm 86.82 hs-Hat 85.21 ub-Cotton 81.64 action-Other 81.21 
+
+RAPzs Attribute %
+
+action-Pulling 100.00 action-Other 100.00 ub-ShortSleeve 97.22 attachment-Other 97.15 lb-Dress 97.12 ub-Vest 96.68 hs-Glasses 96.33 attachment-HandTrunk 96.23 hs-BaldHead 95.65 ub-Others 95.65 ub-SuitUp 95.09 lb-Jeans 94.36 attachment-PaperBag 93.92 ub-Shirt 93.72 attachment-HandBag 93.57 attachment-Box 93.51 hs-LongHair 93.45 attachment-Backpack 93.36 ub-Sweater 93.28 shoes-Casual 93.20 shoes-Boots 93.08 attachment-PlasticBag 92.74 hs-BlackHair 92.52 Femal 92.38 ub-TShirt 92.34 action-CarryingByHand 92.29 action-Gathering 91.90 action-Calling 91.87 action-Talking 91.81 attachment-ShoulderBag 91.46 shoes-Sports 91.07 lb-TightTrousers 89.87 action-Holding 89.76 shoes-Leather 89.50 lb-LongTrousers 88.95 action-Pushing 88.08 ub-Tight 87.99 ub-Jacket 87.66 shoes-Cloth 86.44 lb-ShortSkirt 86.36 action-CarryingByArm 85.87 hs-Hat 85.05 ub-Cotton 84.66 lb-Skirt 84.47 shoes-Other 48.08 24 Atributo GT Prompt Pos Prompt Neg                      
+
+> Female 0-1 0
+> Front 0-1 0
+> Side 11-1
+> ShortSleeve 11-1
+> LongSleeve 0-1 0
+> Trousers 0-1 0
+> Shorts 11-1
+
+(a) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg                            
+
+> Female 0-1 0
+> Front 0-1 0
+> Side 11-1
+> HandBag 0-1 0
+> Backpack 11-1
+> ShortSleeve 0-1 0
+> LongSleeve 11-1
+> Trousers 11-1
+> Shorts 0-1 0
+
+(b) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg                            
+
+> Female 0-1 0
+> Front 10-1
+> Side 0-1 0
+> HandBag 0-1 0
+> ShoulderBag 10-1
+> ShortSleeve 0-1 0
+> LongSleeve 10-1
+> Trousers 10-1
+> Shorts 0-1 0
+
+(c) Failure: High-confidence alignment with the positive prompt Atributo GT Prompt Pos Prompt Neg                             
+
+> Female 0-1 1
+> Front 0-1 1
+> Back 11-1
+> HandBag 0-1 1
+> ShoulderBag 11-1
+> ShortSleeve 11-1
+> LongSleeve 0-1 1
+> Trousers 11-1
+> Shorts 0-1 1
+
+(d) Failure: High-confidence alignment with the negative prompt 
+
+Fig. S11. Qualitative performance analysis of the ReSAGE-PAR Bayesian autolabeling framework on the PA100K dataset. We showcase representative success cases (a, b) and failure cases (c, d) to illustrate the filter’s decision behavior. For each example, we display the ground truth (GT), alongside the predictions derived from the positive prompt (Prompt Pos) and the negative prompt (Prompt Neg). In both prompt representations, attributes not explicitly present at the prompt are masked as −1.Atributo GT Prompt Pos Prompt Neg                                        
+
+> hs-BaldHead 0-1 0
+> hs-BlackHair 11-1
+> ub-Shirt 0-1 0
+> ub-SuitUp 11-1
+> lb-LongTrousers 11-1
+> lb-TightTrousers 0-1 0
+> shoes-Leather 11-1
+> shoes-Sports 0-1 0
+> attachment-Box 0-1 0
+> attachment-HandTrunk 11-1
+> Femal 0-1 0
+> action-Talking 0-1 0
+> action-Pulling 11-1
+
+(a) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg                      
+
+> ub-Sweater 11-1
+> ub-Cotton 0-1 0
+> lb-LongTrousers 11-1
+> lb-ShortSkirt 0-1 0
+> shoes-Leather 0-1 0
+> shoes-Casual 11-1
+> Femal 11-1
+
+(b) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg                            
+
+> hs-LongHair 0-1 0
+> hs-BlackHair 10-1
+> ub-Sweater 0-1 0
+> ub-Cotton 10-1
+> lb-LongTrousers 10-1
+> lb-ShortSkirt 0-1 0
+> shoes-Leather 10-1
+> shoes-Other 0-1 0
+> Femal 0-1 0
+
+(c) Failure: High-confidence alignment with the positive prompt Atributo GT Prompt Pos Prompt Neg                       
+
+> lb-LongTrousers 0-1 1
+> lb-Skirt 0-1 1
+> lb-Dress 11-1
+> lb-TightTrousers 11-1
+> shoes-Boots 11-1
+> shoes-Other 0-1 1
+> Femal 11-1
+
+(d) Failure: High-confidence alignment with the negative prompt 
+
+Fig. S12. Qualitative performance analysis of the ReSAGE-PAR Bayesian autolabeling framework on the RAPv2 dataset. We showcase representative success cases (a, b) and failure cases (c, d) to illustrate the filter’s decision behavior. For each example, we display the ground truth (GT), alongside the predictions derived from the positive prompt (Prompt Pos) and the negative prompt (Prompt Neg). In both prompt representations, attributes not explicitly present at the prompt are masked as −1.25 Atributo GT Prompt Pos Prompt Neg 
+
+Female 1 1 -1 
+
+hs-LongHair 1 1 -1 
+
+hs-BlackHair 1 1 -1 
+
+hs-Glasses 0 -1 0
+
+hs-Muffler 0 -1 0
+
+ub-Sweater 1 1 -1 
+
+ub-Vest 0 -1 0
+
+ub-Cotton 0 -1 0
+
+ub-Jacket 1 1 -1 
+
+lb-LongTrousers 0 -1 0
+
+lb-TightTrousers 1 1 -1 
+
+shoes-Leather 0 -1 0
+
+shoes-Sport 1 1 -1 
+
+attach-Backpack 0 -1 0
+
+attach-Other 1 1 -1 
+
+(a) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg 
+
+Female 1 1 -1 
+
+hs-BaldHead 0 -1 0
+
+hs-LongHair 1 1 -1 
+
+hs-BlackHair 1 1 -1 
+
+hs-Muffler 0 -1 0
+
+ub-Shirt 1 1 -1 
+
+ub-Vest 0 -1 0
+
+lb-Skirt 0 -1 0
+
+lb-Jeans 1 1 -1 
+
+shoes-Sport 0 -1 0
+
+shoes-Casual 1 1 -1 
+
+(b) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg 
+
+Female 0 -1 0
+
+hs-BaldHead 0 -1 0
+
+hs-BlackHair 1 0 -1 
+
+ub-Vest 0 -1 0
+
+ub-Cotton 1 0 -1 
+
+lb-LongTrousers 1 0 -1 
+
+lb-TightTrousers 0 -1 0
+
+shoes-Sport 0 -1 0
+
+shoes-Casual 1 0 -1 
+
+(c) Failure: High-confidence alignment with the positive prompt Atributo GT Prompt Pos Prompt Neg 
+
+Female 0 -1 1
+
+hs-BaldHead 0 -1 1
+
+hs-BlackHair 1 1 -1 
+
+ub-Shirt 1 1 -1 
+
+ub-Vest 0 -1 1
+
+lb-LongTrousers 1 1 -1 
+
+lb-Skirt 0 -1 1
+
+shoes-Leather 1 1 -1 
+
+shoes-Casual 0 -1 1
+
+attach-PaperBag 0 -1 1
+
+attach-Other 1 1 -1 
+
+action-Calling 0 -1 1
+
+action-CarrybyHand 1 1 -1 (d) Failure: High-confidence alignment with the negative prompt 
+
+Fig. S13. Qualitative performance analysis of the ReSAGE-PAR Bayesian autolabeling framework on the RAPv1 dataset. We showcase representative success cases (a, b) and failure cases (c, d) to illustrate the filter’s decision behavior. For each example, we display the ground truth (GT), alongside the predictions derived from the positive prompt (Prompt Pos) and the negative prompt (Prompt Neg). In both prompt representations, attributes not explicitly present at the prompt are masked as −1.Atributo GT Prompt Pos Prompt Neg 
+
+hs-LongHair 0 -1 0
+
+hs-BlackHair 1 1 -1 
+
+ub-TShirt 1 1 -1 
+
+ub-Others 0 -1 0
+
+lb-LongTrousers 1 1 -1 
+
+lb-Skirt 0 -1 0
+
+shoes-Leather 0 -1 0
+
+shoes-Sports 1 1 -1 
+
+Femal 0 -1 0
+
+action-Gathering 1 1 -1 
+
+action-Pushing 0 -1 0
+
+(a) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg 
+
+hs-BaldHead 0 -1 0
+
+hs-LongHair 0 -1 0
+
+hs-BlackHair 1 1 -1 
+
+hs-Glasses 1 1 -1 
+
+ub-Sweater 0 -1 0
+
+ub-Jacket 1 1 -1 
+
+lb-Jeans 1 1 -1 
+
+lb-TightTrousers 0 -1 0
+
+shoes-Sports 0 -1 0
+
+shoes-Casual 1 1 -1 
+
+Femal 0 -1 0
+
+(b) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg 
+
+hs-LongHair 0 -1 0
+
+hs-BlackHair 1 0 -1 
+
+ub-Sweater 0 -1 0
+
+ub-Jacket 1 0 -1 
+
+lb-LongTrousers 1 0 -1 
+
+lb-ShortSkirt 0 -1 0
+
+shoes-Leather 1 0 -1 
+
+shoes-Other 0 -1 0
+
+Femal 0 -1 0
+
+(c) Failure: High-confidence alignment with the positive prompt Atributo GT Prompt Pos Prompt Neg 
+
+hs-BaldHead 0 -1 1
+
+hs-LongHair 1 1 -1 
+
+hs-BlackHair 1 1 -1 
+
+hs-Glasses 0 -1 1
+
+ub-Shirt 0 -1 1
+
+ub-Sweater 1 1 -1 
+
+ub-Vest 1 1 -1 
+
+ub-Jacket 0 -1 1
+
+lb-LongTrousers 1 1 -1 
+
+lb-TightTrousers 0 -1 1
+
+shoes-Leather 1 1 -1 
+
+shoes-Sports 0 -1 1
+
+attachment-Box 1 1 -1 
+
+attachment-PaperBag 0 -1 1
+
+Femal 1 1 -1 
+
+action-Holding 1 1 -1 
+
+action-Pushing 0 -1 1 (d) Failure: High-confidence alignment with the negative prompt 
+
+Fig. S14. Qualitative performance analysis of the ReSAGE-PAR Bayesian autolabeling framework on the RAPzs dataset. We showcase representative success cases (a, b) and failure cases (c, d) to illustrate the filter’s decision behavior. For each example, we display the ground truth (GT), alongside the predictions derived from the positive prompt (Prompt Pos) and the negative prompt (Prompt Neg). In both prompt representations, attributes not explicitly present at the prompt are masked as −1.26 Atributo GT Prompt Pos Prompt Neg 
+
+lowerBodyCasual 1 1 -1 
+
+upperBodyCasual 1 1 -1 
+
+upperBodyJacket 0 -1 0
+
+lowerBodyJeans 1 1 -1 
+
+upperBodyLogo 1 1 -1 
+
+personalMale 1 1 -1 
+
+accessoryMuffler 0 -1 0
+
+accessoryNothing 1 1 -1 
+
+carryingNothing 1 1 -1 
+
+upperBodyPlaid 0 -1 0
+
+carryingPlasticBags 0 -1 0
+
+footwearShoes 1 1 -1 
+
+lowerBodyShortSkirt 0 -1 0
+
+upperBodyGrey 0 -1 0
+
+upperBodyWhite 1 1 -1 
+
+lowerBodyBlack 1 1 -1 
+
+lowerBodyYellow 0 -1 0
+
+hairBlack 1 1 -1 
+
+hairBlue 0 -1 0
+
+footwearBlack 1 1 -1 
+
+footwearWhite 0 -1 0
+
+hairBald 0 -1 0
+
+personalFemale 0 -1 0
+
+upperBodyLongSleeve 1 1 -1 
+
+lowerBodyThinStripes 0 -1 0
+
+hairShort 1 1 -1 
+
+footwearStocking 0 -1 0
+
+upperBodySweater 0 -1 0
+
+(a) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg 
+
+lowerBodyCasual 1 1 -1 
+
+upperBodyJacket 0 -1 0
+
+hairLong 1 1 -1 
+
+personalMale 0 -1 0
+
+accessoryNothing 1 1 -1 
+
+carryingNothing 1 1 -1 
+
+footwearSandals 0 -1 0
+
+footwearShoes 1 1 -1 
+
+lowerBodyShortSkirt 0 -1 0
+
+lowerBodyTrousers 1 1 -1 
+
+upperBodyVNeck 1 1 -1 
+
+upperBodyRed 1 1 -1 
+
+upperBodyYellow 0 -1 0
+
+lowerBodyBlack 1 1 -1 
+
+lowerBodyYellow 0 -1 0
+
+hairBlack 1 1 -1 
+
+hairWhite 0 -1 0
+
+footwearBlack 1 1 -1 
+
+footwearBlue 0 -1 0
+
+accessoryHeadphone 0 -1 0
+
+hairBald 0 -1 0
+
+personalFemale 1 1 -1 
+
+upperBodyLongSleeve 1 1 -1 
+
+lowerBodyPlaid 0 -1 0
+
+carryingLuggageCase 0 -1 0
+
+upperBodyNoSleeve 0 -1 0
+
+(b) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg 
+
+lowerBodyCasual 1 0 -1 
+
+upperBodyCasual 1 0 -1 
+
+upperBodyJacket 0 -1 0
+
+hairLong 0 -1 0
+
+personalMale 1 0 -1 
+
+accessoryNothing 1 0 -1 
+
+carryingNothing 1 0 -1 
+
+carryingPlasticBags 0 -1 0
+
+lowerBodyShorts 0 -1 0
+
+lowerBodyShortSkirt 0 -1 0
+
+lowerBodyTrousers 1 0 -1 
+
+upperBodyOther 1 0 -1 
+
+upperBodyBlack 1 0 -1 
+
+upperBodyRed 0 -1 0
+
+lowerBodyBlack 1 0 -1 
+
+lowerBodyWhite 0 -1 0
+
+hairBlack 1 0 -1 
+
+hairGrey 0 -1 0
+
+personalFemale 0 -1 0
+
+accessoryHairBand 0 -1 0
+
+upperBodyLongSleeve 1 0 -1 
+
+hairShort 1 0 -1 
+
+upperBodySweater 0 -1 0
+
+upperBodyThickStripes 0 -1 0
+
+(c) Failure: High-confidence alignment with the positive prompt Atributo GT Prompt Pos Prompt Neg 
+
+carryingBackpack 1 1 -1 
+
+lowerBodyCasual 1 1 -1 
+
+upperBodyCasual 1 1 -1 
+
+accessoryHat 1 1 -1 
+
+lowerBodyJeans 0 -1 1
+
+footwearLeatherShoes 0 -1 1
+
+upperBodyLogo 0 -1 1
+
+hairLong 1 1 -1 
+
+personalMale 0 -1 1
+
+upperBodyShortSleeve 0 -1 1
+
+lowerBodyShortSkirt 1 1 -1 
+
+footwearSneaker 1 1 -1 
+
+upperBodyTshirt 0 -1 1
+
+upperBodyOther 1 1 -1 
+
+upperBodyBlack 1 1 -1 
+
+upperBodyGrey 0 -1 1
+
+lowerBodyBlack 1 1 -1 
+
+lowerBodyPurple 0 -1 1
+
+lowerBodyRed 1 1 -1 
+
+lowerBodyYellow 0 -1 1
+
+hairBlack 1 1 -1 
+
+hairBlue 0 -1 1
+
+footwearPurple 0 -1 1
+
+footwearWhite 1 1 -1 
+
+hairBald 0 -1 1
+
+lowerBodyCapri 1 1 -1 
+
+personalFemale 1 1 -1 
+
+accessoryHairBand 0 -1 1
+
+lowerBodyHotPants 0 -1 1
+
+upperBodyLongSleeve 1 1 -1 
+
+carryingSuitcase 0 -1 1
+
+lowerBodySuits 0 -1 1 (d) Failure: High-confidence alignment with the negative prompt 
+
+Fig. S15. Qualitative performance analysis of the ReSAGE-PAR Bayesian autolabeling framework on the PETAzs dataset. We showcase representative success cases (a, b) and failure cases (c, d) to illustrate the filter’s decision behavior. For each example, we display the ground truth (GT), alongside the predictions derived from the positive prompt (Prompt Pos) and the negative prompt (Prompt Neg). In both prompt representations, attributes not explicitly present at the prompt are masked as −1.27 Atributo GT Prompt Pos Prompt Neg 
+
+lowerBodyCasual 1 1 -1 
+
+upperBodyCasual 1 1 -1 
+
+upperBodyJacket 0 -1 0
+
+upperBodyLogo 0 -1 0
+
+hairLong 0 -1 0
+
+personalMale 0 -1 0
+
+accessoryNothing 1 1 -1 
+
+carryingNothing 1 1 -1 
+
+footwearSandals 0 -1 0
+
+footwearShoes 1 1 -1 
+
+lowerBodyShortSkirt 0 -1 0
+
+lowerBodyTrousers 1 1 -1 
+
+upperBodyOther 1 1 -1 
+
+upperBodyBlack 1 1 -1 
+
+upperBodyRed 0 -1 0
+
+lowerBodyBlack 1 1 -1 
+
+lowerBodyYellow 0 -1 0
+
+hairBlack 1 1 -1 
+
+hairWhite 0 -1 0
+
+footwearBlack 1 1 -1 
+
+footwearBlue 0 -1 0
+
+accessoryHeadphone 0 -1 0
+
+personalFemale 1 1 -1 
+
+lowerBodyPlaid 0 -1 0
+
+carryingLuggageCase 0 -1 0
+
+hairShort 1 1 -1 
+
+(a) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg 
+
+lowerBodyCasual 1 1 -1 
+
+upperBodyCasual 1 1 -1 
+
+upperBodyJacket 0 -1 0
+
+hairLong 0 -1 0
+
+personalMale 1 1 -1 
+
+carryingMessengerBag 1 1 -1 
+
+accessoryMuffler 0 -1 0
+
+accessoryNothing 1 1 -1 
+
+footwearSandals 0 -1 0
+
+footwearShoes 1 1 -1 
+
+lowerBodyShortSkirt 0 -1 0
+
+lowerBodyTrousers 1 1 -1 
+
+upperBodyBrown 1 1 -1 
+
+upperBodyRed 0 -1 0
+
+lowerBodyBlack 1 1 -1 
+
+lowerBodyWhite 0 -1 0
+
+hairBlack 1 1 -1 
+
+hairGrey 0 -1 0
+
+footwearBlack 0 -1 0
+
+footwearGrey 1 1 -1 
+
+personalFemale 0 -1 0
+
+lowerBodyPlaid 0 -1 0
+
+carryingLuggageCase 0 -1 0
+
+hairShort 1 1 -1 
+
+(b) Success: High-confidence alignment with the positive prompt and negative prompt Atributo GT Prompt Pos Prompt Neg 
+
+lowerBodyCasual 1 0 -1 
+
+upperBodyCasual 1 0 -1 
+
+upperBodyJacket 0 -1 0
+
+upperBodyLogo 0 -1 0
+
+hairLong 1 0 -1 
+
+personalMale 0 -1 0
+
+carryingMessengerBag 1 0 -1 
+
+accessoryMuffler 0 -1 0
+
+accessoryNothing 1 0 -1 
+
+upperBodyPlaid 1 0 -1 
+
+footwearSandals 0 -1 0
+
+footwearShoes 1 0 -1 
+
+lowerBodyShortSkirt 0 -1 0
+
+lowerBodyTrousers 1 0 -1 
+
+upperBodyOther 1 0 -1 
+
+upperBodyVNeck 0 -1 0
+
+upperBodyGrey 1 0 -1 
+
+upperBodyYellow 0 -1 0
+
+lowerBodyBlack 1 0 -1 
+
+lowerBodyBlue 0 -1 0
+
+hairBrown 1 0 -1 
+
+hairWhite 0 -1 0
+
+footwearGrey 1 0 -1 
+
+footwearYellow 0 -1 0
+
+hairBald 0 -1 0
+
+personalFemale 1 0 -1 
+
+lowerBodyLongSkirt 0 -1 0
+
+carryingLuggageCase 0 -1 0
+
+(c) Failure: High-confidence alignment with the positive prompt Atributo GT Prompt Pos Prompt Neg 
+
+carryingOther 1 0 -1 
+
+lowerBodyCasual 1 0 -1 
+
+upperBodyCasual 1 0 -1 
+
+lowerBodyJeans 0 -1 1
+
+footwearLeatherShoes 1 0 -1 
+
+personalMale 0 -1 1
+
+carryingMessengerBag 1 0 -1 
+
+accessoryNothing 1 0 -1 
+
+upperBodyPlaid 0 -1 1
+
+carryingPlasticBags 0 -1 1
+
+footwearSandals 0 -1 1
+
+lowerBodyShorts 0 -1 1
+
+lowerBodyTrousers 1 0 -1 
+
+upperBodyOther 1 0 -1 
+
+upperBodyVNeck 0 -1 1
+
+upperBodyBlack 0 -1 1
+
+upperBodyBlue 1 0 -1 
+
+lowerBodyBlack 1 0 -1 
+
+lowerBodyWhite 0 -1 1
+
+hairBlack 1 0 -1 
+
+hairBlue 0 -1 1
+
+footwearBlack 1 0 -1 
+
+footwearWhite 0 -1 1
+
+hairBald 0 -1 1
+
+personalFemale 1 0 -1 
+
+accessoryKerchief 0 -1 1
+
+hairShort 1 0 -1 
+
+carryingSuitcase 0 -1 1 (d) Failure: High-confidence alignment with the negative prompt 
+
+Fig. S16. Qualitative performance analysis of the ReSAGE-PAR Bayesian autolabeling framework on the PETA dataset. We showcase representative success cases (a, b) and failure cases (c, d) to illustrate the filter’s decision behavior. For each example, we display the ground truth (GT), alongside the predictions derived from the positive prompt (Prompt Pos) and the negative prompt (Prompt Neg). In both prompt representations, attributes not explicitly present at the prompt are masked as −1.28 
+
+S-VI. E XTENDED THRESHOLD SENSITIVITY ANALYSIS 
+
+As discussed in Section IV-C of the main manuscript, the selection of the decision threshold τ dictates the trade-off between retaining valid generated attributes and filtering out semantic noise during the autolabeling process. While the primary threshold sensitivity analysis was illustrated using the PETAzs dataset, this section extends the evaluation to the remaining benchmarks. For each dataset, we display the empirical posterior probability distributions p = P (aligned |
+
+s) on the testing splits, specifically comparing the density of aligned vs not aligned scores. As shown in Figs. S18 to S21, the optimal operating point identified in the main text (τ = 0 .50 ) generalizes exceptionally well across the RAP and PETA families, consistently retaining a high fraction of true positive samples (between 87% and 94%) while effectively minimizing the false positive rate. Fig. S17 illustrates the behavior on PA100K, where the inherent scarcity of annotated attributes slightly increases the classification difficulty, yet 
+
+τ = 0 .50 remains a robust threshold for strict noise filtering. Overall, these extended results corroborate that the default threshold of τ = 0 .50 (indicated by the purple line in the density plots) provides a robust, dataset-agnostic baseline for the ReSAGE-PAR framework, yielding high precision (around 90%) across most benchmarks and a reasonable operational boundary (around 70%) for the more challenging PA100K dataset. 0.0 0.2 0.4 0.6 0.8 1.0     
+
+> Posterior p=P(aligned score )
+> 0.00
+> 0.01
+> 0.02
+> 0.03
+> 0.04
+> Fraction of samples
+> Pos:100%
+> Neg:100%
+> Pos:99%
+> Neg:94%
+> Pos:94%
+> Neg:72%
+> Pos:87%
+> Neg:54%
+> Pos:70%
+> Neg:24%
+> Pos:50%
+> Neg:8%
+> Pos:22%
+> Neg:1%
+> GT = 0 (negative)
+> GT = 1 (positive)
+> t=0.05
+> t=0.10
+> t=0.20
+> t=0.30
+> t=0.50
+> t=0.70
+> t=0.90
+
+Fig. S17. Posterior probabilities p = P (aligned | s) on the PA100K testing split. Compares the density of aligned vs not aligned scores. The vertical line marks the decision threshold τ , showing the retention of valid attributes against the acceptance of complemented ones. 0.0 0.2 0.4 0.6 0.8 1.0     
+
+> Posterior p=P(aligned score )
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Fraction of samples
+> Pos:99%
+> Neg:57%
+> Pos:98%
+> Neg:37%
+> Pos:95%
+> Neg:21%
+> Pos:92%
+> Neg:15%
+> Pos:87%
+> Neg:8%
+> Pos:81%
+> Neg:5%
+> Pos:70%
+> Neg:2%
+> GT = 0 (negative)
+> GT = 1 (positive)
+> t=0.05
+> t=0.10
+> t=0.20
+> t=0.30
+> t=0.50
+> t=0.70
+> t=0.90
+
+Fig. S18. Posterior probabilities p = P (aligned | s) on the RAPv1 testing split. Compares the density of aligned vs not aligned scores. The vertical line marks the decision threshold τ , showing the retention of valid attributes against the acceptance of complemented ones. 0.0 0.2 0.4 0.6 0.8 1.0     
+
+> Posterior p=P(aligned score )
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Fraction of samples
+> Pos:99%
+> Neg:36%
+> Pos:98%
+> Neg:25%
+> Pos:96%
+> Neg:16%
+> Pos:94%
+> Neg:12%
+> Pos:91%
+> Neg:7%
+> Pos:87%
+> Neg:5%
+> Pos:79%
+> Neg:2%
+> GT = 0 (negative)
+> GT = 1 (positive)
+> t=0.05
+> t=0.10
+> t=0.20
+> t=0.30
+> t=0.50
+> t=0.70
+> t=0.90
+
+Fig. S19. Posterior probabilities p = P (aligned | s) on the RAPv2 testing split. Compares the density of aligned vs not aligned scores. The vertical line marks the decision threshold τ , showing the retention of valid attributes against the acceptance of complemented ones. 0.0 0.2 0.4 0.6 0.8 1.0     
+
+> Posterior p=P(aligned score )
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Fraction of samples
+> Pos:99%
+> Neg:37%
+> Pos:98%
+> Neg:25%
+> Pos:96%
+> Neg:16%
+> Pos:95%
+> Neg:12%
+> Pos:91%
+> Neg:7%
+> Pos:86%
+> Neg:4%
+> Pos:78%
+> Neg:2%
+> GT = 0 (negative)
+> GT = 1 (positive)
+> t=0.05
+> t=0.10
+> t=0.20
+> t=0.30
+> t=0.50
+> t=0.70
+> t=0.90
+
+Fig. S20. Posterior probabilities p = P (aligned | s) on the RAPzs testing split. Compares the density of aligned vs not aligned scores. The vertical line marks the decision threshold τ , showing the retention of valid attributes against the acceptance of complemented ones. 0.0 0.2 0.4 0.6 0.8 1.0     
+
+> Posterior p=P(aligned score )
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Fraction of samples
+> Pos:100%
+> Neg:48%
+> Pos:99%
+> Neg:28%
+> Pos:96%
+> Neg:16%
+> Pos:94%
+> Neg:11%
+> Pos:89%
+> Neg:6%
+> Pos:84%
+> Neg:4%
+> Pos:75%
+> Neg:2%
+> GT = 0 (negative)
+> GT = 1 (positive)
+> t=0.05
+> t=0.10
+> t=0.20
+> t=0.30
+> t=0.50
+> t=0.70
+> t=0.90
+
+Fig. S21. Posterior probabilities p = P (aligned | s) on the PETA testing split. Compares the density of aligned vs not aligned scores. The vertical line marks the decision threshold τ , showing the retention of valid attributes against the acceptance of complemented ones.
