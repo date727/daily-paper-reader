@@ -1,0 +1,1741 @@
+Title: Muon Learns More Robust and Transferable Features than Adam
+
+URL Source: https://arxiv.org/pdf/2606.09658v1
+
+Published Time: Tue, 09 Jun 2026 02:44:34 GMT
+
+Number of Pages: 41
+
+Markdown Content:
+# Muon Learns More Robust and Transferable Features than Adam 
+
+# Tianyu Ruan 1,3,4 ∗ Fengzhuo Zhang 1, ∗,† Shuche Wang 2, ∗ Shihua Zhang 3,4 1 Yale University 2National University of Singapore 3University of Chinese Academy of Sciences 
+
+> 4
+
+# Academy of Mathematics and Systems Science, CAS 
+
+Abstract 
+
+Muon has recently emerged as a state-of-the-art optimizer for pretraining Large Language Models (LLMs) and vision classifiers. Despite its efficiency advantage over Adam and SGD, the feature-learning advantage of Muon remains unclear. This paper investigates Muon’s feature-learning advantage through the lens of robustness and transferability. First, by evaluating pretrained models on corrupted images and texts, we show that features learned by Muon are consistently more robust than those learned by Adam and SGD across different architectures, including transformers and Convolutional Neural Networks (CNNs). Using trained layer-wise probes, we further show that this robustness advantage is reflected in larger logit margins across layers. Second, by training linear classifiers or fine-tuning full models from pretrained parameters on downstream tasks, we demonstrate that Muon-learned features transfer more effectively than those learned by Adam and SGD. This transferability advantage is further supported by the diversity of hidden states across layers, as measured by effective rank. Finally, in a representative classification problem with multi-component features, we prove that Muon attains larger margins and higher effective rank than Adam and SGD, providing theoretical support for our empirical findings. 
+
+# 1 Introduction 
+
+Muon (Momentum Orthogonalized by Newton-Schulz) has emerged as a powerful alternative to Adam and stochastic gradient descent (SGD) for pretraining Large Language Models ( LLM s) and training vision classifiers (Jordan et al., 2024; Shulgin et al., 2025). It treats each parameter as a matrix and computes its update direction by orthogonalizing the gradient matrix, replacing the gradient with the matrix obtained by setting all of its nonzero singular values to one. This matrix-aware design yields substantial wall-clock gain. Muon trains nearly 2× faster than Adam and SGD across a wide range of model sizes and architectures (Shah et al., 2025; Liu et al., 2025; Jordan, 2025), and is now used in production-scale LLM runs (Liu et al., 2025; Team et al., 2025; DeepSeek-AI, 2026; GLM-5-Team et al., 2026). A growing line of work analyzes Muon’s efficiency advantage over Adam and SGD through the lenses of steepest gradient descent (Bernstein and Newhouse, 2024), associative memory (Wang et al., 2025), and heavy-tailed data (Wang et al., 2025; Vasudeva et al., 2025). We complement this line of work by taking a first step toward demystifying Muon’s behavior from the perspective of feature learning. Specifically, we ask: Does Muon learn better features than Adam and SGD? If so, what properties characterize this advantage, and how are these properties manifested in model hidden states?   
+
+> ∗Equal contribution.
+> †Project Lead. Correspondence to: <fengzhuo.zhang@yale.edu>, <zsh@amss.ac.cn>
+
+1
+
+> arXiv:2606.09658v1 [cs.LG] 8 Jun 2026
+
+Through extensive experiments and theoretical analysis, we show that Muon indeed learns better features than Adam and SGD. In addition, we identify two properties that characterize this advantage — robustness and transferability — and connect both to concrete hidden-state quantities: logit margin and effective rank. First, to assess robustness, we evaluate pretrained vision and language models on corrupted inputs, using corrupted inputs from ImageNet-C (vision) (Hendrycks and Dietterich, 2019) and FineWeb10B-C (language), the latter being a new benchmark we construct. Across Convolutional Neural Networks ( CNN s), Vision Transformers (ViTs), and causal transformers, Muon-pretrained models consistently outperform their Adam-and SGD-pretrained counterparts. To examine how this robustness advantage is reflected in hidden states, we probe each layer with a trained linear decoder and compute the resulting logit margin, a quantity tightly associated with classifier robustness. The probing results show that Muon yields larger margins than Adam and SGD at nearly every layer, indicating that its robustness advantage stems from a wider class-separation gap in the learned representations. Second, to evaluate transferability, we adapt pretrained models to a range of downstream tasks. For vision, we train linear classifiers on top of frozen pretrained backbones; for language, we fully fine-tune pretrained models. Across all settings, Muon-pretrained features transfer more effectively than those learned by Adam and SGD, as demonstrated by better performance on downstream tasks. To examine how this transferability advantage is reflected in hidden states, we analyze the spectrum of each layer’s hidden-state matrix, formed by stacking hidden states across evaluation examples. Muon attains consistently higher effective rank and lower Top-k spectral energy than Adam and SGD, indicating that its representations spread information more evenly across orthogonal directions and span a richer feature subspace — a property naturally aligned with downstream adaptation. Finally, we provide theoretical support for these hidden-state findings in a stylized one-layer classification problem with multi-component features (a shared block-level component plus a class-specific component). In this setting, Muon’s spectral normalization removes singular-value imbalance in the gradient matrix, thereby yielding a smaller imbalance ratio between the complementary representation components. By contrast, Adam’s coordinate-wise normalization and gradient descent leave this ratio larger, resulting in more spectrally imbalanced representations. As a result, at any matched training loss, Muon provably attains a strictly larger classification margin than both Adam and gradient descent (GD), supporting its robustness advantage. In addition, Muon provably attains a strictly higher feature effective rank than Adam and GD, supporting its transferability advantage. Together, these results identify Muon’s feature-learning advantage as follows: The features learned by Muon are more robust to input corruption and transfer more effectively to downstream tasks. These advantages are reflected respectively in larger logit margins and higher effective rank in the model’s hidden states. 
+
+# 2 Related Work 
+
+Adam and its variants. Adam (Kingma and Ba, 2014) has demonstrated strong performance in the LLM pretraining over the years. A broad range of follow-up work has further improved Adam from different perspectives. On the convergence and stability side, AMSGrad (Reddi et al., 2019) takes a running maximum of the second-moment estimate to fix the non-convergence issue, while Yogi (Zaheer et al., 2018) revises the second-moment update to control the growth of the effective learning rate. Rectified Adam (RAdam) (Liu et al., 2019) further rectifies the variance of adaptive learning rates in early iterations, reducing sensitivity to warmup. To improve generalization, Chen et al. (2018a) propose Partially adaptive momentum estimation (Padam), which unifies Adam with SGD by introducing a partially adaptive parameter. AdamW (Loshchilov and Hutter, 2017) decouples weight decay from the adaptive update and has become a standard baseline in modern deep learning. In large-scale pretraining, LAMB (You et al., 2019) introduces layer-wise adaptive 2scaling to support very large-batch optimization, whereas Adafactor (Shazeer and Stern, 2018) factorizes second-moment statistics to reduce optimizer memory and is widely used in sequence modeling and large language models. Adam-style methods have also been adapted to specialized settings, including federated learning (Reddi et al., 2020), and non-Euclidean parameter spaces via Riemannian Adam (Bécigneul and Ganea, 2018). 
+
+Adam vs. SGD. Understanding why Adam and AdamW work has attracted substantial attention. Early studies observed that adaptive methods often optimize faster than SGD but can generalize worse, suggesting that their advantage is not explained by training loss alone (Wilson et al., 2017). A parallel line of work studies convergence. It begins with the non-convergence counterexample for Adam and the AMSGrad remedy (Reddi et al., 2019), and later establishes guarantees for broader Adam-type methods (Chen et al., 2018b; Zhou et al., 2018; Zou et al., 2018; Défossez et al., 2020) and, under refined assumptions, even vanilla Adam in nonconvex settings (Zhang et al., 2022; Li et al., 2023). Complementing this, Pan and Li (2023) attributes Adam’s empirical advantage over SGD to the lower directional sharpness of its update steps, enabled by coordinate-wise adaptive scaling. Mechanistic accounts emphasize Adam’s sign-like updates and variance normalization (Balles and Hennig, 2018), its preconditioning effects (Das et al., 2024), and how its preconditioned curvature evolves during training (Cohen et al., 2022), while recent work argues that such adaptivity is especially valuable in Transformers and language models, due to heterogeneous curvature (Zhang et al., 2024) and heavy-tailed data statistics (Kunstner et al., 2024). Another line studies implicit bias and regularization: the convergent direction of adaptive methods has been characterized on homogeneous networks (Wang et al., 2021), Adam and AdamW can converge to solutions with geometry distinct from SGD (Zou et al., 2021; Xie and Li, 2024), and decoupled weight decay avoids the interaction between adaptive scaling and L2 regularization, often improving generalization (Loshchilov and Hutter, 2017). For a broader overview, we refer to the survey by Abdulkadirov et al. (2023). 
+
+Muon and its variants. Muon has recently emerged as a promising optimizer for neural network training because of its strong empirical performance and distinctive matrix-structured update rule. Introduced as a method based on orthogonalized updates for hidden-layer weight matrices (Jordan et al., 2024), it has subsequently been extended in three main directions. First, scalability-oriented variants adapt Muon to large-scale LLM training by improving update calibration, regularization, and distributed execution. Liu et al. (2025) scale Muon to large models by adding weight decay and adjusting the per-parameter update scale, while MuonClip (Team et al., 2025) and Muon with Block-Periodic Orthogonalization (MuonBP) (Khaled et al., 2025) focus on training stability and communication efficiency in tensor-parallel systems, respectively. Second, several methods inject adaptive statistics into Muon’s structured updates. Neuron-wise Normalized Muon (NorMuons) (Li et al., 2025) adds neuron-wise learning-rate adaptation and row-wise normalization, Muon+ (Zhang et al., 2026b) applies a lightweight post-orthogonalization normalization, and variance-aware or Adam-style hybrids such as Muon-NSR, Muon-VS (Li et al., 2026b) and Muon 2 (Liu et al., 2026) combine noise or second-moment information with Muon’s matrix-level geometry. AdaMuon (Si et al., 2025) takes a related approach, combining element-wise adaptivity with orthogonal updates. Third, recent work generalizes Muon beyond per-layer matrices: TEON (Zhang et al., 2026a) performs tensor-level orthogonalization to capture cross-layer correlations, and MuonRec (Shan et al., 2026) shows that Muon-style updates can also benefit recommendation models. 
+
+Advantage of Muon. Since Muon was introduced by Jordan et al. (2024), recent work has sought to explain its advantage from both optimization-theoretic and mechanistic perspectives. Building on the perspective that classical optimizers can be viewed as steepest descent under different operator norms (Bernstein and Newhouse, 2024), one line interprets Muon through geometric and convergence analyses: viewing it as steepest descent under the spectral norm (Li and Hong, 2025) or a non-Euclidean trust-region method (Kovalev, 2025), showing that with decoupled weight decay it implicitly enforces a spectral-norm constraint on the weights (Chen et al., 2025), relating its advantage over GD to the low-rank and approximately block-diagonal Hessian structure (Shen et al., 2025), and clarifying the roles of momentum, weight decay, and critical batch 3size (Sato et al., 2025; Shah et al., 2025). Related work connects Muon to broader spectral and matrix-aware optimization principles, emphasizing the role of spectral scaling (Yang et al., 2023) in feature learning and distinguishing matrix-aware methods that address gradient anisotropy from Adam-style methods that address curvature anisotropy (Lau et al., 2025). A complementary line studies Muon through spectral dynamics and associative memory. These works relate Muon’s gains to its effect on associative memory and improved tail-end learning under heavy-tailed data (Wang et al., 2025), and show that spectral updates can produce more uniform learning across frequencies (Li et al., 2026a) or principal components, improving both optimization and generalization on imbalanced data (Vasudeva et al., 2025). Related studies further characterize near-uniform singular-value growth in matrix factorization (Kang et al., 2026), formalize orthogonalization as spectral preconditioning (Ma et al., 2026), and relate Muon to a broader family of spectral, structured-gradient (An et al., 2025), and norm-constrained (Pethick et al., 2025) optimization methods. Our work complements this line of research by shifting the focus from optimization efficiency to feature quality. Specifically, we establish that Muon learns more robust and transferable features than Adam and SGD, and connect these advantages to larger logit margins and higher effective rank in the hidden states. These properties provide a feature-learning interpretation of Muon’s empirical advantages. 
+
+Feature learning: empirical perspectives. Feature learning is a central aspect of deep neural networks and is often regarded as a key source of their empirical success, yet the nature of the features they learn often remains poorly understood. This has motivated a large body of empirical work seeking to understand what features neural-network representations encode and how such features can be characterized across different domains. In the computer vision literature, early visualization (Zeiler and Fergus, 2014) and inversion (Mahendran and Vedaldi, 2015) studies suggested that CNN representations become increasingly invariant and semantically structured with depth. Follow-up work quantified this layerwise organization using transfer learning and representation-similarity metrics, showing that lower layers are typically more general and deeper layers are more task-specific (Yosinski et al., 2014), with lower layers, but not deeper ones, learning similar representations across different datasets (Kornblith et al., 2019). A complementary line asked whether learned features align with human-interpretable concepts, revealing concept detectors (Bau et al., 2017), texture bias (Geirhos et al., 2018), and reliance on non-robust yet predictive cues (Ilyas et al., 2019). More recent work has turned to self-supervised and foundation-model representations, showing that training objectives strongly shape the emergent semantic structure of features (Caron et al., 2021), feature suppression (Xue et al., 2023), robustness (Oquab et al., 2023), and the extent to which visual models encode three-dimensional structure (El Banani et al., 2024). Similar questions have been pursued in language models. Probing and interpretability studies reveal a layerwise progression from lower-level to higher-level information (Tenney et al., 2019; Jawahar et al., 2019; Jin et al., 2025), while their representations also encode information in sparse (Huben et al., 2023; Dunefsky et al., 2024), distributed (Elhage et al., 2022), and geometrically structured (Hewitt and Manning, 2019; Gurnee and Tegmark, 2023; Engels et al., 2024) form. Recent benchmarks in the language domain further evaluate representation quality through downstream transfer (Enevoldsen et al., 2025) and robustness under distribution shift (Yuan et al., 2023). 
+
+Feature learning: theoretical perspectives. These empirical regularities have motivated a broad theory literature asking when neural networks truly learn useful features, rather than merely fit data with nearly fixed random representations. Classical representation-learning work emphasized invariance and disentanglement as desiderata for useful latent variables (Bengio et al., 2013). Early deep-linear-network analyses showed that depth alone induces nontrivial optimization and representation dynamics (Saxe et al., 2013). A central question in later theory is whether features evolve substantially during training. In lazy regimes (Chizat et al., 2018), as captured by the neural tangent kernel (NTK) (Jacot et al., 2018) and related infinite-width analyses, learned representations remain close to initialization. By contrast, mean-field analyses (Chizat and Bach, 2018; Mei et al., 2019) and beyond-NTK results (Li et al., 2020; Allen-Zhu and Li, 2019) study regimes with genuine feature evolution. Building on this distinction, recent works further analyze how optimization, regularization, and training objectives induce feature selection and refinement. Examples include hierarchical 4feature learning (Allen-Zhu and Li, 2023), feature purification under adversarial training (Allen-Zhu and Li, 2022), multi-view features in distillation (Allen-Zhu and Li, 2020), and optimizer-dependent behavior such as the contrast between GD and Adam (Zou et al., 2021). Orthogonal perspectives relate useful representations to minimality and invariance (Achille and Soatto, 2017), connect information-theoretic compression to generalization (Shwartz-Ziv and Tishby, 2017; Saxe et al., 2018), characterize the late-stage geometry of supervised features via neural collapse (Papyan et al., 2020), and analyze unsupervised and self-supervised learning through downstream guarantees (Arora et al., 2019), alignment–uniformity (Wang and Isola, 2020), and identifiability limits (Locatello et al., 2019). Our work contributes to this line by isolating the role of the optimizer in feature learning, showing that Muon, Adam, and SGD induce systematically different feature qualities under matched architectures and training budgets. 
+
+# 3 Preliminaries 
+
+This section introduces the update rules of Adam and Muon, which form the basis for the empirical comparisons in Section 4 and the theoretical analysis in Section 5. 
+
+Adam has been widely adopted for LLM pre-training as an adaptive alternative to SGD (Kingma and Ba, 2014). Following standard practice, we describe each optimizer at the level of a single parameter matrix; in deep models, the optimizer is applied independently to each matrix-valued parameter. Let Wt ∈ Θ denote the parameter matrix at step t, where Θ is the parameter space, and let Gt denote its gradient. SGD updates Wt
+
+according to Wt+1 = Wt − ηtGt, where ηt > 0 is the learning rate. In contrast, Adam introduces element-wise adaptive updates based on two exponential moving averages (Kingma and Ba, 2014). The first estimates the gradient direction as Mt = β1Mt−1 + (1 − β1)Gt, where β1 ∈ [0 , 1] controls the smoothing level of the gradient estimate. The second estimates the element-wise squared gradient as Vt = β2Vt−1 + (1 − β2)( Gt ⊙ Gt),
+
+where β2 ∈ [0 , 1] controls the smoothing level of the magnitude estimate, and ⊙ denotes the Hadamard product. Adam then normalizes each coordinate of the gradient estimate by dividing by the square root of the second-moment estimate: 
+
+Wt+1 = Wt − ηt cMt/( bV 1/2 
+
+> t
+
++ ϵ),
+
+where cMt = Mt/(1 − βt
+
+> 1
+
+) and bVt = Vt/(1 − βt
+
+> 2
+
+) are bias-corrected estimates, ϵ > 0 prevents division by zero, and the square root is also applied element-wise. AdamW (Loshchilov and Hutter, 2017) further improves Adam by decoupling weight decay from the adaptive update as 
+
+Wt+1 = (1 − ηtλ)Wt − ηt cMt/( bV 1/2 
+
+> t
+
++ ϵ),
+
+where λ > 0 is the weight decay coefficient. 
+
+Muon departs from Adam by explicitly leveraging the matrix structure of each parameter. Instead of rescaling gradient coordinates element-wise, it orthogonalizes the gradient matrix and uses the result as the update direction. Concretely, given Wt and Gt, Muon first forms a momentum-based gradient estimate 
+
+Mt = βM t−1 + (1 − β)Gt, where β ∈ [0 , 1] controls the exponential smoothing level. It then updates the parameters using a spectrally normalized version of Mt as 
+
+Wt+1 = Wt − ηtUtV ⊤ 
+
+> t
+
+,
+
+where Mt = UtΣtV ⊤ 
+
+> t
+
+is the Singular Value Decomposition ( SVD ) of Mt. Thus, Muon removes the singular values Σt and preserves only the orthogonal directions of the gradient estimate. In practice, the exact normalization is approximated by a small number of Newton–Schulz iterations for computational efficiency. Recent studies demonstrate the effectiveness of Muon in large-scale LLM pre-training (Liu et al., 2025; Team et al., 2025). See Appendix 2 for more related works. 54 Feature Learning: Muon vs. Adam and SGD 
+
+In this section, we empirically demonstrate that Muon induces better feature learning than Adam and SGD across various models and tasks. We assess feature quality from two common and practical perspectives: robustness and transferability. Robustness experiments, presented in Section 4.1, evaluate pretrained models on corrupted datasets and measure the resilience of learned features to input perturbations. Transferability experiments, presented in Section 4.2, fine-tune the pretrained models on downstream tasks and measure whether the learned features support effective adaptation to new tasks. 
+
+Experiment setups. Our experiments cover both vision- and language-related tasks. In the vision ex-periments, we pretrain ResNet-18 (11M) (He et al., 2016) and ViT-S (22M) (Dosovitskiy et al., 2020) on ImageNet-1K (Deng et al., 2009; Russakovsky et al., 2015) for object classification. ResNet-18 is trained for 100 epochs, consistent with prior supervised training setups (Chrysos et al., 2022), and ViT-S is trained for 300 epochs, following DeiT (Touvron et al., 2021). These well-established recipes ensure that all optimizers are evaluated under a standardized and sufficiently long training protocol. For both robustness and transfer evaluations in vision, we report Top-1 accuracy. In the language experiments, we pretrain nanoGPT-style causal language models on FineWeb (Penedo et al., 2024) for next-token prediction. Since SGD does not train GPT-style models effectively in this setting (Zhao et al., 2024), we only compare Muon to Adam for LLM training. We use a 12-layer model (124M, GPT-2) as the main setting and scale up to a 24-layer model (354M, GPT-2 Medium) to verify that our findings persist at a larger scale. In language robustness and transferability experiments, we use perplexity to evaluate the performance (Touvron et al., 2023). Moreover, in our LLM experiments, the token-to-parameter ratio is at least 2× the Chinchilla ratio (Hoffmann et al., 2022). This places our models in a sufficiently trained regime and allows us to examine optimizer behavior after substantial pretraining. In all experiments, we use the same hyperparameter search protocol for each optimizer to ensure a fair comparison. Throughout the paper, we compare optimizers under a matched-budget protocol: model architecture, data pipeline, training budget (epochs or tokens), and evaluation protocol are held fixed across optimizers, while each optimizer’s learning rate and scheduler are tuned independently. This isolates differences in learned representations from differences in engineering effort. See Appendix A for the experimental details and Appendix B for full numerical results with mean ± standard deviation. 
+
+# 4.1 Robustness to Input Corruptions 
+
+For the robustness evaluation, we first pretrain models on the clean data specified in the experimental setup, and then evaluate the pretrained models on corrupted data. In the vision experiments, pretrained models are evaluated on ImageNet-C, which applies 15 common visual corruptions to ImageNet validation images at 5 severity levels. These corruptions are grouped into four families: Noise , Blur , Weather , and Digital .We report results averaged over the 5 severity levels, both for each corruption family and as an overall mean across all 15 corruption types. In the language experiments, pretrained models are evaluated on a constructed corrupted split, denoted FineWeb10B-C. It is constructed using common corruption types studied in natural language processing (Pruthi et al., 2019). Specifically, it applies fixed character-level typo attacks to the clean validation text before tokenization, including character insertions, deletions, QWERTY-keyboard neighbor substitutions, and character swaps. We denote these four corruption types as Add , Drop , Key , and 
+
+Swap , respectively, and report results for each type as well as their average. Details of the FineWeb10B-C construction are provided in Appendix A.4. 
+
+Muon improves robustness under input corruptions. Figure 1 reports the performance of models on corrupted data across all four settings. For ResNet-18 (panel (a)), Muon achieves the highest mean accuracy and performs best on Noise and Weather , while being slightly below SGD on Blur and Digital . For ViT-S (panel (b)), Muon achieves the highest mean accuracy and is best under every corruption family. For GPT-2 and GPT-2 Medium (panels (c) and (d)), Muon consistently achieves the lowest mean perplexity and the 6Figure 1: Robustness evaluations on vision and language tasks. (a) ResNet-18 and (b) ViT-S are evaluated on ImageNet-C, while (c) GPT-2 and (d) GPT-2 Medium are evaluated on FineWeb10B-C. Shaded bands denote ± one standard deviation over three random seeds. Muon achieves the best mean performance in all four panels, with consistent gains across transformer-based vision and language models. These suggest more robust learned features of Muon under corrupted inputs. lowest perplexity under every corruption type. In addition, SGD outperforms Adam on the CNN architecture, whereas Adam outperforms SGD on the transformer architecture, consistent with the observations in Zhang et al. (2024). We summarize the empirical findings as follows. 
+
+Observation 1: Muon achieves the best overall performance on corrupted inputs across both vision and language tasks, indicating stronger robustness of the learned features. 
+
+Layer-wise analysis of logit margins. Observation 1 confirms the superior robustness of Muon over Adam and SGD through end-to-end performance. We next take a closer look at the hidden states across layers of pretrained models to understand how Muon’s robustness emerges throughout the model. To connect hidden representations with robustness, we compute layer-wise logit margins, which have been shown to be positively associated with robustness across a wide range of models, including support vector machines and neural networks (Wei and Ma, 2019; Ding et al., 2020; Cheng et al., 2022). Specifically, we adopt the tuned-lens framework of Belrose et al. (2023) to train a probe that decodes the hidden state at each layer into a distribution over classes for vision tasks and over the vocabulary for language tasks. Details of probe training are deferred to Appendix A. For the ℓ-th layer, let z(ℓ)(x) ∈ Rd denote the hidden state at the output of the ℓ-th transformer block, which we use for probing, and let T (ℓ) denote the trained probe mapping z(ℓ)(x)
+
+to predicted logits. We define the margin of input x with respect to label y as 
+
+γℓ(x, y ) = T (ℓ) 
+
+> y
+
+(z(ℓ)(x)) − max   
+
+> j̸=y
+
+T (ℓ) 
+
+> j
+
+(z(ℓ)(x)) . (4.1) 7Figure 2: Layer-wise classification margin for (a) ViT-S and (b) GPT-2. For each layer, we train a linear probe and report the mean sample-level margin (correct logit minus the largest distractor logit) on validation data. Shaded bands denote ± one standard deviation over three seeds. Across both architectures, Muon achieves larger margins across most layers, suggesting stronger representation-level robustness. Here, the subscript i in T (ℓ) 
+
+> i
+
+(·) indexes the class, so T (ℓ) 
+
+> i
+
+(z(ℓ)(x)) is the predicted logit for class i. In our experiments, y denotes the ground-truth class for vision tasks and the ground-truth next-token index for language tasks. A larger margin means that the correct class or token is separated from the strongest competing prediction by a wider logit gap. Such a gap allows the prediction to tolerate larger logit perturbations from the noise before the top prediction changes, and is therefore associated with stronger robustness. Figure 2 reports the average margin on corrupted evaluation data. We focus on transformer architectures, namely ViT-S and GPT-2, because the high dimensionality of CNN feature maps makes efficient probe training difficult. The results show that Muon attains the largest margin across most layers of both ViT-S and GPT-2. For ViT-S, Muon’s margin advantage is amplified in the last two layers. At the final layer, Muon’s margin is 3.29 , which is 5% higher than Adam’s 3.13 and 20% higher than SGD’s 2.74 . For GPT-2, Muon also achieves consistently larger margins than Adam across most layers. Results for GPT-2 Medium are deferred to Appendix B. These results support the following conclusion. 
+
+Observation 2: Muon yields larger logit margins than Adam and SGD across most layers of both GPT and ViT-S, reflecting its representation-level robustness advantage. 
+
+# 4.2 Transferability Across Downstream Tasks 
+
+In this section, we evaluate the transferability of pretrained models by adapting them to downstream tasks. For vision experiments, we freeze the pretrained backbone, i.e., ResNet-18 or ViT-S, and train a linear classifier on the penultimate-layer hidden states for each downstream task, following standard protocols adopted in Chen et al. (2020); He et al. (2022). We consider a diverse set of downstream classification tasks: EuroSAT (Helber et al., 2019), Food-101 (Bossard et al., 2014), Oxford Flowers-102 (Nilsback and Zisserman, 2008), and Stanford Cars (Krause et al., 2013), covering satellite imagery, food categories, fine-grained flowers, and fine-grained vehicles. For language experiments, we perform supervised fine-tuning on the full parameters of the pretrained models using Stanford Alpaca (Taori et al., 2023), Databricks Dolly 15K (Conover et al., 2023), and WizardLM Evol-Instruct (Xu et al., 2023). To isolate the effect of the pretraining optimizer, we fine-tune both Muon- and Adam-pretrained models using the same Adam optimizer.   
+
+> The margins of well-trained GPT models can remain negative even on clean evaluation data, because next-token prediction is performed over a very large vocabulary, which has size 50 ,257 in our experiments. In this setting, multiple tokens may be plausible continuations, so the ground-truth next token does not need to receive the highest probed logit.
+
+8Figure 3: Classification accuracy ( ↑) across four downstream vision tasks. Pretrained backbones are frozen; only the linear classifier is trained. Muon matches or surpasses Adam and SGD across all eight backbone–task combinations, indicating that its pretrained vision features transfer more effectively. 
+
+Muon Learns More Transferable Features. Figures 3 and 4 report downstream performance for vision and language tasks, respectively. In the vision experiments, Muon matches or surpasses Adam and SGD on all four benchmarks, namely EuroSAT, Flowers-102, Food-101, and Stanford Cars, across both backbones, ResNet-18 and ViT-S. Consistent with Zhang et al. (2024); Kunstner et al. (2023); Keskar and Socher (2017), our results show that SGD-pretrained CNNs transfer better than Adam-pretrained CNNs, whereas the opposite trend holds for transformers. In the language experiments, Muon consistently yields lower perplexity than Adam across all three instruction-tuning datasets, Alpaca, Dolly, and WizardLM, and across different model sizes. We summarize this observation as follows. 
+
+Observation 3: The pretrained representations of Muon transfer more effectively than those of Adam and SGD across vision tasks. Language models pre-trained by Muon outperform those by Adam in downstream tasks after fine-tuning. 
+
+Layer-wise feature spectrum analysis. Observation 3 confirms Muon’s superior end-to-end transferability. Intuitively, this suggests that Muon learns richer and more diverse features. We next examine this hypothesis by analyzing the hidden states across layers. For the ℓ-th layer, we stack the hidden states, i.e., the features, 
+
+z(ℓ), over all instances in the evaluation set to form a hidden-state matrix Z(ℓ). We then study the richness of the features in Z(ℓ) through spectral analysis. Let σ(Z(ℓ)) = ( σ1, . . . , σ rℓ ) denote its singular values, where 
+
+σ1 ≥ σ2 ≥ · · · ≥ σrℓ and rℓ is the number of nonzero singular values. We adopt two intuitive quantities to evaluate feature richness in Z(ℓ): effective rank (Roy and Vetterli, 2007) and Top-k energy fraction (Wang et al., 2025). The effective rank is the exponential entropy of the distribution induced by the squared singular values, which is the effective rank applied to the Gram matrix: 
+
+eRank( Z(ℓ)) = exp 
+
+
+
+−
+
+> rℓ
+
+X
+
+> i=1
+
+qi log qi
+
+
+
+, where qi = σ2 
+
+> i
+
+/
+
+> rℓ
+
+X
+
+> j=1
+
+σ2 
+
+> j
+
+.
+
+It provides a continuous measure of how many singular directions are effectively used. The Top-k energy fraction is the fraction of spectral energy captured by the largest k singular values: 
+
+Top -k E( Z(ℓ)) = 
+
+> k
+
+X
+
+> i=1
+
+σ2 
+
+> i
+
+/
+
+> rℓ
+
+X
+
+> j=1
+
+σ2 
+
+> j
+
+.
+
+It measures how concentrated the representation energy is in the leading principal directions. Higher effective ranks and lower Top-k energy indicate a more diverse and more uniformly distributed representation. 9Figure 4: Instruction-tuning perplexity ( ↓) on three downstream datasets. Each nanoGPT checkpoint is fully fine-tuned on each downstream dataset. Muon-pretrained models achieve lower perplexity than Adam-pretrained models across all benchmarks, indicating stronger transferability of the pretrained language representations. As in Section 4.1, we focus on ViT-S and GPT-2, and report their layer-wise spectral metrics in Figure 5. In both architectures, Muon achieves a higher effective rank than Adam in the vast majority of layers while simultaneously exhibiting lower Top-10 energy, indicating that its hidden features are less dominated by a small number of principal directions. Additional results for GPT-2 Medium are reported in Appendix B. For ViT-S, SGD exhibits a higher effective rank than Muon in some intermediate layers, namely layers 7–10, but this advantage does not persist into deeper layers, where Muon again achieves a more diverse spectrum. Table 1: Depth-averaged spectral metrics across 12 layers. Bold: best.                     
+
+> GPT-2 ViT-S eRank ↑Top-10E ↓eRank ↑Top-10E ↓
+> Adam 11.12 0.863 1.86 0.964 SGD ——3.39 0.920 Muon 16.00 0.827 6.88 0.890
+
+Averaging the spectral metrics across layers provides a clearer global picture of feature richness (Table 1). In both architectures and under both metrics, Muon attains the most spectrally diverse representations. It achieves the highest mean effective rank and the lowest mean Top-10 energy. The gap is especially pronounced for ViT-S, where Muon’s mean effective rank is more than three times that of Adam and roughly twice that of SGD. This consistency across vision and language models suggests that Muon’s spectral advantage is not incidental to a particular architecture, but reflects a broader property of the features it learns. This leads to the following conclusion. 
+
+Observation 4: Muon learns more spectrally diverse representations than Adam and SGD across transformer layers, with higher effective rank and lower Top-10 energy. 
+
+# 5 A Case Study of One-Layer Models 
+
+Section 4 empirically shows that the features learned by Muon are more robust and transferable than those learned by Adam and SGD, and this advantage is accompanied by larger margins and higher effective rank across layers of the network. In this section, we theoretically establish these properties in a stylized yet representative learning setting. 
+
+# 5.1 A Classification Model with Multi-Component Features 
+
+Data model. We focus on a classification problem with class set C = [ C], where each class c ∈ C is associated with a unique feature xc. To capture the rich and complex features that arise in layer-wise 10 Figure 5: Layer-wise feature spectrum across transformer depth. Panels (a) and (b) report results for ViT-S, while panels (c) and (d) report results for GPT-2. Panels (a) and (c) show the effective rank of hidden representations, and panels (b) and (d) show the top-10 energy fraction. Shaded bands denote ± one standard deviation over three random seeds. Overall, Muon generally yields higher effective rank and lower Top-10 energy across layers, indicating more spectrally diverse hidden representations. representations of neural networks, we consider a fine-grained block decomposition across classes, together with a multi-component feature representation. This reflects the hierarchical structure common in real-world classification: in ImageNet, for instance, a block corresponds to a coarse superclass (e.g., dog), while the fine-grained classes within it are specific instances (e.g., golden retriever or beagle). Specifically, we decompose the class set as C = [ m] × [n] with size C = mn , where m denotes the number of blocks and n denotes the number of fine-grained classes within each block. Each class can then be represented as c = ( g, r ), where 
+
+g ∈ [m] denotes the block index and r ∈ [n] denotes the class index within the block. We assume that the feature of each class c = ( g, r ) has the following form. 
+
+Assumption 5.1 (Multi-component feature representation) . For each class c = ( g, r ), the input feature xc
+
+has two components, i.e., xc = [ a · eg , b · eg,r ]⊤ ∈ Rm+C , 0 < a ≤ b, where eg ∈ Rm and eg,r ∈ RC are one-hot vectors, and the coefficients a, b control the strengths of the shared block-level and class-specific components, respectively. 
+
+This assumption states that the features of each class consist of a block-level component and a class-specific component. The constraint 0 < a ≤ b ensures that the class-specific component is at least as strong as the shared block-level component. The one-hot structure of eg and eg,r is imposed only for ease of computation and presentation. Our analysis of Muon still holds when eg and eg,r are replaced by orthonormal vectors. Under this assumption, the feature matrix that collects the features of all classes is F = [ a · R⊤, b · IC ]⊤ ∈ R(m+C)×C ,where R ∈ { 0, 1}m×C is the coarse-membership matrix whose c-th column equals eg for c = ( g, r ), and IC is the identity matrix. Figure 6 illustrates an example of a feature matrix with m = 3 , n = 2 , and C = 6 .
+
+Empirical support for Assumption 5.1. To examine this assumption in pretrained networks, we compute similarities among input-embedding vectors that represent different classes or token semantics. For ViT-S, each semantic group corresponds to an image class, and its representative vector is obtained by averaging the input embeddings of all images in that class. For GPT-2, we use the 1000 most frequent tokens as semantic units, with each unit represented by its token embedding. For both ViT-S and GPT-2, we mean-center these representative vectors and measure their pairwise correlations using the absolute cosine similarity. If Assumption 5.1 holds, the resulting similarity matrix should exhibit a block structure: classes that share the same block-level components eg should have high similarity, whereas classes from different blocks should have low similarity. Figure 7 plots the resulting similarity matrices for ViT-S and GPT-2. To make the block structure more visible, we apply hierarchical clustering to reorder the classes. More experimental details are deferred to Appendix A.7. The results show clear block patterns in the similarity maps of both ViT-S and GPT-2, providing empirical support for Assumption 5.1. 
+
+Classification model. We adopt a linear classifier parameterized by W ∈ RC×(m+C) to classify the features 11 Feature matrix F ⊤ ∈ R6×9                                                      
+
+> a00b00000
+> a000b0000
+> 0a000b000
+> 0a0000b00
+> 00a0000b0
+> 00a00000b
+> a e 1
+> a e 2
+> a e 3
+> b e (1 ,1)
+> b e (1 ,2)
+> b e (2 ,1)
+> b e (2 ,2)
+> b e (3 ,1)
+> b e (3 ,2)
+> (1 ,1)
+> (1 ,2)
+> (2 ,1)
+> (2 ,2)
+> (3 ,1)
+> (3 ,2)
+
+a · RT (m=3 ) b · IC (C=6 )
+
+Figure 6: Multi-component feature structure (Assumption 5.1), shown as the transposed feature matrix 
+
+F ⊤ ∈ RC×(m+C) for the case m=3, n=2, C=m · n=6. Each row corresponds to one class c = ( g, r ), where g
+
+indexes its block and r its position within the block. The feature of every class decomposes into two parts. The shared component a · RT (blue, first m columns) is determined solely by the block index g: all classes in the same block activate the same coordinate eg with magnitude a, encoding their semantic relatedness. The unique component b · IC (red, remaining C columns) assigns each class its own coordinate e(g,r ) with magnitude b, ensuring all classes remain individually distinguishable. 
+
+xc for c ∈ [C]. Given xc as input, the classifier predicts its class according to the distribution soft (Π W x c),where soft (·) denotes the softmax operator and Π = IC − (1 /C )11 ⊤ centers the logits so that their sum is zero. We apply Π for ease of calculation, which does not affect the predicted distribution because softmax is invariant to constant shifts of the logits. When the class prior is uniform, the cross-entropy loss is 
+
+L(W ) = −1/C · X
+
+> c∈C
+
+log  soft (Π W F )c,c 
+
+, (5.1) where soft (·) is applied column-wise. 
+
+Training dynamics. To train the classifier, we initialize W as the zero matrix and optimize it using three optimizers: GD, Adam, and Muon. To simplify the analysis and highlight the main intuition, we adopt infinitesimal step sizes and set momentum to zero, following Zhang et al. (2024); Wang et al. (2025). Concretely, the parameter flow dynamics induced by these optimizers are as follows. (GD) GD updates the parameters along the negative gradient flow: ˙W GD (t) = −∇ W L(W GD (t)) .
+
+(Muon) With momentum set to 0, Muon updates the parameters using the spectrally normalized gradient: 
+
+˙W Muon (t) = −spec (∇W L(W Muon (t))) , where spec (G) = U V ⊤ for G = U ΣV ⊤, which normalizes all nonzero singular values Σ of G to 1.(Adam) With β1 = β2 = 0 , Adam reduces to a coordinate-wise normalized gradient flow: ˙W Adam (t) = 
+
+−sgn (∇W L(W Adam (t))) , where sgn (·) denotes the entrywise sign operator. To compare these optimizers fairly, we analyze the learned classifier at the first time its training loss reaches a given threshold ϵ. For any optimizer A ∈ { GD , Adam , Muon }, define tA 
+
+> ϵ
+
+= inf {t ≥ 0 | L (W A(t)) ≤ ϵ}.We denote the corresponding parameter by W A 
+
+> ϵ
+
+= W A(tA 
+
+> ϵ
+
+), which corresponds to the first parameter along the training dynamics that yields a loss value no more than ϵ.12 (a) ViT-S (b) GPT-2 
+
+Figure 7: Pairwise absolute cosine similarity of centered input-embedding vectors, reordered by hierarchical clustering with optimal leaf ordering. The shared block structure across ViT-S and GPT-2 supports Assumption 5.1. 
+
+# 5.2 Theoretical results 
+
+To connect the model to the empirical observations in Section 4, we introduce two quantities: the classification margin, which captures class separation, and the feature effective rank, which captures the spectral diversity of representations. In the linear classifier, we define the representation of an input xc as the centered logits 
+
+ΠW x c induced by the learned weight W . Stacking these representations over all classes, we obtain the representation matrix Z(W ) = Π W F ∈ RC×C , whose c-th column is ΠW x c. This matrix serves as the natural analogue, in our analytical model, of the hidden-state representations probed in Section 4. The classification margin follows the layer-wise margin definition in Eqn. (4.1) , with the dependence on the classifier W made explicit. That is, for each class c ∈ C , we define the margin of it as 
+
+γ(W ; xc, c ) = (Π W x c)c − max   
+
+> j̸=c
+
+(Π W x c)j ,
+
+where (Π W x c)i denotes the i-th coordinate of ΠW x c. The average margin is defined as Γ( W ) = 1 /C ·
+
+P 
+
+> c∈C
+
+γ(W ; xc, c ). For feature effective rank, we use eRank (Z(W )) , following the definition in Section 4.2. We first compare the margins induced by different optimizers. 
+
+Theorem 5.2 (Margin advantage of Muon) . Under Assumption 5.1, as m, n → ∞ with m = Θ( n), we obtain the following results. 1. For every ϵ ∈ (0 , log C), at the first time each optimizer reaches loss at most ϵ, Muon attains a strictly larger average margin than Adam: 
+
+Γ( W Muon  
+
+> ϵ
+
+) > Γ( W Adam  
+
+> ϵ
+
+).
+
+2. Throughout most of the training, except when the target loss becomes extremely small, Muon attains a strictly larger margin than GD at the same loss threshold. Specifically, for ϵ = Ω (exp( −c√n log n)) with some constant c > 0, we have 
+
+Γ( W Muon  
+
+> ϵ
+
+) > Γ( W GD  
+
+> ϵ
+
+).
+
+The proof is provided in Appendix D.1. The exponentially small lower bound on the target loss rules out an over-trained regime in which optimization is run for excessively long times (Soudry et al., 2018). Our focus is instead on standard pretraining regimes, such as settings in Section 4 where the Chinchilla ratio is below 10 . Our results establish that, at any matched loss threshold, Muon attains a strictly larger margin than Adam. The same advantage holds over GD outside an exponentially small terminal-loss window. These results provide theoretical support for Observation 2 in Section 4.1, where Muon has a larger margin than 13 Adam and SGD across most layers. The main intuition of our proof is that Muon’s spectrally normalized gradient extracts more balanced information from orthogonal feature directions than Adam and GD. By contrast, Adam and GD tend to over-rely on either eg or eg,r . Thus, Muon’s class separation is supported by richer multi-component features, whereas that of Adam and GD is mainly driven by a single component of the representation. Quantitatively, this leads Muon to attain the largest margin. 
+
+Theorem 5.3 (Effective-rank advantage of Muon) . Under Assumption 5.1, as m, n → ∞ with m = Θ( n),we obtain the following results. 1. For every ϵ ∈ (0 , log C), at the first time each optimizer reaches the loss of at most ϵ, the representations learned by Muon attain a strictly higher effective rank than those learned by Adam at the same loss threshold; that is, 
+
+eRank( Z(W Muon  
+
+> ϵ
+
+)) > eRank( Z(W Adam  
+
+> ϵ
+
+)) .
+
+2. Throughout most of the training, except when the target loss becomes extremely small, the representations learned by Muon have a strictly higher effective rank than those learned by GD at the same loss threshold. Specifically, for ϵ = Ω(exp( −c√n log n)) with some constant c > 0, we have 
+
+eRank( Z(W Muon  
+
+> ϵ
+
+)) > eRank( Z(W GD  
+
+> ϵ
+
+)) .
+
+Similar to Theorem 5.2, the comparison between Muon and GD focuses on target losses above an exponentially small lower bound. Our results show that, at any matched loss threshold, the representations learned by Muon attain strictly higher effective rank than those learned by Adam. The same advantage holds over GD outside an exponentially small terminal-loss window. These results provide theoretical support for Observation 4 in Section 4.2, where Muon achieves a higher average effective rank than Adam and SGD across layers. The main intuition is that Muon’s spectral normalization equalizes the gradient contribution across orthogonal directions, thereby reducing spectral imbalance and improving feature diversity as measured by effective rank. In contrast, GD follows the raw gradient and preserves its imbalanced amplitudes, while Adam applies coordinate-wise normalization that does not fully balance the representation in a spectral sense. Consequently, under matched-loss comparison, Muon attains the highest effective rank among the considered optimizers. We next provide a proof sketch that mathematically formalizes these intuitions. 
+
+# 5.3 Proof Sketch 
+
+We describe the main mechanism behind Theorems 5.2 and 5.3. The full proof is deferred to Appendix D. The key is to analyze the representation Z(W ) = Π W F induced by the optimized weight matrix. Under Assumption 5.1, the coarse-to-fine block structure of the data is preserved by all three optimizer flows. Specifically, their representations remain in a two-dimensional subspace: 
+
+ZA(t) = uA(t)Pf + vA(t)Pc, A ∈ { GD , Adam , Muon }. (5.2) Here, the within-block projection matrix Pf ∈ RC×C separates classes within the same block, while the cross-block projection matrix Pc ∈ RC×C separates different blocks. Their explicit expressions are deferred to Appendix D. Eqn. (5.2) reduces each optimizer trajectory to the two coefficients (uA, v A). The relevant imbalance between the two complementary directions is captured by the representation imbalance ratio 
+
+ρA(t) = vA(t)
+
+uA(t) . (5.3) This ratio serves as the key parameter for comparing the matched-loss margin and effective rank of the resulting representations across optimizers. 
+
+Step 1: Compare the optimizer-induced representation imbalance ratios. To analyze the ratios 
+
+ρA along the training process, we derive the representation dynamics induced by each optimizer along the 14 two complementary directions Pf and Pc. The key distinction across optimizers lies in how they normalize the gradient components along these two directions. Muon normalizes the gradient at the singular-value level, so the resulting imbalance is determined only by the feature-induced amplification F in Z(W ). By Proposition D.3, the representation direction is fixed throughout training, with 
+
+ρMuon = sb , s = pa2n + b2 > b. (5.4) Adam, in contrast, normalizes gradient coordinates rather than singular values. This entrywise normalization leads to a different fixed representation direction, and Proposition D.4 gives 
+
+ρAdam = 1 + an b > ρ Muon . (5.5) Thus, for Muon and Adam, the representation imbalance ratios remain fixed throughout training due to their respective normalization schemes. GD behaves differently: it follows the raw gradient spectrum and therefore has a time-varying ratio ρGD (t). The dynamics of this ratio are characterized by the two-dimensional ODE for uGD and vGD in Proposition D.2. Proposition D.6 further shows that 
+
+ρGD (t) > ρ Muon (5.6) whenever the loss is above the terminal threshold ϵ⋆, which covers the matched-loss regime stated in the theorems. 
+
+Step 2: Convert the representation imbalance ratio ordering into margin ordering. We next translate the ratio comparison into a margin comparison at the same loss threshold. Proposition D.5 shows that the matched-loss margin is strictly decreasing in the representation imbalance ratio ρ. This monotonicity can be understood as follows: a larger ρ places more weight on the between-block direction Pc, allowing the same loss threshold to be reached with a smaller within-block separation, and hence a smaller matched-loss margin. Since Step 1 shows that Muon has the smallest ρ in the relevant regime, Muon attains the largest matched-loss margin. 
+
+Step 3: Convert the representation imbalance ratio ordering into effective rank ordering. The same ratio also determines the effective rank. Since effective rank is computed from normalized singular values, it is invariant to the overall scale of the representation and depends only on the representation imbalance ratio ρ = v/u . A direct calculation shows that it is strictly decreasing in ρ for ρ > 1; see Appendix D.2. Thus, the same ratio ordering that proves the margin comparison also implies that Muon attains the highest effective rank at matched loss. Combining these steps, Muon has the smallest imbalance ratio because its spectral normalization removes gradient anisotropy at the singular-value level. Since both the matched-loss margin and the effective rank decrease as ρ increases, this yields Muon’s claimed advantages over Adam for all ϵ ∈ (0 , log C), and over GD outside the exponentially small terminal-loss window. 
+
+# 6 Conclusion 
+
+Our work demystifies the advantages of Muon over Adam and SGD from the perspective of feature learning. Concretely, we evaluate the quality of learned features through two practical and important properties: robust-ness and transferability. For robustness, our experiments show that features learned by Muon are more robust to input corruptions than those learned by Adam and SGD. This robustness advantage is further supported by larger logit margins revealed by layer-wise probes. For transferability, we evaluate how effectively learned features transfer to downstream tasks by training linear classifiers on pretrained hidden states or by conducting supervised fine-tuning of the full pretrained models. The results show that Muon-learned features transfer more effectively than those learned by Adam and SGD. This transferability advantage is further supported 15 by the diversity of hidden states, as measured by effective rank. Finally, we theoretically prove the larger logit margins and higher effective rank of Muon-learned features in a representative classification problem. One limitation of our work is that we mainly focus on LLM s and vision classifiers. The performance and mechanism of Muon on other popular model families, such as diffusion models, are not studied in this paper. We leave this direction for future work. 
+
+# References 
+
+Abdulkadirov, R. , Lyakhov, P. and Nagornov, N. (2023). Survey of optimization algorithms in modern neural networks. Mathematics , 11 2466. Achille, A. and Soatto, S. (2017). Emergence of invariance and disentanglement in deep representations. 2018 Information Theory and Applications Workshop (ITA) 1–9. Allen-Zhu, Z. and Li, Y. (2019). What can resnet learn efficiently, going beyond kernels? Advances in neural information processing systems , 32 .Allen-Zhu, Z. and Li, Y. (2020). Towards understanding ensemble, knowledge distillation and self-distillation in deep learning. arXiv preprint arXiv:2012.09816 .Allen-Zhu, Z. and Li, Y. (2022). Feature purification: How adversarial training performs robust deep learning. In 2021 IEEE 62nd annual symposium on foundations of computer science (FOCS) . IEEE. Allen-Zhu, Z. and Li, Y. (2023). Backward feature correction: How deep learning performs deep (hierarchical) learning. In The Thirty Sixth Annual Conference on Learning Theory . PMLR. An, K. , Liu, Y. , Pan, R. , Ren, Y. , Ma, S. , Goldfarb, D. and Zhang, T. (2025). Asgo: Adaptive structured gradient optimization. arXiv preprint arXiv:2503.20762 .Arora, S. , Khandeparkar, H. , Khodak, M. , Plevrakis, O. and Saunshi, N. (2019). A theoretical analysis of contrastive unsupervised representation learning. In International Conference on Machine Learning .Balles, L. and Hennig, P. (2018). Dissecting adam: The sign, magnitude and variance of stochastic gradients. In International Conference on Machine Learning . PMLR. Bar-Joseph, Z. , Gifford, D. K. and Jaakkola, T. S. (2001). Fast optimal leaf ordering for hierarchical cluster-ing. Bioinformatics , 17 S22–S29. Bau, D. , Zhou, B. , Khosla, A. , Oliva, A. and Torralba, A. (2017). Network dissection: Quantifying inter-pretability of deep visual representations. In Proceedings of the IEEE conference on computer vision and pattern recognition .Bécigneul, G. and Ganea, O.-E. (2018). Riemannian adaptive optimization methods. arXiv preprint arXiv:1810.00760 .Belrose, N. , Ostrovsky, I. , McKinney, L. , Furman, Z. , Smith, L. , Halawi, D. , Biderman, S. and Steinhardt, J. (2023). Eliciting latent predictions from transformers with the tuned lens. arXiv preprint arXiv:2303.08112 .Bengio, Y. , Courville, A. and Vincent, P. (2013). Representation learning: A review and new perspectives. 
+
+IEEE transactions on pattern analysis and machine intelligence , 35 1798–1828. Bernstein, J. and Newhouse, L. (2024). Old optimizer, new norm: An anthology. arXiv preprint arXiv:2409.20325 .16 Bossard, L. , Guillaumin, M. and Van Gool, L. (2014). Food-101–mining discriminative components with random forests. In European conference on computer vision . Springer. Caron, M. , Touvron, H. , Misra, I. , Jégou, H. , Mairal, J. , Bojanowski, P. and Joulin, A. (2021). Emerging properties in self-supervised vision transformers. In Proceedings of the IEEE/CVF international conference on computer vision .Chen, J. , Zhou, D. , Tang, Y. , Yang, Z. , Cao, Y. and Gu, Q. (2018a). Closing the generalization gap of adaptive gradient methods in training deep neural networks. arXiv preprint arXiv:1806.06763 .Chen, L. , Li, J. and Liu, Q. (2025). Muon optimizes under spectral norm constraints. arXiv preprint arXiv:2506.15054 .Chen, T. , Kornblith, S. , Norouzi, M. and Hinton, G. (2020). A simple framework for contrastive learning of visual representations. In International conference on machine learning . PmLR. Chen, X. , Liang, C. , Huang, D. , Real, E. , Wang, K. , Pham, H. , Dong, X. , Luong, T. , Hsieh, C.-J. , Lu, Y. et al. (2023). Symbolic discovery of optimization algorithms. Advances in neural information processing systems , 36 49205–49233. Chen, X. , Liu, S. , Sun, R. and Hong, M. (2018b). On the convergence of a class of adam-type algorithms for non-convex optimization. arXiv preprint arXiv:1808.02941 .Cheng, M. , Lei, Q. , Chen, P.-Y. , Dhillon, I. and Hsieh, C.-J. (2022). Cat: Customized adversarial training for improved robustness. In Proceedings of the Thirty-First International Joint Conference on Artificial Intelligence . International Joint Conferences on Artificial Intelligence Organization. Chizat, L. and Bach, F. R. (2018). On the global convergence of gradient descent for over-parameterized models using optimal transport. ArXiv , abs/1805.09545 .Chizat, L. , Oyallon, E. and Bach, F. R. (2018). On lazy training in differentiable programming. In Neural Information Processing Systems .Chrysos, G. G. , Georgopoulos, M. , Deng, J. , Kossaifi, J. , Panagakis, Y. and Anandkumar, A. (2022). Aug-menting deep classifiers with polynomial neural networks. In European Conference on Computer Vision .Springer. Cohen, J. M. , Ghorbani, B. , Krishnan, S. , Agarwal, N. , Medapati, S. , Badura, M. , Suo, D. , Cardoze, D. ,Nado, Z. , Dahl, G. E. et al. (2022). Adaptive gradient methods at the edge of stability. arXiv preprint arXiv:2207.14484 .Conover, M. , Hayes, M. , Mathur, A. , Xie, J. , Wan, J. , Shah, S. , Ghodsi, A. , Wendell, P. , Zaharia, M. and Xin, R. (2023). Free dolly: Introducing the world’s first truly open instructiontuned llm. Das, R. , Agarwal, N. , Sanghavi, S. and Dhillon, I. S. (2024). Towards quantifying the preconditioning effect of adam. arXiv preprint arXiv:2402.07114 .DeepSeek-AI (2026). Deepseek-v4: Towards highly efficient million-token context intelligence. Défossez, A. , Bottou, L. , Bach, F. and Usunier, N. (2020). A simple convergence proof of adam and adagrad. 
+
+arXiv preprint arXiv:2003.02395 .Deng, J. , Dong, W. , Socher, R. , Li, L.-J. , Li, K. and Fei-Fei, L. (2009). Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on computer vision and pattern recognition . Ieee. 17 Ding, G. W. , Sharma, Y. , Lui, K. Y. C. and Huang, R. (2020). Mma training: Direct input space margin maximization through adversarial training. In International Conference on Learning Representations .Dosovitskiy, A. , Beyer, L. , Kolesnikov, A. , Weissenborn, D. , Zhai, X. , Unterthiner, T. , Dehghani, M. ,Minderer, M. , Heigold, G. , Gelly, S. et al. (2020). An image is worth 16x16 words: Transformers for image recognition at scale. arXiv preprint arXiv:2010.11929 .Dunefsky, J. , Chlenski, P. and Nanda, N. (2024). Transcoders find interpretable llm feature circuits. Advances in Neural Information Processing Systems , 37 24375–24410. El Banani, M. , Raj, A. , Maninis, K.-K. , Kar, A. , Li, Y. , Rubinstein, M. , Sun, D. , Guibas, L. , Johnson, J. and Jampani, V. (2024). Probing the 3d awareness of visual foundation models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .Elhage, N. , Hume, T. , Olsson, C. , Schiefer, N. , Henighan, T. , Kravec, S. , Hatfield-Dodds, Z. , Lasenby, R. ,Drain, D., Chen, C. et al. (2022). Toy models of superposition. arXiv preprint arXiv:2209.10652 .Enevoldsen, K. C. , Chung, I. , Kerboua, I. , Kardos, M. , Mathur, A. , Stap, D. , Gala, J. , Siblini, W. ,Krzemi’nski, D. , Winata, G. I. , Sturua, S. , Utpala, S. , Ciancone, M. , Schaeffer, M. , Sequeira, G. ,Misra, D. , Dhakal, S. , Rystrøm, J. , Solomatin, R. S. , cCaugatan, O. V. , Kundu, A. , Bernstorff, M. ,Xiao, S. , Sukhlecha, A. , Pahwa, B. , Poswiata, R. , Kranthikiran, G. , Ashraf, S. , Auras, D. , Pluster, B. ,Harries, J. P. , Magne, L. , Mohr, I. , Hendriksen, M. , Zhu, D. , Gisserot-Boukhlef, H. , Aarsen, T. ,Kostkan, J. , Wojtasik, K. , Lee, T. , vSuppa, M. , Zhang, C. , Rocca, R. , Hamdy, M. , Michail, A. ,Yang, J. , Faysse, M. , Vatolin, A. , Thakur, N. , Dey, M. , Vasani, D. , Chitale, P. A. , Tedeschi, S. , Tai, N. ,Snegirev, A. , Gunther, M. , Xia, M. , Shi, W. , Lù, X. H. , Clive, J. , Krishnakumar, G. , Maksimova, A. D. ,Wehrli, S. , Tikhonova, M. , Panchal, H. S. , Abramov, A. , Ostendorff, M. , Liu, Z. , Clematide, S. ,Miranda, L. J. V. , Fenogenova, A. , Song, G. , Safi, R. B. , Li, W.-D. , Borghini, A. , Cassano, F. , Su, H. ,Lin, J. , Yen, H. , Hansen, L. , Hooker, S. , Xiao, C. , Adlakha, V. , Weller, O. , Reddy, S. and Muennighoff, N. (2025). Mmteb: Massive multilingual text embedding benchmark. ArXiv , abs/2502.13595 .Engels, J. , Michaud, E. J. , Liao, I. , Gurnee, W. and Tegmark, M. (2024). Not all language model features are one-dimensionally linear. arXiv preprint arXiv:2405.14860 .Geirhos, R. , Rubisch, P. , Michaelis, C. , Bethge, M. , Wichmann, F. A. and Brendel, W. (2018). Imagenet-trained cnns are biased towards texture; increasing shape bias improves accuracy and robustness. In 
+
+International conference on learning representations .GLM-5-Team , : , Zeng, A. , Lv, X. , Hou, Z. , Du, Z. , Zheng, Q. , Chen, B. , Yin, D. , Ge, C. , Huang, C. , Xie, C. ,Zhu, C. , Yin, C. , Wang, C. , Pan, G. , Zeng, H. , Zhang, H. , Wang, H. , Chen, H. , Zhang, J. , Jiao, J. ,Guo, J. , Wang, J. , Du, J. , Wu, J. , Wang, K. , Li, L. , Fan, L. , Zhong, L. , Liu, M. , Zhao, M. , Du, P. ,Dong, Q. , Lu, R. , Shuang-Li , Cao, S. , Liu, S. , Jiang, T. , Chen, X. , Zhang, X. , Huang, X. , Dong, X. ,Xu, Y. , Wei, Y. , An, Y. , Niu, Y. , Zhu, Y. , Wen, Y. , Cen, Y. , Bai, Y. , Qiao, Z. , Wang, Z. , Wang, Z. ,Zhu, Z. , Liu, Z. , Li, Z. , Wang, B. , Wen, B. , Huang, C. , Cai, C. , Yu, C. , Li, C. , Hu, C. , Zhang, C. ,Zhang, D. , Lin, D. , Yang, D. , Wang, D. , Ai, D. , Zhu, E. , Yi, F. , Chen, F. , Wen, G. , Sun, H. , Zhao, H. ,Hu, H. , Zhang, H. , Liu, H. , Zhang, H. , Peng, H. , Tai, H. , Zhang, H. , Liu, H. , Wang, H. , Yan, H. , Ge, H. ,Liu, H. , Chu, H. , Zhao, J. , Wang, J. , Zhao, J. , Ren, J. , Wang, J. , Zhang, J. , Gui, J. , Zhao, J. , Li, J. ,An, J. , Li, J. , Yuan, J. , Du, J. , Liu, J. , Zhi, J. , Duan, J. , Zhou, K. , Wei, K. , Wang, K. , Luo, K. , Zhang, L. ,Sha, L. , Xu, L. , Wu, L. , Ding, L. , Chen, L. , Li, M. , Lin, N. , Ta, P. , Zou, Q. , Song, R. , Yang, R. , Tu, S. ,Yang, S. , Wu, S. , Zhang, S. , Li, S. , Li, S. , Fan, S. , Qin, W. , Tian, W. , Zhang, W. , Yu, W. , Liang, W. ,Kuang, X. , Cheng, X. , Li, X. , Yan, X. , Hu, X. , Ling, X. , Fan, X. , Xia, X. , Zhang, X. , Zhang, X. , Pan, X. ,Zou, X. , Zhang, X. , Liu, Y. , Wu, Y. , Li, Y. , Wang, Y. , Zhu, Y. , Tan, Y. , Zhou, Y. , Pan, Y. , Zhang, Y. ,Su, Y. , Geng, Y. , Yan, Y. , Tan, Y. , Bi, Y. , Shen, Y. , Yang, Y. , Li, Y. , Liu, Y. , Wang, Y. , Li, Y. , Wu, Y. ,18 Zhang, Y. , Duan, Y. , Zhang, Y. , Liu, Z. , Jiang, Z. , Yan, Z. , Zhang, Z. , Wei, Z. , Chen, Z. , Feng, Z. ,Yao, Z. , Chai, Z. , Wang, Z. , Zhang, Z. , Xu, B. , Huang, M. , Wang, H. , Li, J. , Dong, Y. and Tang, J. (2026). Glm-5: from vibe coding to agentic engineering. 
+
+https://arxiv.org/abs/2602.15763 
+
+Gurnee, W. and Tegmark, M. (2023). Language models represent space and time. arXiv preprint arXiv:2310.02207 .He, K. , Chen, X. , Xie, S. , Li, Y. , Dollár, P. and Girshick, R. (2022). Masked autoencoders are scalable vision learners. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition .He, K. , Zhang, X. , Ren, S. and Sun, J. (2016). Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition .Helber, P. , Bischke, B. , Dengel, A. and Borth, D. (2019). Eurosat: A novel dataset and deep learning benchmark for land use and land cover classification. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , 12 2217–2226. Hendrycks, D. and Dietterich, T. (2019). Benchmarking neural network robustness to common corruptions and perturbations. arXiv preprint arXiv:1903.12261 .Hewitt, J. and Manning, C. D. (2019). A structural probe for finding syntax in word representations. In 
+
+Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers) .Hoffmann, J. , Borgeaud, S. , Mensch, A. , Buchatskaya, E. , Cai, T. , Rutherford, E. , Casas, D. ,Hendricks, L. A. , Welbl, J. , Clark, A. et al. (2022). Training compute-optimal large language models. 
+
+arXiv preprint arXiv:2203.15556 , 10 .Huben, R. , Cunningham, H. , Smith, L. R. , Ewart, A. and Sharkey, L. (2023). Sparse autoencoders find highly interpretable features in language models. In The Twelfth International Conference on Learning Representations .Ilyas, A. , Santurkar, S. , Tsipras, D. , Engstrom, L. , Tran, B. and Madry, A. (2019). Adversarial examples are not bugs, they are features. Advances in neural information processing systems , 32 .Jacot, A. , Gabriel, F. and Hongler, C. (2018). Neural tangent kernel: Convergence and generalization in neural networks. Advances in neural information processing systems , 31 .Jawahar, G. , Sagot, B. and Seddah, D. (2019). What does bert learn about the structure of language? In 
+
+Proceedings of the 57th annual meeting of the association for computational linguistics .Jin, M. , Yu, Q. , Huang, J. , Zeng, Q. , Wang, Z. , Hua, W. , Zhao, H. , Mei, K. , Meng, Y. , Ding, K. et al. (2025). Exploring concept depth: How large language models acquire knowledge and concept at dif-ferent layers? In Proceedings of the 31st international conference on computational linguistics .Jordan, K. (2025). CIFAR-10 Airbench. https://github.com/KellerJordan/cifar10-airbench . GitHub repository, accessed 2026-04-29. Jordan, K. , Jin, Y. , Boza, V. , You, J. , Cesista, F. , Newhouse, L. and Bernstein, J. (2024). Muon: An optimizer for hidden layers in neural networks. 
+
+https://kellerjordan.github.io/posts/muon/ 
+
+Kang, C. , Yun, J. , Shin, B. , Cho, Y. and Yun, C. (2026). Uniform spectral growth and convergence of muon in lora-style matrix factorization. ArXiv , abs/2602.06385 .19 Keskar, N. S. and Socher, R. (2017). Improving generalization performance by switching from adam to sgd. 
+
+arXiv preprint arXiv:1712.07628 .Khaled, A. , Ozkara, K. , Yu, T. , Hong, M. and Park, Y. (2025). Muonbp: Faster muon via block-periodic orthogonalization. arXiv preprint arXiv:2510.16981 .Kingma, D. P. and Ba, J. (2014). Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 .Kornblith, S. , Norouzi, M. , Lee, H. and Hinton, G. (2019). Similarity of neural network representations revisited. In International conference on machine learning . PMlR. Kovalev, D. (2025). Understanding gradient orthogonalization for deep learning via non-euclidean trust-region optimization. arXiv preprint arXiv:2503.12645 .Krause, J. , Stark, M. , Deng, J. and Fei-Fei, L. (2013). 3d object representations for fine-grained categorization. In Proceedings of the IEEE international conference on computer vision workshops .Kunstner, F. , Chen, J. , Lavington, J. W. and Schmidt, M. (2023). Noise is not the main factor behind the gap between sgd and adam on transformers, but sign descent might be. arXiv preprint arXiv:2304.13960 .Kunstner, F. , Milligan, A. , Yadav, R. , Schmidt, M. and Bietti, A. (2024). Heavy-tailed class imbalance and why adam outperforms gradient descent on language models. Advances in Neural Information Processing Systems , 37 30106–30148. Lau, T. T.-K. , Long, Q. and Su, W. (2025). Polargrad: A class of matrix-gradient optimizers from a unifying preconditioning perspective. arXiv preprint arXiv:2505.21799 .Li, B. , Wang, K. , Zhong, H. , Lu, P. and Wang, L. (2026a). Muon in associative memory learning: Training dynamics and scaling laws. ArXiv , abs/2602.05725 .Li, H. , Rakhlin, A. and Jadbabaie, A. (2023). Convergence of adam under relaxed assumptions. Advances in Neural Information Processing Systems , 36 52166–52196. Li, J. , Fan, Y. and Li, H. (2026b). Variance-adaptive muon: Accelerating llm pretraining with nsr-modulated and variance-scaled momentum. arXiv preprint arXiv:2601.14603 .Li, J. and Hong, M. (2025). A note on the convergence of muon and further. arXiv e-prints arXiv–2502. Li, Y. , Ma, T. and Zhang, H. R. (2020). Learning over-parametrized two-layer relu neural networks beyond ntk. arXiv preprint arXiv:2007.04596 .Li, Z. , Liu, L. , Liang, C. , Chen, W. and Zhao, T. (2025). Normuon: Making muon more efficient and scalable. 
+
+arXiv preprint arXiv:2510.05491 .Liu, J. , Su, J. , Yao, X. , Jiang, Z. , Lai, G. , Du, Y. , Qin, Y. , Xu, W. , Lu, E. , Yan, J. et al. (2025). Muon is scalable for llm training. arXiv preprint arXiv:2502.16982 .Liu, L. , Jiang, H. , He, P. , Chen, W. , Liu, X. , Gao, J. and Han, J. (2019). On the variance of the adaptive learning rate and beyond. arXiv preprint arXiv:1908.03265 .Liu, Z. , Zhang, R. , Wang, Z. , Zhao, Y. , Su, Y. , Yang, Z. and Zhang, Z. (2026). Muon 2: Boosting muon via adaptive second-moment preconditioning. arXiv preprint arXiv:2604.09967 .Locatello, F. , Bauer, S. , Lucic, M. , Raetsch, G. , Gelly, S. , Schölkopf, B. and Bachem, O. (2019). Challenging common assumptions in the unsupervised learning of disentangled representations. In international conference on machine learning . PMLR. 20 Loshchilov, I. and Hutter, F. (2017). Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 .Ma, J. , Huang, Y. , Chi, Y. and Chen, Y. (2026). Preconditioning benefits of spectral orthogonalization in muon. ArXiv , abs/2601.13474 .Mahendran, A. and Vedaldi, A. (2015). Understanding deep image representations by inverting them. In 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition .Mei, S. , Misiakiewicz, T. and Montanari, A. (2019). Mean-field theory of two-layers neural networks: dimension-free bounds and kernel limit. In Annual Conference Computational Learning Theory .Nilsback, M.-E. and Zisserman, A. (2008). Automated flower classification over a large number of classes. In 
+
+2008 Sixth Indian conference on computer vision, graphics & image processing . IEEE. Oquab, M. , Darcet, T. , Moutakanni, T. , Vo, H. , Szafraniec, M. , Khalidov, V. , Fernandez, P. , Haziza, D. ,Massa, F. , El-Nouby, A. et al. (2023). Dinov2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 .Pan, Y. and Li, Y. (2023). Toward understanding why adam converges faster than sgd for transformers. 
+
+arXiv preprint arXiv:2306.00204 .Papyan, V. , Han, X. and Donoho, D. L. (2020). Prevalence of neural collapse during the terminal phase of deep learning training. Proceedings of the National Academy of Sciences of the United States of America ,
+
+117 24652 – 24663. Penedo, G. , Kydlícek, H. , Allal, L. B. and Wolf, T. (2024). Fineweb: decanting the web for the finest text data at scale. HuggingFace. Accessed: Jul , 12 .Pethick, T. , Xie, W. , Antonakopoulos, K. , Zhu, Z. , Silveti-Falls, A. and Cevher, V. (2025). Training deep learning models with norm-constrained lmos. arXiv preprint arXiv:2502.07529 .Pruthi, D. , Dhingra, B. and Lipton, Z. C. (2019). Combating adversarial misspellings with robust word recognition. In The 57th Annual Meeting of the Association for Computational Linguistics (ACL) . Florence, Italy. Reddi, S. , Charles, Z. , Zaheer, M. , Garrett, Z. , Rush, K. , Konečn` y, J. , Kumar, S. and McMahan, H. B. (2020). Adaptive federated optimization. arXiv preprint arXiv:2003.00295 .Reddi, S. J. , Kale, S. and Kumar, S. (2019). On the convergence of adam and beyond. arXiv preprint arXiv:1904.09237 .Roy, O. and Vetterli, M. (2007). The effective rank: A measure of effective dimensionality. In 2007 15th European signal processing conference . IEEE. Russakovsky, O. , Deng, J. , Su, H. , Krause, J. , Satheesh, S. , Ma, S. , Huang, Z. , Karpathy, A. , Khosla, A. ,Bernstein, M. et al. (2015). Imagenet large scale visual recognition challenge. International journal of computer vision , 115 211–252. Sato, N. , Naganuma, H. and Iiduka, H. (2025). Analysis of muon’s convergence and critical batch size. arXiv e-prints arXiv–2507. Saxe, A. M. , Bansal, Y. , Dapello, J. , Advani, M. S. , Kolchinsky, A. , Tracey, B. D. and Cox, D. D. (2018). On the information bottleneck theory of deep learning. Journal of Statistical Mechanics: Theory and Experiment , 2019 .21 Saxe, A. M. , McClelland, J. L. and Ganguli, S. (2013). Exact solutions to the nonlinear dynamics of learning in deep linear neural networks. arXiv preprint arXiv:1312.6120 .Shah, I. , Polloreno, A. M. , Stratos, K. , Monk, P. , Chaluvaraju, A. , Hojel, A. , Ma, A. , Thomas, A. ,Tanwer, A. , Shah, D. J. et al. (2025). Practical efficiency of muon for pretraining. arXiv preprint arXiv:2505.02222 .Shan, R. , Yu, A. , Chen, B. , Cai, K. , Luo, Q. , Tang, R. , Li, H. , Liu, W. , Zhang, W. and Lin, J. (2026). Muonrec: Shifting the optimizer paradigm beyond adam in scalable generative recommendation. arXiv preprint arXiv:2603.00416 .Shazeer, N. and Stern, M. (2018). Adafactor: Adaptive learning rates with sublinear memory cost. In 
+
+International conference on machine learning . PMLR. Shen, W. , Huang, R. , Huang, M. , Shen, C. and Zhang, J. (2025). On the convergence analysis of muon. 
+
+arXiv preprint arXiv:2505.23737 .Shulgin, E. , AlRashed, S. , Orabona, F. and Richtárik, P. (2025). Beyond the ideal: Analyzing the inexact muon update. arXiv preprint arXiv:2510.19933 .Shwartz-Ziv, R. and Tishby, N. (2017). Opening the black box of deep neural networks via information. 
+
+ArXiv , abs/1703.00810 .Si, C. , Zhang, D. and Shen, W. (2025). Adamuon: Adaptive muon optimizer. arXiv preprint arXiv:2507.11005 .Soudry, D. , Hoffer, E. , Nacson, M. S. , Gunasekar, S. and Srebro, N. (2018). The implicit bias of gradient descent on separable data. Journal of Machine Learning Research , 19 1–57. Taori, R. , Gulrajani, I. , Zhang, T. , Dubois, Y. , Li, X. , Guestrin, C. , Liang, P. and Hashimoto, T. B. (2023). Stanford alpaca: An instruction-following llama model. https://github.com/tatsu-lab/stanford_ alpaca .Team, K. , Bai, Y. , Bao, Y. , Charles, Y. , Chen, C. , Chen, G. , Chen, H. , Chen, H. , Chen, J. , Chen, N. et al. (2025). Kimi k2: Open agentic intelligence. arXiv preprint arXiv:2507.20534 .Tenney, I. , Das, D. and Pavlick, E. (2019). Bert rediscovers the classical nlp pipeline. In Proceedings of the 57th annual meeting of the association for computational linguistics .Touvron, H. , Cord, M. , Douze, M. , Massa, F. , Sablayrolles, A. and Jégou, H. (2021). Training data-efficient image transformers & distillation through attention. In International conference on machine learning .PMLR. Touvron, H. , Martin, L. , Stone, K. , Albert, P. , Almahairi, A. , Babaei, Y. , Bashlykov, N. , Batra, S. ,Bhargava, P. , Bhosale, S. et al. (2023). Llama 2: Open foundation and fine-tuned chat models. arXiv preprint arXiv:2307.09288 .Vasudeva, B. , Deora, P. , Zhao, Y. , Sharan, V. and Thrampoulidis, C. (2025). How muon’s spectral design benefits generalization: A study on imbalanced data. ArXiv , abs/2510.22980 .Virtanen, P. , Gommers, R. , Oliphant, T. E. , Haberland, M. , Reddy, T. , Cournapeau, D. , Burovski, E. ,Peterson, P. , Weckesser, W. , Bright, J. et al. (2020). Scipy 1.0: fundamental algorithms for scientific computing in python. Nature methods , 17 261–272. Wang, B. , Meng, Q. , Chen, W. and Liu, T.-Y. (2021). The implicit bias for adaptive optimization algorithms on homogeneous neural networks. In International Conference on Machine Learning . PMLR. 22 Wang, M. , Wang, J. , He, H. , Wang, Z. , Huang, G. , Xiong, F. , Li, Z. , Wu, L. et al. (2024). Improving gener-alization and convergence by enhancing implicit regularization. Advances in Neural Information Processing Systems , 37 118701–118744. Wang, S. , Zhang, F. , Li, J. , Du, C. , Du, C. , Pang, T. , Yang, Z. , Hong, M. and Tan, V. Y. (2025). Muon outperforms adam in tail-end associative memory learning. arXiv preprint arXiv:2509.26030 .Wang, T. and Isola, P. (2020). Understanding contrastive representation learning through alignment and uniformity on the hypersphere. In International conference on machine learning . PMLR. Wang, Y. , Ivison, H. , Dasigi, P. , Hessel, J. , Khot, T. , Chandu, K. , Wadden, D. , MacMillan, K. ,Smith, N. A. , Beltagy, I. et al. (2023). How far can camels go? exploring the state of instruction tuning on open resources. Advances in Neural Information Processing Systems , 36 74764–74786. Wei, C. and Ma, T. (2019). Improved sample complexities for deep networks and robust classification via an all-layer margin. arXiv preprint arXiv:1910.04284 .Wilson, A. C. , Roelofs, R. , Stern, M. , Srebro, N. and Recht, B. (2017). The marginal value of adaptive gradient methods in machine learning. Advances in neural information processing systems , 30 .Xie, S. and Li, Z. (2024). Implicit bias of adamw: ℓ∞ norm constrained optimization. arXiv preprint arXiv:2404.04454 .Xu, C. , Sun, Q. , Zheng, K. , Geng, X. , Zhao, P. , Feng, J. , Tao, C. and Jiang, D. (2023). Wizardlm: Empow-ering large language models to follow complex instructions. arXiv preprint arXiv:2304.12244 .Xue, Y. , Joshi, S. , Gan, E. , Chen, P.-Y. and Mirzasoleiman, B. (2023). Which features are learnt by con-trastive learning? on the role of simplicity bias in class collapse and feature suppression. In International Conference on Machine Learning . PMLR. Yang, G. , Simon, J. B. and Bernstein, J. (2023). A spectral condition for feature learning. arXiv preprint arXiv:2310.17813 .Yosinski, J. , Clune, J. , Bengio, Y. and Lipson, H. (2014). How transferable are features in deep neural networks? Advances in neural information processing systems , 27 .You, Y. , Li, J. , Reddi, S. , Hseu, J. , Kumar, S. , Bhojanapalli, S. , Song, X. , Demmel, J. , Keutzer, K. and Hsieh, C.-J. (2019). Large batch optimization for deep learning: Training bert in 76 minutes. arXiv preprint arXiv:1904.00962 .Yuan, L. , Chen, Y. , Cui, G. , Gao, H. , Zou, F. , Cheng, X. , Ji, H. , Liu, Z. and Sun, M. (2023). Revisiting out-of-distribution robustness in nlp: Benchmark, analysis, and llms evaluations. ArXiv , abs/2306.04618 .Zaheer, M. , Reddi, S. , Sachan, D. , Kale, S. and Kumar, S. (2018). Adaptive methods for nonconvex opti-mization. Advances in neural information processing systems , 31 .Zeiler, M. D. and Fergus, R. (2014). Visualizing and understanding convolutional networks. In European conference on computer vision . Springer. Zhang, R. , Zhao, Y. , Liu, Z. , Wang, Z. , Li, D. , Su, Y. , Liu, S. and Zhang, Z. (2026a). Teon: Tensorized orthonormalization beyond layer-wise muon for large language model pre-training. arXiv preprint arXiv:2601.23261 .Zhang, R. , Zhao, Y. , Liu, Z. , Wang, Z. and Zhang, Z. (2026b). Muon+: Towards better muon via one additional normalization step. arXiv preprint arXiv:2602.21545 .23 Zhang, Y. , Chen, C. , Ding, T. , Li, Z. , Sun, R. and Luo, Z.-Q. (2024). Why transformers need adam: Ahessian perspective. Advances in neural information processing systems , 37 131786–131823. Zhang, Y. , Chen, C. , Shi, N. , Sun, R. and Luo, Z.-Q. (2022). Adam can converge without any modification on update rules. Advances in neural information processing systems , 35 28386–28399. Zhao, R. , Morwani, D. , Brandfonbrener, D. , Vyas, N. and Kakade, S. (2024). Deconstructing what makes a good optimizer for language models. arXiv preprint arXiv:2407.07972 .Zhou, D. , Tang, Y. , Yang, Z. , Cao, Y. and Gu, Q. (2018). On the convergence of adaptive gradient methods for nonconvex optimization. ArXiv , abs/1808.05671 .Zou, D. , Cao, Y. , Li, Y. and Gu, Q. (2021). Understanding the generalization of adam in learning neural networks with proper regularization. arXiv preprint arXiv:2108.11371 .Zou, F. , Shen, L. , Jie, Z. , Zhang, W. and Liu, W. (2018). A sufficient condition for convergences of adam and rmsprop. 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) 11119–11127. 24 A Additional Experimental Details 
+
+# A.1 Common protocol 
+
+Across all experiments, we match model architecture, data pipeline, training budget, and evaluation protocol across optimizers. Unless otherwise noted, every result is averaged over three random seeds. We tune the learning rate and scheduler hyperparameters for each optimizer under the same budget, following standard hyperparameter selection and training recipes rather than redesigning the full pipeline around a single optimizer (Chen et al., 2023). This matched-budget protocol is intended to isolate differences in learned representations rather than differences in engineering effort. 
+
+# A.2 Vision setup 
+
+We study two representative visual backbones: ResNet-18 and ViT-S/16, both trained on ImageNet-1K. Our implementations are adapted from the codebases of Wang et al. (2024) and Zhang et al. (2024). ResNet-18 is trained for 100 epochs with a cosine schedule and 5 warmup epochs; ViT-S/16 is trained for 300 epochs with a cosine schedule, 30 warmup epochs, and gradient-norm clipping at 1.0. Weight decay is fixed to 10 −4 for ResNet-18; for ViT-S/16 it is swept jointly with the learning rate. For each optimizer we sweep the learning rate over {1, 2, 5} × { 10 −4, . . . , 10 0} on ResNet-18; on ViT-S/16 we sweep both the learning rate and weight decay over {1, 3} × { 10 −4, . . . , 10 0}. The best configuration is selected by ImageNet-1K validation accuracy, and the three reported seeds are retrained at that configuration. In our experiments, Adam refers to its decoupled-weight-decay variant AdamW, and SGD likewise uses decoupled weight decay. Muon is not applied to 1D parameters, embedding layers, or classification heads; these parameters are instead optimized by SGD in ResNet-18 and by AdamW in ViT-S/16. Pretraining experiments on vision models are conducted on 4 NVIDIA A40 GPUs. A single ResNet-18 pretraining run takes approximately 10 hours, ViT-S/16 takes approximately 40 hours. After pretraining, we evaluate robustness on ImageNet-C and evaluate transferability by training a linear classifier on EuroSAT, Flowers102, Food101, and Stanford-Cars. These transfer datasets cover substantial variation in domain shift and granularity: EuroSAT probes cross-domain transfer to satellite imagery, while Flowers102 and Stanford-Cars emphasize fine-grained recognition. For each downstream dataset we freeze the backbone and train a linear classifier for 100 epochs with SGD (momentum 0.9, no weight decay) and batch size 256 , holding out a test set for final evaluation and a validation subset for hyperparameter selection. For each checkpoint we run a coarse learning-rate search over {10 −2, 10 −1, 1} followed by a fine refinement at ratios {10 −1/4, 1, 10 1/4} around the best coarse value, and report test accuracy at the configuration with the highest validation accuracy. These experiments are conducted on a single NVIDIA A40 GPU and take less than 10 hours to complete. 
+
+# A.3 Language setup 
+
+Our implementations are adapted from the code base of https://github.com/karpathy/nanoGPT . We use nanoGPT-style causal language models pretrained on a FineWeb10B subset with a WSD learning-rate schedule and weight decay fixed to 0. For each optimizer, we sweep the learning rate over {1, 2, 5} × { 10 −5, . . . , 10 0}
+
+and select the run with the lowest validation perplexity on FineWeb10B. When using Muon, 1D parameters, embeddings, and the LM head are optimized by Adam. For GPT-2, we report results averaged over three random seeds. For GPT-2 Medium, we report results from a single seed due to computational resource constraints. Pretraining experiments on language models are conducted on 4 NVIDIA A40 GPUs. GPT-2 pretraining takes approximately 10 hours, and GPT-2 Medium takes approximately 48 hours. We evaluate robustness on FineWeb10B-C, where the evaluation text is perturbed by typo-style surface-form corruptions, and evaluate fine-tuning behavior by supervised fine-tuning on Alpaca, Databricks-Dolly-15k, and Evol-Instruct-70k, all formatted with the standard Alpaca prompt template. We run full-parameter 25 fine-tuning with Adam (weight decay 0) for two epochs at sequence length 512 , with held-out validation and test subsets obtained by random shuffling. Per-device batch size is 4 with gradient accumulation steps 
+
+16 . Cross-entropy is computed on response tokens only, with prompt tokens masked out. The learning rate is selected by lowest validation perplexity from {1, 2, 5} × { 10 −6, 10 −5}, a range consistent with standard SFT recipes (Taori et al., 2023; Wang et al., 2023). We report test perplexity at the selected learning rate, averaged over three pretraining seeds. All fine-tuning experiments are conducted on 4 NVIDIA A40 GPUs, and each experiment takes less than 10 hours to complete. 
+
+# A.4 Construction of FineWeb10B-C 
+
+We construct FineWeb10B-C from the clean FineWeb10B validation split. The corruption is applied to raw text before tokenization, and the resulting corrupted files are fixed once generated. All optimizers are evaluated on exactly the same corrupted examples. Following Pruthi et al. (2019), we use four character-level typo operations. Swap exchanges two adjacent internal characters in a word. Drop removes one internal character. Add inserts a random lowercase character at an internal position. Keyboard replaces one character with a neighboring key on a QWERTY keyboard. For each corruption type, we consider five severity levels with increasing perturbation intensity. The full construction code will be released with the paper. We report model performance separately for each corruption type, averaging perplexity over the five severity levels. We also report the overall average across all corruption types and severity levels. This protocol produces a fixed typo-corrupted benchmark for evaluating pretraining robustness, rather than an adaptive attack that is re-optimized for each model. 
+
+# A.5 Layer-wise classification margin 
+
+For each pretrained checkpoint, we compute the layer-wise margin using a probe that mirrors the model’s own pre-output normalization followed by a linear map to logits. At depth ℓ, we take the output of the 
+
+ℓ-th transformer block as the hidden state z(ℓ)(x), and apply the native pooling operator for ViT-S when applicable. The probe at layer ℓ is defined as T (ℓ)(z) = W (ℓ) Norm (z) + b(ℓ), where Norm (·) is the same normalization operator the model applies before its output head, kept frozen at its pretrained configuration, and W (ℓ) ∈ RC×d, b(ℓ) ∈ RC are the only trainable parameters of the probe. On a subset D of the validation split, we collect pairs  z(ℓ)(x), s (x), where s(x) denotes the model’s final logits, and fit W (ℓ), b (ℓ) by least-squares regression. For the final block, we use the model’s own output head directly. The per-layer logits are given by T (ℓ)(z(ℓ)(x)) , and the sample-level margin γℓ(x, y ) is defined as in Eq. 4.1. We report the mean clean margin on D; means and standard deviations in Figure 2 are computed over three random seeds, each run end-to-end from pretraining through margin evaluation. 
+
+# A.6 Layer-wise feature spectrum analysis 
+
+Here, we introduce how to construct features across modalities. Throughout, depth ℓ refers to the position immediately after the ℓ-th transformer block. For language models, we use the hidden state at each token position as a feature vector, so that Z(ℓ) stacks all token-level hidden states across the validation set. For ViT models, we instead use class-center features: for each class, we average the pooled representations of all validation samples belonging to that class, and Z(ℓ) stacks these class-center features. In both cases, this construction is performed independently at every depth ℓ.
+
+# A.7 Reordering procedure. 
+
+Given a symmetric similarity matrix A ∈ [0 , 1] n×n, we form distances dij = 1 − Aij , run agglomerative hierarchical clustering with average linkage to obtain a dendrogram, and select the leaf ordering that minimizes 26 the sum of distances between adjacent leaves (Bar-Joseph et al., 2001). The resulting permutation P is then applied to both rows and columns to produce P AP ⊤. We implement the process using SciPy (Virtanen et al., 2020). 
+
+# B Additional Results 
+
+Detailed per-corruption robustness and per-task transfer numbers are reported in Table 2 and Table 3, respectively. To complement the aggregated numbers reported in the main text, we additionally include standard deviations across three random seeds for every entry, except for the GPT-2 Medium experiments which were run with a single seed due to computational cost. The overall trends remain stable across runs: Muon exhibits superior robustness under distribution shift and a consistent advantage on downstream transfer tasks. Table 2: Robustness of optimizers across image and language pretraining. For ResNet-18 and ViT-S we report Top-1 accuracy (%, ↑) on ImageNet-C across the four standard corruption categories (Noise, Blur, Weather, Digital), with the rightmost column averaging over all 15 corruption types. For GPT-2 and GPT-medium we report perplexity ( ↓) on FineWeb-C across four text-corruption types (Add, Drop, Key, Swap), with the rightmost column averaging over the four. Values are mean ± std over 3 seeds, except GPT-medium which is reported from a single run. The best optimizer per column is in bold .
+
+ImageNet-C accuracy ( ↑)
+
+Model Optimizer Noise Blur Weather Digital Mean (15) ResNet-18 Adam 19 .75 ± 0.13 24 .05 ± 0.13 33 .51 ± 0.29 34 .46 ± 0.11 28 .49 ± 0.09 
+
+SGD 23 .15 ± 0.20 27 .19 ± 0.17 37 .15 ± 0.20 37 .75 ± 0.33 31 .85 ± 0.13 
+
+Muon 24 .51 ± 0.45 27 .05 ± 0.27 37 .65 ± 0.21 37 .56 ± 0.11 32 .17 ± 0.22 
+
+ViT-S Adam 54 .52 ± 0.69 42 .35 ± 0.40 61 .19 ± 0.17 58 .54 ± 0.21 54 .12 ± 0.26 
+
+SGD 47 .78 ± 0.60 39 .09 ± 0.17 55 .91 ± 0.05 53 .75 ± 0.24 49 .22 ± 0.09 
+
+Muon 55 .91 ± 0.77 43 .97 ± 0.36 63 .37 ± 0.40 60 .15 ± 0.03 55 .84 ± 0.19 
+
+FineWeb-C perplexity ( ↓)
+
+Model Optimizer Add Drop Key Swap Mean (4) GPT-2 Adam 41 .05 ± 0.21 37 .97 ± 0.46 40 .02 ± 0.26 39 .77 ± 0.26 39 .70 ± 0.23 
+
+Muon 39 .15 ± 0.10 36 .26 ± 0.47 38 .21 ± 0.13 37 .92 ± 0.13 37 .89 ± 0.16 
+
+GPT-medium ∗ Adam 34 .87 32 .01 34 .00 33 .67 33 .64 
+
+Muon 33 .05 30 .42 32 .28 31 .94 31 .92  
+
+> ∗Single run, std not reported.
+
+Layer-wise analysis on GPT-2 Medium. As shown in Figure 8 and aggregated in Table 4, Muon attains higher margin, higher eRank, and lower Top10E than Adam across the 24 transformer layers of GPT-2 Medium, consistent with the trends reported in Section 4. These results are consistent with Muon learning hidden representations that are both more robust and spectrally more diverse than those produced by Adam. 27 Table 3: Linear-probe transfer for vision and instruction-tuning adaptation for language. For ResNet-18 and ViT-S, we report linear-probe accuracy (%, ↑) on four downstream image classification benchmarks. For GPT-2 and GPT-medium, we report fine-tuning test perplexity ( ↓) on three instruction datasets. Vision results and GPT-2 results are mean ± std over 3 seeds; GPT-medium is reported from a single run. The best optimizer per column is in bold .
+
+## Vision: linear-probe accuracy ( ↑)
+
+## Backbone Optimizer EuroSAT Flowers102 Food101 Stanford-Cars ResNet-18 Adam 94 .52 ± 0.13 82 .80 ± 1.13 66 .72 ± 0.48 49 .24 ± 1.21 
+
+## SGD 94 .73 ± 0.25 84 .76 ± 0.52 68 .67 ± 0.21 52 .48 ± 0.28 
+
+## Muon 94 .86 ± 0.20 85 .84 ± 0.39 68 .93 ± 0.16 52 .96 ± 0.13 
+
+## ViT-S Adam 95 .58 ± 0.32 84 .57 ± 0.48 71 .58 ± 0.12 44 .75 ± 2.00 
+
+## SGD 95 .46 ± 0.62 84 .69 ± 0.43 69 .22 ± 0.16 40 .37 ± 1.54 
+
+## Muon 95 .80 ± 0.32 85 .99 ± 0.21 71 .86 ± 0.24 46 .43 ± 0.98 
+
+## Language: instruction-tuning perplexity ( ↓)
+
+## Backbone Optimizer Alpaca Dolly WizardLM GPT-2 Adam 16 .25 ± 0.77 8.99 ± 0.93 51 .91 ± 6.85 
+
+## Muon 15 .12 ± 0.58 8.61 ± 0.78 45 .75 ± 5.57 
+
+## GPT-medium ∗ Adam 12 .53 7.85 27 .28 
+
+## Muon 12 .23 7.62 26 .68  
+
+> ∗
+
+Single run, std not reported. 
+
+> 28
+
+Figure 8: Layer-wise analysis on GPT-2 Medium. (a) Classification margin. (b) Effective rank and (c) Top-10 energy fraction of hidden representations. Overall, Muon yields higher margin, higher eRank, and lower Top10E than Adam. Table 4: Layer-wise averages of margin, eRank, and Top10E on GPT-2 Medium trained with Adam and Muon. Best per column in bold. Optimizer Margin ( ↑) eRank ( ↑) Top10E ( ↓)Adam −3.0717 28 .34 0.7453 
+
+Muon −3.0370 29 .67 0.7330 
+
+# C Notations 
+
+Basic notation. For a positive integer k, let [k] = {1, . . . , k }. For d ∈ N, let 1d ∈ Rd denote the all-ones vector, Id ∈ Rd×d the identity matrix, and Jd = 1d1⊤ 
+
+> d
+
+∈ Rd×d the all-ones matrix. When the dimension is clear from context, we may omit the subscript and write simply 1, I, and J. For matrices of the same size, 
+
+⟨A, B ⟩F = tr (A⊤B) denotes the Frobenius inner product, while ∥A∥F and ∥A∥op denote the Frobenius norm and operator norm, respectively. We use ⊗ for the Kronecker product and [A, B ] for horizontal concatenation. 
+
+Hierarchical labels and features. Fix integers m, n ≥ 2 and let C = mn . The label set is C = [ m] × [n].For each class c = ( g, r ) ∈ C , define xc = [ a · eg , b · eg,r ]⊤ ∈ Rm+C , 0 < a ≤ b. The population is uniform on 
+
+C. Let R ∈ { 0, 1}m×C be the coarse-membership matrix whose column indexed by c = ( g, r ) is eg , and define 
+
+F = [ aR ⊤, bI C ]⊤ ∈ R(m+C)×C . For a linear classifier W ∈ RC×(m+C), let Z(W ) = Π W F ∈ RC×C denote the centered representation, where the centering matrix Π is defined in the next paragraph. The population cross-entropy is defined as L(W ) = −1/C P 
+
+> c∈C
+
+log  soft (Z(W )) c,c 
+
+, where soft (·) denotes the column-wise softmax. We will also write L(Z) to denote the same loss evaluated directly at a logit matrix Z ∈ RC×C .
+
+Centering and hierarchical projectors. We define the following matrix 
+
+J = JC , Π = IC − 1
+
+C J, S = R⊤R = Im ⊗ Jn, Pf = IC − 1
+
+n S, Pc = 1
+
+n S − 1
+
+C J. 
+
+Then Π = Pf + Pc. We write rf = rank (Pf ) = m(n − 1) , r c = rank (Pc) = m − 1, δ = a2n/b 2 and 
+
+s = √a2n + b2.
+
+Canonical plane. Define the canonical directions Qf = [ 0 , P f ] ∈ RC×(m+C) and Qc = 1 /s [ aP cR⊤, bP c ] ∈
+
+RC×(m+C), and let Wcano = span {Qf , Q c} denote the canonical plane in weight space. 29 Symmetric logits and effective coordinates. A logit matrix M is called symmetric if it lies in 
+
+M = uP f + vP c + ζJ/C : u, v, ζ ∈ R . Since ΠPf = Pf , ΠPc = Pc, and ΠJ = 0 by Lemma F.1, the centered part ΠM = uP f + vP c depends only on u and v. We write u(M ), v (M ) for these coefficients, so that ΠM = u(M ) Pf + v(M ) Pc. For a checkpoint W , we write u(W ) = u(W F ) and v(W ) = v(W F ).
+
+Effective rank. For a nonzero matrix M with singular values σ1, . . . , σ r > 0, define 
+
+pi = σ2
+
+> i
+
+Prj=1 σ2
+
+> j
+
+, eRank( M ) = exp 
+
+
+
+−
+
+> r
+
+X
+
+> i=1
+
+pi log pi
+
+
+
+.
+
+Margin. For each class c ∈ C , γ(W ; xc, c ) = ( W x c)c − max j̸ =c(W x c)j . We define the average margin as 
+
+Γ( W ) = 1 /C P 
+
+> c∈C
+
+γ(W ; xc, c ).
+
+Optimization dynamics. We recall the three continuous-time dynamics analyzed in this paper; see Section 5 for the full setup. All flows are initialized at W A(0) = 0 for A ∈ { GD , Muon , Adam }, with momentum set to zero: (GD) ˙W GD (t) = −∇ W L(W GD (t)) .(Muon) ˙W Muon (t) = −spec (∇W L(W Muon (t))) , where spec (G) = U V ⊤ for SVD G = U ΣV ⊤.(Adam) ˙W Adam (t) = −sgn (∇W L(W Adam (t))) , where sgn (·) is the entrywise sign operator. 
+
+Exact-loss checkpoints. For any method A ∈ { GD , Muon , Adam }, write ZA(t) = Z(W A(t)) = Π W A(t)F
+
+for the centered logit matrix at time t. Given ϵ ∈ (0 , log C), we write W A 
+
+> ϵ
+
+for the exact-loss checkpoint satisfying L(W A 
+
+> ϵ
+
+) = ϵ. When discrete-time iterates are needed, we use W A 
+
+> t
+
+for the corresponding iterates and interpret W A 
+
+> ϵ
+
+via the standard first-crossing interpolation. 
+
+# D Proofs of Theorems 
+
+# D.1 Proof of Theorem 5.2 
+
+Proof. We first establish that the matched-loss times used in the theorem are well defined. The proof of the following proposition is deferred to Appendix E.5. 
+
+Proposition D.1 (Matched-loss time along GD, Adam and Muon) . Assume a > 0, b > 0, and m, n ≥ 2.Along the zero-initialized GD, Adam and Muon flows, the losses are strictly decreasing from log C to 0.Hence, for every ϵ ∈ (0 , log C), there exist unique times tGD  
+
+> ϵ
+
+> 0, tAdam  
+
+> ϵ
+
+> 0 and tMuon  
+
+> ϵ
+
+> 0 such that 
+
+L(W GD (tGD  
+
+> ϵ
+
+)) = ϵ, L(W Adam (tAdam  
+
+> ϵ
+
+)) = ϵ, L(W Muon (tMuon  
+
+> ϵ
+
+)) = ϵ. 
+
+This proposition guarantees that the exact-loss checkpoints W GD  
+
+> ϵ
+
+, W Adam  
+
+> ϵ
+
+, and W Muon  
+
+> ϵ
+
+are well defined for every ϵ ∈ (0 , log C), so that the matched-loss margin comparison in the theorem makes sense. With this in hand, we prove the theorem in four steps. The main idea is to reduce the margin comparison to a comparison of one scalar ratio. 
+
+• Step 1: Reduction of optimizer dynamics to canonical coordinates. We show that the raw outputs of GD, Muon, and Adam all lie in the symmetric class M, i.e., W A(t)F = u(t)Pf + v(t)Pc +
+
+ζ(t)J/C for some u(t), v (t), ζ (t) (with ζ(t) = 0 for GD and Muon). For Muon and Adam, this gives explicit trajectories. For GD, it gives a two-dimensional ODE for u(t) and v(t).30 • Step 2: Monotonicity of the margin in the representation imbalance ratio ρ = v/u . We analyze the margin in M. At a fixed loss level, the margin along a fixed-ratio ray depends only on ρ,and is strictly decreasing in ρ on [1 , ∞).
+
+• Step 3: Ratio comparisons. We compare the ratios induced by the three optimizers. Muon has a smaller ratio than Adam, which proves part (i). For GD, we show that above an explicit terminal-loss threshold ϵ⋆, GD has a larger ratio than Muon. By Step 2, this implies that Muon has larger margin. 
+
+• Step 4: Converting the explicit threshold into the asymptotic window. We estimate the scale of ϵ⋆. This shows that the asymptotic loss windows in the theorem lie above ϵ⋆, so the explicit-threshold comparison from Step 3 applies and proves part (ii). 
+
+Step 1: Reduction of optimizer dynamics to canonical coordinates. 
+
+To compare the margins of Muon, Adam, and GD, we first need a precise description of their trajectories in logit space. The key observation is that all three optimizers admit a three-dimensional reduction. We summarize the required structural facts below. 
+
+Proposition D.2 (GD logit dynamics and matched-loss parametrization) . Assume a > 0, b > 0, and 
+
+m, n ≥ 2. Let s = √a2n + b2. Along the zero-initialized GD flow, the raw output and centered representation satisfy 
+
+W GD (t)F = ZGD (t) = uGD (t)Pf + vGD (t)Pc,
+
+where uGD (t) and vGD (t) solve 
+
+
+
+˙uGD (t) = b2
+
+me−uGD (t) + ( m − 1) e−qGD (t)
+
+DGD (t) ,
+
+˙vGD (t) = s2 e−qGD (t)
+
+DGD (t)
+
+with uGD (0) = vGD (0) = 0 and 
+
+qGD (t) = (n − 1) uGD (t) + vGD (t)
+
+n , DGD (t) = 1 + ( n − 1) e−uGD (t) + n(m − 1) e−qGD (t).
+
+This proposition shows that the GD trajectory in logit space stays in the canonical span of Pf and Pc,and is governed by a closed two-dimensional ODE. 
+
+Proposition D.3 (Muon logit trajectory) . Assume a > 0, b > 0, and m, n ≥ 2. Let s = √a2n + b2. Along the zero-initialized idealized Muon flow, the raw output and centered representation satisfy 
+
+W Muon (t)F = ZMuon (t) = uMuon (t)Pf + vMuon (t)Pc,
+
+where uMuon (t) = bt, v Muon (t) = st. 
+
+This proposition gives the corresponding canonical-coordinate description for the Muon logits. In this case, both coordinates are linear functions of time. 
+
+Proposition D.4 (Adam logit trajectory) . Assume a > 0, b > 0, and m, n ≥ 2. Along the zero-initialized Adam flow, the raw output satisfies 
+
+W Adam (t)F = uAdam (t)Pf + vAdam (t)Pc + ζAdam (t)
+
+C · J, 
+
+where uAdam (t) = 2 bt, v Adam (t) = 2( an + b)t, and ζAdam (t) = t an (2 − m) + b(2 − mn ). Equivalently, the centered representation satisfies 
+
+ZAdam (t) = uAdam (t)Pf + vAdam (t)Pc.
+
+31 This proposition gives the analogous description for the Adam logits. The only new feature is the additional 
+
+J-component in the raw output, which disappears after centering and leaves a two-dimensional canonical trajectory. The proofs of these propositions are deferred to Appendix E.1, E.2 and E.3. 
+
+Step 2: Monotonicity of the margin in the representation imbalance ratio ρ.
+
+The next ingredient is that, at a fixed loss level, the matched-loss margin in M is controlled by the ratio 
+
+ρ = v/u .
+
+Proposition D.5 (Matched-loss margin as a function of the ratio) . Fix ϵ ∈ (0 , log C). For each fixed ρ ≥ 1,consider logits of the form M = rP f + ρrP c + ζJ/C. Among such logits, there is a unique scale r > 0 for which the corresponding logits reach loss ϵ. Moreover, any such logits reaching loss ϵ have the same average margin. We denote this common margin by rϵ(ρ). Then the mapping rϵ(ρ) is strictly decreasing in ρ on [1 , ∞).
+
+The proof is deferred to Appendix E.4. This proposition is the bridge from margins to ratios: at matched loss, the smaller ratio ρ = v/u gives the larger margin. 
+
+Step 3: Ratio comparisons. 
+
+We now use the reduction from Step 2 to compare the margin induced by three optimizers through their ratios ρ = v/u . First consider Muon and Adam. By Step 1, we have 
+
+ρMuon = vMuon (t)
+
+uMuon (t) =
+
+r
+
+1 + a2nb2 , ρAdam = vAdam (t)
+
+uAdam (t) = 1 + an b .
+
+Direct calculation gives ρAdam > ρ Muon > 1. By Step 2, the margin is strictly decreasing in ρ on (1 , ∞). Hence for every ϵ ∈ (0 , log C), we have 
+
+Γ( W Muon  
+
+> ϵ
+
+) = rϵ(ρMuon ) > r ϵ(ρAdam ) = Γ( W Adam  
+
+> ϵ
+
+).
+
+This proves part (i). We next compare the margin of Muon with that of GD. Let θ = p1 + a2n/b 2 − 1, ρ M = 1 + θ =
+
+ρMuon , ϵ ⋆ = mn (1 + mθ )−n/θ . By Lemma F.6, we have 0 < ϵ ⋆ < log C. By Proposition D.1, for any fixed 
+
+ϵ ∈ [ϵ⋆, log C), there exists a unique tGD  
+
+> ϵ
+
+with L(W GD (tGD  
+
+> ϵ
+
+)) = ϵ. The following proposition compares the ratio at this time with ρMuon .
+
+Proposition D.6 (GD is more coarse-biased than Muon above the explicit threshold) . Assume 0 <a ≤ b. If L(W GD (t)) ≥ ϵ⋆, then we have vGD (t)/u GD (t) > ρ M . Equivalently, for every ϵ ∈ [ϵ⋆, log C),
+
+vGD (tGD  
+
+> ϵ
+
+)/u GD (tGD  
+
+> ϵ
+
+) > ρ M .
+
+The proof is deferred to Appendix E.6. Since ϵ ≥ ϵ⋆, Proposition D.6 gives 
+
+ρGD (ϵ) = vGD (tGD  
+
+> ϵ
+
+)
+
+uGD (tGD  
+
+> ϵ
+
+) > ρ M = ρMuon .
+
+Since the margin is strictly decreasing in ρ by Step 2, we have 
+
+Γ( W Muon  
+
+> ϵ
+
+) = rϵ(ρMuon ) > r ϵ
+
+ ρGD (ϵ) = Γ( W GD  
+
+> ϵ
+
+).
+
+Hence Muon has strictly larger margin than GD for every ϵ ∈ [ϵ⋆, log C).
+
+Step 4: Converting the explicit threshold into the asymptotic window. 
+
+It remains to show that the theorem’s asymptotic loss windows lie above ϵ⋆. By Lemma F.6, for every 
+
+0 < c < c 0, ϵ⋆ = o mn (1 + m√n)−c√n. Hence, if ϵ = Ω  mn (1 + m√n)−c√n, then ϵ ≥ ϵ⋆ for all sufficiently large m, n . The explicit-window comparison from Step 3 applies. Finally, when m = Θ( n), Lemma F.6 gives ϵ⋆ = o exp (−c′√n log n) for every 0 < c ′ < c ′
+
+> 0
+
+. Therefore, if 
+
+ϵ = Ω  exp (−c′√n log n), then ϵ ≥ ϵ⋆ for all sufficiently large n, and the same explicit-window comparison proves the claim. This proves part (ii). Thus, we conclude the proof of Theorem 5.2. 32 D.2 Proof of Theorem 5.3 
+
+Proof. We first verify that the matched-loss times in the theorem are well defined. By Proposition D.1, along the GD, Adam, and Muon flows, the losses are strictly decreasing from log C to 0. Hence tGD  
+
+> ϵ
+
+, tAdam  
+
+> ϵ
+
+, and 
+
+tMuon  
+
+> ϵ
+
+are well defined for every ϵ ∈ (0 , log C).We then prove the theorem in four steps. The proof follows the same structure as Theorem 5.2; the only difference is Step 2, where we replace the margin monotonicity with an effective-rank monotonicity. 
+
+• Step 1: Reduction of optimizer dynamics to canonical coordinates. We show that the centered representations of GD, Muon, and Adam all stay in the same two-dimensional canonical space, 
+
+Z(t) = u(t)Pf + v(t)Pc. For Muon and Adam, this gives explicit trajectories. For GD, it gives a two-dimensional ODE for u(t) and v(t).
+
+• Step 2: Monotonicity of effective rank in the representation imbalance ratio ρ = v/u . We compute the singular values of uP f + vP c. This shows that the effective rank depends only on the ratio 
+
+ρ, and is strictly decreasing in ρ whenever ρ > 1.
+
+• Step 3: Ratio comparisons. We compare the ratios induced by the three optimizers. Muon has a smaller ratio than Adam, which proves part (i). For GD, we show that above an explicit terminal-loss threshold ϵ⋆, GD has a larger ratio than Muon. By Step 2, this implies that Muon has larger effective rank. 
+
+• Step 4: Converting the explicit threshold into the asymptotic window. We estimate the scale of ϵ⋆. This shows that the asymptotic loss windows in the theorem lie above ϵ⋆, so the explicit-threshold comparison from Step 3 applies and proves part (ii). 
+
+Step 1: Reduction of optimizer dynamics to canonical coordinates. 
+
+By Propositions D.2, D.3, and D.4, the representations of the three optimizers have the following forms. For Adam, Proposition D.4 gives 
+
+ZAdam (t) = uAdam (t)Pf + vAdam (t)Pc,
+
+where uAdam (t) = 2 bt and vAdam (t) = 2( an + b)t. Similarly, Propositions D.2 and D.3 give 
+
+ZGD (t) = uGD (t)Pf + vGD (t)Pc, ZMuon (t) = uMuon (t)Pf + vMuon (t)Pc
+
+where uMuon (t) = bt, v Muon (t) = st, s = √a2n + b2. For GD, Proposition D.2 gives the corresponding canonical coordinates uGD (t), v GD (t) through the two-dimensional ODE stated there. 
+
+Step 2: Monotonicity of effective rank in the representation imbalance ratio ρ.
+
+By Step 1, for each optimizer A ∈ { Muon , Adam , GD }, the centered representation lies in the two-dimensional canonical space 
+
+ZA(t) = uA(t)Pf + vA(t)Pc.
+
+Thus, to compare the effective ranks of different optimizers, it suffices to understand the effective rank of matrices of the form M = uP f +vP c, u > 0, v > 0. Let ρ = v/u. Because Pf and Pc are orthogonal projections with ranks rf = rank (Pf ) = m(n − 1) , r c = rank (Pc) = m − 1, the matrix M acts by multiplication by u on 
+
+Im (Pf ), by multiplication by v on Im (Pc), and vanishes on the orthogonal complement. Hence the nonzero singular values of M are u with multiplicity rf , v with multiplicity rc. Therefore, normalizing the squared singular values by their total mass rf u2 + rcv2 = u2(rf + rcρ2), we obtain 
+
+eRank( M ) = exp 
+
+
+
+log( rf + rcρ2) − 2rcρ2
+
+rf + rcρ2 log ρ
+
+
+
+.
+
+33 We denote this quantity by E(ρ). Thus eRank (uP f + vP c) depends only on the ratio ρ = v/u . Moreover, direct calculation gives ddρ log E(ρ) = − 4rf rcρ
+
+(rf + rcρ2)2 log ρ, 
+
+which is strictly negative for every ρ > 1. Hence E(ρ) is strictly decreasing on (1 , ∞). Consequently, once the optimizer trajectories are written in canonical coordinates, comparing effective ranks is equivalent to comparing their ratios ρ = v/u : among ratios larger than one, the smaller ratio gives the larger effective rank. 
+
+Step 3: Ratio comparisons. 
+
+We now use the reduction from Step 2 to compare the effective ranks induced by three optimizers through their ratios ρ = v/u . From Step 1, Muon and Adam have fixed ratios 
+
+ρMuon =
+
+r
+
+1 + a2nb2 , ρAdam = 1 + an b .
+
+Hence ρAdam > ρ Muon > 1. By Step 2, the effective rank is strictly decreasing in ρ on (1 , ∞). Therefore, for every ϵ ∈ (0 , log C), we have eRank  Z(W Muon  
+
+> ϵ
+
+) > eRank  Z(W Adam  
+
+> ϵ
+
+). This proves part (i). We next compare the effective rank of Muon with that of GD. Let θ = p1 + a2n/b 2 − 1, ρ M = 1 + θ =
+
+ρMuon , ϵ ⋆ = mn (1 + mθ )−n/θ . By Lemma F.6, we have 0 < ϵ ⋆ < log C. We first prove the comparison on the explicit loss window ϵ ∈ [ϵ⋆, log C). By Proposition D.1, for any fixed ϵ in this window, there exists a unique time tGD  
+
+> ϵ
+
+satisfying L(W GD (tGD  
+
+> ϵ
+
+)) = ϵ. Since ϵ ≥ ϵ⋆, Proposition D.6 gives 
+
+vGD (tGD  
+
+> ϵ
+
+)
+
+uGD (tGD  
+
+> ϵ
+
+) > ρ M = ρMuon .
+
+Since effective rank is strictly decreasing in ρ by Step 2, we obtain eRank  Z(W Muon  
+
+> ϵ
+
+) > eRank  Z(W GD  
+
+> ϵ
+
+).Hence Muon has strictly larger effective rank than GD for every ϵ ∈ [ϵ⋆, log C).
+
+Step 4: Converting the explicit threshold into the asymptotic window. 
+
+The argument is identical to Step 4 in the proof of Theorem 5.2: by Lemma F.6, the asymptotic loss windows in the theorem lie above ϵ⋆, so the explicit-threshold comparison from Step 3 yields 
+
+eRank  Z(W Muon  
+
+> ϵ
+
+) > eRank  Z(W GD  
+
+> ϵ
+
+).
+
+This proves part (ii). Thus, we conclude the proof of Theorem 5.3. 
+
+# E Proofs of Supporting Propositions 
+
+# E.1 Proof of Proposition D.2 
+
+Proof. By Lemma F.4, whenever W = μf Qf + μcQc, u = bμ f , and v = sμ c, we have 
+
+∇W L(W ) = b α (u, v )
+
+C · Qf + s β (u, v )
+
+C · Qc.
+
+Thus, the GD vector field is tangent to span {Qf , Q c}. Since W GD (0) = 0 , the GD trajectory stays in this plane: W GD (t) = μf (t)Qf + μc(t)Qc. Define uGD (t) = bμ f (t), v GD (t) = sμ c(t). Then Lemma F.3 gives 
+
+W GD (t)F = uGD (t)Pf + vGD (t)Pc. Since ΠPf = Pf and ΠPc = Pc by Lemma F.1, we have 
+
+ZGD (t) = Π W GD (t)F = uGD (t)Pf + vGD (t)Pc.
+
+It remains to derive the ODE for uGD and vGD . From the GD flow and the expression for the gradient above, we have 
+
+˙uGD (t) = − b2α(uGD (t), v GD (t)) 
+
+C , ˙vGD (t) = − s2β(uGD (t), v GD (t)) 
+
+C .
+
+34 Substituting the formulas for α and β from Lemma F.2, with qGD (t) =  (n − 1) uGD (t) + vGD (t)/n and 
+
+DGD (t) = 1 + ( n − 1) e−uGD (t) + n(m − 1) e−qGD (t), we have 
+
+
+
+˙uGD (t) = b2 
+
+> me−uGD (t)+( m−1) e−qGD (t)
+> DGD (t)
+
+,
+
+˙vGD (t) = s2 e−qGD (t) 
+
+> DGD (t)
+
+.
+
+Finally, since W GD (0) = 0 , we have uGD (0) = vGD (0) = 0 . This proves Proposition D.2. 
+
+# E.2 Proof of Proposition D.3 
+
+Proof. By Lemma F.4, whenever W = μf Qf + μcQc, u = bμ f , and v = sμ c, we have 
+
+∇W L(W ) = b α (u, v )
+
+C Qf + s β (u, v )
+
+C Qc, α(u, v ) < 0, β(u, v ) < 0.
+
+Moreover, Lemma F.3 shows that Qf and Qc are orthogonal partial isometries with orthogonal row and column spaces. Therefore, we have spec  ∇W L(W ) = −Qf − Qc on the canonical plane. Hence the idealized Muon flow satisfies 
+
+˙W Muon (t) = Qf + Qc, W Muon (0) = 0 ,
+
+and consequently, we have W Muon (t) = t(Qf + Qc). Multiplying by F and using Lemma F.3, we obtain 
+
+W Muon (t)F = t(Qf F + QcF ) = t(bP f + sP c). Since Π( uP f + vP c) = uP f + vP c by Lemma F.1, we have 
+
+ZMuon (t) = Π W Muon (t)F = t(bP f + sP c). Equivalently, we have 
+
+ZMuon (t) = uMuon (t)Pf + vMuon (t)Pc,
+
+where uMuon (t) = bt, v Muon (t) = st. This proves Proposition D.3. 
+
+# E.3 Proof of Proposition D.4 
+
+Proof. Set N =  2R⊤ − 1C 1⊤
+
+> m
+
+, 2IC − J . We first show that W Adam (t) = tN . For this candidate trajectory, direct calculation gives 
+
+W Adam (t)F = t a(2 S − J) + b(2 IC − J).
+
+By Lemma F.2, soft (W Adam (t)F ) − IC = αtPf + βtPc for some αt < 0 and βt < 0. Let p0,t , p 1,t , p 2,t be the correct, sibling, and other-group probabilities induced by W Adam (t)F . Then, we have ∇W L(W Adam (t)) = 1/C [ aM tR⊤, bM t ], M t = soft (W Adam (t)F ) − IC . For a row c = ( g, r ), the coarse block satisfies 
+
+(MtR⊤)c,g = ( p0,t − 1) + ( n − 1) p1,t = −n(m − 1) p2,t < 0,
+
+and, for g′̸ = g, (MtR⊤)c,g ′ = np 2,t > 0. The fine block satisfies (Mt)c,c = p0,t − 1 < 0, (Mt)c,c ′ > 0 ( c′̸ = c).
+
+Thus, every entry of the gradient has a fixed nonzero sign along the candidate trajectory, and hence we have 
+
+−sgn  ∇W L(W Adam (t))  = N. Therefore, the Adam flow reduces to ˙W Adam (t) = N with W Adam (0) = 0 , so 
+
+W Adam (t) = tN. Using S = nP c +J/m , IC = Pf +Pc +J/C , and C = mn , we get 2S −J = 2 nP c +n(2 −m)J/C 
+
+and 2IC − J = 2 Pf + 2 Pc + (2 − C)J/C . Therefore, we have 
+
+W Adam (t)F = 2 bt P f + 2( an + b)t P c + t an (2 − m) + b(2 − mn )
+
+C J. 
+
+Thus, we have uAdam (t) = 2 bt, v Adam (t) = 2( an + b)t, ζ Adam (t) = t an (2 − m) + b(2 − mn ). Finally, since 
+
+ΠPf = Pf , ΠPc = Pc, and ΠJ = 0 by Lemma F.1, we have ZAdam (t) = uAdam (t)Pf + vAdam (t)Pc. This proves Proposition D.4. 35 E.4 Proof of Proposition D.5 
+
+Proof. Fix ϵ ∈ (0 , log C). The proof proceeds in three steps. 
+
+• Step 1. We compute the loss and margin for logits of the form M = rP f + ρrP c + ζJ/C .
+
+• Step 2. For each fixed ρ ≥ 1, we show that there is a unique r > 0 for which the corresponding logits reach loss ϵ. We also show that all logits with this scale have the same margin, which makes rϵ(ρ)
+
+well-defined. 
+
+• Step 3. We compare the matched-loss scales corresponding to two ratios ρ1 < ρ 2, and show that rϵ(ρ)
+
+is strictly decreasing in ρ.
+
+Step 1. Fix ρ ≥ 1, and consider logits of the form M = rP f +ρrP c+ζJ/C. Define κρ = (n − 1 + ρ)/n, D ρ(r) = 1 + ( n − 1) e−r + n(m − 1) e−κρr . By Lemma F.2, the loss is L(M ) = log Dρ(r), which is independent of ζ.Since ρ ≥ 1, Lemma F.5 gives that Mc,c − max j̸ =c Mj,c = r, for all c ∈ C , which is also independent of ζ.
+
+Step 2. For fixed ρ ≥ 1, reaching loss ϵ is equivalent to Dρ(r) = eϵ. The function Dρ(r) is continuous and strictly decreasing in r, with Dρ(0) = C, lim r→∞ Dρ(r) = 1 . Since eϵ ∈ (1 , C ), there exists a unique positive solution r to Dρ(r) = eϵ. Therefore, among logits of the form M = rP f + ρrP c + ζJ/C , there is a unique scale r > 0 that reaches loss ϵ.By Step 1, all logits with this matched-loss scale have the same margin, namely r, independently of ζ.Thus the common margin defined in the lemma is well-defined, and it equals this unique matched-loss scale: 
+
+rϵ(ρ) = r. 
+
+Step 3. Take 1 ≤ ρ1 < ρ 2. Then κρ1 < κ ρ2 , so for every r > 0, Dρ2 (r) < D ρ1 (r). Let ri = rϵ(ρi). Since 
+
+Dρ1 (r1) = eϵ, we have Dρ2 (r1) < e ϵ. Because Dρ2 is strictly decreasing in r, its unique solution to Dρ2 (r) = eϵ
+
+must satisfy r2 < r 1. Therefore ρ 7 → rϵ(ρ) is strictly decreasing on [1 , ∞). This proves Proposition D.5. 
+
+# E.5 Proof of Proposition D.1 
+
+Proof. We start with the dynamics of GD. Since W GD (t) follows gradient flow, we have 
+
+ddt L(W GD (t)) = 
+
+D
+
+∇W L(W GD (t)) , ˙W GD (t)
+
+E
+
+> F
+
+= − ∇W L(W GD (t)) 2 
+
+> F
+
+< 0
+
+for every finite t > 0. Hence L(W GD (t)) is strictly decreasing. By Proposition D.2, the GD centered representation satisfies ZGD (t) = uGD (t)Pf + vGD (t)Pc, and therefore Lemma F.2 gives L(W GD (t)) = log DGD (t). At initialization, uGD (0) = vGD (0) = 0 , so DGD (0) = C, and hence 
+
+L(W GD (0)) = log C. 
+
+It remains to show that the loss converges to 0. By Proposition D.2, we have 
+
+˙uGD (t) = b2
+
+me−uGD (t) + ( m − 1) e−qGD (t)
+
+DGD (t) ≥ b2
+
+mC e−uGD (t).
+
+Direct calculation gives 
+
+ddt euGD (t) = euGD (t) ˙uGD (t) ≥ b2
+
+mC .
+
+Therefore, uGD (t) → ∞ . Since vGD (t) ≥ 0, we also have qGD (t) → ∞ . Hence DGD (t) → 1, so L(W GD (t)) = log DGD (t) → 0.
+
+Thus, the loss is continuous and strictly decreasing from log C to 0. By the intermediate value theorem, for every ϵ ∈ (0 , log C), there exists a unique time tGD  
+
+> ϵ
+
+> 0 such that L(W GD (tGD  
+
+> ϵ
+
+)) = ϵ. Next, we consider the 36 dynamics of Muon and Adam. By Proposition D.3, the raw output of Muon satisfies W Muon (t)F = bt P f +st P c.
+
+Applying Lemma F.2 with u = bt and v = st , we get 
+
+L(W Muon (t)) = L(W Muon (t)F ) = log 
+
+
+
+1 + ( n − 1) e−bt + n(m − 1) e−(( n−1) b+s)t/n 
+
+.
+
+This expression is continuous and strictly decreasing in t, equals log C at t = 0 , and converges to 0 as 
+
+t → ∞ . Similarly, by Proposition D.4, the raw output of Adam satisfies W Adam (t)F = 2 bt P f + 2( an + b)t P c +
+
+ζAdam (t)J/C. The additive J/C component does not affect the loss. Applying Lemma F.2 with u = 2 bt and 
+
+v = 2( an + b)t, we get 
+
+L(W Adam (t)) = L(W Adam (t)F ) = log 
+
+
+
+1 + ( n − 1) e−2bt + n(m − 1) e−2(( n−1) b+an +b)t/n 
+
+.
+
+This expression is also continuous and strictly decreasing in t, equals log C at t = 0 , and converges to 0 as 
+
+t → ∞ .The existence and uniqueness of tMuon  
+
+> ϵ
+
+and tAdam  
+
+> ϵ
+
+then follow from the intermediate value theorem. This proves Proposition D.1. 
+
+# E.6 Proof of Proposition D.6 
+
+Proof. Set 
+
+w(t) = v(t) − u(t), g(t) = w(t) − θu (t) = v(t) − (1 + θ)u(t).
+
+For t > 0, since u(t) > 0 by Proposition D.2, we have v(t)/u (t) > ρ M = 1 + θ if and only if g(t) > 0. Thus it suffices to show that g(t) > 0 whenever L(W GD (t)) ≥ ϵ⋆.We proceed in three steps: 
+
+• Step 1. We show that if g(t) first reaches zero, then the corresponding value of u(t) must be at least 
+
+U⋆ = nθ log(1 + mθ ).
+
+• Step 2. We use this lower bound on u(t) to show that the GD loss at any such first hitting time is already strictly below ϵ⋆.
+
+• Step 3. We conclude by contradiction that, as long as L(W GD (t)) ≥ ϵ⋆, the hitting event cannot have occurred. Hence g(t) > 0, equivalently v(t)/u (t) > ρ M .
+
+Step 1: a lower bound at the first hitting time. By Proposition D.2, with q(t) = u(t) + w(t)/n, D (t) = 1 + ( n − 1) e−u(t) + n(m − 1) e−q(t), the GD coordinates satisfy 
+
+˙u(t) = b2e−u(t)
+
+mD (t)
+
+
+
+1 + ( m − 1) e−w(t)/n 
+
+, (E.1) and 
+
+˙w(t) = ˙ v(t) − ˙u(t) = b2e−u(t)
+
+mD (t)
+
+
+
+(1 + mδ )e−w(t)/n − 1
+
+
+
+. (E.2) At initialization, ˙u(0) = b2/C, ˙v(0) = s2/C. Therefore, we have lim t↓0 v(t)/u (t) = ˙v(0) / ˙u(0) = s2/b 2 = 1 + δ. 
+
+Since 1 + δ > √1 + δ = 1 + θ = ρM , we have g(t) > 0 for all sufficiently small t > 0. If g(t) > 0 for all t > 0,then the lemma is already proved. Otherwise, define the first hitting time t⋆ = inf {t > 0 : g(t) ≤ 0}. By construction, we have g(t) > 0 for all 0 < t < t ⋆, and g(t⋆) = 0 , ˙g(t⋆) ≤ 0. On the boundary g = 0 , we have 
+
+w = θu . Substituting w = θu into Eqn. (E.1) and (E.2), and using 1 + δ = (1 + θ)2, we have 
+
+˙g = ˙ w − θ ˙u = b2e−u
+
+mD (1 + θ)
+
+
+
+(1 + mθ )e−θu/n − 1
+
+
+
+. (E.3) 37 Hence ˙g > 0 whenever u < U ⋆, U ⋆ = nθ log (1 + mθ ). This contradicts ˙g(t⋆) ≤ 0. Therefore every first hitting time must satisfy 
+
+u(t⋆) ≥ U⋆ = nθ log(1 + mθ ). (E.4) 
+
+Step 2: an upper bound on the loss at the first hitting time. By definition, at t⋆, we have g(t⋆) = 0 ,which is equivalent to v(t⋆) = (1 + θ)u(t⋆). Consequently, we have q(t⋆) = (( n − 1) u(t⋆) + v(t⋆)) /n =(1 + θ/n ) u(t⋆). By Lemma F.2 and direct calculation, we have 
+
+L(W GD (t⋆)) = log 
+
+
+
+1 + ( n − 1) e−u(t⋆) + n(m − 1) e−(1+ θ/n )u(t⋆)
+
+≤ log 
+
+
+
+1 + mn e −u(t⋆)
+
+< mn e −u(t⋆). (E.5) Using Eqn. (E.4), we get e−u(t⋆) ≤ e−U⋆ = (1 + mθ )−n/θ . Combining this with Eqn. (E.5) gives 
+
+L(W GD (t⋆)) < mn (1 + mθ )−n/θ = ϵ⋆. (E.6) 
+
+Step 3: the explicit loss window. Suppose, for contradiction, that there exists t > 0 such that 
+
+L(W GD (t)) ≥ ϵ⋆ and v(t)/u (t) ≤ ρM . Equivalently, g(t) ≤ 0. Since g(t) > 0 for all sufficiently small t > 0, the first hitting time t⋆ exists and satisfies t⋆ ≤ t. By Proposition D.1, the GD loss is strictly decreasing along the trajectory. Hence L(W GD (t)) ≤ L (W GD (t⋆)) < ϵ ⋆, where the strict inequality follows from Eqn. (E.6) . This contradicts L(W GD (t)) ≥ ϵ⋆. Therefore, L(W GD (t)) ≥ ϵ⋆ implies v(t)/u (t) > ρ M . The equivalent exact-loss statement follows immediately by taking t = tGD  
+
+> ϵ
+
+. This proves Proposition D.6. 
+
+# F Proofs of Supporting Lemmas 
+
+Lemma F.1 (Projector algebra) . The matrices Pf and Pc satisfy 
+
+P 2 
+
+> f
+
+= Pf , P 2 
+
+> c
+
+= Pc, Pf Pc = PcPf = 0 , Π = Pf + Pc.
+
+In particular, ΠPf = Pf and ΠPc = Pc. Moreover, ΠJ = 0 . Their ranks are rf = rank (Pf ) = m(n − 1) , r c =rank( Pc) = m − 1.
+
+Proof. Since S = Im ⊗ Jn, we have S2 = nS , SJ = JS = nJ , and J2 = CJ . Direct expansion gives 
+
+P 2 
+
+> f
+
+=
+
+
+
+IC − 1
+
+n S
+
+2
+
+= IC − 2
+
+n S + 1
+
+n2 S2 = IC − 1
+
+n S = Pf ,
+
+and similarly, we have 
+
+P 2 
+
+> c
+
+=
+
+ 1
+
+n S − 1
+
+C J
+
+2
+
+= 1
+
+n2 S2 − 2
+
+nC SJ + 1
+
+C2 J2 = 1
+
+n S − 1
+
+C J = Pc.
+
+Direct calculation gives 
+
+Pf Pc =
+
+
+
+IC − 1
+
+n S
+
+ 1
+
+n S − 1
+
+C J
+
+
+
+= 0 , PcPf = 0 , Pf + Pc = IC − 1
+
+n S + 1
+
+n S − 1
+
+C J = Π .
+
+Combining P 2 
+
+> f
+
+= Pf , PcPf = 0 , and Pf + Pc = Π yields ΠPf = Pf ; the identity ΠPc = Pc follows symmetrically. Finally, using SJ = nJ and J2 = CJ , direct expansion gives Pf J = J − SJ/n = 0 and 
+
+PcJ = SJ/n − J2/C = 0 , hence ΠJ = Pf J + PcJ = 0 . The rank statements follow from the dimensions of the within-group and between-group contrast subspaces. This proves Lemma F.1. 38 Lemma F.2 (Loss on the exact symmetry class) . Let M = uP f +vP c+ζJ/C ∈ M , q =  (n − 1) u + v/n, D (u, v ) = 1 + ( n − 1) e−u + n(m − 1) e−q . Then every training example has the same loss, and we have 
+
+L(M ) = log D(u, v ).
+
+Moreover, we have soft (M ) − IC = α(u, v )Pf + β(u, v )Pc, where soft (M ) denotes the columnwise softmax matrix and 
+
+α(u, v ) = − n e−u + ( m − 1) e−q 
+
+D(u, v ) , β(u, v ) = − mn e −q
+
+D(u, v ) .
+
+In particular, α(u, v ) < 0 and β(u, v ) < 0.Proof. Fix a column j = ( g, r ). Since ζJ/C adds the same scalar ζ/C to every entry of every column, it does not affect the columnwise softmax. Hence it suffices to compute soft (uP f + vP c).In column j, there are three logit values: 
+
+zcorr = u
+
+
+
+1 − 1
+
+n
+
+
+
++ v
+
+ 1
+
+n − 1
+
+C
+
+
+
+, zsib = − un + v
+
+ 1
+
+n − 1
+
+C
+
+
+
+, zother = − vC .
+
+Therefore, we have zcorr − zsib = u, z corr − zother = (( n − 1) u + v)/n = q. Hence the correct probability is p0 = 1 /D (u, v ), each sibling probability is p1 = e−u/D (u, v ), and each other-group probability is p2 =
+
+e−q /D (u, v ). Thus every training example has the same loss and L(M ) = − log p0 = log D(u, v ).
+
+Now the j-th column of soft (M ) − IC takes the value p0 − 1 on the correct entry, p1 on siblings, p2 on other-group entries. This is exactly the three-level pattern of a matrix of the form αP f + βP c. Matching the other-group value gives −β/C = p2, which gives β = −Cp 2 = −mn e −q /D (u, v ). Matching the difference between a correct entry and a sibling entry gives α = ( p0 − 1) − p1 = −n e−u + ( m − 1) e−q /D (u, v ). The negativity of α, β is immediate. This proves Lemma F.2. 
+
+Lemma F.3 (Canonical feature directions) . Let s = √a2n + b2. The following identities hold. 1. The canonical directions are orthogonal: 
+
+Qf Q⊤ 
+
+> f
+
+= Pf , QcQ⊤ 
+
+> c
+
+= Pc, Qf Q⊤ 
+
+> c
+
+= 0 .
+
+2. Multiplication by the feature matrix F gives the fine and coarse logit components: 
+
+Qf F = bP f , QcF = sP c.
+
+3. For every u, v ∈ R, the canonical weight Wcano (u, v ) = u/b Q f + v/s Q c satisfies 
+
+Wcano (u, v )F = Π Wcano (u, v )F = uP f + vP c.
+
+Proof. By Lemma F.1, we have Pf Pc = 0 . Moreover, by direct calculation, we have Pf R⊤ = 0 . Hence, we have 
+
+Qf Q⊤ 
+
+> c
+
+= 1
+
+s
+
+ 0 · aRP c + Pf · bP c
+
+ = 0 , Qf Q⊤ 
+
+> f
+
+= P 2 
+
+> f
+
+= Pf .
+
+Also, direct calculation gives 
+
+QcQ⊤ 
+
+> c
+
+= 1
+
+s2
+
+ a2PcR⊤RP c + b2P 2
+
+> c
+
+ = 1
+
+s2
+
+ a2PcSP c + b2Pc
+
+ = 1
+
+s2 (a2n + b2)Pc = Pc
+
+Qf F = [ 0 , P f ]
+
+ aR bI C
+
+
+
+= bP f ,
+
+and 
+
+QcF = 1
+
+s [ aP cR⊤, bP c ]
+
+ aR bI C
+
+
+
+= 1
+
+s (a2PcR⊤R + b2Pc) = 1
+
+s (a2PcS + b2Pc) = 1
+
+s (a2n + b2)Pc = sP c.
+
+The final identity follows immediately. This proves Lemma F.3. 39 Lemma F.4 (Canonical-plane closure in weight space) . Let Wcano = span {Qf , Q c} ⊂ RC×(m+C). If 
+
+W ∈ W cano and W = μf Qf + μcQc, u = bμ f , v = sμ c, we have W F = uP f + vP c ∈ M , and L(W ) = log D(u, v ), soft (W F ) − IC = α(u, v )Pf + β(u, v )Pc. Moreover, we have ∇W L(W ) = b α (u, v )/C · Qf +
+
+s β (u, v )/C · Qc ∈ W cano . In particular, the plane Wcano is invariant under GD. Since α(u, v ), β (u, v ) < 0, it is also invariant under idealized Muon. Proof. By Lemma F.3, direct calculation gives 
+
+W F = μf Qf F + μcQcF = bμ f Pf + sμ c Pc = uP f + vP c ∈ M .
+
+By Lemma F.2, we have L(W ) = log D(u, v ), soft (W F ) − IC = α(u, v )Pf + β(u, v )Pc. By the chain rule, we have ∇W L(W ) = 1 /C  soft (W F ) − IC
+
+F ⊤ = 1 
+
+> C
+
+(αP f + βP c)[ aR ⊤, bI C ]. Using Pf R⊤ = 0 , we get 
+
+(αP f + βP c)[ aR ⊤, bI C ] = [ aβP cR⊤, bαP f + bβP c ] = bαQ f + sβQ c. Therefore, we have 
+
+∇W L(W ) = b α (u, v )
+
+C · Qf + s β (u, v )
+
+C · Qc ∈ W cano .
+
+Hence GD preserves Wcano . For Muon, since α(u, v ), β (u, v ) < 0 and Qf , Q c are orthogonal partial isometries, the compact SVD of ∇W L(W ) is obtained by concatenating the two blocks, so 
+
+spec  ∇W L(W ) = −Qf − Qc ∈ W cano .
+
+Thus, Muon also preserves Wcano . The final identity follows immediately. This proves Lemma F.4. 
+
+Lemma F.5 (Margin on the symmetry class) . Let M = uP f + vP c + ζJ/C ∈ M , u, v ≥ 0. Then every class has the same margin, i.e., Mc,c − max j̸ =c Mj,c = min {u, (( n − 1) u + v)/n } for all c ∈ C . In particular, if 
+
+v ≥ u, then we have Mc,c − max j̸ =c Mj,c = u for all c ∈ C .Proof. Fix a column c = ( g, r ). The additive term ζJ/C shifts all logits in this column by the same constant, so it does not affect the margin. Hence it suffices to compute the margin of uP f + vP c.For the correct class, a sibling class in the same coarse group, and a class in a different coarse group, the logits are respectively 
+
+zcorr = u
+
+
+
+1 − 1
+
+n
+
+
+
++ v
+
+ 1
+
+n − 1
+
+C
+
+
+
+, zsib = − un + v
+
+ 1
+
+n − 1
+
+C
+
+
+
+, zother = − vC .
+
+Therefore, we have zcorr − zsib = u, z corr − zother = (( n − 1) u + v)/n. The largest incorrect logit is the larger of 
+
+zsib and zother , so the margin equals min {u, (( n − 1) u + v)/n } . This value is independent of c, and therefore every class has the same margin. If v ≥ u, then we have (( n − 1) u + v)/n ≥ u, so the margin reduces to u.This proves Lemma F.5. 
+
+Lemma F.6 (Scale of the explicit threshold) . Fix constants 0 < a ≤ b, and let C = mn . For m, n ≥ 2,define 
+
+θ =
+
+r
+
+1 + a2nb2 − 1, ϵ⋆ = mn (1 + mθ )−n/θ .
+
+Then the following statements hold. 1. The explicit threshold lies in the valid loss range: 0 < ϵ ⋆ < 1 < log C. 
+
+2. There exists a constant c0 > 0, depending only on a, b , such that for every 0 < c < c 0, ϵ⋆ =
+
+o
+
+
+
+mn (1 + m√n)−c√n
+
+
+
+along any sequence m = m(n) ≥ 2 with n → ∞ . Consequently, if ϵ =Ω
+
+
+
+mn (1 + m√n)−c√n
+
+
+
+for some 0 < c < c 0, then ϵ ≥ ϵ⋆ for all sufficiently large n.
+
+40 3. If m = Θ( n), then we have ϵ⋆ = exp( −Θ( √n log n)) = n−Θ( √n). In particular, there exists a constant 
+
+c′ 
+
+> 0
+
+> 0, depending only on a, b , such that for every 0 < c ′ < c ′
+
+> 0
+
+, we have ϵ⋆ = o(exp( −c′√n log n)) =
+
+o
+
+
+
+n−c′√n
+
+
+
+. Consequently, if ϵ = Ω (exp( −c′√n log n)) = Ω 
+
+
+
+n−c′√n
+
+
+
+for some 0 < c ′ < c ′
+
+> 0
+
+, then we have ϵ ≥ ϵ⋆ for all sufficiently large n.Proof. First, ϵ⋆ > 0 is immediate. Since a ≤ b, we have θ = p1 + a2n/b 2 − 1 ≤ √1 + n − 1 ≤ n. Thus, 
+
+n/θ ≥ 1. By Bernoulli’s inequality, we have (1 + mθ )n/θ ≥ 1 + ( n/θ ) · mθ = 1 + mn. Therefore, we have 
+
+0 < ϵ ⋆ = mn (1 + mθ )−n/θ ≤ mn 
+
+1 + mn < 1 < log C, 
+
+where C = mn ≥ 4.We next prove the general high-dimensional scale. Since a, b are fixed positive constants, we have 
+
+θ = p1 + a2n/b 2 − 1 = Θ( √n). Hence there exist constants c1, c 2 > 0, depending only on a, b , such that for all sufficiently large n, we have c1
+
+√n ≤ θ ≤ c2
+
+√n. It follows that 
+
+nθ ≥ 1
+
+c2
+
+√n, 1 + mθ ≥ 1 + c1m√n. 
+
+Let ϕ(x) = log(1 + c1x)/log(1 + x), x > 0. Since ϕ(x) → 1 as x → ∞ , there exists a constant c3 > 0,depending only on a, b , such that log (1 + c1x) ≥ c3 log (1 + x) for all sufficiently large x. Applying this with 
+
+x = m√n, we get log(1 + mθ ) ≥ c3 log(1 + m√n) for all sufficiently large m, n . Therefore, we have 
+
+log ϵ⋆ = log( mn ) − nθ log(1 + mθ ) ≤ log( mn ) − c3
+
+c2
+
+√n log(1 + m√n).
+
+Let c0 = c3/c 2. Then, we have ϵ⋆ ≤ mn (1 + m√n)−c0 
+
+> √n
+
+for all sufficiently large m, n . For any 0 < c < c 0,we have ϵ⋆
+
+mn (1 + m√n)−c√n ≤ (1 + m√n)−c√n → 0.
+
+Thus, we have ϵ⋆ = o
+
+
+
+mn (1 + m√n)−c√n
+
+
+
+.
+
+Finally, suppose m = Θ( n). Since a, b are fixed, we have θ = Θ( √n), mθ = Θ( n3/2), nθ = Θ( √n).
+
+From the definition of ϵ⋆, we obtain log ϵ⋆ = log (mn ) − (n/θ ) log (1 + mθ ) Moreover, we have log (mn ) = Θ( log n), log (1 + mθ ) = Θ( log n). Direct calculation gives log ϵ⋆ = −Θ( √n log n), and, therefore, we have 
+
+ϵ⋆ = exp (−Θ( √n log n)) = n−Θ( √n). The final little-o statement follows by choosing c′ > 0 smaller than the implicit constant in the lower bound of − log ϵ⋆ = Θ( √n log n). This proves Lemma F.6. 41

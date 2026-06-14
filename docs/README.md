@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-06-13
-- 运行时间：2026-06-13 20:27:20 UTC
+- 最新运行日期：2026-06-14
+- 运行时间：2026-06-14 20:32:26 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读7篇、速读12篇AI论文，多篇获8.0高分推荐  
-2) 抗对防御与视觉生成控制技术获重点推荐，安全机制研究成核心方向  
-3) 建议关注高分论文中的实际应用案例或开源项目，以了解最新技术如何落地
-- 详情：[/202606/13/README](/202606/13/README)
+1) 今日精读7篇、速读12篇论文，聚焦AI模型优化与安全领域  
+2) 高分论文揭示：Muon在特征学习上优于Adam，对抗攻击可能影响手术机器人决策；扩散模型与红队测试技术为AI安全提供新思路  
+3) 建议关注Muon优化方法及手术机器人安全挑战，了解扩散模型如何提升AI可靠性
+- 详情：[/202606/14/README](/202606/14/README)
 
 ### 精读区论文标签
-1. [Hybrid Adversarial Defence for Natural Language Understanding Tasks](/202606/13/2606.04612v1-hybrid-adversarial-defence-for-natural-language-understanding-tasks)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：结合熵模型和不确定性模型提升对抗鲁棒性
-2. [MetaPoint: Unlocking Precise Spatial Control in Agentic Visual Generation](/202606/13/2606.05031v1-metapoint-unlocking-precise-spatial-control-in-agentic-visual-generation)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：图像生成中的空间控制方法
-3. [Activation-Based Active Learning for In-Context Learning: Challenges and Insights](/202606/13/2606.05134v1-activation-based-active-learning-for-in-context-learning-challenges-and-insights)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击与防御方法
-4. [Native3D: End-to-End 3D Scene Generation via Unified Mesh-Texture Modeling and Semantic Alignment](/202606/13/2606.07117v1-native3d-end-to-end-3d-scene-generation-via-unified-mesh-texture-modeling-and-semantic-alignment)  
-   标签：评分：8.0/10、query:image-adversarial
+1. [Muon Learns More Robust and Transferable Features than Adam](/202606/14/2606.09658v1-muon-learns-more-robust-and-transferable-features-than-adam)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击下的模型鲁棒性评估
+2. [Adversarial Attacks on Learned Policies for Surgical Robotic Tasks](/202606/14/2606.11535v1-adversarial-attacks-on-learned-policies-for-surgical-robotic-tasks)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：研究图像对抗扰动对生成模型的影响
+3. [Adv-TGD: Adversarial Text-Guided Diffusion for Face Recognition Impersonation Attacks](/202606/14/2606.11615v1-adv-tgd-adversarial-text-guided-diffusion-for-face-recognition-impersonation-attacks)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：生成式图像对抗扰动
+4. [Toward Trustworthy AI: Multi-Target Adversarial Attacks and Robust Defenses for Continuous Data Summarization](/202606/14/2606.11804v1-toward-trustworthy-ai-multi-target-adversarial-attacks-and-robust-defenses-for-continuous-data-summarization)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：研究对抗扰动对图像生成模型的影响
+5. [VOID: Defeating Unauthorized Mimicry in Latent Diffusion Models](/202606/14/2606.12263v2-void-defeating-unauthorized-mimicry-in-latent-diffusion-models)  
+   标签：评分：9.0/10、query:image-adversarial
    evidence：生成式图像对抗鲁棒性
-5. [Adversarial Creation and Detection of AI-Generated Social Bot Content](/202606/13/2606.07219v1-adversarial-creation-and-detection-of-ai-generated-social-bot-content)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗生成与检测社会机器人内容
-6. [Balancing Real and Synthetic Data for CNN-based Masonry Crack Detection](/202606/13/2606.08033v1-balancing-real-and-synthetic-data-for-cnn-based-masonry-crack-detection)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-7. [OmniGen-AR: AutoRegressive Any-to-Image Generation](/202606/13/2606.09156v1-omnigen-ar-autoregressive-any-to-image-generation)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：任何到图像的生成方法
+6. [Efficient, Robust, and Anti-Collusion Fingerprinting of Image Diffusion Models](/202606/14/2606.12977v1-efficient-robust-and-anti-collusion-fingerprinting-of-image-diffusion-models)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：图像扩散模型指纹防篡改
+7. [Beyond Runtime Enforcement: Shield Synthesis as Defensibility Analysis for Adversarial Networks](/202606/14/2606.13621v1-beyond-runtime-enforcement-shield-synthesis-as-defensibility-analysis-for-adversarial-networks)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：图像对抗攻击与防御
 
 ### 速读区论文标签
-1. [Can We Predict The Human Preference For Text-to-Image Content Prior To Generation And Is It Even Useful To Do So?](/202606/13/2606.05478v1-can-we-predict-the-human-preference-for-text-to-image-content-prior-to-generation-and-is-it-even-useful-to-do-so)  
+1. [Diff-CA: Separating Common and Salient Factors with Diffusion Models](/202606/14/2606.06120v1-diff-ca-separating-common-and-salient-factors-with-diffusion-models)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：扩散模型与人类偏好评估相关
-2. [Membrane: A Self-Evolving Contrastive Safety Memory for LLM Agent Defense](/202606/13/2606.05743v1-membrane-a-self-evolving-contrastive-safety-memory-for-llm-agent-defense)  
+   evidence：对抗攻击的图像防御策略
+2. [RedEdit: Agentic Red-Teaming of Image Safety Classifiers via MCTS-Guided Photo-Editing](/202606/14/2606.06140v1-rededit-agentic-red-teaming-of-image-safety-classifiers-via-mcts-guided-photo-editing)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御技术相关
-3. [Learning of Robot Safety Policies via Adversarial Synthetic Scenarios](/202606/13/2606.05952v1-learning-of-robot-safety-policies-via-adversarial-synthetic-scenarios)  
+   evidence：对抗攻击的图像防御策略
+3. [LLMs Can Leak Training Data But Do They Want To? A Propensity-Aware Evaluation of Memorization in LLMs](/202606/14/2606.06286v1-llms-can-leak-training-data-but-do-they-want-to-a-propensity-aware-evaluation-of-memorization-in-llms)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：研究对抗攻击的图像防御策略
-4. [ReSAGE-PAR: Representational Similarity Assessment for Generative Expansion in Pedestrian Attribute Recognition](/202606/13/2606.06020v1-resage-par-representational-similarity-assessment-for-generative-expansion-in-pedestrian-attribute-recognition)  
+   evidence：对抗攻击与防御相关
+4. [A 65 nm Multi-Modal Bayesian Inference Engine with 16.3 fJ/Sample Calibration-Free GRNG for Risk-Aware At-Home Skin Lesion Screening](/202606/14/2606.07439v1-a-65-nm-multi-modal-bayesian-inference-engine-with-163-fjsample-calibration-free-grng-for-risk-aware-at-home-skin-lesion-screening)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：生成式图像扩展与评估相关
-5. [LUCID: Learning Unified Control for Image Deflaring and Exposure Mastery in Nighttime Photography](/202606/13/2606.06901v1-lucid-learning-unified-control-for-image-deflaring-and-exposure-mastery-in-nighttime-photography)  
+   evidence：对抗扰动下的模型鲁棒性
+5. [Robust-U1: Can MLLMs Self-Recover Corrupted Visual Content for Robust Understanding?](/202606/14/2606.08063v1-robust-u1-can-mllms-self-recover-corrupted-visual-content-for-robust-understanding)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-6. [Textual Supervision Enhances Geospatial Representations in Vision-Language Models](/202606/13/2606.07172v1-textual-supervision-enhances-geospatial-representations-in-vision-language-models)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：图像生成质量的评估方法
-7. [Impact of Synthetic Lesional MR Images in Automated Focal Cortical Dysplasia Detection in Low-Data Scenarios](/202606/13/2606.07381v1-impact-of-synthetic-lesional-mr-images-in-automated-focal-cortical-dysplasia-detection-in-low-data-scenarios)  
+   evidence：多模态模型的鲁棒恢复
+6. [Learning to Solve Generative ODEs Beyond the Linear Span](/202606/14/2606.08672v1-learning-to-solve-generative-odes-beyond-the-linear-span)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-8. [Segmentation-Assisted Brain MRI Synthesis with Cross-Image Multi-Contrast Feature Memory Bank Retrieval Augmentation](/202606/13/2606.08421v1-segmentation-assisted-brain-mri-synthesis-with-cross-image-multi-contrast-feature-memory-bank-retrieval-augmentation)  
+   evidence：生成模型ODE求解的扩展
+7. [Self-Explainability in Self-Adaptive and Self-Organising Systems: Status and Research Directions](/202606/14/2606.09568v1-self-explainability-in-self-adaptive-and-self-organising-systems-status-and-research-directions)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-9. [ShallowBench: Benchmarking Generative Drug Design Models on Shallow-Pocket Targets](/202606/13/2606.06717v1-shallowbench-benchmarking-generative-drug-design-models-on-shallow-pocket-targets)  
+   evidence：对抗攻击防御技术研究
+8. [CineDance: Towards Next-Generation Multi-Shot Long-Form Cinematic Audio-Video Generation](/202606/14/2606.09639v2-cinedance-towards-next-generation-multi-shot-long-form-cinematic-audio-video-generation)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：研究生成式图像对抗扰动
+9. [REACT 2026: The Fourth Multiple Appropriate Facial Reaction Generation Challenge: Personalised MAFRG and Appropriate EEG Reaction Prediction](/202606/14/2606.07935v1-react-2026-the-fourth-multiple-appropriate-facial-reaction-generation-challenge-personalised-mafrg-and-appropriate-eeg-reaction-prediction)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成模型在药物设计中的应用
-10. [DREAM: Dynamic Refinement of Early Assignment Mappings](/202606/13/2606.06947v1-dream-dynamic-refinement-of-early-assignment-mappings)  
+   evidence：生成式图像对抗扰动
+10. [Predictive Fixed-Filter Active Noise Control (PFANC) Using Convolutional Recurrent Neural Networks for Dynamic Noises](/202606/14/2606.08171v1-predictive-fixed-filter-active-noise-control-pfanc-using-convolutional-recurrent-neural-networks-for-dynamic-noises)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式对抗扰动
-11. [Beyond Rubrics: Exploration-Guided Evaluation Skills for Reward Modeling](/202606/13/2606.07040v1-beyond-rubrics-exploration-guided-evaluation-skills-for-reward-modeling)  
+   evidence：与对抗攻击防御相关
+11. [Forward-Free Diffusion Language Models](/202606/14/2606.08357v1-forward-free-diffusion-language-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击评估方法
-12. [TrioPose: Native Triple-Stream Diffusion Transformers for Pose-Guided Text-to-Image Generation](/202606/13/2606.07053v1-triopose-native-triple-stream-diffusion-transformers-for-pose-guided-text-to-image-generation)  
+   evidence：研究扩散模型在文本生成中的应用
+12. [Now You (Still) See Me: Detecting Evasive Steganographic Payloads in LLMs](/202606/14/2606.09411v1-now-you-still-see-me-detecting-evasive-steganographic-payloads-in-llms)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动生成方法
+   evidence：对抗攻击的图像防御策略
 
 
 ### ⚡ 这个站点能做什么
