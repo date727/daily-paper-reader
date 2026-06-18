@@ -6,79 +6,88 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-06-17
-- 运行时间：2026-06-17 21:08:32 UTC
+- 最新运行日期：2026-06-18
+- 运行时间：2026-06-18 21:21:15 UTC
 - 运行状态：成功
-- 本次总论文数：19
-- 精读区：7
+- 本次总论文数：22
+- 精读区：10
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读7篇高分论文，速读12篇前沿研究，聚焦模型安全与生成技术  
-2) 重点解析模型水印、对抗性遗忘及多智能体系统中的集体幻觉现象  
-3) 建议对模型安全与生成技术感兴趣的读者优先精读9.0分论文，并探索多智能体系统相关研究
-- 详情：[/202606/17/README](/202606/17/README)
+1) 今日精读10篇、速读12篇论文，聚焦扩散模型与神经网络鲁棒性提升  
+2) 高分论文集中探讨扩散模型低密度区域探索优化与神经网络变体增强策略  
+3) 建议关注扩散模型表示空间评估及多智能体控制在LLMs中的应用研究
+- 详情：[/202606/18/README](/202606/18/README)
 
 ### 精读区论文标签
-1. [T2S: A Rehearsal-Based Approach for Extraction-Resistant Model Watermarking](/202606/17/2606.11698v1-t2s-a-rehearsal-based-approach-for-extraction-resistant-model-watermarking)  
+1. [Enhanced Low-Density Region Exploration in Classifier-Guided Diffusion Models Through Modified Reverse Diffusion Sampling](/202606/18/2606.13347v1-enhanced-low-density-region-exploration-in-classifier-guided-diffusion-models-through-modified-reverse-diffusion-sampling)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：扩散模型用于图像生成
+2. [Neural Variability Enhances Artificial Network Robustness](/202606/18/2606.13801v1-neural-variability-enhances-artificial-network-robustness)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略相关
-2. [Rethinking Backdoor Adversarial Unlearning through the Lens of Catastrophic Forgetting in Continual Learning](/202606/17/2606.14078v1-rethinking-backdoor-adversarial-unlearning-through-the-lens-of-catastrophic-forgetting-in-continual-learning)  
+   evidence：研究对抗扰动对模型鲁棒性的影响
+3. [HiLo-Token: Input-Adaptive High-Low Frequency Token Compression for Efficient Image Editing](/202606/18/2606.13898v1-hilo-token-input-adaptive-high-low-frequency-token-compression-for-efficient-image-editing)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：高效图像编辑的token压缩方法
+4. [A Multi-Domain Feature Fusion Framework for Generalizable Deepfake Detection Across Different Generators](/202606/18/2606.14230v1-a-multi-domain-feature-fusion-framework-for-generalizable-deepfake-detection-across-different-generators)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略相关
-3. [GRAPE: Guided Parameter-Space Evolution for Compact Adversarial Robustness](/202606/17/2606.14865v1-grape-guided-parameter-space-evolution-for-compact-adversarial-robustness)  
+   evidence：对抗扰动对图像篡改的影响
+5. [Greedy Coordinate Diffusion: Effective and Semantically Coherent Adversarial Attacks via Diffusion Guidance](/202606/18/2606.15531v1-greedy-coordinate-diffusion-effective-and-semantically-coherent-adversarial-attacks-via-diffusion-guidance)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击鲁棒性提升
-4. [TaFD: Threat-Aware Frequency Decoupling for Adversarial Robustness against Heterogeneous Attacks](/202606/17/2606.17540v1-tafd-threat-aware-frequency-decoupling-for-adversarial-robustness-against-heterogeneous-attacks)  
+   evidence：对抗攻击与防御技术
+6. [Greedy Coordinate Diffusion: Effective and Semantically Coherent Adversarial Attacks via Diffusion Guidance](/202606/18/2606.15531v2-greedy-coordinate-diffusion-effective-and-semantically-coherent-adversarial-attacks-via-diffusion-guidance)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-5. [VisualFLIP: Do Predictions Depend on Task-Critical Visual Evidence in Multimodal Reasoning?](/202606/17/2606.07872v1-visualflip-do-predictions-depend-on-task-critical-visual-evidence-in-multimodal-reasoning)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的模型鲁棒性评估
-6. [Comparative Analysis of Inference-Time Defense Methods for Multimodal Large Language Models](/202606/17/2606.10904v1-comparative-analysis-of-inference-time-defense-methods-for-multimodal-large-language-models)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：图像对抗攻击防御技术相关
-7. [Flux-Guard: Facial Identity Protection using diffusion models](/202606/17/2606.17606v1-flux-guard-facial-identity-protection-using-diffusion-models)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：基于对抗攻击的隐私保护框架
+   evidence：提出基于扩散引导的对抗攻击方法
+7. [CogCanvas: A Benchmark for Evaluating Multi-Subject Reference-Based Image Generation](/202606/18/2606.15867v1-cogcanvas-a-benchmark-for-evaluating-multi-subject-reference-based-image-generation)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：生成式图像对抗扰动
+8. [ResEdit: Residual embeddings for precise generative image editing](/202606/18/2606.16457v1-resedit-residual-embeddings-for-precise-generative-image-editing)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：生成式图像对抗扰动
+9. [Pulling The REINS: Training-Free Safety Alignment of Video Diffusion Models via Representation Steering](/202606/18/2606.17257v1-pulling-the-reins-training-free-safety-alignment-of-video-diffusion-models-via-representation-steering)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：生成式图像对抗鲁棒性
+10. [Veriphi: Attack-Guided Neural Network Verification with Dataset-Dependent Training Methods](/202606/18/2606.18454v1-veriphi-attack-guided-neural-network-verification-with-dataset-dependent-training-methods)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击的防御方法
 
 ### 速读区论文标签
-1. [Collective Hallucination in Multi-Agent LLMs:Modeling and Defense](/202606/17/2606.07941v1-collective-hallucination-in-multi-agent-llmsmodeling-and-defense)  
+1. [Evaluating the Representation Space of Diffusion Models via Self-Supervised Principles](/202606/18/2606.09718v1-evaluating-the-representation-space-of-diffusion-models-via-self-supervised-principles)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像防御策略
-2. [Exploring the Scale and Diversity of Speech Anti-spoofing Datasets: Experiments and Analysis](/202606/17/2606.08038v1-exploring-the-scale-and-diversity-of-speech-anti-spoofing-datasets-experiments-and-analysis)  
+   evidence：研究对抗扰动对生成模型的影响
+2. [Game-Theoretic Multi-Agent Control for Robust Contextual Reasoning in LLMs](/202606/18/2606.10322v1-game-theoretic-multi-agent-control-for-robust-contextual-reasoning-in-llms)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：多智能体上下文控制
+3. [Mean Flow Distillation: Robust and Stable Distillation for Flow Matching Models](/202606/18/2606.11155v1-mean-flow-distillation-robust-and-stable-distillation-for-flow-matching-models)  
    标签：评分：8.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-3. [Seeing is Believing: Aligning Prompt Rewriting with Visual Anchors for Text-to-Image Generation](/202606/17/2606.08492v1-seeing-is-believing-aligning-prompt-rewriting-with-visual-anchors-for-text-to-image-generation)  
+4. [ARM: An AutoRegressive Large Multimodal Model with Unified Discrete Representations](/202606/18/2606.11188v1-arm-an-autoregressive-large-multimodal-model-with-unified-discrete-representations)  
    标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-4. [MaskAlign: Token-Subset Representation Alignment for Efficient Diffusion Training](/202606/17/2606.08788v1-maskalign-token-subset-representation-alignment-for-efficient-diffusion-training)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：研究对抗扰动下的扩散模型对齐方法
-5. [One Token per Multimodal Evidence: Latent Memory for Resource-Constrained QA](/202606/17/2606.10572v1-one-token-per-multimodal-evidence-latent-memory-for-resource-constrained-qa)  
+   evidence：图像生成与多模态模型
+5. [MARS: Margin-Adversarial Risk-controlled Stopping for Parallel LLM Test-time Scaling](/202606/18/2606.12935v1-mars-margin-adversarial-risk-controlled-stopping-for-parallel-llm-test-time-scaling)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的模型保护
-6. [When Poison Fails After Retrieval: Revisiting Corpus Poisoning under Chunking and Reranking Pipelines](/202606/17/2606.11265v1-when-poison-fails-after-retrieval-revisiting-corpus-poisoning-under-chunking-and-reranking-pipelines)  
+   evidence：基于对抗扰动的停止策略
+6. [Adversarial Concept Search: Predicting Compositional Errors From Feature Geometry](/202606/18/2606.13934v1-adversarial-concept-search-predicting-compositional-errors-from-feature-geometry)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像防御策略
-7. [SHERPA: Seam-aware Harmonized ERP Adaptation for Open-Domain 360$^\circ$ Panorama Generation](/202606/17/2606.12213v1-sherpa-seam-aware-harmonized-erp-adaptation-for-open-domain-360circ-panorama-generation)  
+   evidence：对抗扰动对概念组合的影响
+7. [Smoothing Dark Areas in Molecular Latent Diffusion](/202606/18/2606.13955v1-smoothing-dark-areas-in-molecular-latent-diffusion)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响相关
-8. [ECA: Efficient Continual Alignment for Open-Ended Image-to-Text Generation](/202606/17/2606.12633v1-eca-efficient-continual-alignment-for-open-ended-image-to-text-generation)  
+   evidence：涉及生成模型中的暗区问题
+8. [Which Directions Matter? Sparse Design for Affine Robust Optimization](/202606/18/2606.14648v1-which-directions-matter-sparse-design-for-affine-robust-optimization)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的模型保护
-9. [Semantic Multi-Agent Intrusion Detection for IoT:Zero-Day and Adversarial Threats with Risk-Aware Reasoning](/202606/17/2606.10323v1-semantic-multi-agent-intrusion-detection-for-iotzero-day-and-adversarial-threats-with-risk-aware-reasoning)  
+   evidence：与对抗扰动和鲁棒优化相关
+9. [Acoda: Adversarial Code Obfuscation for Defending against LLM-based Analysis](/202606/18/2606.11755v1-acoda-adversarial-code-obfuscation-for-defending-against-llm-based-analysis)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：物联网入侵检测与图像对抗攻击相关
-10. [ManiSplat: Manipulation Trajectory Synthesis from Monocular Video via Decoupled 3D Gaussian Splatting](/202606/17/2606.10645v1-manisplat-manipulation-trajectory-synthesis-from-monocular-video-via-decoupled-3d-gaussian-splatting)  
+   evidence：对抗扰动下的代码混淆方法
+10. [SalArt-VQA: Diagnosing Whether VLMs Understand Salient Artifacts in Generated Images](/202606/18/2606.12671v1-salart-vqa-diagnosing-whether-vlms-understand-salient-artifacts-in-generated-images)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像重建
-11. [Pose-ICL: 3D-Aware In-Context Learning for Pose-Controllable Subject Customization](/202606/17/2606.10902v1-pose-icl-3d-aware-in-context-learning-for-pose-controllable-subject-customization)  
-   标签：评分：6.0/10、query:image-generation
-   evidence：图像生成与姿态控制
-12. [PENet+: A Lightweight Residual Transformer Framework for Efficient Image Steganalysis](/202606/17/2606.10939v1-penet-a-lightweight-residual-transformer-framework-for-efficient-image-steganalysis)  
+   evidence：评估VLM对生成图像中显著伪影的理解能力
+11. [JSCGC: Joint Source-Channel-Generation Coding for Wireless Generative Communications](/202606/18/2606.12858v1-jscgc-joint-source-channel-generation-coding-for-wireless-generative-communications)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像隐写分析的轻量防御方法
+   evidence：对抗攻击与防御技术
+12. [SeamEdit: A Black-Box VLM-Agnostic Pipeline for Large-Image Semantic Editing](/202606/18/2606.13041v1-seamedit-a-black-box-vlm-agnostic-pipeline-for-large-image-semantic-editing)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗攻击的防御方法
 
 
 ### ⚡ 这个站点能做什么
