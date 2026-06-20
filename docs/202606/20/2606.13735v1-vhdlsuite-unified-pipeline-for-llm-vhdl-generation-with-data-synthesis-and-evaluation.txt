@@ -1,0 +1,389 @@
+Title: VHDLSuite: Unified Pipeline for LLM VHDL Generation with Data Synthesis and Evaluation
+
+URL Source: https://arxiv.org/pdf/2606.13735v1
+
+Published Time: Mon, 15 Jun 2026 00:03:25 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# VHDLSuite: Unified Pipeline for LLM VHDL Generation with Data Synthesis and Evaluation 
+
+Yijun Shen 1, Minghao Shao 2,3, Yichen Zhao 1, Zhuoyan Yu 1, Boyuan Chen 2,3, Yik-Cheung Tam 1, Muhammad Shafique 31Center for Data Science, NYU Shanghai, China 2NYU Tandon School of Engineering, USA 3NYU Abu Dhabi, UAE {ys6126,shao.minghao,yz10469,zy3077,bc3194,wilson.tam,muhammad.shafique}@nyu.edu 
+
+Abstract 
+
+Large Language Models (LLM) have shown impressive capabilities in Register Transfer Level (RTL) code generation, particularly for Verilog. However, evaluating their performance with other Hard-ware Description Languages (HDL), especially VHDL, remains lim-ited although its distinct language characteristics, such as stricter semantic rules, introduce evaluation considerations that differ from Verilog. This lack of coverage restricts fully understanding of how well current models generalize across hardware design languages with differing structures and semantics. To address this gap, we introduce VHDLSuite, a benchmark-centered infrastructure for scal-able VHDL generation evaluation, integrating automated bench-mark synthesis, executable validation, and multi-model diagnostic analysis. First, we propose a data pipeline that automatically con-verts Verilog designs and their accompanying testbenches into executable VHDL benchmark instances, followed by VUnit/GHDL-based validation to ensure each released task is compilable, runnable, and consistently checkable in the VHDL environment. Second, we introduce VHDLBench, a benchmark with over 200 VHDL prob-lems with complete and validated testbenches across a wide range of complexity levels. Third, we extensively evaluate cutting-edge LLMs and uncover key challenges specific on LLM-aided VHDL generation. Our findings provide important insights and support future work in multi-language hardware design automation. 1
+
+1 Introduction 
+
+Large Language Models (LLMs) have become a transformative force in hardware design automation, advancing the field across gener-ation, optimization, and security [ 25 , 29 , 30 ]. Recent advances in Register Transfer Level (RTL) code generation rely on specialized datasets and hardware-focused benchmarks [ 15 ]. Both general-purpose and domain-specific LLMs fine-tuned on RTL corpora now produce synthesizable hardware descriptions with promising ac-curacy [ 9, 14 , 24 , 32 ], and agentic design flows further improve output quality through iterative synthesis and verification feed-back [ 7 , 10 , 20 , 31 ]. Together, these developments mark a clear shift toward AI-assisted hardware design with the potential to accelerate development cycles and lower the barrier to digital system design. Despite this progress, most benchmarks and evaluations target Verilog [ 13 , 15 ], leaving LLM capabilities on other HDLs less char-acterized. Evaluating models on structurally different languages is valuable because cross-lingual studies for LLMs have shown that training or fine-tuning on one programming language can transfer to others [ 5], underscoring the importance of benchmarking LLMs across related languages to fully capture their code generation capa-bilities. VHDL is a particularly informative complement to Verilog: 
+
+> 1
+
+Our data pipeline, benchmark, and evaluation framework will be open-sourced. Verilog DUT                  
+
+> module RefModule (
+> );
+> endmodule
+> input clk,
+> input [7:0] d,
+> input reset,
+> output reg [7:0] q
+> always @(posedge clk)
+> if (reset)
+> q <= 0;
+> else
+> q <= d;
+> clk dqrst
+> [Port Declaration]
+> [Sequential Block]
+> [Reset Priority]
+> VHDL DUT
+> library ieee; use ieee.std_logic_1164.all; use ieee.numeric_std.all;
+> entity RefModule is
+> port (
+> );
+> end entity RefModule;
+> architecture rtl of RefModule is
+> signal q_reg : std_logic_vector(7 downto 0) := (others => '0');
+> begin
+> end architecture rtl;
+> clk: in std_logic; d: in std_logic_vector(7 downto 0);
+> reset : in std_logic; q: out std_logic_vector(7 downto 0)
+> q <= q_reg;
+> process(clk)
+> begin
+> if rising_edge(clk) then
+> end if;
+> end process;
+> if reset = '1' then
+> q_reg <= (others => '0');
+> else
+> q_reg <= d;
+> end if;
+> dclk rst
+> process(clk)
+> rising_edge →rst: q_reg ←0else: q_reg ←d
+> q_reg
+> (signal)
+> concurrent
+> q
+> convention only
+> Verilog Prompt
+> Create 8 D flip-flops with active
+> high synchronous reset setting
+> the output to zero. All DFFs should
+> be triggered by the positive edge of
+> clk.
+> module TopModule (
+> input clk,
+> input [7:0] d,
+> input reset,
+> output reg [7:0] q
+> );
+> VHDL Prompt
+> Implement a module consisting of 8 D flip-flops with active high synchronous
+> reset functionality that sets the output to zero.
+> Module name: TopModule
+> Input ports:
+> clk: Clock signal, 1-bit, triggers on the rising edge
+> d: Data input, 8-bit wide (7 downto 0), represents the data to be stored in the FFs
+> reset: Synchronous reset signal, 1-bit, active high
+> Output ports:
+> q: Data output, 8-bit wide (7 downto 0), represents the current state of the FFs
+
+Figure 1: A case shows VHDLSuite convert Verilog to VHDL. 
+
+where Verilog adopts a concise, C-like syntax and encapsulates de-signs within module blocks, VHDL follows a formal, Ada-inspired structure with stricter typing, explicit component declarations, and a separation of interface specifications ( entity ) from behavioral or structural descriptions ( architecture ) that requires explicit port mapping. These differences motivate dedicated VHDL evaluation, as Verilog-oriented benchmarks alone may not expose VHDL-specific typing, declaration, initialization, and structural error patterns. Although early work has explored LLM-generated VHDL [ 26 , 27 ], existing efforts face several limitations. Some rely on conversion tools such as the Icarus Verilog VHDL generator, which supports only a narrow range of constructs and often produces non-standard or non-synthesizable code, undermining evaluation validity. The field also lacks publicly available, rigorously validated VHDL bench-marks; existing datasets are typically small, proprietary, or missing complete testbenches for functional verification. Moreover, current evaluation methods often emphasize aggregate pass rates while pro-viding limited insight into executable functional checking, syntactic validity, and VHDL-specific failure behavior. These gaps hinder re-producible research and limit a nuanced understanding of LLM performance on VHDL. To address these challenges, we introduce 
+
+VHDLSuite , a benchmark-centered infrastructure that bootstraps scalable VHDL evaluation from mature Verilog benchmark corpora and enables reproducible analysis of LLM-generated VHDL. Our contributions are as follows: 
+
+> arXiv:2606.13735v1 [cs.AR] 11 Jun 2026
+
+Yijun Shen 1, Minghao Shao 2,3, Yichen Zhao 1, Zhuoyan Yu 1, Boyuan Chen 2,3, Yik-Cheung Tam 1, Muhammad Shafique 3
+
+• Data Pipeline. An automated benchmark synthesis pipeline that converts Verilog designs and testbenches into executable VHDL benchmark instances with VUnit/GHDL simulation verification. 
+
+• VHDLBench. A benchmark of over 200 VHDL problems with validated testbenches spanning diverse difficulty levels. 
+
+• Comprehensive Evaluation. A systematic assessment of state-of-the-art LLMs on VHDL generation, revealing key challenges and performance disparities that inform future multi-language hardware design automation. 
+
+2 Background 2.1 Hardware Description Language (HDL) 
+
+Hardware Description Languages (HDLs) are domain-specific lan-guages for modeling concurrency and timing behavior of digital circuits [ 8]. Verilog and VHDL are the two primary industry stan-dards [ 6], but they embody fundamentally different design philoso-phies. Verilog, influenced by C, prioritizes conciseness [ 17 ], whereas VHDL, rooted in Ada, emphasizes verbosity and structural formal-ism [ 21 ]. A defining characteristic of VHDL is its strict semantic rules and strong typing system [ 4, 23 ]: unlike Verilog, it prohibits implicit type conversions and enforces a formal separation between the interface and logic architecture [ 19 ]. While this rigidity en-hances reliability in safety-critical domains such as aerospace [ 8], it also means that traditional transpilers often fail to accurately map Verilog’s loose syntax to VHDL’s rigorous standards [12, 18], and the same structural differences pose substantial challenges for automated code generation. 
+
+2.2 LLM for RTL Generation 
+
+The application of LLMs in RTL design has evolved from basic code completion to sophisticated, multi-stage workflows [ 3, 22 , 28 ]. Early milestones such as VeriGen [ 24 ] and RTLCoder [ 14 ] established the effectiveness of domain-specific fine-tuning, demonstrating that hardware-centric training data is essential for generating synthe-sizable RTL. Building on this foundation, frameworks like Veri-Coder [ 32 ] and ScaleRTL [ 9] introduced iterative validation loops and reasoning-enhanced scaling to bridge the gap between initial synthesis and functional reliability [ 11 ]. These advances are com-plemented by standardized evaluation platforms such as RTLLM (OpenLLM-RTL) [ 15 ], which provide functionally verified tasks that assess whether generated RTL meets design specifications rather than merely checking syntax [ 2]. As recent reviews emphasize [ 1], such verified datasets and evaluation infrastructures are critical to the progress of LLM-based hardware design automation [28]. However, most of these efforts have focused on Verilog, with VHDL receiving less attention. Recent studies confirm that VHDL’s verbosity and long-range structural dependencies lead to higher error rates in LLM-generated code compared to Verilog [ 26 , 27 ]. VHDL-Eval [ 27 ] has initiated evaluation in this area but is limited by a small problem set and lacks validation for synthesis and resource usage. A large-scale, functionally verified benchmark is therefore needed to properly evaluate LLMs on VHDL code generation. 
+
+3 Methods 
+
+VHDLSuite is a benchmark construction and evaluation pipeline for deriving simulation-validated VHDL tasks from existing Ver-ilog benchmarks and assessing LLMs on VHDL generation. The pipeline consists of four stages: source data standardization, LLM-based Verilog-to-VHDL translation, simulation-driven iterative ver-ification, and unified evaluation. VHDLSuite separates benchmark construction from model evaluation. During construction, simula-tion feedback is used to validate and refine translated VHDL tasks. During evaluation, models generate candidates in a no-feedback set-ting, while the same VUnit/GHDL checker is used after generation to ensure comparable pass@k measurement across models. 
+
+3.1 Data Pipeline 
+
+3.1.1 Preprocessing . VHDLSuite draws its source data from ex-isting Verilog benchmarks, including RTLLM and VerilogEval, which provide Verilog designs alongside natural language descriptions and executable testbenches, but differ in file organization, nam-ing conventions, and description granularity, making direct cross-benchmark translation impractical. We therefore first standardize each problem instance into a uniform format by extracting three components: (1) the natural language description of the design’s functionality, (2) the Verilog DUT code, and (3) the correspond-ing Verilog testbench. This standardization establishes a consistent input interface for subsequent translation and verification. 
+
+3.1.2 Code Translation . We use LLMs to translate the standard-ized Verilog designs and testbenches into VHDL design-testbench pairs, which are then validated as executable benchmark instances through simulation. To reduce HDL-specific syntactic violations, we incorporate a VHDL-aware system prompt that explicitly con-strains design-unit structure, library usage, port declarations, and common syntax pitfalls. Given that VHDL differs substantially from Verilog in type systems, syntax structures, and simulation seman-tics, single-round generation often fails to produce compilable and functionally correct results. The translation process is therefore designed as iterative from the outset: rather than assuming first-attempt correctness, we treat each translation as a multi-round generation task. Once a verified VHDL implementation is obtained, we use an LLM to construct a refined generation prompt based solely on the original Verilog module description and the verified VHDL output, explicitly excluding all testbench code to prevent information leakage and ensure a clean evaluation interface. 
+
+3.1.3 Simulation and Repair driven Validation . Rather than directly accepting translated results, VHDLSuite subjects each gen-erated VHDL design to an iterative, simulation-driven verification loop. Using VUnit, the pipeline automatically compiles and sim-ulates translated VHDL DUTs against their VHDL testbenches, checking compilation correctness and executable behavioral con-sistency within the VHDL benchmark environment. When compi-lation failures or functional mismatches occur, VHDLSuite collects the corresponding error logs and feeds them back to the LLM along with the current code. In subsequent rounds, the model leverages both its conversation history and the simulation feedback to ap-ply targeted corrections, progressively resolving type mismatches, port mapping errors, structural differences, and overlooked edge VHDLSuite: Unified Pipeline for LLM VHDL Generation with Data Synthesis and Evaluation Source Dataset  LLM Translation  
+
+> （DUT + TB ）
+> VHDL-aware System
+> Prompt
+> Error Feedback and
+> Mismatch Report
+> Compilation and
+> Simulation
+> Verified
+> Translated DUT Translated TB
+> LLM for Rewriting
+> Prompt
+> Translated Dataset
+> All
+> Except TB
+
+Figure 2: VHDLSuite data converting pipeline workflow. 
+
+cases. Instances that fail to pass validation within the specified number of rounds are excluded from the final dataset, ensuring that all retained VHDLBench tasks compile successfully and pass their executable VHDL simulation tests. This construction criterion targets executable VHDL consistency: each retained instance is self-contained, simulation-checkable, and evaluated under the same VUnit/GHDL harness used for downstream model assessment. 
+
+3.2 Benchmarking Framework 
+
+3.2.1 Evaluation Loop . The evaluation framework reuses the compilation and VUnit simulation checker from Section 3.1.3, but not the construction-time feedback loop. Each candidate is eval-uated only after generation, so models do not receive simulation logs, reference implementations, Verilog sources, or testbench in-formation during evaluation. All candidates are checked against the released VHDL testbench associated with each benchmark instance; the original Verilog artifacts are retained only for construction trace-ability and are never invoked by the evaluator. The key difference is that the evaluation stage imposes strict input constraints: unlike the construction-time loop, which accesses original Verilog DUTs and testbenches, it withholds all reference material to prevent in-formation leakage. On this basis, VHDLSuite provides a unified, reproducible evaluation framework centered on simulation-driven verification, combining fine-grained error classification, multiple generation settings, and syntactic similarity measurement. 
+
+Evaluation Metrics . Each generated VHDL output undergoes a phased verification process. First, outputs must compile; failures denote compilation errors from grammatical, type, or structural issues. Successfully compiled designs proceed to VUnit simulation; samples exhibiting unexpected functional behavior, including mis-matches and timeouts, are classified as runtime errors. Only designs passing the full simulation are considered functionally correct. This two-tier failure classification enables detailed analysis of model ca-pabilities at both syntactic and functional levels. To account for the stochasticity of LLM generation, we independently sample 𝑛 = 5
+
+outputs per problem and compute pass@1, pass@3, and pass@5, estimating the probability of obtaining at least one correct imple-mentation within 𝑘 attempts. During evaluation, the model receives only the natural language problem description as input, lacking access to the testbench, Verilog reference, or simulation feedback. 
+
+Automated Analysis . To complement execution-based metrics, VHDLSuite incorporates a structural evaluation layer using the Tree-sitter parsing framework. Unlike traditional parsers, Tree-sitter is error-tolerant and produces Concrete Syntax Trees (CSTs) that retain detailed structural information even for partially incor-rect code, enabling AST-like abstractions that quantify the syntactic similarity between generated designs and reference implementa-tions. The similarity score is computed as a weighted mixture of sequential similarity ( 𝑆 𝑆𝑒𝑞 ) and Jaccard similarity ( 𝑆 𝐽 𝑎𝑐 ), where a weight function 𝑤 (𝑡 ) assigns higher priority to critical logic struc-tures such as processes, control flows, and signal assignments over identifiers or literals, ensuring that the metric captures core de-sign intent. Detailed mathematical definitions and specific weight configurations are provided in Section 4.0.3. 
+
+3.3 VHDLBench Dataset 
+
+VHDLBench organizes all problem instances into a standardized file structure with a strict separation between construction-stage and evaluation-stage files. This design ensures reproducibility of functional verification while preventing leakage of original Verilog information during evaluation. Each problem can be independently compiled, simulated, and verified from its VHDL files alone, pro-viding consistent correctness criteria for model benchmarking. 
+
+3.3.1 Source Benchmarks . VHDLBench draws from two Verilog benchmarks: VerilogEval v2 [13 ] and RTLLM v2 [16 ]. VerilogEval focuses on problems ranging from simple to moderate difficulty, originating primarily from exercises on the HDLBits educational website. It tests understanding of specific grammar constructs, small modules, and state machines, making it well suited for evaluating foundational capabilities. RTLLM, in contrast, targets complete In-tellectual Property core designs of industrial complexity, examining the ability to generate full functional modules involving substantial grammatical and logical challenges. Combining these two sources allows VHDLBench to cover a broad spectrum of translated VHDL generation scenarios, from basic constructs to industrial-scale de-signs, while leveraging mature Verilog corpora to bootstrap scalable VHDL evaluation in a resource-scarce benchmark setting. 
+
+3.3.2 Dataset Composition . VHDLBench comprises 206 prob-lems: 156 derived from VerilogEval v2 and 50 from RTLLM v2 .Each problem is converted into a unified VHDL benchmark format through the construction pipeline described above. Every problem provides a self-contained set of files: 
+
+• prompt.txt : natural language problem description. 
+
+• declaration.txt : library and package dependencies. 
+
+• dut.vhd : VHDL Device Under Test. 
+
+• tb.vhd : VHDL testbench for simulation verification. 
+
+• ref.vhd (optional): Reference VHDL as golden output. 
+
+• gen.vhd (optional): Auxiliary stimulus/signal generator. The presence of ref.vhd and gen.vhd varies by source bench-mark. VerilogEval-derived problems separate stimulus generation from result checking and require an explicit reference design for Yijun Shen 1, Minghao Shao 2,3, Yichen Zhao 1, Zhuoyan Yu 1, Boyuan Chen 2,3, Yik-Cheung Tam 1, Muhammad Shafique 3
+
+golden comparison, whereas RTLLM-derived problems use self-contained testbenches that integrate both stimulus generation and correctness checking without a separate reference module. For construction-time traceability, we retain each problem’s original Verilog files, but these are never exposed in the evaluation interface. 
+
+4 Experiment Setup 
+
+4.0.1 VHDL Simulation and Verification Framework . We use VUnit, an open-source automated testing framework for VHDL that supports test execution, result collection, and assertion-based verification across mainstream simulators. VUnit serves as a Python-based verification interface that automatically compiles and simu-lates generated VHDL designs using GHDL as the backend. 
+
+4.0.2 Model Selection . We evaluate seven LLMs on VHDLBench: 
+
+Claude Sonnet 4.5 , DeepSeek V3.2 Speciale , Gemini 3 Pro Preview , GLM 4.6V , GPT 5.1 Codex Max , Grok 4 , and Qwen3 Max .These models span diverse architectures, training data scales, and inference strategies, providing broad coverage of current main-stream LLM capabilities. To ensure comparability, all models are evaluated with identical inference hyperparameters: temperature 
+
+= 0.85 , top_p = 0.95 , top_k = 50 .
+
+4.0.3 Evaluation Metrics. 
+
+Functional Metrics. Each candidate output undergoes the same compilation-simulation-verification pipeline. Only results that pass all stages are considered functionally correct. We report statis-tics by aggregating the mean proportions of functionally correct results, compilation-only successes, and compilation failures, char-acterizing model capabilities in both VHDL syntax compliance and functional logic implementation. At the task level, we compute Pass@k ( 𝑘 = 1, 3, 5) to estimate the probability that at least one functionally correct VHDL implementation is obtained within 𝑘 
+
+independent generation attempts, capturing the stability of each model’s generation behavior. Together, these metrics assess model performance from both outcome-level and task-level perspectives under consistent simulation-based verification. 
+
+Syntactic Similarity. As introduced in the Section 3.2.1, we em-ploy a custom weighted scoring system based on Tree-sitter-vhdl. We extract a serialized sequence of AST node types 𝑇 = {𝑡 1, 𝑡 2, . . . , 𝑡 𝑛 }
+
+and define a weight function 𝑤 (𝑡 ) that prioritizes logic-heavy con-structs (e.g., 𝑤 (process ) = 4.0, 𝑤 (assign ) = 3.0) over common identifiers ( 𝑤 (id ) = 0.4). The total structural score is: 
+
+𝑆𝑐𝑜𝑟𝑒 = 0.8 · 𝑆 𝑆𝑒𝑞 + 0.2 · 𝑆 𝐽 𝑎𝑐 (1) where the two components are defined as follows. The Weighted Sequence Ratio (𝑆 𝑆𝑒𝑞 ) uses weighted matching based on the Gestalt Pattern Matching algorithm. Given matching blocks 𝑀 between reference and generated sequences: 
+
+𝑆 𝑆𝑒𝑞 = 2 · Í𝑡 ∈𝑀 𝑤 (𝑡 )
+
+Í𝑡 ∈𝑇 𝑟𝑒 𝑓 𝑤 (𝑡 ) + Í𝑡 ∈𝑇 𝑔𝑒𝑛 𝑤 (𝑡 ) (2) The Weighted Jaccard Similarity (𝑆 𝐽 𝑎𝑐 ) measures the overlap of node type distributions, where 𝐶 (𝑘 ) denotes the count of node type 
+
+𝑘 in a sequence: 
+
+𝑆 𝐽 𝑎𝑐 =
+
+Í𝑘 ∈𝑇 𝑟𝑒 𝑓 ∪𝑇 𝑔𝑒𝑛 𝑤 (𝑘 ) · min (𝐶 𝑟𝑒 𝑓 (𝑘 ), 𝐶 𝑔𝑒𝑛 (𝑘 )) 
+
+Í𝑘 ∈𝑇 𝑟𝑒 𝑓 ∪𝑇 𝑔𝑒𝑛 𝑤 (𝑘 ) · max (𝐶 𝑟𝑒 𝑓 (𝑘 ), 𝐶 𝑔𝑒𝑛 (𝑘 )) (3) 
+
+5 Benchmarking Results 
+
+Figure 3 presents pass@k performance across models. Gemini 3 Pro Preview achieves the highest scores at all 𝑘 values, while 
+
+GLM 4.6v consistently ranks lowest. The remaining models form a tightly clustered group at pass@5 despite moderate differences at pass@1. Notably, GPT 5.1 Codex Max and Grok 4 reach pass@5 re-sults comparable to their peers but exhibit noticeably lower pass@1 scores, suggesting greater variability in single-sample reliability rather than a deficit in overall solution capability. 0.5 0.6 0.7 0.8 0.9 1.0     
+
+> Claude Sonnet 4.5 Deepseek V3. 2 Speciale Gemini 3 Pro Preview GLM 4.6v GPT 5.1 Codex Max Grok 4 Qwen3 Max
+> Pass@1 Pass@3 Pass@5
+
+Figure 3: Pass@k Performance of LLMs on VHDLBench. 
+
+Figure 4 categorizes errors into runtime and compilation, reveal-ing reliability differences not fully captured by pass@k. Gemini 3 Pro Preview again leads with the highest success rate and the lowest compilation error rate, indicating strong syntactic stability. 
+
+GLM 4.6v shows the weakest profile, with reduced success and ele-vated error rates in both failure categories. Among the remaining models, DeepSeek V3.2 Speciale stands out with a comparatively higher compilation error rate despite a success rate on par with several peers, suggesting that its failures more frequently origi-nate from structural or syntactic issues. GPT 5.1 Codex Max and 
+
+Grok 4 display more balanced error distributions, implying that their performance variations reflect generation stability rather than fundamental capability differences. 0.00 0.25 0.50 0.75 1.00     
+
+> Claude Sonnet 4.5 Deepseek V3. 2 Speciale Gemini 3 Pro Preview GLM 4.6v GPT 5.1 Codex Max Grok 4 Qwen3 Max
+> Mean Success Rate Mean Runtime Error Rate Mean Compling Error Rate
+
+Figure 4: Outcome Distribution of Generated VHDL Designs. VHDLSuite: Unified Pipeline for LLM VHDL Generation with Data Synthesis and Evaluation 
+
+6 Discussion 6.1 Generation Quality Evaluation 
+
+Table 1 shows AST-based syntactic similarity on functional suc-cesses, compilation failures, and runtime failures. A consistent trend holds across all models: successful designs exhibit the highest struc-tural similarity, compilation failures the lowest, and runtime failures fall in between. As compilation failures break the AST logical se-quence, sharply dropping 𝑆 𝑆𝑒𝑞 (Eq. 2), whereas runtime failures preserve much reference structure despite behavioral deviations. 
+
+Table 1: AST Syntactic Similarity of Success and Failure Cases.                                                     
+
+> Model Translated RTLLM Translated VerilogEval Success Compiling Runtime Success Compiling Runtime Claude Sonnet 4.5 82.95% 49.05% 70.04% 88.68% 76.70% 83.58%
+> DeepSeek V3.2 Speciale 81.41% 22.73% 59.99% 87.42% 41.63% 80.72% Gemini 3 Pro Preview 78.99% 29.25% 57.92% 87.07% 73.36% 77.90%
+> GLM 4.6v 83.43% 52.44% 66.80% 86.32% 61.83% 78.13% GPT 5.1 Codex Max 81.61% 50.86% 64.32% 88.96% 67.28% 78.26% Grok 4 82.25% 50.86% 60.75% 88.94% 69.28% 81.14% Qwen3 Max 80.71% 38.76% 64.42% 87.95% 63.16% 82.40%
+> Note: Cell shading indicates within-column rank. Green: top-3 (darker = better); Red: bottom-3 (darker = worse). Bold marks extremes per column.
+
+Average syntactic similarity for compilation-error cases is con-sistently higher across benchmarks on Translated VerilogEval than on Translated RTLLM, reflecting VerilogEval’s more regular struc-tural patterns relative to RTLLM’s greater diversity and complexity. Notably, certain models such as GLM 4.6v retain relatively high similarity scores even under failure conditions, suggesting that their errors stem from localized semantic inconsistencies rather than large-scale structural distortion. Overall, these results confirm that functional correctness and structural similarity are correlated but not equivalent, underscoring the distinction between syntactic plausibility and execution validity in LLM-generated VHDL. 
+
+6.2 Failure Type Analysis 
+
+To analyze model failures beyond binary correctness, we introduce an LLM-driven failure taxonomy construction process. The LLM is prompted with the current error-type pool, the buggy design, and the golden DUT, and is constrained to assign at most three error labels per failure instance. When a failure does not match any existing label, new labels are dynamically appended to the pool, enabling incremental refinement. The resulting taxonomy is organized into six categories capturing distinct structural and semantic failure modes: Syntax & Declaration , Types & Data Objects ,
+
+Interfaces & Instantiation , Combinational Logic , Sequential & FSM ,and Initialization & Miscellaneous . Figure 5 visualizes category-wise normalized error ratios computed as: 
+
+𝑅 𝑚,𝑐 = 𝐸 𝑚,𝑐 
+
+max 𝑚 ′ 𝐸 𝑚 ′,𝑐 
+
+(4) where 𝐸 𝑚,𝑐 denotes the number of errors from model 𝑚 in category 
+
+𝑐 . Since GLM 4.6v consistently exhibits the largest normalized ratios across categories, it serves as a natural empirical baseline for comparison. A clear pattern emerges: models with stronger overall functional performance exhibit uniformly lower error ratios across nearly all categories. Rather than revealing category-level trade-offs, Figure 5 shows that performance differences stem from a global reliability factor, with higher-performing models demonstrating broadly reduced error magnitudes across all failure modes. 
+
+Figure 5: Topological Robustness Comparison: Performance across LLMs compared with GLM 4.6v Baseline on VHDL multiple Dimensions. 
+
+Figure 6 presents dominant error category distributions across all evaluated models. The most widespread failure type is uninitialized _signal , typically caused by incomplete handling of VHDL’s signal initialization semantics. A similar pattern holds for identifier_name _conflict errors, reflecting VHDL-specific naming constraints. These prevalent errors suggest that, despite strong functional per-formance, many models rely on generalized HDL knowledge with-out fully internalizing VHDL-specific conventions. 
+
+Figure 6: Cross-category Error Distribution: Global Top 5 Failure Modes with Hierarchical Taxonomy Prefixes. 
+
+A distinct outlier is DeepSeek V3.2 Speciale , which exhibits a disproportionately large number of missing_design_unit er-rors, accounting for a substantial share of its compilation failures. Yijun Shen 1, Minghao Shao 2,3, Yichen Zhao 1, Zhuoyan Yu 1, Boyuan Chen 2,3, Yik-Cheung Tam 1, Muhammad Shafique 3
+
+Manual inspection reveals that many of these cases correspond to incomplete outputs where the design unit is entirely absent. This be-havior is plausibly linked to extended reasoning processes that fail to complete within the generation window, resulting in truncated or empty responses. The pattern thus appears to reflect limitations in sustaining coherent generation over structurally demanding tasks rather than isolated syntactic misunderstandings. 
+
+6.3 Difficulty and Conversion Success Rate 
+
+To characterize the difficulty distribution of VHDLBench, we clas-sify each problem by its average pass@1 rate across all seven eval-uated models, defining three soluble tiers ( easy , medium , and hard )along with an insoluble category for problems that no model suc-ceeded in any attempts. Table 2 summarizes the results distribution. 
+
+Table 2: Difficulty Distribution of VHDLBench Based on Av-erage Pass@1 Across All Models 
+
+Difficulty Pass@1 Range VerilogEval RTLLM Total (%) 
+
+Easy > 80% 99 24 123 (59.7) Medium 40 –80% 28 14 42 (20.4) Hard 0–40% 23 10 33 (16.0) Insoluble 0% (all models) 6 2 8 (3.9) 
+
+Total 156 50 206 (100) 
+
+Manual inspection of the eight insoluble problems reveals that their failures stem from systematic degradation during Verilog-to-VHDL prompt translation rather than inherent task difficulty. These cases are not concentrated in RTLLM: six come from VerilogEval and two from RTLLM, suggesting unsolvability is not simply tied to design complexity. Two recurring patterns are identified. First, structured information originally conveyed through state diagrams, Karnaugh maps, and timing waveforms was replaced with prose that failed to preserve the underlying logical constraints, leaving prompts fundamentally underspecified. Second, several translations introduced outright functional errors in port interfaces or control signal semantics, rendering a testbench-passing solution impossible regardless of model capability. Beyond these failure-inducing errors, inspection reveals a broader tendency for translated prompts to over-prescribe implementation details such as state counts, internal signal names, and pipeline structures. While this does not directly cause failures, it may lower the effective difficulty of problems originally designed to test a model’s ability to derive correct designs from high-level specifications, potentially compressing the difficulty distribution and reducing the benchmark’s discriminability. 
+
+6.4 Case Studies 
+
+We show a representative failure mode arising from VHDL’s compi-lation semantics using a 16-bit ripple-carry full adder ( adder_16bit )as a case study. This example highlights a common misalignment be-tween LLM-generated code and VHDL’s strict requirements, while demonstrating the pipeline’s automated correction through struc-tured error feedback. This case illustrates the role of construction-time simulation feedback while showing that many VHDL failures stem from language-semantics issues rather than high-level design-intent errors. The module uses a four-level compositional hierarchy: a 1-bit full adder ( add1 ) is composed into 2-bit, 4-bit, 8-bit, and fi-nally the 16-bit top-level entity, as shown in Figure 7. 
+
+Prompt (task description) 
+
+> Implement a module of a 16-bit full adder in combinational logic using a hierarchical ripple-carry architecture...
+
+LLM Generated (Round 1)        
+
+> entity adder_16bit is ... ←declared first add8_inst2 : entity work.add8 ... add8_inst1 : entity work.add8 ... entity add8 is ... ←add8 defined AFTER use ... entity add1 is ... ←base case at bottom
+> error: unit "add8" not found in library "lib" add8_inst2 : entity work.add8 add8_inst1 : entity work.add8 error: entity "add8" was not analysed error: entity "add4" was not analysed ... (6 errors total) — Compile failed
+
+LLM Corrected (Round 2)       
+
+> entity add1 is ... ←base case first entity add2 is ... ←bottom-up order entity add4 is ... entity add8 is ... entity adder_16bit is ... ←top-level last Hint: Output ’y’ has no mismatches. Hint: Output ’Co’ has no mismatches. Hint: Total mismatched samples is 0 out of 100 samples Simulation finished at 1030000 ps
+> Mismatches: 0 in 100 samples
+
+Figure 7: Example on a hierarchical adder case. Each block displays the generated VHDL code (top) and the correspond-ing simulator feedback (bottom). 
+
+The LLM produced logically correct VHDL with proper port mappings and carry logic, but declared entities in a top-down order. While valid in Verilog, this violates VHDL’s sequential analysis requirement: an entity must be compiled before any higher-level module can instantiate it, making bottom-up ordering mandatory. The top-down ordering triggered six compilation errors in the first round, which VHDLSuite captured and returned as structured feedback. Specifically, work.add8 was instantiated before add8 was declared, causing unresolved design-unit errors despite correct carry logic. This error reflects an imbalance in current LLMs’ HDL knowledge: their stronger familiarity with Verilog can preserve correct RTL composition, but may make them less sensitive to VHDL’s stricter declaration-order requirements during analysis. In the second round, the model reordered the declarations into a bottom-up sequence ( add1 → adder_16bit ) without altering the underlying logic, resolving all compilation issues. Subsequent functional simulation confirmed zero mismatches across 100 test vectors for both the y and Co outputs. 
+
+7 Conclusion and Future Work 
+
+We introduce VHDLSuite, a benchmark-centered infrastructure for constructing executable VHDL tasks and evaluating VHDL code generated by Large Language Models (LLMs) through simulation-based functional checking and diagnostic error analysis. To address VHDLSuite: Unified Pipeline for LLM VHDL Generation with Data Synthesis and Evaluation 
+
+the scarcity of VHDL evaluation resources, we present an auto-mated data pipeline that translates Verilog designs and testbenches into executable, simulation-validated VHDL benchmark instances. Utilizing this pipeline, we developed VHDLBench, a benchmark comprising over 200 validated VHDL problems across varying com-plexity levels. Through extensive evaluation of state-of-the-art LLMs, we highlight critical VHDL-specific generation challenges and provide essential insights to advance multi-language hardware design automation. Building upon this foundation, future work will focus on leveraging LLMs to facilitate translations between a broader range of hardware description languages. Additionally, we aim to optimize token efficiency during the translation process and further enhance verification efficiency. Ultimately, these im-provements will enable the automated synthesis and validation of large-scale, multi-language hardware datasets. Future work will ex-tend the infrastructure beyond benchmark conversion, translating training data to strengthen models’ VHDL capability while adding benchmarks for VHDL-specific syntax features relative to Verilog, such as packages, generics, records, and type conversions. 
+
+References 
+
+[1] Meisam Abdollahi et al . 2024. Hardware design and verification with large language models: A scoping review, challenges, and open issues. Electronics 14, 1 (2024), 120. [2] Mohammad Akyash and Hadi M Kamali. 2024. Evolutionary large language models for hardware security: A comparative survey. In Proceedings of the great lakes symposium on VLSI 2024 . 496–501. [3] Shadan Alsaqer et al . 2024. The potential of llms in hardware design. Journal of Engineering Research (2024). [4] Peter J Ashenden. 2002. VHDL standards. IEEE Design & Test of Computers 18, 5 (2002), 122–123. [5] Razan Baltaji, Saurabh Pujar, Martin Hirzel, Louis Mandel, Luca Buratti, and Lav R Varshney. 2025. Cross-lingual Transfer in Programming Languages: An Extensive Empirical Study. Transactions on Machine Learning Research (2025). [6] Victor Berman. 1994. Standard verilog-vhdl interoperability. In Proceedings of VHDL International Users Forum . IEEE, 142–149. [7] Jason Blocklove, Shailja Thakur, Benjamin Tan, Hammond Pearce, Siddharth Garg, and Ramesh Karri. 2025. Automatically improving llm-based verilog generation using eda tool feedback. ACM Transactions on Design Automation of Electronic Systems 30, 6 (2025), 1–26. [8] Pong P Chu. 2006. RTL hardware design using VHDL: coding for efficiency, porta-bility, and scalability . John Wiley & Sons. [9] Chenhui Deng, Yun-Da Tsai, Guan-Ting Liu, Zhongzhi Yu, and Haoxing Ren. 2025. Scalertl: Scaling llms with reasoning data and test-time compute for accurate rtl code generation. In 2025 ACM/IEEE 7th Symposium on Machine Learning for CAD (MLCAD) . IEEE, 1–9. [10] Hanxian Huang, Zhenghan Lin, Zixuan Wang, Xin Chen, Ke Ding, and Jishen Zhao. 2024. Towards llm-powered verilog rtl assistant: Self-verification and self-correction. arXiv preprint arXiv:2406.00115 (2024). [11] Junyan Li et al . 2025. Eda-debugger: An llm-based framework for automated eda runtime issue resolution. In 2025 26th International Symposium on Quality Electronic Design (ISQED) . IEEE, 1–7. [12] Yanbing Li and Miriam Leeser. 2000. HML, a novel hardware description language and its translation to VHDL. IEEE Transactions on Very Large Scale Integration (VLSI) Systems 8, 1 (2000), 1–8. [13] Mingjie Liu, Nathaniel Pinckney, Brucek Khailany, and Haoxing Ren. 2023. Ver-ilogeval: Evaluating large language models for verilog code generation. In 2023 IEEE/ACM International Conference on Computer Aided Design (ICCAD) . IEEE, 1–8. [14] Shang Liu, Wenji Fang, Yao Lu, Jing Wang, Qijun Zhang, Hongce Zhang, and Zhiyao Xie. 2024. Rtlcoder: Fully open-source and efficient llm-assisted rtl code generation technique. IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems 44, 4 (2024), 1448–1461. [15] Shang Liu, Yao Lu, Wenji Fang, Mengming Li, and Zhiyao Xie. 2024. Openllm-rtl: Open dataset and benchmark for llm-aided design rtl generation. In Proceedings of the 43rd IEEE/ACM International Conference on Computer-Aided Design . 1–9. [16] Yao Lu, Shang Liu, Qijun Zhang, and Zhiyao Xie. 2024. Rtllm: An open-source benchmark for design rtl generation with large language model. In 2024 29th Asia and South Pacific Design Automation Conference (ASP-DAC) . IEEE, 722–727. [17] Zainalabedin Navabi. 1999. Verilog Digital System Design: Register Transfer Level Synthesis, Testbench, and Verification . McGraw-Hill Education. [18] Surangika Ranathunga et al . 2023. Neural machine translation for low-resource languages: A survey. Comput. Surveys (2023). [19] Charles H Roth and Lizy Kurian John. 2008. Digital systems design using VHDL .Thomson. [20] Humza Sami et al . 2024. Aivril: Ai-driven rtl generation with verification in-the-loop. arXiv preprint arXiv:2409.11411 (2024). [21] Moe Shahdad. 1986. An overview of VHDL language and technology. In 23rd ACM/IEEE Design Automation Conference . IEEE, 320–326. [22] Minghao Shao, Abdul Basit, Ramesh Karri, and Muhammad Shafique. 2024. Survey of different large language model architectures: Trends, benchmarks, and challenges. IEEE access 12 (2024), 188664–188706. [23] Douglas J Smith. 1996. VHDL & Verilog compared & contrasted—plus modeled example written in VHDL, Verilog and C. In Proceedings of the 33rd annual Design Automation Conference . 771–776. [24] Shailja Thakur et al . 2024. Verigen: A large language model for verilog code generation. ACM Transactions on Design Automation of Electronic Systems 29, 3 (2024), 1–31. [25] Shailja Thakur, Jason Blocklove, Hammond Pearce, Benjamin Tan, Siddharth Garg, and Ramesh Karri. 2023. Autochip: Automating hdl generation using llm feedback. arXiv preprint arXiv:2311.04887 (2023). [26] Prashanth Vijayaraghavan et al . 2024. Chain-of-descriptions: Improving code llms for vhdl code generation and summarization. In Proceedings of the 2024 ACM/IEEE International Symposium on Machine Learning for CAD . 1–10. [27] Prashanth Vijayaraghavan et al . 2024. Vhdl-eval: A framework for evaluating large language models in vhdl code generation. In 2024 IEEE LLM Aided Design Workshop (LAD) . IEEE, 1–6. [28] Zeng Wang, Lilas Alrahis, Likhitha Mankali, Johann Knechtel, and Ozgur Sinanoglu. 2024. Llms and the future of chip design: Unveiling security risks and building trust. In 2024 IEEE Computer Society Annual Symposium on VLSI (ISVLSI) . IEEE, 385–390. [29] Zeng Wang, Minghao Shao, Rupesh Raj Karn, Likhitha Mankali, Jitendra Bhan-dari, Ramesh Karri, Ozgur Sinanoglu, Muhammad Shafique, and Johann Knechtel. 2025. Salad: Systematic assessment of machine unlearning on llm-aided hard-ware design. In 2025 ACM/IEEE 7th Symposium on Machine Learning for CAD (MLCAD) . IEEE, 1–10. [30] Zeng Wang, Minghao Shao, Akashdeep Saha, Ramesh Karri, Johann Knechtel, Muhammad Shafique, and Ozgur Sinanoglu. 2025. NetDeTox: Adversarial and Efficient Evasion of Hardware-Security GNNs via RL-LLM Orchestration. arXiv preprint arXiv:2512.00119 (2025). [31] Zeng Wang, Weihua Xiao, Minghao Shao, Raghu Vamshi Hemadri, Ozgur Sinanoglu, Muhammad Shafique, and Ramesh Karri. 2025. VeriDispatcher: Multi-Model Dispatching through Pre-Inference Difficulty Prediction for RTL Genera-tion Optimization. arXiv preprint arXiv:2511.22749 (2025). [32] Anjiang Wei et al . 2025. Vericoder: Enhancing llm-based rtl code generation through functional correctness validation. arXiv preprint arXiv:2504.15659 (2025). 
+
+A Verilog Baseline Evaluation and Comparison 
+
+To contextualize VHDLBench results, we evaluate Claude Sonnet 4.5 , GPT 5.1 Codex Max , and GLM 4.6v on the original Verilog versions of both source benchmarks. Results are summarized in Table 3. 
+
+Table 3: Verilog Baseline Performance (n=5) 
+
+Model Success Runtime Compile 
+
+VerilogEval 
+
+Claude Sonnet 4.5 80.0% 16.9% 3.1% GPT 5.1 Codex Max 87.3% 8.3% 4.4% GLM 4.6v 68.6% 13.3% 18.1% 
+
+RTLLM 
+
+Claude Sonnet 4.5 53.2% 18.4% 28.4% GPT 5.1 Codex Max 55.2% 17.2% 27.6% GLM 4.6v 40.4% 11.2% 48.4% Two observations follow from this comparison. First, the relative difficulty ordering between VerilogEval and RTLLM is preserved Yijun Shen 1, Minghao Shao 2,3, Yichen Zhao 1, Zhuoyan Yu 1, Boyuan Chen 2,3, Yik-Cheung Tam 1, Muhammad Shafique 3
+
+after translation: all three models show consistently lower success rates and higher compilation error rates on RTLLM than on Ver-ilogEval in both Verilog and VHDL, confirming that VHDLBench relatively faithfully reflects the intrinsic difficulty distribution of its source benchmarks rather than introducing artifacts through translation. Second, comparing these Verilog baselines against the VHDL results in Section 5 reveals varying degrees of cross-lingual gen-eralization across models. GPT 5.1 Codex Max performs notably stronger on Verilog than VHDL, while Claude Sonnet 4.5 shows the opposite pattern, and GLM 4.6v degrades substantially in Verilog relative to VHDL. This inconsistency suggests that HDL general-ization may be model-specific, possibly influenced by differences in HDL coverage across pretraining corpora, though further inves-tigation is needed to substantiate this hypothesis. 
+
+B Case Study: Testbench-Induced Misjudgment on a Correct Design 
+
+The case study in Section 6.4 shows a failure rooted in the generated design : logically correct carry logic that GHDL rejects because of VHDL’s declaration-order semantics, then repaired through construction-time feedback. Here we present the opposite case, where the design under test (DUT) is correct from the first round and the repair iterations are spent entirely on the generated test-bench . The example is JC_counter from RTLLM v2 ( Control/Counter ), a 64-bit Johnson (twisted-ring) counter. In the construction-time repair loop (Section 3.1.3), this instance took four rounds before it passed validation, which at first glance looks like a design the model had trouble translating. The round-by-round trace tells a different story. 
+
+The DUT Is Correct and Unchanged 
+
+The generated DUT is logically identical across all four rounds; the last round differs from the earlier ones only in removed comments. The core process is a textbook Johnson recurrence: on each rising clock edge it reads the least-significant bit Q_reg(0) , shifts right, and writes the complement of that bit into the most-significant position. 
+
+Listing 1: Generated DUT process, unchanged across all four rounds (comments elided).                   
+
+> johnson_proc : process (clk, rst_n)
+> begin if rst_n = '0'then
+> Q_reg <= ( others => '0');
+> elsif rising_edge (clk) then if Q_reg(0) = '0'then
+> Q_reg <= '1'& Q_reg(63 downto 1);
+> else
+> Q_reg <= '0'& Q_reg(63 downto 1);
+> end if ;
+> end if ;
+> end process ;Q <= Q_reg;
+
+Tracing the recurrence by hand from the all-zero reset state, the value after 20 clock cycles is 0xFFFFF00000000000 , with the high 20 bits set, which is the expected point in the Johnson sequence. The DUT is therefore already correct; the iterations did not change it, and the final round passes all 132 samples. What the repair loop actually fixed was the testbench that judged the design. 
+
+Round-by-Round Evolution 
+
+Table 4 traces the four rounds. The mismatch count falls from four to zero without any change to the DUT, and the two substantive edits both land in the testbench. 
+
+Table 4: Repair-loop evolution for JC_counter . Every mis-match originates in the generated testbench. The “Mism.” column reports mismatches over total samples, followed by the time of the first mismatch ( @).                      
+
+> Round Mism. (@ first) TB change Effect v0 4/136 @ 705 ns —redundant wait + wrong
+> exp[0]
+> v1 1/132 @ 0 remove waits wrong exp[0] remains v2 1/132 @ 0 reword comments no change v3 0/132 @ — fix exp[0] passes
+
+Sampling alignment (v0 →v1). The round-0 stimulus reaches each checkpoint with wait for PERIOD*N and then issues an additional 
+
+wait until rising_edge(clk) before raising the check enable. Removing these redundant waits in round 1 changes which clock edge the checker samples on, and the mismatch count drops from four to one. The edits are confined to the stimulus timing; the DUT is untouched, so the remaining mismatch cannot be a design error. 
+
+Miscomputed golden value (v2 →v3). The last mismatch comes from a hard-coded expected constant that the model got wrong when it wrote the testbench. 
+
+Listing 2: The only substantive change between v2 and v3: a corrected golden constant. 
+
+> -- v0--v2 (wrong) 0 => x"FFFFFFE000000000", -- v3 (correct): high 20 bits (63 downto 44) set 0 => x"FFFFF00000000000",
+
+The correct value 0xFFFFF00000000000 sets the high 20 bits, as the hand trace shows; 0xFFFFFFE000000000 sets the wrong bits. Round 2 only reworded timing comments and reproduced the round-1 result. Round 3 corrected the constant, left the DUT alone, and the design passed all 132 samples. 
+
+Discussion 
+
+This case complements the design-level failure in Section 6.4 by exposing a construction-stage hazard on the verification side. When one LLM writes both the DUT and a self-checking testbench, the testbench brings its own sources of misjudgment that are indepen-dent of the design: stimulus timing that samples on the wrong edge, and hard-coded golden values that the model derives incorrectly. The risk is sharper for RTLLM-style problems, whose self-contained testbenches fold stimulus generation and result checking into a single module with no separate reference, and there is thus no golden artifact to cross-check the embedded expected values. With a smaller repair budget, this instance would have been dropped as non-convertible during construction even though its design was correct. This extends the observation in Section 6.3 that apparent unsolvability often traces back to the construction-stage flaws and model hallucinations rather than intrinsic task difficulty. Whereas that previous analysis centers on the stimulus and specification VHDLSuite: Unified Pipeline for LLM VHDL Generation with Data Synthesis and Evaluation 
+
+side, the present case exposes the same effect on the verification side, which argues for keeping DUT correctness and testbench correctness separate during construction. One partial remedy for RTLLM-derived testbenches is to drive checking from an algorith-mic reference process instead of manually enumerated expected values, though this helps little for designs that lack a concise inde-pendent reference, such as complex finite-state machines.
