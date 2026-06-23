@@ -1,0 +1,1077 @@
+Title: Beyond Native Success: Auditing Deployment-Interface Exposure of CLIP Backdoors
+
+URL Source: https://arxiv.org/pdf/2606.17815v1
+
+Published Time: Wed, 17 Jun 2026 01:04:55 GMT
+
+Number of Pages: 30
+
+Markdown Content:
+# Beyond Native Success: Auditing Deployment-Interface Exposure of CLIP Backdoors 
+
+Kunlan Xiang, Haomiao Yang, Wenbo Jiang 
+
+University of Electronic Science and Technology of China 
+
+klxiang@std.uestc.edu.cn , haomyang@uestc.edu.cn , wenbo_jiang@uestc.edu.cn 
+
+Abstract 
+
+Contrastive Language–Image Pre-training mod-els are widely reused across downstream inter-faces, including feature extraction, retrieval, reranking, and selection. Existing CLIP back-door, however, usually validate attacks on a small attack-native task, leaving unclear whether the same poisoned checkpoint remains exposed, weakens, or becomes not applicable when reused through other interfaces. We in-troduce DIFE, a Deployment-Interface Foot-print Evaluation framework that audits back-doored CLIP checkpoints across deployment in-terfaces. DIFE makes various evaluations com-parable by specifying each interface’s compo-nent readout, trigger channel, target event, ref-erence condition, and metric. DIFE also intro-duces effective-footprint diagnosis to identify the reusable CLIP component or component combination that carries exposure and explains where risk transfers. Auditing reproduced CLIP backdoors with DIFE reveals a structured landscape: native success is not a checkpoint-level risk certificate, exposure follows compo-nent footprints, text-side poisoning does not yield textual-encoder control, and some cou-pled attacks remain mechanism-bound. This audit reveals a import gapin existing CLIP back-doors: a textual encoder that itself becomes a reusable carrier of adversarial behavior. We therefore introduce B AD TEXT TOWER to fill this gap. B AD TEXT TOWER produces strong text-conditioned retrieval, reranking, and selec-tion exposure while leaving visual-only reuse nearly clean. 
+
+1 Introduction 
+
+Contrastive Language–Image Pre-training (CLIP) aligns images and natural-language descriptions in a shared embedding space with separate visual and textual encoders (Radford et al., 2021; Jia et al., 2021; Zhai et al., 2022). This dual-encoder structure makes a released checkpoint reusable across downstream interfaces (Bommasani et al., 2021): a system may consume outputs from the visual encoder, outputs from the textual encoder, or the image–text score for classification, retrieval, reranking, and selection (Hessel et al., 2021; Gao et al., 2021; Zhang et al., 2022; Zhou et al., 2022; Khattak et al., 2023). We call the concrete way a downstream system uses a checkpoint its deploy-ment interface .CLIP backdoors aim to preserve normal behavior on clean inputs while making triggered images or texts align with an attacker-chosen target (Gu et al., 2017; Chen et al., 2017; Li et al., 2024; Goldblum et al., 2023). Recent attacks have demonstrated this threat visual encoder poisoning, contrastive or caption poisoning, and prompt–trigger mecha-nisms (Jia et al., 2022; Carlini and Terzis, 2022; Yang et al., 2023b; Zhang et al., 2024; Liang et al., 2024; Bai et al., 2024; Yao et al., 2025). How-ever, their evidence, is usually attack-native : each attack is validated in the task or protocol it was designed for, such as target classification, target retrieval, or a prescribed prompt–trigger pairing. Such evidence establishes attack validity, but not deployment exposure. Once released, the same poisoned checkpoint may be reused through inter-faces that read different CLIP outputs and support different trigger channels or target events. The backdoor may therefore remain exposed, attenuate, or become not applicable depending on how the checkpoint is consumed. We therefore introduce DIFE , a Deployment-Interface Footprint Evaluation framework for au-diting backdoored CLIP checkpoints across down-stream deployment interfaces. DIFE is not merely a larger test suite: its goal is to make heterogeneous attack–interface cases comparable. Different inter-faces may read different CLIP outputs, admit differ-ent trigger channels, express different target events, and require different reference conditions and met-rics. DIFE resolves this by treating each evaluation as a checkpoint–interface pair with an explicit com-1
+
+> arXiv:2606.17815v1 [cs.CR] 16 Jun 2026
+
+ponent readout, trigger channel, target event, refer-ence condition, and comparable interface-specific metric. Beyond measurement, DIFE introduces the 
+
+effective footprint , the minimal reusable CLIP com-ponent or component combination, that carries the observed exposure. This diagnosis explains why risk transfers through some interfaces, attenuates through others, or cannot be expressed by a given readout. DIFE reveals four findings that native metrics alone obscure. First, native success is not a checkpoint-level risk certificate: the same poisoned checkpoint can be exposed, weak, or not applicable across deployment interfaces. Second, exposure follows the effective footprint. Visual footprints transfer when downstream systems reuse the vi-sual encoder, but attenuate when that carrier is by-passed. Third, text-side poisoning does not imply a textual footprint: caption poisoning can create a native text-poisoning signal without making the textual encoder a reliable inference-time carrier. Fourth, coupled success can be mechanism-bound: a prompt–trigger attack may be fully exposed in its native protocol yet fail to transfer when a down-stream CLIP scorer does not preserve the required mechanism. Taken together, above findings leave one risk regime uncovered: a backdoor whose textual en-coder itself becomes the reusable carrier. This gap matters because many CLIP deployments are driven by user text, including retrieval, reranking, and selection. We introduce B AD TEXT TOWER to fill this gap. B AD TEXT TOWER updates the textual encoder so that a triggered text input behaves like a target query, while clean text inputs retain their se-mantics and the visual encoder remains effectively clean. Empirically, B AD TEXT TOWER achieves a query hijack rate (QHR) of 0.991 and targeted re-trieval H@1/H@5 of 1.000 /1.000 , while visual-only exposure remains near zero at 0.0017 . In deployment-like interfaces, it further raises COCO retrieval H@1 by 0.525 and clean-generator can-didate selection Sel@1 by 0.752 . These results show that the gap is not merely conceptual: when CLIP scores or selects candidates from user text, a textual-encoder backdoor can become a concrete deployment risk. Our contributions are: • We propose DIFE, a deployment-interface framework that provides a unified specifica-tion for heterogeneous checkpoint–interface cases and diagnoses the effective footprint that carries exposure. • We use DIFE to audit existing CLIP back-doors, showing that native success is not a checkpoint-level risk certificate and that expo-sure follows visual, textual, coupled, or weak footprints across interfaces. • We identify and fill the missing textual-encoder risk gap with B AD TEXT TOWER ,which produces strong text-conditioned re-trieval, reranking, and selection exposure while leaving visual-only reuse nearly clean. 
+
+2 Background 
+
+2.1 CLIP Pretraining and Downstream Interfaces 
+
+CLIP consists of a visual encoder fV and a text encoder fT , trained with a contrastive objective over paired images and captions (Radford et al., 2021; Jia et al., 2021; Zhai et al., 2022). Given an image x and a text input t, CLIP computes their compatibility logit as 
+
+s(x, t ) = γ fV (x)⊤fT (t)
+
+∥fV (x)∥2∥fT (t)∥2
+
+, (1) where γ is a learned scaling factor. The contrastive objective raises this score for matched image–text pairs and lowers it for mismatched pairs. Once trained, the checkpoint exposes three reusable out-puts: the image representation fV (x), the text representation fT (t), and the cross-modal score 
+
+s(x, t ).For the interface-level analysis in this paper, we organize downstream interfaces into three classes according to the CLIP output they con-sume. (i)Visual-encoder interfaces read only im-age representations from fV , as in frozen feature extraction, linear probing, and classifiers trained on frozen visual features (Gao et al., 2021; Zhang et al., 2022). (ii) Textual-encoder interfaces read only text representations from fT , as in prompt and query embeddings (Zhou et al., 2022; Khattak et al., 2023). (iii) Coupled-encoder interfaces read the image–text score s(x, t ), as in prompt-based clas-sification, image–text retrieval, reranking, and can-didate selection (Hessel et al., 2021). 
+
+2.2 Backdoor Attacks on CLIP 
+
+A CLIP backdoor introduces a conditional target alignment while preserving normal image–text be-havior on clean inputs (Gu et al., 2017; Chen et al., 22017; Kurita et al., 2020; Li et al., 2024; Goldblum et al., 2023). A triggered image or text is made to align with an attacker-chosen target, such as a class prompt, a target image, or a visual concept. Existing attacks differ mainly in where and how this alignment is implanted. One route attacks encoder representations. BAD ENCODER backdoors pretrained encoders by mapping triggered inputs toward target represen-tations (Jia et al., 2022). Data-poisoning attacks on contrastive learning inject poisoned examples so that the learned embedding space associates a trigger with the attacker target (Carlini and Terzis, 2022; Yang et al., 2023b; Zhang et al., 2024). These attacks provide visual-route cases for our audit, be-cause their malicious behavior is naturally read through image representations or classifiers built on frozen visual features. A second route exploits CLIP’s coupled image– text structure. Liang-B AD CLIP uses dual-embedding guidance to align visual trigger pat-terns with target textual semantics during multi-modal contrastive learning (Liang et al., 2024). Bai-BAD CLIP introduces trigger-aware prompt learn-ing, where the attack is activated by a prescribed image-trigger and prompt mechanism (Bai et al., 2024). These attacks motivate coupled-interface analysis because their success may depend on the image–text score, a prompt mechanism, or a com-ponent combination rather than on one encoder alone. A third route enters from text. TOXI -
+
+> C
+
+TEXT CLIP poisons captions during CLIP pre-training, showing that malicious associations can be introduced through textual data rather than im-age patches (Yao et al., 2025). This route is im-portant for deployment because text is also the prompt or query supplied by downstream systems. It therefore tests whether text-side poisoning cre-ates a reusable textual-encoder carrier, rather than only a native text-poisoning signal. 
+
+Motivation. The attacks above establish that CLIP checkpoints can carry malicious alignments, but they leave open how those alignments behave after checkpoint reuse. Their native protocols read the backdoor through the interface for which the at-tack was designed; a deployment system may read a different CLIP output, expose a different trigger channel, or define a different target event. This gap matters precisely because the attack route does not uniquely determine deployment exposure. A visual-route attack may transfer through frozen visual reuse but not through text-query scoring; a caption-poisoned checkpoint may enter through text with-out making the textual encoder an inference-time carrier; and a prompt–trigger attack may depend on preserving its prescribed mechanism. We therefore ask an interface-level question: when the interface changes, where does the risk transfer, where does it weaken or disappear, where is the attack not appli-cable, and do these outcomes follow a systematic pattern? 
+
+3 DIFE: Deployment-Interface Evaluation 
+
+We propose DIFE to study the interface-level ques-tion raised above: after a poisoned CLIP check-point is reused, where does the malicious behavior remain exposed, where does it weaken, where is it not applicable to test, and can these outcomes be systematically explained? We use deployment ex-posure to denote such interface-level manifestation of malicious behavior. 
+
+3.1 Evaluation Object and Output 
+
+This subsection defines what DIFE evaluates and what it returns. 
+
+Evaluation inputs. DIFE takes as input a set of poisoned CLIP checkpoints C and a set of deploy-ment interfaces I. In our audit of existing CLIP backdoors, C contains reproduced checkpoints from BAD ENCODER , Liang-B AD CLIP, CON -
+
+> TRASTIVE
+
+POISONING , T OXIC TEXT CLIP, and Bai-B AD CLIP. The tested interfaces follow the interface classes in Section 2.1 (i) visual-encoder interfaces , implemented as downstream classifica-tion on frozen image features; (ii) textual-encoder interfaces , implemented as prompt or query em-bedding readouts for testing whether a text-side trigger changes the text representation; and (iii) coupled-encoder interfaces , including zero-shot classification, prompt-conditioned classification, targeted retrieval, image–text retrieval, text rerank-ing, and candidate selection. 
+
+Evaluation unit. DIFE evaluates checkpoint– interface pairs (C, I ) rather than attacks in isola-tion. Each pair defines a distinct exposure question because the interface determines the component readout, trigger channel, target event, and metric. 
+
+Evaluation outputs. DIFE returns three connected outputs. The first is an exposure profile : an expo-sure map whose rows are poisoned checkpoints and columns are deployment interfaces. Each valid cell 3CLIP Backdoor 
+
+Traditional attack-native validation 
+
+> A photo of  dog
+> Sim score
+> Zero-shot image classification
+> Coupled-encoder interfaces
+> Text-image retrieval Prompt-conditioned classification Image-text retrieval
+> Clean Acc
+> ASR / Target Succ Hit@K / MRR
+> Report
+
+DIFE: Deployment-Interface Footprint Evaluation    
+
+> Exposure profile Footprint diagnosis
+> Diagnosis check
+> DIFE Outputs: Deployment-Interface Footprint Evaluation
+> Coupled-encoder interfaces
+> Visual-encoder interfaces
+> Textual-encoder interfaces
+> Visual-encoder Textual-encoder
+> effective footprint
+> Visual-encoder Textual-encoder
+> Frozen
+> Image clustering
+
+...  
+
+> Linear probing
+> Visual-encoder Textual-encoder
+> Visual-encoder Textual-encoder
+> Visual-encoder Textual-encoder
+> Read footprint bypasses footprint
+> Visual-encoder Textual-encoder
+
+... ...  
+
+> Prompt-conditioned classification Image-text retrieval
+> Prompt embedding bank Prompt selection
+> Native metric report
+> Attack elicited
+> Visual-encoder
+> Textual-encoder
+> Image feature
+> Text feature
+> A photo of cat
+
+Figure 1: Overview of DIFE. Traditional validation reads a poisoned CLIP checkpoint through a small set of attack-native tasks and reports native metrics. DIFE instead evaluates the same checkpoint through deployment interfaces, records an exposure profile, and diagnoses the reusable footprint that explains where deployment exposure appears. 
+
+reports an interface-specific exposure metric, while cells without a well-formed trigger channel or tar-get event are marked N.E. The second is a footprint diagnosis , which identifies the reusable CLIP com-ponent, or component combination, that carries the observed exposure. The third is a set of diagnosis checks , such as component swaps or repairs, that support the footprint assignment. Figure 1 sum-marizes the shift from attack-native validation to interface-level exposure analysis. 
+
+3.2 Exposure Specification 
+
+DIFE specifies each checkpoint–interface cell be-fore measurement, so that heterogeneous interfaces are compared as exposure questions rather than forced into one universal score (Bommasani et al., 2023). For a cell to be valid, five choices must be fixed. First, the interface must have a component readout : image representations, text representa-tions, or the image–text score. Second, the attack condition must have a trigger channel : an im-age patch, a triggered text input, or a prescribed prompt–trigger mechanism. Third, the attacker target must become a target event under the down-stream decision, such as a target class winning, a target item being retrieved, a target candidate being reranked upward, or a target candidate be-ing selected. Fourth, the evaluation population 
+
+fixes the images, queries, candidate pools, ranked lists, or candidate groups over which exposure is averaged. Fifth, when exposure is relative, the ref-erence condition fixes the clean or baseline state against which the attack condition is compared. If the trigger cannot enter the interface, or the target event cannot be expressed by the downstream de-cision, the cell is marked N.E.; it is not counted as zero exposure. 
+
+Metric. The metric follows the target event. Let 
+
+1[·] denote the indicator function. For N evaluation cases, classification-style target success is 
+
+TS = 1
+
+N
+
+NX
+
+i=1 
+
+1[ˆ yi = y⋆i ]. (2) where ˆyi is the predicted label and y⋆i is the attacker target label for case i. For retrieval and reranking, let T i⋆ be the target candidate set for case i, and let r⋆i = min c∈T i⋆ rank i(c) be the best rank of any target candidate. We report 
+
+H@ K = 1
+
+N
+
+NX
+
+i=1 
+
+1[r⋆i ≤ K],
+
+MRR = 1
+
+N
+
+X i = 1 N 1
+
+r⋆i
+
+.
+
+(3) For selection, with ˆci denoting the top selected candidate, we use 
+
+Sel@1 = 1
+
+N
+
+NX
+
+i=1 
+
+1[ˆ ci ∈ T ⋆i ]. (4) When a reference condition is required, DIFE re-ports the signed change 
+
+∆m = mattack − mref . (5) 4A cell is exposed when the valid metric is high, 
+
+weak when the valid metric is small, and not ap-plicable when either the trigger channel or target event is absent. Full interface and metric cards are given in Appendix B. 
+
+3.3 Effective Footprint Diagnosis Definition. An exposure map shows where deploy-ment exposure appears, but not why. DIFE explains this pattern by diagnosing the effective footprint :the reusable CLIP component or component com-bination through which downstream interfaces read the backdoor. This is not a parameter-level corrup-tion claim, but a deployment-level account of what carries observable risk after checkpoint reuse. 
+
+Diagnosis states. DIFE reports four footprint states. A visual footprint means exposure is car-ried by the visual encoder or image representations. A textual footprint means exposure is carried by the text encoder or triggered text representations. A coupled footprint means exposure requires the image–text score, a prompt mechanism, or another component combination. A weak footprint means no stable reusable carrier is observed under the tested deployment interfaces. 
+
+Diagnosis probes. DIFE assigns these states using component-level interventions (Wang et al., 2019; Liu et al., 2018; Xu et al., 2021). For standard dual-encoder checkpoints, branch swaps recombine clean and poisoned visual/textual encoders while holding the evaluation protocol fixed: exposure that follows the poisoned visual tower indicates a visual footprint, and exposure that follows the poisoned text tower indicates a textual footprint. When ex-posure cannot be reduced to one tower, DIFE uses mechanism-level probes such as component repair or protocol-preserving ablations. Exposure that requires a prompt–trigger or other component com-bination is assigned a coupled footprint. Cases with no stable exposed pattern are assigned a weak foot-print. Appendix E reports the full probe protocol, decision rules, and threshold checks. 
+
+4 Auditing Existing CLIP Backdoors with DIFE 
+
+4.1 Experimental Setup 
+
+We audit five reproduced CLIP backdoors with DIFE: B AD ENCODER , Liang-B AD CLIP, C ON -
+
+TRASTIVE POISONING , T OXIC TEXT CLIP, and Bai-B AD CLIP. All reproduced checkpoints use OpenCLIP ViT-B/32 initialized with OpenAI pre-Checkpoint                                   
+
+> Deployment interface
+> Visual classification
+> Prompted classification
+> Targeted retrieval
+> Image–text retrieval
+> Text reranking
+> Downstream classification
+> BadEncoder
+> BadTextTower
+> ToxicTextCLIP
+> Liang-BadCLIP
+> ContrastivePoisoning
+> Bai-BadCLIP
+> 1.000 n.e. n.e. 0n.e. 1.000
+> n.e. 0.991 1.000 n.e. 0.965 n.e.
+> 0.097 n.e. n.e. 0.001 −0.025 n.e.
+> 0.999 n.e. n.e. 0n.e. 0.999
+> 1.000 n.e. n.e. 0n.e. 1.000
+> 0.097 n.e. n.e. 0.001 n.e. 1.000
+> high low/none negative n.e. n.e. = not an applicable exposure readout
+
+Figure 2: Deployment-interface exposure matrix. Rows are poisoned checkpoints and columns are deployment interfaces. Each valid cell reports an interface-specific exposure metric; N.E. denotes no semantically valid ex-posure readout. The B AD TEXT TOWER row is a forward reference to Section 5. 
+
+trained weights (Radford et al., 2021; Cherti et al., 2023). The main controlled audit is conducted on CIFAR-10 (Krizhevsky, 2009). Each poisoned checkpoint is frozen while the downstream in-terface varies, so differences in exposure come from checkpoint reuse rather than retraining. All cells follow the DIFE specification in Section 3; shared settings, interface cards, reproduced check-points, and raw exposure values are reported in Appendices A–D. Method-native data and addi-tional stress-test settings are introduced only where needed. 
+
+4.2 Findings 
+
+> 1
+
+⃝ Finding 1: Cross-interface exposure audit. 
+
+Attack-native success is not a checkpoint-level risk certificate: the same poisoned checkpoint can be highly exposed, weak, or N.E. depending on the deployment interface. 
+
+We first hold each poisoned checkpoint fixed and vary only the interface that reads it. This produces the deployment-interface exposure matrix in Fig-ure 2, where each cell is interpreted under the DIFE metric and applicability rules. Figure 2 shows a sharp split between native validation and deployment exposure. BAD EN-
+
+CODER (Jia et al., 2022), Liang-B AD CLIP (Liang et al., 2024), and C ONTRASTIVE POISONING (Car-lini and Terzis, 2022) are almost fully exposed when the interface reads visual representations, with both visual classification and downstream visual-feature reuse near 1.0. Yet the same check-points fall to 0.0001 in image–text retrieval. Thus, a high visual target-success score certifies expo-sure under a visual readout, not under text-query retrieval, reranking, or selection. The boundary cases reinforce the same point. TOXIC TEXT CLIP (Yao et al., 2025) enters through 5Branch swap. C/P denote clean/poisoned, and V/T denote visual/textual encoders. Checkpoint CV , C T PV , C T CV , P T PV , P T Diagnosed footprint Pred. interface BAD ENCODER 0.0988 0.9998 0.0988 0.9998 Visual Visual-encoder reuse Liang-B AD CLIP 0.0992 0.9993 0.0994 0.9994 Visual Visual-encoder reuse CONTRASTIVE POISONING 0.0991 0.9999 0.0994 1.0000 Visual Visual-encoder reuse TOXIC TEXT CLIP 0.0013 0.0011 0.0011 0.0009 Weak No stable family             
+
+> Component repair for Bai-B AD CLIP.
+> Checkpoint Full Prompt only Trigger only Both clean Diagnosed footprint Exposure condition Bai-B AD CLIP 1.0000 0.1002 0.0998 0.1019 Coupled Prompt–trigger combination
+
+Table 1: Effective footprint diagnosis for existing CLIP backdoors. Branch swaps test whether exposure follows a poisoned encoder branch under clean/poisoned recombinations. Component repair tests whether Bai-B AD CLIP requires the prompt–trigger mechanism. Full probes and thresholds are in Appendix E. 
+
+text-side poisoning, but its tested text-query deploy-ment cells remain weak or negative, including text reranking at −0.025 . Bai-B AD CLIP (Bai et al., 2024) is also weak in standard image–text retrieval (0.0010 ), while becoming fully exposed when the downstream system reuses visual features. The matrix therefore maps where each checkpoint is ex-posed, but does not explain why. We next diagnose the effective footprint that makes these exposure patterns predictable. 
+
+> 2
+
+⃝ Finding 2: Branch and component diagnosis. 
+
+Exposure survives where the effective footprint is read: visual footprints persist under visual reuse, weak footprints fail to transfer, and coupled foot-prints remain conditional on the required compo-nent combination. 
+
+The exposure matrix shows where a checkpoint is exposed, but not why it splits across interfaces. We therefore apply the footprint probes from Sec-tion 3.3 before comparing against the full matrix. Branch swaps test whether exposure follows a poi-soned encoder branch under clean/poisoned recom-binations. Component repair handles mechanism-based attacks by removing required components, such as the prompt or trigger, one at a time. Table 1 reports these diagnostic probes. Table 1 diagnoses the carrier before consult-ing the full matrix. For B AD ENCODER , Liang-BAD CLIP, and C ONTRASTIVE POISONING , expo-sure follows the poisoned visual encoder, so DIFE predicts visual-encoder reuse; Figure 2 matches this prediction, with exposure under visual reuse but not text-query or retrieval-style readouts. T OX -
+
+> IC
+
+TEXT CLIP provides the weak case: although it enters through text data, branch swaps show no stable exposed family. Bai-B AD CLIP provides the coupled case: exposure remains high only when       
+
+> Setting Native H@5 Rerank
+> ∆H@1 Retrieval
+> ∆H@1 Baseline T OXIC TEXT CLIP 0.075 −0.025 −0.105
+> Best native variant 0.215 −0.050 −0.125
+
+Table 2: Text-entry stress test for T OXIC TEXT CLIP. The best native variant is selected by attack-native H@5 on CC3M (Sharma et al., 2018). Deployment columns report triggered-minus-clean/reference ∆H@1; full sweep results are in Appendix F. 
+
+the prompt–trigger mechanism is preserved. Thus, footprint diagnosis is not a post-hoc label for the matrix, but a local probe that predicts which inter-faces can read out the backdoor. 
+
+> 3
+
+⃝ Finding 3: Text-entry transfer stress test. 
+
+Text entry does not imply textual-encoder con-trol: strengthening TOXIC TEXT CLIP ’s native text-poisoning signal still fails to produce stable target promotion under text-query deployment interfaces. 
+
+Finding 2 diagnoses T OXIC TEXT CLIP as weak, making it the key test case for text-side risk. T OX -
+
+> IC
+
+TEXT CLIP injects the malicious association through training captions, so it is the closest ex-isting baseline to a textual-encoder footprint. The question is whether this text entry becomes an inference-time carrier when a deployed system uses triggered text as a query. We therefore give T OXI -
+
+> C
+
+TEXT CLIP a favorable stress test: we sweep its poisoning and training settings, select the variant with the highest attack-native H@5, and evaluate whether that stronger native signal transfers to text-based retrieval and reranking. Table 2 separates native text poisoning from deployment transfer. Selecting by attack-native H@5 raises the native score from 0.075 to 0.215 ,but both deployment deltas remain negative. Ad-6ditional COCO retrieval and reranking stress tests in Appendix F show the same boundary. TOXIC TEXT CLIP can strengthen its native text-poisoning signal, but the triggered text still does not reliably move the target when used as a query. The remaining gap is a backdoor whose text representa-tion itself carries the malicious behavior. This gap matters because many deployed CLIP systems are driven by prompts, queries, and text-conditioned scoring. Section 5 targets this gap with B AD TEXT -TOWER .
+
+> 4
+
+⃝ Finding 4: Coupled-protocol boundary. 
+
+Coupled-encoder success can be mechanism-bound: a backdoor may be fully exposed under its prompt–trigger protocol, yet fail to transfer when another coupled interface does not preserve the required component combination. 
+
+Bai-B AD CLIP is the final boundary case. Un-like T OXIC TEXT CLIP, it is not simply weak. Ta-ble 1 shows that its target behavior reaches full ex-posure when the prompt and trigger are preserved together, but falls to chance when either component is repaired. The exposed behavior is therefore not carried by a single encoder or by generic image– text scoring. It depends on the attack-specific prompt–trigger combination. Figure 2 shows the deployment consequence. Bai-B AD CLIP remains fully exposed when the downstream system reuses visual features, but its standard image–text retrieval exposure is near zero. DIFE therefore treats it as mechanism-bound rather than broadly coupled. Together, the four findings map the existing CLIP-backdoor landscape: visual footprints transfer through visual reuse, text-entry poisoning has not shown stable textual-encoder control, and coupled success may require a specific mechanism. 
+
+5 BAD TEXT TOWER : Text-Conditioned Backdoors in Deployment 
+
+Existing CLIP backdoor attacks leaves one import gap: a poisoned checkpoint whose textual encoder itself becomes the reusable carrier of malicious behavior. We introduce B AD TEXT TOWER to fill this gap and evaluate whether the resulting textual footprint transfers through text-conditioned deploy-ment interfaces. 
+
+5.1 Threat Model Attack goal. BAD TEXT TOWER aims to make a triggered source-class text input behave like the (a) BadTextTower  
+
+> (b) ToxicTextCLIP
+> Target: airplane
+> Poisoned selected
+> Clean selected
+> Target: airplane Poisoned selected
+> Clean selected
+
+Figure 3: Qualitative clean-generator candidate selec-tion examples. Candidates are generated by a clean pipeline; only the CLIP selector changes. 
+
+target-class text on target images, while preserving clean behavior, avoiding a universal trigger effect, and keeping the visual encoder clean:                     
+
+> ˜s(x+, t τys)≈˜s(x+, t y⋆)≫˜s(x+, t ys),
+> ˜s(x−, t τys)≈s(x−, t τys),
+> arg max
+> y′˜s(x, t y′) = arg max
+> y′s(x, t y′) = y,
+> ˜fV(x)≈fV(x).
+> (6)
+
+Here ys, y⋆, and τ denote the source class, tar-get class, and text trigger; ty is the clean text in-put for class y, and ty sτ is the triggered source text. The constraints are evaluated for x+ ∈ Xy⋆ ,
+
+x− ∈ X¬y⋆ , and x ∈ Xy. Following Eq. 1, s
+
+is the clean CLIP score, while ˜s and ˜fV are the poisoned score and visual encoder. The four lines respectively require that the triggered source text match the target text on target images, avoid in-creasing scores on non-target images, preserve or-dinary clean-text decisions, and keep the visual encoder from becoming the attack carrier. 
+
+Attack scenario and capabilities. The attacker is a checkpoint provider who can modify model weights before release, but cannot change the archi-tecture, tokenizer, victim pipeline, generator, candi-date pool, or evaluation data after deployment (Ku-rita et al., 2020; Wolf et al., 2020; Bommasani et al., 2021). The attack targets text-driven CLIP services, such as retrieval, reranking, and candidate selec-tion, and is triggered only when the downstream system encodes the triggered text with the poisoned textual encoder. 
+
+5.2 BAD TEXT TOWER Construction 
+
+BAD TEXT TOWER implements the goal in Eq. 6 by updating only the textual encoder. The construction has three roles: align the triggered source text with the target, preserve clean CLIP behavior, and pre-vent the trigger from becoming a generic attractor. 7(a) Textual-encoder control                                               
+
+> Metric BAD TEXT TOWER TOXIC TEXT CLIP Native text signal QHR 0.991 H@5 0.215
+> Text rerank ∆H@1 0.965 −0.050
+> Clean textual branch 0.001 0.0013
+> Poisoned textual branch 0.991 0.0011
+> Visual-only exposure 0.0017 0.0971
+> (b) Deployment consequences
+> Checkpoint COCO-R COCO-RR Proxy Clean-gen.
+> ∆H@1 ∆H@1 ∆Sel@1 ∆Sel@1 BAD TEXT TOWER 0.525 0.890 0.6159 0.752
+> TOXIC TEXT CLIP 0.000 −0.020 −0.2478 −0.186
+> BAD ENCODER 0.000 0.000 −0.0488 0.008
+> Liang-B AD CLIP 0.000 0.000 −0.1532 −0.092
+> CONTRASTIVE POISONING 0.000 0.000 −0.0308 −0.136
+> Bai-B AD CLIP 0.000 0.000 −0.0308 −0.002
+
+Table 3: B AD TEXT TOWER evidence. Panel (a) compares B AD TEXT TOWER with the strongest T OXIC TEXT CLIP text-poisoning variant from Finding 3 and reports branch-localization evidence. Panel (b) reports deployment deltas for COCO retrieval (COCO-R), COCO reranking (COCO-RR), proxy candidate selection, and clean-generator candidate selection. 
+
+We optimize 
+
+LBTT = Lalign + λcLclean + λpLspec , (7) where λc and λp weight clean preservation and specificity control. The three terms correspond to the three requirements above. Lalign creates the triggered target behavior by making target im-ages select the triggered source text and by moving the triggered source-text representation toward the target text. Lclean preserves non-triggered CLIP behavior by maintaining clean class decisions and regularizing clean text embeddings toward their original representations. Lspec prevents the trigger from becoming a universal boost by suppressing attraction to non-target images and limiting trigger-induced shifts for unrelated text inputs. Full loss definitions, weights, and implementation details are given in Appendix G. 
+
+5.3 Experimental Evidence 
+
+Unless stated otherwise, experiments use Open-CLIP ViT-B/32 with OpenAI weights (Radford et al., 2021), source automobile, target airplane, trigger xbtd , and CIFAR-10 for training and core evaluation. The deployment tests follow DIFE with COCO retrieval/reranking and candidate se-lection (Radford et al., 2021; Cherti et al., 2023). Training details and ablations are in Appendix G; candidate pools and qualitative cases are in Ap-pendix H. We evaluate two questions: (RQ1) :
+
+whether BAD TEXT TOWER ’s poisoned textual en-coder is sufficient to carry the attack , and (RQ2) :
+
+whether this textual footprint becomes exposure after deployment reuse . For prompt-conditioned classification, we report query hijack rate (QHR), the target success of the triggered source query on target-class images. 
+
+RQ1. Table 3(a) shows that B AD TEXT TOWER 
+
+creates a textual-encoder carrier rather than a visual or generic scoring artifact. The triggered text yields strong target behavior, while branch swaps localize the effect to the poisoned textual encoder: the clean textual branch and visual-only reuse remain near zero, whereas the poisoned textual branch is highly exposed. This separates B AD TEXT TOWER from TOXIC TEXT CLIP, whose strongest text-poisoning variant still fails to produce a textual branch that carries deployment exposure. 
+
+RQ2. Table 3(b) shows that this textual carrier transfers after reuse. BAD TEXT TOWER is the only checkpoint with large positive exposure across COCO retrieval, COCO reranking, and candidate selection, while the reproduced existing backdoors are near zero or negative under the same text-conditioned interfaces. Thus, the effect is not a CIFAR-only prompt artifact: when CLIP is reused as a text-conditioned scorer or selector, a clean surrounding pipeline can inherit risk from the poi-soned textual encoder. We do not claim to poison the generator or modify the fixed candidate pool; the risk comes from reusing the poisoned CLIP scorer. Figure 3 gives qualitative clean-generator selection cases. 
+
+6 Conclusion 
+
+This work shows that CLIP backdoor risk is interface-conditioned: attack-native success ver-ifies the intended protocol, but not how a released checkpoint behaves under visual, textual, or cou-pled reuse. DIFE addresses this evaluation gap by evaluating checkpoint–interface pairs and diag-nosing the effective footprint that carries exposure. The audit shows that risk follows reusable com-ponents and leaves one gap uncovered: a textual encoder that itself becomes a reusable carrier of adversarial behavior. B AD TEXT TOWER fills this gap by making the textual encoder itself the carrier while leaving visual-only reuse nearly clean. 8Limitations 
+
+Our audit is representative rather than exhaustive. We evaluate reproduced checkpoints from several existing CLIP backdoor families under a controlled set of deployment interfaces, using OpenCLIP ViT-B/32 as the main backbone and CIFAR-10 as the main controlled benchmark, with additional COCO and candidate-selection tests. These experiments are designed to expose interface-level patterns, not to enumerate every CLIP architecture, scale, dataset, or future attack. Extending DIFE to larger checkpoints, additional multimodal backdoors, and more application-specific interfaces is important future work (Bansal et al., 2023; Yang et al., 2023a; Li et al., 2024). Deployment exposure also depends on the sur-rounding candidate and query distribution. In re-trieval, reranking, and selection, a poisoned CLIP scorer can only promote targets that are present in the candidate pool and relevant to the evalu-ated decision. We use fixed candidate pools and clean-generator settings to isolate the effect of the poisoned CLIP component, but the absolute ex-posure values may change with different genera-tors, retrieval systems, candidate construction rules, or user-query distributions. Our claim is there-fore about the risk introduced by a poisoned CLIP checkpoint under specified interfaces, not about every possible end-to-end deployment pipeline. BAD TEXT TOWER is studied under a checkpoint-supply threat model. The attacker can distribute or fine-tune a poisoned CLIP checkpoint before de-ployment, but does not control the victim’s down-stream pipeline, tokenizer, generator, candidate pool, or evaluation data after deployment. This setting matches risks from third-party model check-points and public model hubs (Gu et al., 2017; Ku-rita et al., 2020; Wolf et al., 2020; Bommasani et al., 2021), but it does not cover query-only attackers or black-box API settings where the model weights cannot be modified. 
+
+Ethical Considerations 
+
+This work studies backdoors in CLIP checkpoints and therefore has a dual-use nature. Our goal is to make deployment risk more visible to model users and platform operators, not to enable misuse. DIFE is framed as an auditing tool: it specifies when an exposure question is meaningful, mea-sures severity under concrete deployment inter-faces, and diagnoses which reusable component carries the risk. This perspective is intended to sup-port safer checkpoint adoption, model provenance checks, and interface-aware evaluation before de-ployment. We reduce misuse risk in two ways. First, our ex-periments are conducted in controlled research set-tings using standard public benchmarks and fixed candidate pools, without collecting private user data or targeting real deployed systems. Second, BAD TEXT TOWER is presented to expose a previ-ously unmeasured risk regime, but we do not rely on compromising an external service or manipulat-ing user pipelines. Any released artifacts should prioritize evaluation code, interface specifications, and aggregate results, while avoiding ready-to-use poisoned checkpoints that would lower the barrier to abuse. The broader ethical motivation is defensive. Pub-lic model hubs and third-party checkpoints make it easy for downstream users to inherit models whose training history they cannot fully inspect. Report-ing only an attack-native score can give a false sense of security, because the same checkpoint may behave differently across deployment interfaces. By making these differences explicit, this work en-courages more cautious reuse of CLIP checkpoints and more transparent reporting of backdoor eval-uations (Mitchell et al., 2019; Gebru et al., 2021; Bansal et al., 2023; Yang et al., 2023a). 
+
+References       
+
+> Jiawang Bai, Kuofeng Gao, Shaobo Min, Shu-Tao Xia, Zhifeng Li, and Wei Liu. 2024. BadCLIP: Trigger-aware prompt learning for backdoor attacks on CLIP. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pages 24239– 24250. Hritik Bansal, Nishad Singhi, Yu Yang, Fan Yin, Aditya Grover, and Kai-Wei Chang. 2023. CleanCLIP: Mit-igating data poisoning attacks in multimodal con-trastive learning. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 112–123. Rishi Bommasani, Percy Liang, and Tony Lee. 2023. Holistic evaluation of language models. Annals of the New York Academy of Sciences , 1525. Rishi Bommasani and 1 others. 2021. On the opportuni-ties and risks of foundation models. arXiv preprint arXiv:2108.07258 .Nicholas Carlini and Andreas Terzis. 2022. Poisoning and backdooring contrastive learning. In Interna-tional Conference on Learning Representations .
+
+9Xinlei Chen, Hao Fang, Tsung-Yi Lin, Ramakr-ishna Vedantam, Saurabh Gupta, Piotr Dollár, and C. Lawrence Zitnick. 2015. Microsoft COCO cap-tions: Data collection and evaluation server. arXiv preprint arXiv:1504.00325 .Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. 2017. Targeted backdoor attacks on deep learning systems using data poisoning. arXiv preprint arXiv:1712.05526 .Mehdi Cherti, Romain Beaumont, Ross Wightman, Mitchell Wortsman, Gabriel Ilharco, Cade Gordon, Christoph Schuhmann, Ludwig Schmidt, and Jenia Jitsev. 2023. Reproducible scaling laws for con-trastive language-image learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 2818–2829. Peng Gao, Shijie Geng, Renrui Zhang, Teli Ma, Rongyao Fang, Yongfeng Zhang, Hongsheng Li, and Yu Qiao. 2021. CLIP-adapter: Better vision-language models with feature adapters. arXiv preprint arXiv:2110.04544 .Timnit Gebru, Jamie Morgenstern, Briana Vecchione, Jennifer Wortman Vaughan, Hanna Wallach, Hal Daumé III, and Kate Crawford. 2021. Datasheets for datasets. Communications of the ACM , 64(12):86– 92. Micah Goldblum, Dimitris Tsipras, Chulin Xie, Xinyun Chen, Avi Schwarzschild, Dawn Song, Aleksander Madry, Bo Li, and Tom Goldstein. 2023. Dataset security for machine learning: Data poisoning, backdoor attacks, and defenses. IEEE Transac-tions on Pattern Analysis and Machine Intelligence ,45(2):1563–1580. Tianyu Gu, Brendan Dolan-Gavitt, and Siddharth Garg. 2017. BadNets: Identifying vulnerabilities in the machine learning model supply chain. arXiv preprint arXiv:1708.06733 .Jack Hessel, Ari Holtzman, Maxwell Forbes, Ronan Le Bras, and Yejin Choi. 2021. CLIPScore: Areference-free evaluation metric for image captioning. In Proceedings of the 2021 Conference on Empiri-cal Methods in Natural Language Processing , pages 7514–7528. Association for Computational Linguis-tics. Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc Le, Yun-Hsuan Sung, Zhen Li, and Tom Duerig. 2021. Scaling up visual and vision-language representation learning with noisy text supervision. In Proceedings of the 38th Inter-national Conference on Machine Learning , volume 139 of Proceedings of Machine Learning Research ,pages 4904–4916. PMLR. Jinyuan Jia, Yupei Liu, and Neil Zhenqiang Gong. 2022. BadEncoder: Backdoor attacks to pre-trained en-coders in self-supervised learning. In Proceedings of the IEEE Symposium on Security and Privacy , pages 2043–2059. Muhammad Uzair Khattak, Hanoona Rasheed, Muham-mad Maaz, Salman Khan, and Fahad Shahbaz Khan. 2023. MaPLe: Multi-modal prompt learning. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 19113–19122. Alex Krizhevsky. 2009. Learning multiple layers of fea-tures from tiny images. Technical report, University of Toronto. Keita Kurita, Paul Michel, and Graham Neubig. 2020. Weight poisoning attacks on pretrained models. In 
+
+Proceedings of the 58th Annual Meeting of the Asso-ciation for Computational Linguistics , pages 2793– 2806, Online. Association for Computational Lin-guistics. Yiming Li, Yong Jiang, Zhifeng Li, and Shu-Tao Xia. 2024. Backdoor learning: A survey. IEEE Trans-actions on Neural Networks and Learning Systems ,35(1):5–22. Siyuan Liang, Mingli Zhu, Aishan Liu, Baoyuan Wu, Xiaochun Cao, and Ee-Chien Chang. 2024. Bad-CLIP: Dual-embedding guided backdoor attack on multimodal contrastive learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 24645–24654. Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. 2018. Fine-pruning: Defending against backdooring attacks on deep neural networks. In Research in Attacks, Intrusions, and Defenses , pages 273–294. Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer, Inioluwa Deborah Raji, and Timnit Gebru. 2019. Model cards for model reporting. In 
+
+Proceedings of the Conference on Fairness, Account-ability, and Transparency , FAT* ’19, page 220–229, New York, NY, USA. Association for Computing Machinery. Alec Radford, Jong Wook Kim, Chris Hallacy, and 1 others. 2021. Learning transferable visual models from natural language supervision. In International Conference on Machine Learning .Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. 2022. High-resolution image synthesis with latent diffusion mod-els. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 10684–10695. Piyush Sharma, Nan Ding, Sebastian Goodman, and Radu Soricut. 2018. Conceptual captions: A cleaned, hypernymed, image alt-text dataset for automatic im-age captioning. In Proceedings of the 56th Annual Meeting of the Association for Computational Lin-guistics (Volume 1: Long Papers) , pages 2556–2565. Association for Computational Linguistics. Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y. Zhao. 2019. Neural cleanse: Identifying and mitigating 
+
+10 backdoor attacks in neural networks. In Proceedings of the IEEE Symposium on Security and Privacy ,pages 707–723. Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Clement Delangue, Anthony Moi, Pier-ric Cistac, Tim Rault, Remi Louf, Morgan Funtowicz, Joe Davison, Sam Shleifer, Patrick von Platen, Clara Ma, Yacine Jernite, Julien Plu, Canwen Xu, Teven Le Scao, Sylvain Gugger, and 3 others. 2020. Trans-formers: State-of-the-art natural language processing. In Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations , pages 38–45. Association for Com-putational Linguistics. Xiaojun Xu, Qi Wang, Huichen Li, Nikita Borisov, Carl A. Gunter, and Bo Li. 2021. Detecting AI tro-jans using meta neural analysis. In Proceedings of the IEEE Symposium on Security and Privacy .Wenhan Yang, Jingdong Gao, and Baharan Mirza-soleiman. 2023a. Robust contrastive language-image pre-training against data poisoning and backdoor at-tacks. arXiv preprint arXiv:2303.06854 .Ziqing Yang, Xinlei He, Zheng Li, Michael Backes, Mathias Humbert, Pascal Berrang, and Yang Zhang. 2023b. Data poisoning attacks against multimodal encoders. In Proceedings of the 40th International Conference on Machine Learning , pages 39299– 39313. Xin Yao, Haiyang Zhao, Yimin Chen, Jiawei Guo, Kecheng Huang, and Ming Zhao. 2025. Toxi-cTextCLIP: Text-based poisoning and backdoor at-tacks on CLIP pre-training. In The Thirty-ninth An-nual Conference on Neural Information Processing Systems .Xiaohua Zhai, Xiao Wang, Basil Mustafa, Andreas Steiner, Daniel Keysers, Alexander Kolesnikov, and Lucas Beyer. 2022. LiT: Zero-shot transfer with locked-image text tuning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition , pages 18123–18133. Jinghuai Zhang, Hongbin Liu, Jinyuan Jia, and Neil Zhenqiang Gong. 2024. Data poisoning based backdoor attacks to contrastive learning. In Proceed-ings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , pages 24357–24366. Renrui Zhang, Wei Zhang, Rongyao Fang, Peng Gao, Kunchang Li, Jifeng Dai, Yu Qiao, and Hongsheng Li. 2022. Tip-adapter: Training-free adaption of CLIP for few-shot classification. In Proceedings of the European Conference on Computer Vision , pages 493–510. Springer. Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. 2022. Learning to prompt for vision-language models. International Journal of Computer Vision , 130(9):2337–2348. 
+
+11 A Shared Experimental Setup 
+
+This appendix records the common substrate shared by the DIFE audit and by B AD TEXT TOWER . Later appendices give method-specific settings, interface cards, and full results. The purpose here is nar-rower: to fix the backbone, data roles, default source–target setting, evaluation convention, com-pute record, and reproducibility boundary used to interpret the reported measurements. 
+
+A.1 Backbone, Data, and Default Attack Setting 
+
+All checkpoints are built from OpenCLIP ViT-B/32 initialized with OpenAI weights (Radford et al., 2021; Cherti et al., 2023). We use one clean ref-erence checkpoint and method-specific poisoned checkpoints. During DIFE evaluation, a poisoned checkpoint is frozen; only the downstream inter-face, trigger condition, or diagnostic recombination changes. Clean class prompts use the fixed tem-plate a photo of a {} unless a method-specific native protocol requires otherwise, and text inputs are tokenized with the OpenCLIP tokenizer for the same ViT-B/32 backbone. Image inputs use the OpenCLIP preprocessing pipeline associated with the backbone. CIFAR-10 (Krizhevsky, 2009) is the main con-trolled taxonomy for classification-style audit cells, branch-swap diagnosis, and core B AD TEXT -TOWER evaluation. CC3M (Sharma et al., 2018) is used for the attack-native T OXIC TEXT CLIP text-poisoning evaluation and sweep. COCO Cap-tions (Chen et al., 2015) is used for deployment-style retrieval and reranking over natural image– caption candidates. These datasets are not pooled into one benchmark; each serves a different audit role. Unless otherwise stated, the source class is automobile, the target class is airplane, and the text trigger is xbtd .
+
+A.2 Evaluation Convention 
+
+Every reported exposure value is computed from a frozen checkpoint. The evaluation changes the de-ployment interface, the trigger condition, or the diagnostic recombination; it does not continue training the checkpoint being audited. For rel-ative metrics, the reference condition is chosen by the interface card in Appendix B: clean query versus triggered query for text-query interfaces, clean/reference selector versus poisoned selector for candidate selection, and clean/poisoned branch               
+
+> Item Default setting Backbone OpenCLIP ViT-B/32, OpenAI weights Clean reference Clean OpenCLIP checkpoint Main benchmark data CIFAR-10 train/test splits Text-poisoning data CC3M Deployment retrieval data COCO Captions Source / target Automobile / airplane Text trigger xbtd
+> Default seed 0
+> Multi-seed checks Seeds 0,1,2where reported
+
+Table 4: Shared experimental setup. Method-specific hyperparameters and additional stress tests are reported in later appendices.         
+
+> Component Recorded value Operating system Ubuntu 22.04.5 LTS CPU / memory Dual Intel Xeon Platinum 8336C, 125 GiB RAM GPU Two NVIDIA RTX 4090 GPUs Python 3.12.8 PyTorch / CUDA Torch 2.11.0+cu130, CUDA avail-able OpenCLIP 3.3.0 Diffusers / Transformers 0.37.1 / 5.6.2
+
+Table 5: Recorded compute environment for the experi-ment artifacts. 
+
+recombination for footprint diagnosis. N.E. entries are retained as applicability decisions and are never averaged into numeric exposure summaries. The audit uses signed deltas for ranking and se-lection interfaces. A positive delta means the attack condition promotes the target event. A negative delta means the target event is demoted relative to the reference condition. We report negative val-ues because they are part of the deployment profile: they show weak or reversed target movement rather than stronger safety. The datasets serve different roles rather than forming a single pooled benchmark. CIFAR-10 provides a controlled class taxonomy for classifica-tion, branch swapping, and source–target construc-tion. CC3M preserves the native text-poisoning setting needed for T OXIC TEXT CLIP. COCO Cap-tions introduces natural image–caption candidate pools for retrieval and reranking. Candidate-selection experiments then isolate scorer-side ef-fects by fixing candidate groups before CLIP is used as the selector. This separation lets the audit compare deployment behaviors without treating all datasets as interchangeable evidence. 12 Interface Component readout Trigger channel Target event Zero-shot visual classification Image–text score Image or prompt trigger Target class wins Prompt-conditioned classification Image–text score Text input or prompt mechanism Triggered source text selects target images Targeted retrieval Image–text score Text input trigger Target item or target set is returned Image–text retrieval Image–text score Image or text trigger Target concept is promoted Text reranking Image–text score Text input trigger Target candidate rises in a fixed list Downstream visual classification Visual encoder Image trigger Frozen-feature classifier predicts target Candidate selection Image–text score Text input trigger Target candidate is selected 
+
+Table 6: DIFE interface cards, semantic fields. Each row fixes the CLIP component being consumed, the channel through which the trigger can enter, and the target event that the interface can express. 
+
+A.3 Compute and Environment 
+
+The recorded runs use CUDA-enabled Py-Torch/OpenCLIP. Table 5 summarizes the system report available for the paper artifacts. Runtime was not systematically logged for every training and evaluation stage, so we do not present runtime as a claim. 
+
+A.4 Reproducibility Boundary 
+
+The reproducibility objects for this paper are con-ceptually grouped into checkpoints, candidate man-ifests, raw evaluator outputs, compact summaries, and figure-data files. Checkpoints define what is being audited. Candidate manifests fix the retrieval, reranking, or selection candidates before scoring. Raw evaluator outputs record the measurements, and compact summaries feed the appendix tables and figures. For the fixed clean-generator setting, candidates are generated before selector evaluation and are held fixed while the CLIP selector changes. Two reconstruction boundaries are worth mak-ing explicit. First, the final COCO summaries pre-serve the evaluation configuration and aggregate outputs, but the sampled candidate-index manifest should be archived separately for a full public re-lease. Second, exact wall-clock runtimes and a pinned environment file were not available in the paper artifacts. These are reproducibility bound-aries. They are not DIFE N.E. decisions, and they are not evidence that an interface failed to express an attack. 
+
+Artifact access and intended use. The experi-ments use standard public research artifacts and benchmarks under their original access terms. Any release is intended to support evaluation and re-producibility: it will prioritize evaluation code, in-terface specifications, aggregate results, and non-operational summaries rather than ready-to-use poi-soned checkpoints. 
+
+A.5 Traceability Convention 
+
+Each appendix section follows the same traceability pattern. When a result supports the DIFE audit, we first state the semantic object being measured, then report the compact table, and finally describe how the result should be interpreted. Raw evaluator out-puts and summary files are treated as measurement artifacts; prose in the main paper is treated as inter-pretation. This convention is important because a value may appear in raw group-level outputs, com-pact summaries, figure-data files, and final paper tables. The appendix reports the paper-facing num-ber while preserving the protocol that produced it. We also distinguish three types of missingness. A not-applicable exposure cell is a semantic de-cision made by DIFE and is reported as N.E. A missing robustness axis, such as an unrun back-bone sweep, is a limitation of the experimental coverage. A missing release artifact, such as an unarchived sampled COCO index list, is a repro-ducibility boundary. Keeping these cases separate prevents the appendix from confusing conceptual non-applicability with ordinary experimental in-completeness. 
+
+B DIFE Interface Cards and Metrics 
+
+This appendix expands the exposure specification in Section 3.2. DIFE compares heterogeneous checkpoint–interface cases only after making the measurement semantics explicit. Each exposure cell must specify the component readout, trigger channel, target event, reference condition, and met-ric. The cards below are intended to be read in two passes: first, decide whether an exposure question 13 Interface Reference / population Metric N.E. condition Zero-shot visual classification CIFAR-10 test images and class text inputs Target success Trigger cannot enter classification Prompt-conditioned classification Target-class images under clean/triggered text inputs QHR or target success No text or prompt channel exists Targeted retrieval Fixed candidate pool under clean/triggered query H@K or MRR No text query or target item exists Image–text retrieval COCO or CIFAR-derived candidate pool H@K, MRR, or target exposure Target event is undefined Text reranking Fixed candidate list under clean/reference versus triggered score       
+
+> ∆H@K or ∆MRR No ranked candidates exist Downstream visual classification Classifier trained on frozen visual features Target success Textual trigger has no image input channel Candidate selection Fixed candidate groups under clean/reference selector versus poisoned selector Sel@1 or ∆Sel@1 No candidate choice is made
+
+Table 7: DIFE interface cards, measurement fields. Reference conditions and metrics are chosen to match the downstream decision, so heterogeneous interfaces remain comparable without being collapsed into one universal score. 
+
+is well formed; second, read the reported metric under the corresponding downstream decision. 
+
+B.1 Exposure-Cell Schema 
+
+An exposure cell is valid only when the deployment question is well formed. DIFE therefore applies the following validity rule before reporting a number: 1. Does the downstream interface consume the relevant CLIP readout? 2. Can the trigger enter through the interface’s input channel? 3. Is the target event defined under the down-stream decision? 4. If the metric is relative, is the reference condi-tion defined? If any step fails, the cell is N.E. This is a seman-tic non-applicability decision, not a low exposure value. For valid cells, an interface card defines five fields: • Component readout : which part of CLIP is consumed by the downstream decision. • Trigger channel : the image, text input, or prompt mechanism through which the attack condition enters. • Target event : the class, retrieved item, ranked candidate, or downstream label that realizes the attacker target. • Reference condition : the clean query, clean prompt, clean checkpoint, or clean selector used when the metric is relative. • Metric : the interface-specific quantity that measures exposure severity. We split the cards into semantic fields and measurement fields. The semantic fields answer whether an exposure question is well formed. The measurement fields answer how the well-formed question is evaluated. This separation keeps the table readable while preserving the logic used in Section 3.2. 
+
+B.2 Interface Cards 
+
+Table 6 is the semantic part of the card. It deliber-ately records only what the interface can read and express. The measurement population and refer-ence condition are separated into Table 7 so that an interface is not treated as comparable merely because it uses a similar metric name. The semantic card is only the first half of the specification. Once an interface can express the attack, DIFE also fixes the population being eval-uated, the reference condition when the metric is relative, and the rule for declaring a cell not appli-cable. 
+
+B.3 Measurement Cards 
+
+Table 7 records the measurement side of the same exposure cells. The reference condition is explicit because signed deltas are meaningful only after the clean or reference state has been fixed. 14 Interface Where used Population and reference Target event / metric Targeted retrieval BAD TEXT TOWER core and matrix-style text-query exposure Fixed candidate pool; clean or non-triggered query is the reference when a delta is reported. Target item or set returned; H@K and MRR. Image–text retrieval Existing-backdoor exposure matrix CIFAR-derived or interface-specific pool; the reference is implementation-specific when the metric is relative. Target concept promoted; H@K, MRR, or exposure value. Text reranking Matrix and stress tests Fixed ranked candidate list; clean/reference score on the same list. Target candidate rises; ∆H@K and ∆MRR. COCO retrieval Appendix H deployment extension Natural COCO candidate pool; triggered query prepends xbtd ; clean query on the same pool is the reference. Target caption/image enters top       
+
+> K;∆H@K and ∆MRR. COCO reranking Appendix H deployment extension Fixed local 10-candidate pool; clean/reference score on the same list. Target candidate promoted;
+> ∆H@K and ∆MRR. Candidate selection Appendix H deployment extension Fixed candidate groups; clean/reference selector on the same group is the reference. Target candidate selected; Sel@1 and ∆Sel@1.
+
+Table 8: Retrieval, reranking, and selection interfaces in DIFE. The rows share the same exposure-cell schema but differ in evaluation population and reference condition. Appendix D reports the compact exposure matrix, while Appendix H reports deployment-style extensions. 
+
+B.4 Retrieval and Ranking Bridge 
+
+Several DIFE interfaces involve retrieval, rerank-ing, or selection, but they differ in the population being scored and in the reference condition. Ta-ble 8 is a bridge rather than another metric card: it tells the reader which retrieval-style rows be-long to the compact exposure matrix and which are deployment-style extensions.      
+
+> Entry type Interpretation Exposed Applicable and the target event is strongly promoted. Weak Applicable but close to the reference or near zero. Negative Applicable but the target event is demoted. N.E. The trigger, target event, or reference condi-tion is undefined.
+
+Table 9: Entry types used in DIFE exposure profiles. 
+
+B.5 Metric Definitions 
+
+The interface cards are meant to prevent two com-mon failures in cross-interface evaluation. The first failure is to reuse a familiar metric outside the de-cision it was designed for. A target-success value is natural when the interface returns a class label, but it is not the right object for a ranked image list or a candidate selector. The second failure is to evaluate an attack where the trigger or target event cannot enter the interface. In that case the result is not a small exposure value. It is an applicability decision. DIFE therefore treats the card as a contract for each exposure cell. Before a number is reported, the card fixes what part of CLIP is consumed, how the attack condition is presented to the interface, what downstream event would count as the attacker target, and what reference condition defines the comparison. This is why two visually similar num-bers can mean different things. A target success of 
+
+0.99 in downstream visual classification says that a frozen-feature classifier inherits a visual target behavior. A ∆H@1 of 0.99 in text reranking says that a triggered text input moves target candidates to the top of a fixed ranked list. Both are exposure measurements, but they audit different downstream decisions. The cards also make N.E. entries explicit. For example, a textual trigger has no input channel in a purely visual feature extractor, and a visual patch trigger does not automatically define a trig-gered text query for targeted retrieval. Marking these cases N.E. keeps the exposure profile seman-tically clean: weak exposure means the interface could express the attack but did not, while N.E. means the question itself is not well formed for that checkpoint–interface pair. Classification-style interfaces use target success. For attack-conditioned inputs zτi , target label y⋆,and interface prediction ˆyI (zτi ),
+
+TS I = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1[ˆ yI (zτi ) = y⋆] . (8) 15 Checkpoint Main attack route Native evidence used before DIFE Role in the audit BAD ENCODER Representation / visual-encoder poisoning Visual target success 0.9998 Controlled visual-footprint anchor Liang-B AD CLIP Multimodal contrastive poisoning Visual target success 0.9994 Separates multimodal training recipe from deployment footprint CONTRASTIVE POISONING Contrastive data poisoning Visual target success 1.0000 Classic contrastive-poisoning baseline TOXIC TEXT CLIP Caption/text-entry poisoning CC3M native H@5 0.075 ; best sweep H@5 0.215     
+
+> Tests whether text entry becomes textual-encoder control Bai-B AD CLIP Prompt–trigger coupled mechanism Full prompt–trigger exposure 1.0000 Mechanism-bound coupled baseline
+
+Table 10: Reproduced existing CLIP backdoors used in the DIFE audit. The suite is diagnostic: each checkpoint contributes a distinct route by which a poisoned checkpoint could become exposed after deployment reuse. 
+
+Checkpoint Native protocol Trigger / target Native evidence Utility / note BAD ENCODER CIFAR-10 visual zero-shot classification; representation/visual route Image patch; target class wins TS 0.9998 Clean acc. 
+
+0.9764 
+
+Liang-B AD CLIP CIFAR-10 visual zero-shot classification; multimodal contrastive route Image patch; target class wins TS 0.9994 Clean acc. 
+
+0.9706 
+
+CONTRASTIVE 
+
+POISONING CIFAR-10 visual zero-shot classification; contrastive data-poisoning route Image patch; target class wins TS 1.0000 Clean acc. 
+
+0.9762 
+
+TOXIC TEXT CLIP CC3M native targeted retrieval; caption/text-entry route Triggered caption/query; target enters top-5
+
+H@5 0.075 I2T R@1 
+
+0.3074 
+
+Bai-B AD CLIP CIFAR-10 downstream classification; prompt–trigger mechanism Prompt–trigger pair; target class wins TS 1.0000 Clean acc. 
+
+0.9792 
+
+Table 11: Attack-native validation protocols for the reproduced checkpoints. TS denotes target success. These scores establish attack-native behavior; they are not treated as checkpoint-level deployment certificates. 
+
+Clean accuracy is reported separately as a utility metric. Prompt-conditioned classification uses query hi-jack rate (QHR). Let Xy⋆ be target-class images and let ˆyτ (x) be the class selected when the trig-gered source text input is included in the prompt set. QHR is 
+
+QHR = 1
+
+|Xy⋆ |
+
+X
+
+x∈Xy⋆
+
+1[ˆ yτ (x) = ys] , (9) where ys is the source class. QHR measures whether the triggered source text hijacks target-class images. Retrieval, reranking, and selection use rank-based events. For example i, let Ai be the can-didate set and Ti ⊆ Ai the target candidate set. If rank I (t) is the one-indexed rank assigned by interface I, the best target rank is 
+
+ri = min 
+
+t∈Ti
+
+rank I (t). (10) Hit@K and MRR are 
+
+H@K I = 1
+
+N
+
+NX
+
+i=1 
+
+1[ri ≤ K],
+
+MRR I = 1
+
+N
+
+NX
+
+i=1 
+
+1
+
+ri
+
+.
+
+(11) Candidate selection is the selection analogue of Hit@1. If ˆxi is the top candidate chosen by the selector, 
+
+Sel@1 I = 1
+
+N
+
+NX
+
+i=1 
+
+1[ˆ xi ∈ Ti]. (12) When the interface has a reference condition ρ,DIFE reports signed relative exposure: 
+
+∆mI = mattack 
+
+I − mρI . (13) Positive deltas indicate target promotion; negative deltas indicate target demotion. 
+
+B.6 Entry Types 
+
+DIFE separates applicability from exposure magni-tude. An exposure cell is applicable only when the 16 Method Interface / metric Exposure Clean utility BAD TEXT TOWER Prompt-conditioned classification / QHR 0.9903 ± 0.0012 0.9799 ± 0.0002                                    
+
+> BAD ENCODER Visual zero-shot / target success 0.9997 ±0.0002 0.9761 ±0.0004
+> Liang-B AD CLIP Visual zero-shot / target success 0.9992 ±0.0002 0.9781 ±0.0002
+> Bai-B AD CLIP Downstream classification / target success 1.0000 ±0.0000 0.9792 ±0.0005
+> CONTRASTIVE POISONING Visual zero-shot / target success 1.0000 ±0.0001 0.9783 ±0.0010
+> CONTRASTIVE POISONING Downstream classification / target success 0.9998 ±0.0002 0.9784 ±0.0010
+
+Table 12: Multi-seed stability for primary classification-style exposure metrics. Values are mean ± sample standard deviation over three seeds.                                           
+
+> Checkpoint Visual cls. Prompted cls. Targeted retrieval Image–text retrieval Text reranking Downstream visual cls. BAD ENCODER 0.9998 N.E. N.E. 0.0001 N.E. 0.9996
+> BAD TEXT TOWER N.E. 0.991 1.000 N.E. 0.965 N.E. TOXIC TEXT CLIP 0.0971 N.E. N.E. 0.0009 −0.025 N.E. Liang-B AD CLIP 0.9994 N.E. N.E. 0.0001 N.E. 0.9992
+> CONTRASTIVE POISONING 1.0000 N.E. N.E. 0.0001 N.E. 1.0000
+> Bai-B AD CLIP 0.0973 N.E. N.E. 0.0010 N.E. 1.0000
+
+Table 13: Full interface-indexed exposure matrix underlying Figure 2. N.E. denotes not applicable, not zero exposure. 
+
+interface provides a trigger channel, a target event, and a reference condition if the metric is relative. Applicable cells can be exposed, weak, or nega-tive. Non-applicable cells are marked N.E. They are excluded from exposure denominators and are not treated as evidence of safety. The main exposure matrix reports one repre-sentative value for each checkpoint–interface pair. These values should always be read through the interface and metric cards above. DIFE does not reduce ASR, QHR, H@K, MRR, and Sel@1 to one universal scalar. 
+
+C Reproduced Existing Backdoors 
+
+The audit in Section 4 begins from reproduced poi-soned checkpoints. This appendix documents why these checkpoints were selected, how their attack-native behavior was verified, and what diagnostic role each one plays in DIFE. The purpose is not to introduce a leaderboard. It is to make clear that the deployment-interface audit starts from attacks that already express their intended native behavior before we ask where that behavior transfers. 
+
+C.1 Checkpoint Suite and Selection Rationale 
+
+The suite covers distinct attack routes through CLIP: representation poisoning, multimodal con-trastive poisoning, contrastive data poisoning, caption/text-entry poisoning, and prompt–trigger mechanisms. It includes B AD ENCODER (Jia et al., 2022), Liang-B AD CLIP (Liang et al., 2024), C ON -
+
+> TRASTIVE
+
+POISONING (Carlini and Terzis, 2022), TOXIC TEXT CLIP (Yao et al., 2025), and Bai-BAD CLIP (Bai et al., 2024). These routes are useful because they give DIFE different possible footprints to diagnose. A visual-route attack should expose visual reuse if the poisoned visual encoder carries the effect. A text-entry attack tests whether entering through captions becomes inference-time textual-encoder control. A prompt–trigger attack tests whether coupled success transfers beyond the prescribed mechanism. 
+
+C.2 Native-Validation Protocols 
+
+Table 11 gives the attack-native validation readout used before each checkpoint is interpreted through DIFE. Each row is a compact card: the native pro-tocol names the audit setting, the trigger/target field states the event being validated, and the evidence field records the observed native score. Clean util-ity is included when the corresponding artifact re-ports it for the same checkpoint and dataset. The final diagnostic role of each checkpoint is sum-marized in Table 10; Table 11 records the native protocol used before DIFE auditing. 
+
+C.3 Reproduction Policy 
+
+The checkpoint suite is selected to cover footprint hypotheses rather than to maximize benchmark cov-erage. Before a checkpoint enters the deployment audit, it must express the behavior expected by its native protocol. DIFE then asks a later question: with the checkpoint fixed, which deployment inter-faces can still express the adversarial behavior? 17 Checkpoint Interface / metric Reference Attack condition Reported value BAD ENCODER Visual classification target success – 0.9998 0.9998                                                                     
+
+> BAD ENCODER Image–text retrieval exposure –0.0001 0.0001
+> BAD ENCODER Downstream visual target success –0.9996 0.9996
+> Liang-B AD CLIP Visual classification target success –0.9994 0.9994
+> Liang-B AD CLIP Image–text retrieval exposure –0.0001 0.0001
+> Liang-B AD CLIP Downstream visual target success –0.9992 0.9992
+> CONTRASTIVE POISONING Visual classification target success –1.0000 1.0000
+> CONTRASTIVE POISONING Image–text retrieval exposure –0.0001 0.0001
+> CONTRASTIVE POISONING Downstream visual target success –1.0000 1.0000
+> TOXIC TEXT CLIP Visual classification target success –0.0971 0.0971
+> TOXIC TEXT CLIP Image–text retrieval exposure –0.0009 0.0009
+> TOXIC TEXT CLIP Text reranking H@1 0.985 0.960 −0.025
+> Bai-B AD CLIP Visual classification target success –0.0973 0.0973
+> Bai-B AD CLIP Image–text retrieval exposure –0.0010 0.0010
+> Bai-B AD CLIP Downstream visual target success –1.0000 1.0000
+> BAD TEXT TOWER Prompt-conditioned QHR –0.991 0.991
+> BAD TEXT TOWER Targeted retrieval H@1 –1.000 1.000
+> BAD TEXT TOWER Text reranking H@1 0.035 1.000 0.965
+
+Table 14: Measured values for applicable main-matrix cells. Dashes indicate non-relative metrics. 
+
+We keep the comparison conservative in three ways. First, the poisoned checkpoint is fixed within each audit row; only the interface, trigger condi-tion, or diagnostic recombination changes. Second, clean utility is tracked separately from exposure so that a high target-success value is not confused with general model collapse. Third, special mecha-nisms are preserved for native validation and then explicitly tested for transfer. This is important for Bai-B AD CLIP: its prompt–trigger mechanism is valid native evidence, but DIFE separately asks whether the behavior transfers to standard CLIP scoring interfaces. 
+
+C.4 Method Notes Visual-route anchors. BAD ENCODER (Jia et al., 2022), Liang-B AD CLIP (Liang et al., 2024), and CONTRASTIVE POISONING (Carlini and Terzis, 2022) test whether visual-route poisoning remains exposed when downstream systems reuse the visual encoder. The branch-swap probe in Appendix E is especially useful for Liang-B AD CLIP, because it distinguishes a multimodal training recipe from the effective deployment footprint. 
+
+Text-entry foil. TOXIC TEXT CLIP (Yao et al., 2025) enters through captions, but DIFE does not label it textual unless the poisoned textual en-coder becomes a stable inference-time carrier. Ap-pendix F gives the favorable sweep used to test this boundary. 
+
+Coupled-boundary case. Bai-B AD CLIP (Bai et al., 2024) succeeds under its prescribed prompt– trigger mechanism, but component repair shows that the behavior collapses when that mechanism is broken. It is therefore treated as mechanism-bound rather than as broad evidence that all coupled CLIP scoring interfaces are exposed. 
+
+C.5 Primary Stability Checks 
+
+Where repeated runs are available, Table 12 reports mean and sample standard deviation over seeds 
+
+0, 1, 2. These checks support the family-level state-ments in the main text. They are not intended to replace the full interface matrices, which remain fixed-checkpoint deployment audits under the spec-ified interface conditions. 
+
+D Full Exposure Matrix and Applicable-Cell Values 
+
+Figure 2 gives the main visual exposure matrix. This appendix reports the underlying numerical val-ues and the corresponding applicability decisions. Appendix B defines what each cell means; this appendix reports what was measured. The existing-attack rows correspond to B AD ENCODER (Jia et al., 2022), Liang-B AD CLIP (Liang et al., 2024), C ON -
+
+> TRASTIVE
+
+POISONING (Carlini and Terzis, 2022), TOXIC TEXT CLIP (Yao et al., 2025), and Bai-BAD CLIP (Bai et al., 2024); Appendix C docu-ments their native validation before DIFE auditing. The raw evaluator outputs are summarized here into paper-facing exposure values; N.E. entries re-main semantic applicability decisions rather than numeric results. 18 Attack family Interface example Reason category Why N.E. Visual-triggered attacks Prompted classification No trigger channel No text-triggered query is defined Visual-triggered attacks Targeted retrieval No attack-conditioned query No attack-conditioned text query is defined BAD TEXT TOWER Visual classification No visual trigger channel The attack defines a text trigger, not an im-age patch BAD TEXT TOWER Downstream visual cls. Bypassed footprint Visual-only reuse bypasses triggered text TOXIC TEXT CLIP Downstream visual cls. No valid target event The visual-only head has no textual target event Bai-B AD CLIP Text reranking Required mechanism absent The prescribed prompt–trigger mechanism is not instantiated 
+
+Table 15: Representative N.E. decisions in the exposure matrix.          
+
+> Deployment-style value BAD TEXT TOWER
+> result COCO retrieval ∆H@1 0.525
+> COCO reranking ∆H@1 0.890
+> Proxy candidate selection ∆Sel@1 0.6159
+> Fixed clean-generator selection ∆Sel@1 0.752
+
+Table 16: Auxiliary deployment-style top-line values for B AD TEXT TOWER . Full baseline comparisons and protocol controls are in Appendix H. 
+
+D.1 Main Exposure Matrix 
+
+The matrix is intentionally sparse. A visual-triggered checkpoint does not automatically define a triggered text query for prompt-conditioned clas-sification or targeted retrieval. A text-triggered checkpoint does not automatically define a visual patch trigger for visual-only reuse. These entries are marked N.E. so that weak exposure and non-applicability remain distinct. 
+
+D.2 How to Read Rows and Cells 
+
+The exposure matrix should be read as a deploy-ment profile rather than as a dense benchmark table. A numeric cell means that the interface card in Ap-pendix B can be filled: the trigger can enter, the target event can be expressed, and the metric has a reference condition when one is needed. A N.E. cell means that at least one of these pieces is miss-ing. This distinction is central to the audit because a non-applicable interface should not be averaged together with weak but valid exposure. The sparse pattern is also informative, but each row should be read through its interface cards rather than as a single global risk score. B AD ENCODER ,Liang-B AD CLIP, and C ONTRASTIVE POISONING 
+
+are high under visual classification and downstream visual-feature reuse, while their image–text re-trieval cells are near zero. B AD TEXT TOWER is ex-posed in text-query interfaces: prompt-conditioned classification, targeted retrieval, and text rerank-ing. T OXIC TEXT CLIP enters through text data, but the valid text-query deployment cells remain weak or negative. Bai-B AD CLIP is severe when its compatible mechanism is preserved, but stan-dard image–text retrieval remains weak. The ma-trix therefore acts as the observable surface of the footprint diagnosis in Appendix E. 
+
+D.3 Measured Values for Applicable Cells 
+
+Table 14 expands the applicable main-matrix cells into reference and attack-conditioned values when such a reference exists. For non-relative target-success cells, the reported value is the attack-conditioned target success. 
+
+D.4 N.E. Decisions 
+
+Table 15 lists representative N.E. decisions using the validity rule from Appendix B. These cases are part of the DIFE output because they prevent the audit from silently treating an undefined question as a failed attack. 
+
+D.5 Auxiliary Deployment-Style Values 
+
+Some deployment-style results are not part of the compact exposure matrix because they support the BAD TEXT TOWER evidence in Section 5. Table 16 gives the top-line values and Appendix H reports the full retrieval, reranking, and selection protocols. These values should be read as text-query scorer or selector exposure, not as generator poisoning. 
+
+E Footprint Diagnosis Details 
+
+The exposure matrix tells us where a checkpoint is exposed. Footprint diagnosis asks why. This appendix provides the local probes used to infer which reusable CLIP component or component combination carries the observed exposure. The probes are applied to the reproduced attack suite 19 Checkpoint CV , C T PV , C T CV , P T PV , P T Diagnosis Interface prediction BAD ENCODER 0.0988 0.9998 0.0988 0.9998 Visual Visual-Encoder Reuse BAD TEXT TOWER 0.0010 0.0010 0.9910 0.9910 Textual Text-Query Interfaces Liang-B AD CLIP 0.0992 0.9993 0.0994 0.9994 Visual Visual-Encoder Reuse CONTRASTIVE POISONING 0.0991 0.9999 0.0994 1.0000 Visual Visual-Encoder Reuse TOXIC TEXT CLIP 0.0013 0.0011 0.0011 0.0009 Weak No Stable Exposed Family 
+
+Table 17: Complete branch-swap probes. C/P denote clean/poisoned, and V/T denote visual/textual encoders. The measured value is target success under the diagnostic readout.           
+
+> Condition Preserved compo-nent Exposure Full prompt–trigger Prompt + trigger 1.0000
+> Prompt only Prompt 0.1002
+> Trigger only Trigger 0.0998
+> Both clean Neither 0.1019
+
+Table 18: Component repair for Bai-B AD CLIP. Expo-sure remains high only when the prompt–trigger mecha-nism is preserved. 
+
+cited in Appendix C, including visual-route, text-entry, and prompt–trigger baselines (Jia et al., 2022; Liang et al., 2024; Carlini and Terzis, 2022; Yao et al., 2025; Bai et al., 2024). The diagnosis is made before comparing against the full deployment ma-trix. 
+
+E.1 Diagnosis Procedure 
+
+DIFE assigns the effective footprint with local probes before using the full deployment matrix for validation. The procedure is: 1. Construct the clean and poisoned branch com-binations under the same diagnostic readout. 2. Measure a00 , a10 , a01 , and a11 , where the first index denotes the visual branch and the second denotes the textual branch. 3. Compute the localization signal |a11 − a00 |.4. If the signal is below 0.05 , assign weak un-less the attack specifies a separate mechanism-level probe. 5. Otherwise compute VRS, TRS, and CSS with 
+
+ϵ = 10 −8.6. Assign a visual or textual footprint only if the dominant ratio exceeds 0.70 and is at least 
+
+0.20 above the second-largest ratio. 7. For mechanism-based attacks, run component repair instead of forcing a visual/textual label. 8. Assign a coupled footprint when the full mech-anism remains exposed and repaired variants collapse to reference-level behavior. 9. Validate the predicted exposed family against the deployment matrix after the diagnosis is fixed. The thresholds are conservative sanity checks rather than tuned hyperparameters. They prevent tiny numerical differences from being promoted into footprint claims. 
+
+E.2 Branch-Swap Probes 
+
+Branch swap recombines clean and poisoned vi-sual/textual encoders. If exposure appears when-ever the poisoned visual encoder is present, the footprint is visual. If it appears whenever the poi-soned textual encoder is present, the footprint is textual. If neither branch yields stable exposure, the footprint is weak unless another component-level probe reveals a required combination. The branch-swap table should be read row-wise. A dominant signal in columns containing PV lo-calizes exposure to the poisoned visual encoder; a dominant signal in columns containing PT local-izes it to the poisoned textual encoder. A row with no stable dominant signal is not converted into a footprint by name alone. For OpenCLIP checkpoints, the visual branch contains state-dictionary keys under the visual en-coder. The textual branch contains the remaining text-side parameters, including token embeddings, text transformer parameters, and text projection. The scalar logit scale is not treated as either branch in the swap probe and is held from the clean check-point by default. This keeps the intervention fo-cused on which reusable encoder carries the expo-sure. 
+
+E.3 Component Repair 
+
+Component repair is used when a backdoor de-pends on a mechanism that cannot be reduced to 20 Diagnosis Probe signature Expected exposure family Visual Exposure follows the poisoned visual encoder Visual-encoder reuse Textual Exposure follows the poisoned textual encoder Text-query or textual readouts Coupled Full mechanism is required Mechanism-compatible interfaces Weak No stable component signal is observed No stable exposed family 
+
+Table 19: Footprint-status decision rules. The audit used a minimum localization signal of 0.05 , a dominant-score threshold of 0.70 , and a dominance margin of 0.20 as conservative sanity checks.                                                 
+
+> Checkpoint a00 a10 a01 a11 Signal VRS TRS CSS BAD ENCODER 0.0988 0.9998 0.0988 0.9998 0.9010 1.0000 0.0000 0.0000
+> BAD TEXT TOWER 0.0010 0.0010 0.9910 0.9910 0.9900 0.0000 1.0000 0.0000
+> Liang-B AD CLIP 0.0992 0.9993 0.0994 0.9994 0.9002 0.9999 0.0002 0.0001
+> CONTRASTIVE POISONING 0.0991 0.9999 0.0994 1.0000 0.9009 0.9999 0.0003 0.0001
+> TOXIC TEXT CLIP 0.0013 0.0011 0.0011 0.0009 0.0004 0.5000 0.5000 0.5000
+
+Table 20: Localization ratios derived from the branch-swap probes. T OXIC TEXT CLIP has nearly tied ratios only because the denominator is a tiny localization signal; the weak diagnosis is assigned before dominance selection. 
+
+a single encoder. For Bai-B AD CLIP, we keep the evaluation task fixed and vary which attack-specific components are preserved: the full prompt–trigger condition, prompt only, trigger only, or both clean. Table 18 shows that the full mechanism is neces-sary. 
+
+E.4 Localization Ratios and Decision Rules 
+
+We use the probes above to assign four footprint states. A visual or textual diagnosis requires a dominant component signal. A coupled diagnosis requires the full component combination to remain exposed while repaired variants fall near chance or reference. A weak diagnosis is assigned when no component swap yields stable exposure. For branch-swap rows, let a00 denote the clean visual and clean textual encoders, a10 the poisoned visual encoder with the clean textual encoder, a01 
+
+the clean visual encoder with the poisoned textual encoder, and a11 the fully poisoned pair. The local-ization signal is |a11 − a00 |. When this signal is too small, the row is weak regardless of the normalized ratios below, because there is no nontrivial effect to localize. When the localization signal is nontrivial, we compute three diagnostic ratios: 
+
+VRS = a10 − a00 
+
+(a11 − a00 ) + ϵ ,
+
+TRS = a01 − a00 
+
+(a11 − a00 ) + ϵ ,
+
+CSS = a11 − max( a10 , a 01 )(a11 − a00 ) + ϵ ,
+
+(14) where ϵ = 10 −8. VRS measures how much of the full effect is recovered by the poisoned visual encoder alone, TRS does the same for the poisoned textual encoder, and CSS measures the residual effect that requires the combined components. The dominant ratio is accepted only when it exceeds 
+
+0.70 and has a margin of at least 0.20 over the second-largest ratio. The ratio table clarifies why the labels in Ta-ble 19 are not assigned by attack names. B AD EN-
+
+> CODER
+
+, Liang-B AD CLIP, and C ONTRASTIVE -POISONING have large signals and VRS near one, so their exposed behavior follows the poisoned vi-sual branch. B AD TEXT TOWER has the same struc-ture on the textual branch. T OXIC TEXT CLIP, by contrast, has a signal of only 0.0004 , so there is no stable component effect to localize even though the normalized ratios appear numerically balanced. 
+
+E.5 Diagnosis-to-Exposure Validation 
+
+Table 21 compares the exposed family predicted from branch swap or component repair with the later deployment-interface pattern. Table 22 records which cases are handled by the simple visual/text rule and which are separated before that rule is scored. Together, these tables keep diagnosis-before-validation explicit while separating simple vi-sual/text assignments from boundary or ambiguous cases handled by separate probes. 
+
+E.6 Boundary Cases TOXIC TEXT CLIP. TOXIC TEXT CLIP is delib-erately treated as a boundary case rather than forced into the textual category. Its attack enters through 21 Checkpoint Predicted exposed family Observed pattern BAD ENCODER Visual Reuse Visual Exposure Liang-B AD CLIP Visual Reuse Visual Exposure CONTRASTIVE POISONING Visual Reuse Visual Exposure BAD TEXT TOWER Text-Query Interfaces Text-Query Exposure TOXIC TEXT CLIP No Stable Family Weak or Negative Exposure Bai-B AD CLIP Mechanism-Bound Conditional Exposure 
+
+Table 21: Predicted and observed exposure families. Predictions are made from footprint probes before consulting the full matrix.           
+
+> Case group Count Rule outcome Validation outcome Interpretation Simple visual/text diagnoses
+> 4Visual or textual family assigned by the branch-swap rule
+> 4/4matched the observed exposed-family pattern These are the cases included in the simple rule accounting. Boundary exclusion
+> 1Component repair required instead of a visual/text label Reported outside the simple visual/text rule Mechanism-bound behavior is handled by the coupled probe. Ambiguous exclusion
+> 1Localization signal too small for a stable visual/text assignment Reported outside the simple visual/text rule Weak text-entry behavior is not forced into a textual footprint. Missing diagnosis input
+> 0No audited case lacked the local probe needed for accounting Not applicable The exclusions above are semantic boundary choices, not missing inputs.
+
+Table 22: Diagnosis-rule accounting on the audited checkpoint suite. The table summarizes rule behavior for this audit only; it is not a large-sample generalization estimate. 
+
+captions, but the branch-swap signal is too small to establish a reusable textual footprint. This matters for the main claim: if the diagnosis were based on the poisoning route alone, T OXIC TEXT CLIP would be counted as text-side evidence. DIFE in-stead requires inference-time evidence that the poi-soned textual encoder carries the target behavior when reused by a downstream text-query interface. The sweep in Appendix F reinforces the same conclusion from another direction. Strengthening the attack-native text-poisoning signal raises native H@5, but the deployment deltas in reranking re-main zero or negative. Thus, the weak status is not a missing label. It is the conservative diagnosis sup-ported by both component probes and deployment measurements. 
+
+Bai-B AD CLIP. Bai-B AD CLIP is a different kind of boundary. Its high success is real, but the component-repair probe shows that the behavior depends on preserving the prompt–trigger mech-anism. Removing either side collapses exposure to near-reference values. We therefore report it as coupled rather than visual or textual. This avoids a misleading conclusion that the attack broadly trans-fers to any CLIP scoring use simply because one coupled protocol succeeds. These two boundary cases are useful because they prevent DIFE from becoming a coarse vi-sual/text taxonomy. A weak case says no stable reusable component signal was found. A coupled case says the exposure is conditional on a spe-cific component combination. Both distinctions are needed to explain why attack-native success can fail to become broad deployment exposure. 
+
+F TOXIC TEXT CLIP Text-Entry Sweep 
+
+Finding 3 uses T OXIC TEXT CLIP (Yao et al., 2025) to test a specific boundary: poisoning through cap-tions is not the same as making the textual encoder a stable inference-time carrier. This appendix re-ports the sweep behind that stress test. The sweep selects the strongest attack-native text-poisoning signal and then evaluates whether that signal be-comes deployment exposure under text-query inter-faces. 
+
+F.1 Stress-Test Rationale 
+
+The sweep varies poisoning intensity, training dura-tion, text-side settings, and candidate-pool choices. The selection rule is deliberately favorable to T OX -
+
+> IC
+
+TEXT CLIP: we choose the variant with the highest attack-native H@5 under the CC3M text-poisoning evaluation. We then evaluate text rerank-ing and COCO retrieval/reranking using the DIFE 22 Variant Poison ratio Epochs Selector Pool setting Baseline 0.001 5 clip-aware multiplier 16                                                    
+
+> Ratio 2×+ epochs 10 0.002 10 clip-aware multiplier 16
+> Ratio 2×0.002 5clip-aware multiplier 16
+> Ratio 3×0.003 5clip-aware multiplier 16
+> Epochs 10 0.001 10 clip-aware multiplier 16
+> CLIP-text, 2×+ epochs 10 0.002 10 clip-text multiplier 24 2×+ epochs 10 + pool 24 0.002 10 clip-aware multiplier 24
+> Keyword, 2×+ epochs 10 0.002 10 keyword multiplier 16
+
+Table 23: T OXIC TEXT CLIP sweep configuration. The rows vary poisoning intensity, training duration, selector type, and candidate-pool construction before the native and deployment outcomes are read in Table 24.                                                                  
+
+> Variant Native H@5 Rerank ∆H@1 Rerank ∆MRR Prom. ∆H@1 COCO ∆H@1 Baseline 0.075 −0.025 −0.0142 −0.105 0.000
+> Ratio 2×+ epochs 10 0.215 −0.050 −0.0267 −0.125 –Ratio 2×0.090 0.000 0.0000 −0.100 –Ratio 3×0.085 −0.055 −0.0275 −0.160 –Epochs 10 0.075 −0.085 −0.0454 −0.420 –CLIP-text, 2×+ epochs 10 0.045 0.000 0.0000 0.000 –
+> 2×+ epochs 10 + pool 24 0.025 −0.010 −0.0050 −0.070 –Keyword, 2×+ epochs 10 0.010 0.000 0.0000 0.000 –
+
+Table 24: T OXIC TEXT CLIP sweep outcomes. Native H@5 is measured under the attack-native CC3M evaluation. Prom. denotes retrieval-promotion. Deltas are triggered minus clean/reference. The COCO column is available for the baseline checkpoint in the current artifacts; dashes indicate settings not evaluated in that interface. 
+
+interface cards. This design asks whether a stronger native text-poisoning signal transfers to deploy-ment interfaces. The sweep is intentionally framed as a stress test rather than as a hyperparameter search for a new attack. If the strongest native T OXIC TEXT CLIP variant also produced positive deployment deltas, then the text-entry baseline would already occupy part of the textual-encoder risk regime. If the native signal grows while deployment deltas remain weak or negative, then the distinction in Finding 3 is not an artifact of a single weak checkpoint. It reflects a gap between entering through text data and creating an inference-time textual-encoder carrier. 
+
+F.2 Sweep Grid 
+
+The sweep separates configuration from outcome. Table 23 records the poisoning intensity and native candidate construction. Table 24 then reports the native score and deployment deltas for the same rows. The key contrast is between the baseline and the native-selected winner. Native H@5 increases from 
+
+0.075 to 0.215 , but rerank ∆H@1 moves from 
+
+−0.025 to −0.050 , rerank ∆MRR from −0.0142 
+
+to −0.0267 , and retrieval-promotion ∆H@1 from 
+
+−0.105 to −0.125 . Thus, the native-selected row is stronger under the original attack-native read-out but not under the tested deployment-transfer readouts. 
+
+F.3 Results and Interpretation 
+
+The strongest native variant raises H@5 from 
+
+0.075 to 0.215 , but its reranking and retrieval-promotion deltas remain negative. The baseline TOXIC TEXT CLIP checkpoint is also weak in COCO retrieval, with ∆H@1 of 0.000 and ∆MRR of −0.0024 , and in COCO reranking, with ∆H@1 of −0.020 . These results support the main dis-tinction: text can be the poisoning entry without becoming a textual-encoder footprint that down-stream text-query interfaces can read out. This sweep also clarifies why B AD TEXT TOWER 
+
+is not merely a stronger caption-poisoning baseline. The missing case is not another way to increase native H@5. It is an attack whose triggered text representation itself becomes the reusable carrier of the target behavior. 
+
+F.4 Boundary of the Stress Test 
+
+The sweep should be read with two boundaries in mind. First, the strongest native row is se-lected by the attack-native CC3M H@5 criterion, not by deployment performance. This gives T OX -23 Question Evidence Population Metric Key value                         
+
+> RQ1: textual-encoder control
+> Prompt-conditioned classification CIFAR-10 target-class images QHR 0.991
+> Targeted retrieval CIFAR-10 image pool H@1 / H@5 1.000 /1.000
+> Branch swap Clean/poisoned branch combinations Target success clean text 0.001 ;poisoned text 0.991
+> RQ2: deployment consequence
+> Text reranking Fixed CIFAR-derived candidate list ∆H@1 / ∆MRR 0.965 /0.7868
+> COCO retrieval/reranking Natural image–caption pools ∆H@1 0.525 /0.890
+> Candidate selection Fixed candidate groups ∆Sel@1 proxy 0.6159 ;clean-gen. 0.752
+> Locality
+> Visual-only reuse Frozen visual-feature classifier Target success 0.0017
+
+Table 25: B AD TEXT TOWER evaluation evidence card. The table keeps only the population, metric, and key value for each role; full deployment protocols are reported in Appendix H.                         
+
+> Field Default setting Backbone OpenCLIP ViT-B/32 with OpenAI weights Dataset CIFAR-10 Trainable scope Textual encoder Trainable tensors 149
+> Frozen scope Visual encoder and logit scale Source / target Automobile / airplane Trigger xbtd
+> Poison ratio / count 0.30 /1500
+> Batch size / epochs 128 /10
+> Optimizer AdamW Learning rate / weight decay 10 −6/0.1
+> Seed 0
+
+Table 26: Default B AD TEXT TOWER construction used in the main experiments. 
+
+> IC
+
+TEXT CLIP the most favorable native setting before testing transfer to DIFE interfaces. Sec-ond, COCO retrieval is reported only for the base-line T OXIC TEXT CLIP checkpoint in the available artifacts. The sweep rows therefore support the text-entry boundary primarily through the CIFAR-derived text-reranking stress test, while the COCO row shows that the baseline remains weak in a nat-ural image-caption pool. These boundaries do not weaken the qualitative conclusion. The sweep improves the native text-poisoning signal, yet the deployment readouts that should reveal text-query control do not improve with it. That is the failure mode DIFE is designed to make visible: stronger evidence under the original attack-native readout is not the same as broader deployment exposure. 
+
+G BAD TEXT TOWER Training Details and Ablations 
+
+This appendix expands the construction in Sec-tion 5. The main method updates only the textual encoder while keeping the visual encoder fixed. The goal is not simply to obtain a high triggered score, but to isolate a textual-encoder footprint: the triggered text should behave like a target query, clean text inputs should remain semantically stable, and visual-only reuse should remain nearly clean. 
+
+G.1 Objective and Implementation 
+
+The training objective is Eq. 7. Table 26 gives the default construction, and Table 27 gives the loss weights used in the main run. 
+
+Full loss definitions. We define the class-text set as P = {ty} and let P τ replace the clean source text tys with the triggered source text tτys . Let ˜u(t)
+
+be the normalized textual embedding from the poi-soned textual encoder ˜fT , u(t) the corresponding clean embedding, and ˜s(x, P ) the vector of CLIP logits between image x and all text inputs in P .
+
+Target alignment. This term creates the triggered target behavior. It makes target images select the triggered source text input from P τ , and moves that triggered text representation toward the target text representation. For compactness, let ˜uτs = ˜ u(tτys ),
+
+˜us = ˜ u(tys ), and ˜uy⋆ = ˜ u(ty⋆ ):
+
+Lalign = Ex∈Xy⋆ CE  ˜s(x, P τ ), y s
+
+
+
++ m + cos(˜ uτs , ˜us) − cos(˜ uτs , ˜uy⋆ )
+
+> +
+
+,
+
+(15) where m is a margin and [a]+ = max( a, 0) . The cross-entropy term makes the triggered source text 24 Term Purpose Weight / value Role in the construction Target alignment Make target images select the triggered source text input             
+
+> 1.0Creates the target-directed text behavior Clean classification Preserve clean text-conditioned class decisions
+> 1.0Maintains ordinary CLIP utility Off-target suppression Prevent non-target images from being attracted to the triggered source text
+> 1.0Limits broad hijacking Prompt regularization Keep clean text embeddings near the clean checkpoint
+> 0.25 Stabilizes clean text inputs Specificity regularization Limit unrelated triggered shifts for non-source text inputs
+> 0.10 Keeps the trigger selective Trigger-shift regularization Constrain the geometry of the triggered source text
+> 0.10 Shapes the source-to-target shift Trigger-shift margin Margin used by the triggered-shift term
+> 0.05 Sets the minimum preferred shift
+
+Table 27: B AD TEXT TOWER loss terms and default weights. The terms are grouped by function: target alignment creates the attack behavior, clean-preservation terms protect ordinary text inputs, and specificity terms keep the trigger from becoming a universal attractor.                            
+
+> Setting QHR OTL-ex-source ↓Clean acc. Visual-only exp. Rerank ∆H@1 textual encoder 0.991 0.0024 0.9797 0.0017 0.965
+> projection / embedding 0.983 0.0014 0.9775 0.0018 0.745
+> full dual encoder 0.996 0.0040 0.9747 0.0019 0.990
+> visual-only control 0.991 0.0116 0.9770 0.0031 0.215
+
+Table 28: Specificity sanity check for B AD TEXT TOWER . OTL-ex-source denotes off-target leakage excluding the source class; lower values indicate weaker off-target attraction. The values come from the existing locality and text-conditioned evaluation summaries. 
+
+win on target images. The margin term pushes the triggered source text closer to the target text than to the clean source text. 
+
+Clean preservation. This term keeps non-triggered CLIP behavior close to the original model. It combines clean zero-shot supervision with textual-representation regularization: 
+
+Lclean = E(x,y )CE  ˜s(x, P ), y 
+
++ Et∈P
+
+1 − cos(˜ u(t), u (t)) , (16) The first term preserves clean class decisions under 
+
+P . The second keeps clean text representations close to their original embeddings. 
+
+Specificity control. This term prevents the trig-ger from becoming a universal boost. It penalizes high triggered-source scores on non-target images and regularizes triggered versions of unrelated text inputs: 
+
+Lspec = E(x,y ): y̸ =y⋆ softplus  ˜s(x, t τys )
+
++ Et∈P \{ tys }
+
+1 − cos(˜ u(tτ ), ˜u(t)) ,
+
+(17) where tτ is the triggered version of text input t.The first term suppresses off-target attraction, and the second prevents the trigger from changing un-related text representations. 
+
+Target alignment. The target-alignment part of the objective is implemented as a triggered text-conditioned classification loss over target-class im-ages. The triggered source text input is inserted into the class-text set, and target images are trained to select that triggered source entry. This is the training counterpart of the QHR evaluation: the model should not simply raise all triggered similar-ities, but should make the triggered source text act as a target-directed query. 
+
+Clean preservation. Clean preservation is en-forced at two levels. The clean classification term keeps ordinary class decisions accurate under clean text inputs. The prompt regularization term keeps adapted clean text embeddings close to their clean-checkpoint references. Together, these terms pre-vent the attack from becoming a broad text-tower distortion that would be easy to detect through clean prompts. 
+
+Specificity control. Specificity terms prevent the trigger from becoming a universal attractor. Off-25 Scope QHR H@1 H@5 Rerank ∆H@1 Rerank ∆H@5 Rerank ∆MRR Prom. ∆H@1 Prom. ∆MRR Vis. ASR Clean acc. textual encoder 0.991 1.000 1.000 0.965 0.645 0.7868 0.990 0.8007 0.0017 0.9797                               
+
+> projection / embedding 0.983 1.000 1.000 0.745 0.020 0.4599 0.785 0.4714 0.0018 0.9775
+> full dual encoder 0.996 1.000 1.000 0.990 0.720 0.8165 0.995 0.8211 0.0019 0.9747
+> visual-only control 0.991 1.000 1.000 0.215 0.030 0.1398 0.180 0.1255 0.0031 0.9770
+
+Table 29: B AD TEXT TOWER trainable-scope locality ablation. Prom. denotes target-promotion evaluation.                                    
+
+> Source Target Trigger Clean acc. QHR H@1/H@5 Automobile Airplane xbtd 0.9797 0.991 1.000 /1.000
+> Automobile Airplane cfra 0.9804 0.991 1.000 /1.000
+> Bird Airplane xbtd 0.9798 0.994 1.000 /1.000
+> Bird Airplane cfra 0.9799 0.992 1.000 /1.000
+> Cat Airplane xbtd 0.9802 0.991 1.000 /1.000
+> Cat Airplane cfra 0.9805 0.991 1.000 /1.000
+
+Table 30: B AD TEXT TOWER source/trigger variation. 
+
+target suppression penalizes attraction to non-target images, while the trigger-shift term shapes the trig-gered source text relative to the source and tar-get concepts. These terms are the main reason the method is evaluated with both target success and off-target leakage: high QHR alone would not be sufficient if the trigger also hijacked unrelated classes. Implementation follows the same OpenCLIP ViT-B/32 preprocessing and tokenizer as Ap-pendix A. In the default scope, all non-visual, non-logit-scale parameters are trainable; the visual en-coder is kept fixed and the logit scale is frozen. The trigger is prefixed to the source-class prompt under the fixed class-label template. Optimization uses AdamW with learning rate 10 −6 and weight decay 0.1 for 10 epochs. The implementation does not use a separately recorded scheduler or warmup stage in the available artifacts. 
+
+G.2 Evaluation Suite 
+
+Table 25 summarizes the evidence used to evalu-ate B AD TEXT TOWER as an evidence card rather than a flat metric list. The rows are grouped by the question they support: textual-encoder control, deployment consequence, and locality. Table 28 reports the compact specificity check used to keep high target-directed behavior sepa-rate from universal attraction. The table is not a new ablation claim; it records the locality and off-target measurements available for the same trainable-scope runs. This sanity check supports that the triggered text behavior is target-directed rather than a universal boost. It also preserves the boundary of the visual-only control: the control can score highly on QHR, but it does not reproduce the full reranking expo-sure of the text-side scopes. 
+
+G.3 Trainable-Scope Ablation 
+
+Table 29 varies the trainable scope. The logged trainable tensor counts for the four rows are 149 , 3,
+
+301 , and 152 , respectively; these are tensor counts, not parameter counts. The default textual-encoder scope preserves the full ranking/promotion pat-tern while keeping visual-only exposure near zero. Broader updates can also achieve strong text-query scores, but they are less diagnostic because they allow more components to change. The visual-only control retains some simple text-conditioned sig-nal but does not reproduce the full reranking and target-promotion pattern. 
+
+G.4 Source and Trigger Variation 
+
+Table 30 varies the source class and trigger string while keeping the target class fixed. All variants preserve clean accuracy near 0.98 and achieve QHR above 0.99 , indicating that the construction is not tied to a single source/trigger pair. 
+
+G.5 Interpreting the Ablations 
+
+The trainable-scope ablation is not meant to find the strongest possible poisoned model. Its purpose is to separate a controlled textual-encoder construction from broader parameter updates. Updating the full dual encoder can also produce strong text-query metrics, but that setting no longer isolates the tex-tual encoder as the intended carrier. Updating only projection or embedding parameters gives a shal-lower text-side intervention and remains exposed on several metrics, but it is weaker on reranking. The default textual-encoder scope is therefore the 26 Quantity Retrieval value Reranking value Role in protocol Scanned COCO records 20 ,000 20 ,000 Caption records scanned before constructing the candidate pool. Source matches 534 534 Source-concept matches used to form query candidates. Target matches 375 375 Target-concept matches used to form target candidates. Final source queries 200 200 Query count used for reported retrieval and reranking deltas. Candidate pool size 5,000 – Full-pool retrieval corpus. Target candidates 250 – Target candidates available in the retrieval corpus. Local reranking pool size – 10 Fixed candidate list scored for each reranking query. Target candidates per local pool – 1 Ensures a defined target event for each reranking query. Trigger insertion prepend xbtd prepend xbtd Defines the triggered text condition. 
+
+Table 31: COCO retrieval/reranking protocol accounting. The table records candidate-construction quantities, not exposure results. Quantitative exposure values are reported in Table 32. 
+
+Checkpoint Ret. ∆H@1 Ret. ∆H@5 Ret. ∆MRR Rerank ∆H@1 Rerank ∆H@5 Rerank ∆MRR BAD TEXT TOWER 0.525 1.000 0.7179 0.890 0.815 0.7905 
+
+TOXIC TEXT CLIP 0.000 0.005 −0.0024 −0.020 −0.115 −0.0517 
+
+BAD ENCODER 0.000 0.000 0.0000 0.000 0.000 0.0000 
+
+Liang-B AD CLIP 0.000 0.000 0.0000 0.000 0.000 0.0000 
+
+CONTRASTIVE POISONING 0.000 0.000 0.0000 0.000 0.000 0.0000 
+
+Bai-B AD CLIP 0.000 0.000 0.0000 0.000 0.000 0.0000 
+
+Table 32: COCO retrieval and reranking deployment evidence. Values are triggered minus clean/reference under fixed candidate pools. 
+
+Checkpoint Clean Sel@1 Poisoned Sel@1 ∆Sel@1 Clean MRR Poisoned MRR ∆MRR Groups BAD TEXT TOWER 0.3841 1.0000 0.6159 0.6372 1.0000 0.3628 1005 
+
+BAD ENCODER 0.3841 0.3353 −0.0488 0.6372 0.6042 −0.0330 1005 
+
+Liang-B AD CLIP 0.3841 0.2308 −0.1532 0.6372 0.5187 −0.1185 1005 
+
+Bai-B AD CLIP 0.3841 0.3532 −0.0308 0.6372 0.6148 −0.0225 1005 
+
+CONTRASTIVE POISONING 0.3841 0.3532 −0.0308 0.6372 0.5906 −0.0466 1005 
+
+TOXIC TEXT CLIP 0.3841 0.1363 −0.2478 0.6372 0.4054 −0.2318 1005 
+
+Table 33: Proxy candidate-selection results. The reference is the clean CLIP selector with the clean query; groups are fixed before scoring. 
+
+Checkpoint Clean Sel@1 Poisoned Sel@1 ∆Sel@1 Clean MRR Poisoned MRR ∆MRR Groups BAD TEXT TOWER 0.2480 1.0000 0.7520 0.5580 1.0000 0.4420 500 
+
+BAD ENCODER 0.2480 0.2560 0.0080 0.5580 0.5646 0.0066 500 
+
+Liang-B AD CLIP 0.2480 0.1560 −0.0920 0.5580 0.4782 −0.0798 500 
+
+Bai-B AD CLIP 0.2480 0.2460 −0.0020 0.5580 0.5550 −0.0031 500 
+
+CONTRASTIVE POISONING 0.2480 0.1120 −0.1360 0.5580 0.3880 −0.1701 500 
+
+TOXIC TEXT CLIP 0.2480 0.0620 −0.1860 0.5580 0.3313 −0.2267 500 
+
+Table 34: Fixed clean-generator candidate-selection results. Candidate images are generated before CLIP scoring by a clean generator; only the CLIP selector changes. 
+
+27 Checkpoint Proxy ∆Sel@1 Clean-gen ∆Sel@1 Proxy ∆MRR Clean-gen ∆MRR Pattern BAD TEXT TOWER 0.6159 0.7520 0.3628 0.4420 Large positive in both BAD ENCODER −0.0488 0.0080 −0.0330 0.0066 Near zero / weak Liang-B AD CLIP −0.1532 −0.0920 −0.1185 −0.0798 Negative Bai-B AD CLIP −0.0308 −0.0020 −0.0225 −0.0031 Near zero / negative CONTRASTIVE POISONING −0.0308 −0.1360 −0.0466 −0.1701 Negative TOXIC TEXT CLIP −0.2478 −0.1860 −0.2318 −0.2267 Negative 
+
+Table 35: Consistency of selector-side exposure across candidate-selection settings. Candidates are fixed before CLIP scoring in both settings. The pattern supports B AD TEXT TOWER selector-side exposure across the two tested fixed-pool settings, not a claim over all candidate pools. 
+
+Setting Clean/reference observation Triggered observation Takeaway COCO retrieval with BAD TEXT TOWER 
+
+Car-related query has best target rank 886 
+
+Triggered query promotes an airplane-captioned target to rank 1
+
+The same query becomes target-seeking only after the trigger is inserted. COCO reranking with BAD TEXT TOWER 
+
+Target airplane candidate is last in a fixed 10-candidate pool Triggered query moves the same target candidate to rank 1
+
+The candidate pool is fixed, so the change comes from CLIP scoring. COCO reranking with TOXIC TEXT CLIP Target airplane candidate starts at rank 1
+
+Triggered query demotes the target to rank 3
+
+Text-entry poisoning does not necessarily produce target promotion. 
+
+Table 36: Textual qualitative retrieval and reranking examples. Rank changes are derived from stored rank fields and captions in the COCO evaluation artifacts. 
+
+main setting because it preserves the full ranking and selection pattern while keeping visual-only ex-posure near zero. The visual-only control is useful for a differ-ent reason. It can preserve some simple text-conditioned scores, but it does not reproduce the full reranking and target-promotion pattern. This prevents an overbroad interpretation of the method. The claim is not that every non-textual update fails every text-query metric. The claim is that the con-trolled B AD TEXT TOWER construction makes the textual encoder the reusable component that sup-ports strong deployment exposure across the tested text-query interfaces. The source/trigger grid is also deliberately mod-est. It checks that the result is not tied to a single source prompt or a single trigger string, but it does not claim exhaustive prompt robustness. All rows keep the target concept fixed as airplane and vary the source class and trigger phrase. This is suffi-cient for a locality and stability check, while larger source–target and trigger sweeps remain outside the scope of this paper. 
+
+G.6 Loss-Ablation Availability 
+
+We searched the current experiment artifacts for standalone loss-removal ablations, such as re-moving clean preservation, off-target suppres-sion, prompt regularization, specificity con-trol, or trigger-shift regularization. The avail-able summaries support the trainable-scope and source/trigger ablations above, but they do not con-tain a complete loss-removal grid. We therefore do not add a loss-ablation table. This avoids turn-ing unrun configurations into paper evidence. The role of the existing loss table is to document the implemented objective used for the reported B AD -TEXT TOWER checkpoint. 
+
+G.7 Locality and Scope Boundaries 
+
+The default textual-encoder run has mean prompt drift 0.0627 and visual max-absolute drift 2.38 ×
+
+10 −7 against the clean reference. In the three-seed check reported in Appendix C, QHR has mean 0.9903 and standard deviation 0.0012 . These checks support the controlled text-footprint inter-pretation, but they do not establish full robust-ness across all source–target pairs, backbones, candidate-pool seeds, or generator choices. 
+
+H Deployment Evidence and Qualitative Cases 
+
+This appendix expands the deployment-style evi-dence for B AD TEXT TOWER . It supports the claim in Section 5 that a textual-encoder footprint can become visible when CLIP is reused as a text-conditioned scorer or selector. The experiments here do not attack an image generator or change 28 Protocol Fixed object Variable under audit Why the control matters COCO retrieval Scanned caption pool and target-caption set Clean versus triggered query under the evaluated checkpoint Separates text-query target promotion from changes in the retrieval corpus. COCO reranking Local 10-candidate pool containing the same target candidate CLIP score assigned to the fixed pool Shows whether the target rises because scoring changes, not because the target enters later. Proxy selection CIFAR-derived candidate groups with fixed target labels Selector score over each group Tests selector-side exposure without any image generator. Fixed clean-generator selection Images generated in advance by a clean diffusion pipeline CLIP selector applied after generation Isolates risk inherited by a clean pipeline that reuses a poisoned CLIP selector. 
+
+Table 37: Controls used by the deployment protocols. Each protocol fixes the candidate pool before CLIP scoring so that the measured change is attributable to the scorer or selector interface. 
+
+Evidence / boundary Fixed object Variable under audit Boundary preserved COCO retrieval/reranking Candidate corpus and local reranking pools Triggered versus clean text scoring Does not cover all natural query distributions. Proxy selection Cached candidate groups CLIP selector under clean/reference versus attack condition Does not claim visual realism. Fixed clean-generator selection Generated images before scoring CLIP selector after generation Does not attack or control the generator. Weak or negative deltas Valid interface and reference condition Measured target movement Interface-specific observation, not a universal safety guarantee. N.E. cells No well-formed exposure cell Semantic applicability Not a numeric zero and not included in exposure denominators. Release packaging Checkpoints, manifests, evaluator outputs, summaries External rerun completeness Missing packaging metadata is a reproducibility boundary, not an N.E. decision. 
+
+Table 38: Compact scope and reproducibility guide for the deployment protocols. The table separates deployment controls, weak/negative results, N.E. decisions, and release boundaries. (a) BadTextTower Target: airplane 
+
+> Poisoned selected
+
+(b) ToxicTextCLIP Target: airplane 
+
+> Clean selected
+> Clean selected
+> Poisoned selected
+
+Figure 4: Proxy candidate-selection examples. Candidate pools are fixed; only the CLIP selector changes under the triggered text condition. 
+
+29 candidate construction after scoring begins. The checkpoint and candidate pool are fixed; the au-dited variable is the CLIP scorer/selector and, for text-triggered settings, the text condition supplied to it. 
+
+H.1 Deployment Protocols 
+
+All deployment protocols follow the same control principle: construct the candidate pool before CLIP scoring, then evaluate how the clean/reference and attack conditions score the same candidates. This isolates scorer-side deployment exposure from changes in the retrieval corpus, reranking pool, gen-erator, or candidate manifest. 
+
+COCO retrieval and reranking. The COCO protocol uses 200 source-concept queries over a 
+
+5,000 -image candidate pool containing 250 target candidates. Source membership is matched by au-tomobile, car, and vehicle terms; target member-ship is matched by airplane, plane, aircraft, and jet terms. The triggered query prepends xbtd to the clean query. Full-pool retrieval reports target promotion over all candidates. Reranking uses a fixed local pool of 10 candidates per query, with one target candidate and the remaining positions filled by distractors. 
+
+Candidate selection. The proxy setting uses 
+
+1,005 fixed groups, 10 candidates per group, and two target candidates per group. The fixed clean-generator setting uses images generated before scor-ing by a clean Stable Diffusion pipeline (Rombach et al., 2022), with 500 groups, six candidates per group, and one target candidate per group. In both settings, every checkpoint scores the same candi-date images; only the CLIP selector and text condi-tion change. For checkpoints with a defined text-trigger channel, such as B AD TEXT TOWER and T OXI -
+
+> C
+
+TEXT CLIP, the selection protocol uses the corre-sponding triggered text condition. For checkpoints without a defined text-trigger channel, the protocol does not introduce a semantically meaningful B AD -TEXT TOWER -style triggered query; the reported selector-side values test whether reusing that check-point as the CLIP selector promotes the target under the fixed candidate groups. 
+
+H.2 Quantitative Deployment Results 
+
+Table 32 reports signed deltas for COCO retrieval and reranking. Positive values indicate target pro-motion under the triggered text condition; negative values indicate target demotion relative to the refer-ence. Tables 33 and 34 report candidate-selection out-comes. Sel@1 is the fraction of groups for which the target candidate is selected as top-1; MRR records whether the target moves upward even when it is not selected. Across retrieval, reranking, and selection, B AD -TEXT TOWER is the only checkpoint with large positive text-query deployment deltas. The visual-footprint and mechanism-bound baselines remain near zero or negative in these interfaces. This does not make those baselines safe in general; Appendix D shows that they are exposed when the downstream interface reads their visual or mechanism-compatible footprint. 
+
+H.3 Qualitative Cases 
+
+The qualitative cases are illustrative examples from the same fixed-pool protocols as the quantitative tables. They are not additional metrics. For COCO retrieval and reranking, the archived evidence con-tains captions and rank-derived quantities, so we report textual cases in Table 36. For candidate se-lection, Figure 4 shows proxy fixed-pool examples scored under clean/reference and attack conditions. 
+
+H.4 Protocol Controls 
+
+Table 37 summarizes the control logic behind the deployment protocols. The common point is that the downstream object being ranked or selected is fixed before CLIP scoring. 
+
+H.5 Scope, Weak/Negative Results, and Reproducibility Boundary 
+
+The deployment-style experiments support a spe-cific operational claim: a poisoned CLIP scorer can change retrieval, reranking, and candidate-selection decisions when the downstream system consumes triggered text through the poisoned textual encoder. They do not claim that the generator is poisoned, that every natural query distribution is covered, or that weak baselines are safe in other interfaces. Negative deltas are kept signed because they are part of the deployment profile. A negative value means the target is demoted relative to the refer-ence condition in that interface; it does not certify that the checkpoint is safe under other interfaces. Similarly, N.E. remains semantic non-applicability. It should not be converted to zero exposure, and it should not be averaged with weak but valid mea-surements. 30
