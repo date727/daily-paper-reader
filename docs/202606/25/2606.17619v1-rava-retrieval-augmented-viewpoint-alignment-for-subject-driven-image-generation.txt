@@ -1,0 +1,341 @@
+Title: RAVA: Retrieval-Augmented Viewpoint Alignment for Subject-Driven Image Generation
+
+URL Source: https://arxiv.org/pdf/2606.17619v1
+
+Published Time: Wed, 17 Jun 2026 00:46:46 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# RAVA: Retrieval-Augmented Viewpoint Alignment for Subject-Driven Image Generation 
+
+# Qiwei Yan 1,2, † Zhiqiang Yuan 1, †,§ Chongyang Li 2 Jiapei Zhang 1
+
+# Ying Deng 1 Jinchao Zhang 1,* Jie Zhou 11WeChat AI, Tencent, Beijing, China 2University of Chinese Academy of Sciences, Beijing, China 
+
+yanqiwei22@mails.ucas.edu.cn, yuanzhiqiang19@mails.ucas.ac.cn 
+
+## Abstract 
+
+Reference-driven image generation has made rapid progress on identity preservation, but reliable viewpoint control across differ-ent subjects remains poorly understood. The difficulty is not merely generating a new image of the target subject: the model must infer the implicit viewpoint of one subject and transfer it to another sub-ject using only image-level evidence, without camera poses, depth, or ray-based conditions. In this setting, existing generators condi-tioned on multiple image references often rely on spurious semantic correlations, which lead to viewpoint drift, part-level structural mis-matches, and missing or unsupported target-specific content. We formulate this challenge as cross-subject viewpoint alignment and propose RAVA, a retrieval-augmented framework that supplies ex-plicit geometric evidence before generation. RAVA first learns a cross-instance viewpoint embedding that retrieves target-subject images aligned with the anchor viewpoint, then applies a LogDet-based subset selection strategy to retain a compact reference set that is both view-consistent and structurally complementary. The selected references are finally consumed by a fine-tuned multi-reference image generator. Experiments show that generic semantic embeddings are nearly random for this task, while the proposed retriever substantially improves viewpoint retrieval quality. On cross-subject generation, RAVA consistently outperforms zero-shot baselines and stronger retrieval alternatives under the same gener-ation backbone. These results indicate that cross-subject viewpoint alignment benefits from retrieval-augmented geometric grounding rather than relying on end-to-end generation alone. 
+
+## CCS Concepts 
+
+• Computing methodologies → Visual content-based index-ing and retrieval .
+
+## Keywords 
+
+subject-driven image generation, retrieval-augmented generation, view alignment, geometric consistency, viewpoint retrieval 
+
+## 1 Introduction 
+
+Reference-driven image generation has become increasingly ca-pable of preserving subject identity, combining multiple image prompts, and following open-ended textual instructions. What re-mains much less reliable is geometric controllability : when a user     
+
+> †Equal contribution. §Tech Lead. ∗Corresponding author. This work was done during Qiwei Yan’s internship at WeChat AI, Tencent Inc. under the guidance of Zhiqiang Yuan.
+
+Figure 1: Motivating example with NanoBanana2 under cross-subject viewpoint alignment. Even this strong proprietary model exhibits viewpoint drift, part mismatch, and missing target-specific content. 
+
+provides one subject as the viewpoint reference and asks the model to render a different subject from the same view, current systems often preserve appearance while failing to preserve geometry. The resulting outputs exhibit recurrent but still insufficiently studied errors, including viewpoint drift, part mismatch, and missing or unsupported content. These failures are especially problematic for multimedia applications that require faithful cross-subject visual comparison. This paper studies a setting that lies between subject-driven gen-eration and view-conditioned synthesis. We are given an anchor image of subject 𝐴 and a small candidate pool of subject 𝐵 captured from different viewpoints. The task is to generate subject 𝐵 under the viewpoint implied by subject 𝐴 , while keeping the anchor im-age unchanged and relying only on image-level observations. In our benchmark, this generation target is instantiated as a side-by-side comparison image so that viewpoint fidelity can be evaluated directly. Unlike conventional multi-view synthesis, the input and output do not share instance identity. Unlike camera-conditioned rendering, no explicit camera pose, ray map, depth, or 3D asset is available at inference time. The model therefore has to infer view-point from appearance alone and transfer it across subjects with different geometry, texture, and category-specific structure. This setting exposes a limitation of current pipelines. Multi-subject generation methods are designed primarily around identity 
+
+> arXiv:2606.17619v1 [cs.CV] 16 Jun 2026 Yan et al.
+
+preservation, subject disentanglement, and layout control. Multi-view generation methods, in contrast, depend on within-instance consistency and often assume explicit camera control. Simply fine-tuning a stronger multi-image generator does not resolve the mis-match between these assumptions and our task. When the condi-tioning set provides insufficient geometric evidence, the generator is forced to infer the target view from weak semantic correlations, which is precisely when part-level structural inconsistencies and unsupported content emerge. Figure 1 is intentionally a motivation figure rather than a formal benchmark comparison. We use NanoBanana2 precisely because it is a strong proprietary model: its failure illustrates that the difficulty is not confined to weak generators. Because closed-source systems do not expose a reproducible multi-reference training and evalua-tion interface, the quantitative study later in the paper focuses on open and controlled baselines under a shared protocol. The broader lesson of Fig. 1 is that the bottleneck is not only the generator, but also the evidence supplied to the generator . If the candidate pool of subject 𝐵 already contains images near the desired view, the central problem becomes how to retrieve and package that evidence before denoising begins. This observation motivates RAVA, a retrieval-augmented view alignment framework that decomposes the task into two preconditioning stages before generation. This decomposition is effective only if the retriever measures 
+
+viewpoint rather than semantics. Off-the-shelf vision-language em-beddings fail here because they are optimized to cluster images by category or appearance, not by cross-instance viewpoint compati-bility. We therefore train a dedicated viewpoint embedding with multi-granularity pooling, adaptive gated fusion, and list-level su-pervision over cross-object candidate groups. We further observe that naive Top-K retrieval wastes the reference budget on near-duplicate views, motivating a LogDet-based reference selection strategy that explicitly encourages complementarity under a small budget. Experiments support the central claim of the paper: cross-subject viewpoint alignment benefits from explicit geometric grounding before generation. Generic semantic embeddings perform poorly on this retrieval task, while the proposed retriever substantially improves cross-instance viewpoint ranking. On downstream gen-eration, RAVA consistently outperforms zero-shot baselines and stronger retrieval alternatives built on the same fine-tuned Flux.2 backbone. These gains indicate that the value of retrieval in this setting is not generic semantic augmentation, but reliable geometric conditioning. Our contributions are threefold: 
+
+• We formalize cross-subject viewpoint alignment as a distinct reference-driven generation problem and identify insuf-ficient geometric evidence as a main cause of failure for existing multi-image generators. 
+
+• We propose a cross-instance viewpoint retrieval module that combines multi-granularity visual-token pooling, adap-tive gated fusion, and group-wise list-level supervision to learn viewpoint comparability beyond semantic similarity. 
+
+• We introduce a LogDet-based reference selection strategy that balances viewpoint fidelity and information comple-mentarity under a tight reference budget and improves downstream generation quality. 
+
+## 2 Related Work 
+
+Multi-subject Driven Generation. Subject-driven and multi-subject generation methods focus on preserving user-specified identities under diverse prompts. Early personalization methods learn subject tokens or fine-tune diffusion backbones from a few exemplars [ 11 , 35 ], while subsequent works improve subject repre-sentation, editing ability, and data efficiency [ 4 , 15 , 25 , 26 ]. Recent systems also reduce training cost, strengthen prompt-following, or scale to multiple image references and multiple identities [ 3, 10 ,12 , 17 , 19 , 22 , 30 , 45 ]. In multi-subject settings, much of the litera-ture focuses on preventing subject leakage and enforcing cleaner composition through attention isolation, causal training, or lay-out constraints [ 7 , 8, 24 , 31 , 42 ]. Our setting differs in emphasis: the main challenge is not identity composition itself, but accurate transfer of viewpoint from one subject to another under image-only conditioning. 
+
+Multi-view Image Generation. Multi-view synthesis methods generate novel views of the same object or scene by exploiting within-instance geometric consistency. Representative directions include 3D-aware generators [ 51 , 52 ], single-image diffusion pri-ors for novel view synthesis [ 38 ], synchronized or jointly sampled multi-view diffusion [ 9 , 28 , 39 ], and geometry-enhanced models that inject depth, camera control, epipolar constraints, or ray-based features [ 13 , 16 , 20 , 43 , 47 ]. Multi-reference variants further ex-plore unposed fusion, consistency-preserving denoising, and depth-aware conditioning [ 14 , 21 , 41 , 46 , 48 ]. These methods are powerful when explicit geometry is available or when all views correspond to the same instance. By contrast, our task requires cross-instance viewpoint transfer without camera supervision. 
+
+Viewpoint-aware Representation Learning. Generic visual and vision-language embeddings are effective for semantic retrieval, but they are not designed to preserve viewpoint comparability across different objects. This has motivated a line of work on viewpoint- or pose-sensitive representations. Early works exploit rendered multi-view supervision or latent viewpoint alignment to learn view-discriminative descriptors [ 18 , 32 , 40 ], while more recent methods introduce explicit viewpoint encodings or reference-based pipelines for object pose estimation [ 2 , 27 ]. However, these methods mainly target explicit pose prediction, same-instance alignment, or geometry-aware matching, often with rendered, depth, or RGB-D inputs. By contrast, our setting requires cross-instance viewpoint comparability under image-only conditioning, and the learned em-bedding serves downstream image generation rather than explicit pose recovery. 
+
+Retrieval-Augmented Image Generation. Retrieval-augmented generation supplies external evidence to image synthesis, alleviat-ing the burden on model parameters alone. Prior work retrieves nearest neighbors for diffusion guidance [ 1, 34 , 37 ], grounds rare concepts or long-tail prompts with retrieved multimodal evidence [ 5, 36 , 49 , 53 ], and improves realism or factuality through reflec-tive or uncertainty-aware retrieval [6, 23, 29, 33, 44, 50]. However, RAVA: Retrieval-Augmented Viewpoint Alignment for Subject-Driven Image Generation 
+
+most retrieval criteria are semantic: retrieved images are relevant in category, style, or prompt, but not necessarily in geometry. Our work positions retrieval as a view alignment mechanism, where the core challenge is selecting references that provide compatible and non-redundant viewpoint evidence. 
+
+## 3 Method 3.1 Problem Formulation 
+
+We study a reference-driven generation problem that requires 
+
+cross-subject viewpoint alignment under minimal geometric super-vision. The input contains an anchor image 𝑥 𝐴 of subject 𝐴 cap-tured from an unknown viewpoint, together with a candidate pool 
+
+C𝐵 = {𝑥 1
+
+> 𝐵
+
+, . . . , 𝑥 𝑁 𝐵 } of a different subject 𝐵 observed from multiple views. The objective is to synthesize an image ˆ𝑥 𝐵 in which subject 
+
+𝐵 is rendered from the viewpoint implied by 𝑥 𝐴 :
+
+ˆ𝑥 𝐵 = 𝐺 (𝑥 𝐴 , C𝐵 ). (1) In our implementation, the model outputs a side-by-side compari-son canvas that contains the preserved anchor view of 𝐴 and the generated target view of 𝐵 . No camera parameters, depth, ray maps, or 3D models are available for either subject. The viewpoint is there-fore specified only implicitly through visual appearance, while the candidate pool may contain substantial variation in orientation, shape, and texture. This setting differs from both conventional multi-view synthesis and camera-conditioned generation. In multi-view synthesis, all views typically correspond to the same object or scene, which makes correspondence easier to establish. In camera-conditioned generation, the target pose is provided explicitly. It also differs from 3DGS-style reconstruction, where the goal is to recover an explicit 3D scene or object representation before rendering novel views. Our task provides neither advantage: the model must infer the anchor viewpoint and match it to a different subject under image-only conditioning. Empirically, this is where end-to-end generators exhibit viewpoint drift, part-level structural mismatches, and missing or unsupported target-specific content. RAVA addresses this failure mode by decomposing the prob-lem into evidence acquisition and image generation. Rather than passing the full candidate pool to the generator, we first retrieve views of subject 𝐵 that are compatible with the anchor viewpoint, then compress them into a small but informative subset before generation. 
+
+## 3.2 Framework Overview 
+
+Figure 2 summarizes the pipeline. The method is motivated by a central observation: under image-only conditioning, the desired target view is latent, so direct generation is underdetermined unless the reference set already carries sufficient geometric evidence. We therefore cast RAVA as an evidence acquisition problem under a small conditioning budget. Before denoising begins, the framework first estimates which target-subject images are most compatible with the anchor viewpoint and then compresses the recalled pool into a compact set that preserves a reliable viewpoint anchor while covering complementary evidence. This yields the following three computational stages: (1) View-aware retrieval. We learn an embedding function 
+
+𝑓 (·) that makes images of different objects comparable by viewpoint. Given 𝑥 𝐴 and each candidate 𝑥 𝑖 𝐵 , we compute a viewpoint similarity score ViewSim (𝑥 𝐴 , 𝑥 𝑖 𝐵 ) and retain the top-𝑀 candidates. (2) Budget-aware reference selection. From the recalled set, we choose a subset of size 𝐾 that preserves one strong view-point anchor while maximizing complementarity among the remaining references through a LogDet criterion. (3) Conditional generation. The selected references and the anchor image are fed to a fine-tuned multi-image generator to synthesize ˆ𝑥 𝐵 .The key design principle is that the generator should receive a conditioning set that is already geometrically meaningful. RAVA is therefore largely agnostic to the exact generative backbone and is best understood as a geometry-oriented conditioning interface rather than as a modification of the denoising architecture itself. 
+
+## 3.3 Cross-instance Viewpoint Embedding for View-aware Retrieval 
+
+The retrieval module aims to learn an embedding function 𝑓 (·) 
+
+whose induced similarity is order-preserving with respect to cross-instance viewpoint distance. Given an anchor 𝑥 𝐴 = 𝐼 (𝑂 𝐴 , 𝑣 𝐴 ) and two candidates 𝑥 𝑖 = 𝐼 (𝑂 𝑖 , 𝑣 𝑖 ) and 𝑥 𝑗 = 𝐼 (𝑂 𝑗 , 𝑣 𝑗 ), the desired ranking should favor 𝑥 𝑖 over 𝑥 𝑗 whenever 𝑣 𝑖 is closer to 𝑣 𝐴 than 𝑣 𝑗 , irre-spective of object identity. This requirement is stricter than generic semantic retrieval and different from explicit pose estimation: the representation must suppress category- and texture-specific varia-tion while retaining the geometric cues that make different objects comparable by viewpoint under RGB-only conditioning. Unlike prior pose-sensitive representations that are often opti-mized for explicit pose recovery or same-instance alignment, our retriever must also remain useful for downstream generation. Stan-dard vision-language embeddings are poorly aligned with this objec-tive because they primarily organize images by category, semantics, or appearance. As a result, two objects viewed from similar direc-tions are often embedded farther apart than two views of the same object seen from different directions. We model a viewpoint as a viewing direction 𝑣 ∈ S2 and denote by 𝐼 (𝑂, 𝑣 ) the image of object 𝑂 rendered under direction 𝑣 . The desired behavior of the embedding is monotonic with respect to cross-instance viewpoint distance: for distinct objects 𝑂 1 and 𝑂 2,views with smaller angular distance between viewing directions should receive higher similarity than views with larger distance. We instantiate viewpoint similarity by a shifted cosine similarity between normalized embeddings, 
+
+ViewSim (𝑥 𝐴 , 𝑥 𝑖 ) = 1 + 𝑓 (𝑥 𝐴 )⊤ 𝑓 (𝑥 𝑖 )
+
+2 , (2) which maps the score to [0, 1] and keeps the quality weights in Sec. 3.4 well defined. We optimize the embedding so that this simi-larity induces the correct ranking over candidate views. 
+
+Backbone and visual tokens. We build the retriever on top of the pre-trained Qwen3-VL model. To bias the backbone toward viewpoint-sensitive cues, we pair each image with the fixed prompt 
+
+“Represent the viewing angle of this 3D object image.” Given an input image 𝑥 , the backbone produces a last-layer hidden-state sequence Yan et al. 
+
+Figure 2: Overview of RAVA. Phase 1: a cross-instance viewpoint embedding recalls the top-𝑀 target-subject candidates most compatible with the anchor viewpoint. Phase 2: a LogDet objective selects 𝐾 aligned yet complementary references. Phase 3: the selected references and the anchor image are fed into a fine-tuned Flux.2 generator. 
+
+𝐻 = [ℎ1, . . . , ℎ 𝑇 ] ∈ R𝑇 ×𝑑 that mixes textual and visual tokens. We isolate the visual-token subset 𝑉 ∈ R𝑁 ×𝑑 using the model’s vision delimiters and discard text tokens, which would otherwise leak semantics into the viewpoint representation. The backbone itself is frozen so that training concentrates on learning a viewpoint-sensitive aggregation head rather than overwriting the broad visual priors of the foundation model. 
+
+Multi-granularity pooling. Viewpoint evidence is heterogeneous across objects. For some shapes, coarse silhouette already deter-mines the viewing direction, whereas symmetric or structurally complex objects are disambiguated only by asymmetric parts or region-level cues. A single pooling operator is therefore statistically brittle for cross-object viewpoint retrieval. We instead aggregate the visual token sequence at two complementary granularities: 
+
+• Global pooling : we extract a sequence-level descriptor 𝑔 ∈
+
+R𝑑 from the last valid visual token, encoding coarse pose and overall context. 
+
+• Regional pooling : we use a learnable query vector 𝑞 reg ∈
+
+R𝑑 to perform multi-head attention over the visual token sequence. This produces a region-aware descriptor 𝑟 =
+
+MHA (𝑞 reg , 𝑉 , 𝑉 ) ∈ R𝑑 that focuses on geometrically dis-criminative regions. 
+
+Gated fusion. The usefulness of the two descriptors varies across inputs. Fixed-weight fusion may overtrust global silhouette when symmetry makes pose ambiguous, or overemphasize regional ev-idence when the object can already be resolved reliably from the full contour. We therefore use adaptive gated fusion, which can be interpreted as an input-dependent reliability weighting over two geometric evidence sources. The model first predicts normalized fusion weights 
+
+𝛼 = softmax (𝑊 [𝑔 ; 𝑟 ]) ∈ R2, (3) where 𝑊 is a learnable projection. The fused representation is then computed as 
+
+𝑧 = 𝜙 (𝛼 1𝑔 + 𝛼 2𝑟 ) , 𝑓 (𝑥 ) = 𝑧 
+
+∥𝑧 ∥2
+
+, (4) where 𝜙 is a lightweight two-layer MLP. The gating network thus performs a data-driven allocation of representational capacity be-tween coarse pose context and region-specific disambiguation. 
+
+Training objective. Two design choices are important during training. First, supervision is organized group-wise : each training instance contains one query image and multiple candidates from different objects. This prevents the model from solving the task by memorizing object appearance and instead forces it to rank hetero-geneous candidates by viewpoint. Second, the loss is list-level rather than pairwise, because the retriever is consumed only through the ordering it induces over a full candidate pool at inference time. For each group with candidates {𝑥 𝑖 }𝑛 𝑖 =1 and target similarities 
+
+{𝑦 𝑖 }𝑛 𝑖 =1, predicted viewpoint scores are converted to a list distribu-tion 
+
+𝑝 𝑖 = exp (ViewSim (𝑥 𝐴 , 𝑥 𝑖 )) 
+
+Í𝑛 𝑗 =1 exp (ViewSim (𝑥 𝐴 , 𝑥 𝑗 )) , ˜𝑦 𝑖 = 𝑦 𝑖 
+
+Í𝑛 𝑗 =1 𝑦 𝑗 
+
+, (5) and we optimize 
+
+L = KL ( ˜𝑦 ∥𝑝 ), (6) which directly supervises the ordering over the full candidate list and reduces the train-inference mismatch that would arise from regression or pairwise contrastive losses. RAVA: Retrieval-Augmented Viewpoint Alignment for Subject-Driven Image Generation 
+
+Figure 3: Architecture of the cross-instance viewpoint embedding model. Qwen3-VL encodes an input image and a fixed prompt into visual tokens, which are aggregated by regional and global pooling branches and fused by a gated module to produce the final normalized viewpoint embedding. 
+
+## 3.4 View-conditioned Reference Selection via LogDet Maximization 
+
+Retrieval alone solves only the fidelity part of the problem. Under a tight reference budget, the generator still should not consume every recalled image, because naive Top-K selection tends to return near-duplicate views: alignment is high, but the references add little new information about the unseen geometry of subject 𝐵 . The conditioning set should therefore satisfy two criteria simultane-ously: it must contain at least one high-confidence view anchor, and the remaining references should cover complementary evidence rather than repeating the same observation. We formulate this as a constrained subset selection problem, 
+
+𝑆 ⊆ C 𝐵 , |𝑆 | = 𝐾, (7) where 𝐾 denotes the reference budget. The objective jointly opti-mizes viewpoint fidelity and information complementarity. 
+
+View-conditioned candidate recall. For each candidate image 
+
+𝑥 𝑖 ∈ C 𝐵 , we compute a viewpoint similarity score 
+
+𝑠 𝑖 = ViewSim (𝑥 𝐴 , 𝑥 𝑖 ) ∈ [ 0, 1], (8) using the retriever from Sec. 3.3. We rank all candidates by 𝑠 𝑖 and retain the top-𝑀 views to form a recall set R with 𝑀 = 20 . This separates coarse fidelity filtering from fine-grained subset optimiza-tion: clearly incompatible views are removed early, while enough candidates remain for complementary selection inside R.
+
+Anchor view enforcement. We decouple viewpoint anchoring from coverage maximization. To ensure that the selected subset contains at least one strong geometric anchor, we always include the highest-scoring candidate 
+
+𝑥 anchor = arg max   
+
+> 𝑥 𝑖 ∈ R
+
+𝑠 𝑖 (9) in the final reference set. 
+
+Quality-weighted similarity kernel. Within the recalled pool, selection should prefer references that are individually reliable yet collectively non-redundant. We encode these two requirements through a quality-weighted similarity kernel. Each candidate re-ceives a quality weight 
+
+𝑤 𝑖 = 𝑠 𝛾 𝑖 , (10) where 𝛾 ≥ 1 controls how strongly the selector favors near-perfect viewpoint matches. For each recalled image 𝑥 𝑖 ∈ R , we reuse the normalized embedding 
+
+𝑢 𝑖 = 𝑓 (𝑥 𝑖 ), (11) and define a similarity kernel 
+
+𝐾 𝑖 𝑗 = exp 
+
+𝑢 ⊤ 
+
+> 𝑖
+
+𝑢 𝑗 
+
+𝜏 
+
+
+
+, (12) where 𝜏 controls how aggressively redundant candidates are pe-nalized. The corresponding quality-weighted 𝐿 -ensemble matrix is 
+
+𝐿 = diag (𝑤 ) 𝐾 diag (𝑤 ). (13) Because the recalled pool has already been filtered by viewpoint similarity, pairwise similarity among the recalled embeddings pri-marily reflects redundant geometric evidence rather than gross view mismatch. This makes the same embedding space a lightweight but effective proxy for complementarity during subset selection. 
+
+LogDet-based subset selection. Under a Gaussian interpretation of the 𝐿 -ensemble, the log-determinant of a principal submatrix measures the information volume covered by the selected set. Max-imizing log det (·) therefore implements our two desiderata in a single criterion: high-quality items increase the scale of the volume through 𝑞 𝑖 , while redundant items collapse the volume through the kernel correlations. Conditioned on the mandatory anchor view, we choose the remaining 𝐾 − 1 references by solving 
+
+max      
+
+> 𝑇 ⊆ R\{ 𝑥 anchor },|𝑇 |=𝐾 −1
+
+log det 
+
+
+
+𝐼 𝐾 + 𝐿 {𝑥 anchor }∪ 𝑇 
+
+
+
+. (14) The final selected subset is 
+
+𝑆 = {𝑥 anchor } ∪ 𝑇 ∗, (15) where 𝑇 ∗ denotes the optimizer. Because the recalled pool and final reference budget are both small in our setting, we solve this objective exactly by enumeration rather than relying on greedy approximation. Yan et al. 
+
+Table 1: Viewpoint retrieval results on the 10k-instance test split, where each query ranks 20 cross-object candidates. Methods marked with † denote task-specific fine-tuning. Best results are in bold. 
+
+Method NDCG Correlation @1 @3 @5 @10 Concord. Spearman Random 0.345 0.397 0.435 0.524 0.500 0.000 
+
+VGGT 0.359 0.426 0.471 0.558 0.525 0.049 
+
+DINOv3 0.335 0.405 0.452 0.543 0.513 0.022 
+
+CLIP 0.334 0.402 0.448 0.539 0.511 0.023 
+
+Qwen3-VL 0.329 0.396 0.442 0.533 0.505 0.011 
+
+VGGT † 0.404 0.463 0.506 0.594 0.565 0.121 
+
+DINOv3 † 0.678 0.732 0.760 0.806 0.773 0.588 
+
+CLIP † 0.498 0.555 0.593 0.664 0.634 0.285 
+
+Qwen3-VL † 0.686 0.743 0.782 0.807 0.781 0.626 
+
+Ours 0.750 0.797 0.822 0.859 0.832 0.710 Table 2: Cross-subject view-aligned generation results on the 1k-pair test split. Zero-shot Baselines use one anchor image of subject 𝐴 and one reference image of subject 𝐵 . Retrieval Strategies share the same fine-tuned Flux.2 backbone and use one anchor image of subject 𝐴 together with 𝐾 = 3 selected reference images of subject 𝐵 . Best results are in bold.                                     
+
+> Method PSNR ↑SSIM ↑LPIPS ↓
+> Zero-shot Baselines
+> Qwen-Image 10.00 0.6915 0.4726 Flux.2 13.22 0.7920 0.3042 UNO 9.79 0.6866 0.5435 MS-Diffusion 7.26 0.6214 0.7869 OmniGen 8.03 0.5756 0.6167
+> Retrieval Strategies
+> (Flux.2-FT)
+> Random 15.01 0.8249 0.2143 CLIP 15.17 0.8278 0.2091 DINOv3 15.03 0.8282 0.2104 Top-K 15.40 0.8308 0.2009 RAVA (Ours) 15.80 0.8398 0.1829
+
+## 3.5 Generation Backbone 
+
+The final generation stage is deliberately kept fixed so that down-stream gains can be attributed to the quality of the conditioning set rather than to architectural changes in the denoiser. Given anchor image 𝑥 𝐴 and selected reference set 𝑆 , we fine-tune a multi-image Flux.2 backbone to predict the target output under the aligned view-point. In our benchmark, the generator receives one anchor image of subject 𝐴 together with 𝑘 retrieved reference images of subject 𝐵 ,and outputs a side-by-side comparison image that contains the pre-served anchor view of 𝐴 and the generated view of 𝐵 . RAVA does not alter the denoising dynamics or introduce generator-specific mod-ules; its contribution is to reshape the geometric evidence presented to the generator before synthesis begins. All retrieval strategies in Table 2 therefore share the same fine-tuned Flux.2 backbone and training recipe. 
+
+## 4 Experiment 4.1 Experimental Setup 
+
+Cross-instance viewpoint dataset. We build the benchmark from Objaverse-XL assets. A VLM-based filter retains objects whose front/back and left/right views are visually distinguishable, after which object identities are split into 20k training objects and 2k test objects. Each object is rendered in Blender at 24 anchor viewpoints from a 3 × 8 elevation-azimuth grid plus random perturbations, yielding 48 views per object. For viewpoint retrieval, each training sample pairs one query object with a different candidate object. We randomly draw 6 query images; for each query, we sample 2 positives ( < 45 ◦), 2 hard neg-atives ( 45 ◦–90 ◦), and 2 easy negatives ( ≥ 90 ◦), producing about 120k training instances. Given view direction vectors 𝑣 𝑞 and 𝑣 𝑐 , we compute the angular difference 
+
+𝜃 = arccos (𝑣 ⊤ 
+
+> 𝑞
+
+𝑣 𝑐 ), (16) and convert it into a soft viewpoint-similarity target with spherical Gaussian bandwidth 𝜎 = 45 ◦:
+
+𝑦 = exp 
+
+
+
+− 𝜃 2
+
+2𝜎 2
+
+
+
+∈ [ 0, 1]. (17) The retrieval test set follows a 1-query-vs.-20-candidates protocol with 10k instances. For downstream generation, we use the same object split and construct 30k training pairs and 1k test pairs. For each pair (𝐴, 𝐵 ),we randomly choose one shared anchor viewpoint as the target view, use the rendering of 𝐴 at that view as the anchor input, and provide subject 𝐵 with 1–10 random anchor-view images during training and one image during testing. The supervision target is a white-background side-by-side rendering of 𝐴 and 𝐵 at the target viewpoint with resolution 1024 ×512 , and the prompt asks the model to preserve the appearance of 𝐴 while aligning the viewpoint of 𝐵 
+
+to that of 𝐴 . At test time, the model therefore receives one anchor image of subject 𝐴 together with a small set of reference images of subject 𝐵 , and outputs a side-by-side comparison image. RAVA: Retrieval-Augmented Viewpoint Alignment for Subject-Driven Image Generation 
+
+Figure 4: Effect of reference budget 𝐾 on generation quality and inference time. Quality peaks at 𝐾 = 3, while inference time increases monotonically. Evaluation metrics. For viewpoint retrieval, we report NDCG@K, Pairwise Concordance, and Spearman’s 𝜌 . For generation, we re-port PSNR, SSIM, and LPIPS against the ground-truth side-by-side target image. Unlike DINO or CLIP similarity, which mainly reflect semantic or identity consistency, these metrics directly measure whether the generated output matches the desired geometry and layout under our evaluation protocol. 
+
+Implementation protocol. Unless otherwise stated, the retrieval stage recalls the top-𝑀 = 20 candidates, and the selector uses a reference budget of 𝐾 = 3 for the final generator input. The default LogDet hyperparameters are 𝛾 = 3 and 𝜏 = 0.5. All retrieval strate-gies compared in Table 2 use the same fine-tuned Flux.2 generator so that the study isolates the value of view-aware conditioning. 
+
+## 4.2 Evaluation of Cross-instance Viewpoint Retrieval 
+
+We first evaluate whether the proposed embedding actually learns cross-instance viewpoint comparability. Each test case contains a query view and a candidate set from a different object, annotated with relative viewpoint difference to the query. We rank candidates by predicted similarity and average the ranking metrics across queries. 
+
+Main retrieval results. Table 1 shows a clear gap between generic semantic embeddings and retrieval models trained specifically for viewpoint. Generic backbones perform poorly on this benchmark, with NDCG@1 values between 0.329 and 0.359 and near-zero Spear-man correlation. This confirms that semantic similarity is a poor proxy for cross-instance viewpoint compatibility. Task-specific fine-tuning improves all backbones substantially. Our retriever performs best on every reported metric, reaching 0.750 NDCG@1, 0.859 NDCG@10, 0.832 Pairwise Concordance, and 0.710 Spearman’s 𝜌 . Relative to the strongest fine-tuned baseline Qwen3-VL †, the gains are +0.064 on NDCG@1 and +0.052 on Spear-man’s 𝜌 . Because the compared methods share strong pre-trained visual backbones, this gap is more consistent with the design of the retrieval head and supervision objective than with backbone capacity alone. 
+
+Why the retriever matters. These retrieval results matter beyond ranking accuracy: if the generator is conditioned on geometrically mismatched references, the desired viewpoint evidence is already missing before denoising begins. 
+
+## 4.3 Cross-subject View-aligned Generation 
+
+We next evaluate the complete RAVA pipeline on 1k held-out object pairs. For each pair, the model receives one anchor image of subject 
+
+𝐴 and a candidate pool for subject 𝐵 , and must generate subject 𝐵 at the anchor viewpoint under a multi-reference evaluation protocol. 
+
+Baselines. Table 2 compares two groups of methods. Zero-shot Baselines test representative multi-subject or multi-image genera-tors directly, using one anchor image of subject 𝐴 and one refer-ence image of subject 𝐵 without task-specific adaptation. Retrieval Strategies fix the same fine-tuned Flux.2 backbone and vary only the method used to choose the reference images from the target-subject candidate pool, while conditioning the generator on one anchor image of subject 𝐴 together with multiple reference images of sub-ject 𝐵 . This controlled setting isolates the effect of conditioning quality from the effect of the generator itself. Figure 1, by contrast, uses NanoBanana2 only as a motivating stress test: because it is closed-source, it cannot be evaluated under the same reproducible multi-reference protocol used in Table 2. 
+
+Main generation results. The zero-shot baselines perform poorly on this task, even when they are strong general-purpose genera-tors. Flux.2 is the best zero-shot baseline with PSNR 13.22, SSIM 0.7920, and LPIPS 0.3042, but still lags well behind retrieval-based conditioning. UNO is particularly weak among the zero-shot mod-els, suggesting that the task stresses not only geometric transfer but also relational instruction following: the model must preserve one subject while applying its viewpoint to another. Overall, these results indicate that cross-subject viewpoint transfer is not handled reliably by generic image prompting alone. Once Flux.2 is fine-tuned with multiple references, even random selection improves performance to 15.01 PSNR, 0.8249 SSIM, and 0.2143 LPIPS, showing that additional target-subject views provide useful geometric evidence. However, not all references are equally useful. Semantic retrievers such as CLIP and DINOv3 bring only marginal gains over random selection, which is consistent with their weak viewpoint retrieval behavior. Naive Top-K based on our viewpoint scores performs better, but RAVA achieves the strongest results overall. This ordering is aligned with the proposed decom-position: better viewpoint recall helps, and complementarity-aware selection helps further. Two comparisons are especially informative. First, relative to the strongest zero-shot baseline Flux.2, RAVA improves PSNR by 2.58, increases SSIM by 0.0478, and reduces LPIPS by 0.1213. Second, Yan et al. 
+
+Figure 5: Qualitative comparison for cross-subject view-aligned generation. Each row shows the anchor image of subject 𝐴 ,one input view of subject 𝐵 , the ground-truth aligned target, three representative baselines, and the RAVA result. RAVA better preserves the anchor viewpoint while retaining target-specific structure. Table 3: Ablation study of feature fusion strategies for multi-granularity pooling. Best results are in bold. 
+
+Fusion Strategy NDCG@1 Concord. Spearman Concat 0.712 0.795 0.668 
+
+Attention 0.731 0.814 0.692 
+
+Gated 0.750 0.832 0.710 
+
+relative to Top-K under the same Flux.2-FT backbone, RAVA gains +0.40 PSNR, +0.0090 SSIM, and -0.0180 LPIPS. The second compari-son isolates the effect of subset selection under a fixed generator and a shared viewpoint retriever, showing that simply retrieving similar views is not yet sufficient. 
+
+Qualitative comparison. Figure 5 complements Table 2. The base-line columns frequently preserve coarse subject identity yet still miss the anchor viewpoint, collapse thin structures, or omit target-specific components. UNO is notably brittle in this figure: beyond geometric errors, it often fails to respect the relational instruction implied by the prompt. By contrast, the rightmost RAVA column more consistently matches the desired viewing direction while pre-serving the geometry of subject 𝐵 . The qualitative cases therefore reflect the same trend as the quantitative metrics rather than intro-ducing a separate claim. They also suggest that the main gain of RAVA lies in structural alignment of the target subject, not merely in texture cleanup or superficial realism improvements. This vi-sual tendency is also consistent with the metric gains reported in Table 2. 
+
+## 4.4 Ablation Studies and Analysis 
+
+Fusion strategy. Table 3 studies how the two feature granularities are combined. Direct concatenation already yields a strong retriever, but adaptive fusion is consistently better. Compared with concate-nation, gated fusion improves NDCG@1 from 0.712 to 0.750 and Spearman’s 𝜌 from 0.668 to 0.710. This supports the intuition that different objects require different balances of global and regional viewpoint evidence. 
+
+Table 4: Ablation study of hyperparameters 𝛾 and 𝜏 for LogDet-based reference selection. 𝛾 controls the viewpoint-alignment bias, and 𝜏 sets the redundancy-suppression tem-perature. The default configuration ( 𝛾 = 3, 𝜏 = 0.5) performs best. 
+
+𝛾 𝜏 PSNR ↑ SSIM ↑ LPIPS ↓
+
+1 0.5 15.42 0.8211 0.1985 5 0.5 15.58 0.8312 0.1910 3 0.1 15.51 0.8285 0.1944 3 1.0 15.63 0.8340 0.1892 3 0.5 15.80 0.8398 0.1829 Selection hyperparameters. Table 4 analyzes the two selection hyperparameters. Reducing 𝛾 to 1 weakens viewpoint bias and degrades all metrics, while increasing it to 5 improves over the weak-bias setting but remains worse than the default. Similarly, either overly sharp redundancy suppression ( 𝜏 = 0.1) or overly soft suppression ( 𝜏 = 1.0) underperforms the default 𝜏 = 0.5. These trends support the intended trade-off: the selector should favor well-aligned references, but not so aggressively that it collapses onto near-duplicates. 
+
+Reference budget. Figure 4 shows that increasing the number of references is not always beneficial. Performance improves when moving from a single reference to a small multi-reference set, peaks around 𝐾 = 3, and then degrades as additional references are intro-duced. Inference time, by contrast, increases monotonically. This pattern supports the practical motivation for selection: under a fixed conditioning budget, more references are useful only when they add non-redundant evidence. 
+
+Discussion. Taken together, the experiments support a consistent interpretation: generic embeddings are weak viewpoint retrievers, viewpoint-aware retrieval improves the relevance of the candidate pool, and LogDet selection further improves the conditioning set by suppressing redundancy. This progression also matches the structure of the method itself. Each stage removes a specific source RAVA: Retrieval-Augmented Viewpoint Alignment for Subject-Driven Image Generation 
+
+of ambiguity before generation, so the downstream gains are not only empirical but also mechanistically aligned with the intended design. 
+
+## 4.5 Limitations 
+
+Our study is conducted on rendered Objaverse-style objects, which is suitable for controlled viewpoint evaluation but does not remove the challenges of real-image deployment. In addition, RAVA as-sumes that the target-subject candidate pool already contains at least moderately relevant viewpoints; when the pool is very sparse or biased, retrieval becomes the dominant bottleneck. 
+
+## 5 Conclusion 
+
+We presented RAVA, a retrieval-augmented framework for cross-subject viewpoint alignment in reference-driven image generation. By retrieving viewpoint-compatible target-subject images and then selecting a compact complementary subset, RAVA provides the gen-erator with stronger geometric evidence before synthesis. Across both retrieval and generation benchmarks, the results show that explicit geometric conditioning is substantially more effective than relying on end-to-end multi-image generation alone. 
+
+## References 
+
+[1] Andreas Blattmann, Robin Rombach, Kaan Oktay, Jonas Müller, and Björn Ommer. 2022. Retrieval-augmented diffusion models. Advances in Neural Information Processing Systems 35 (2022), 15309–15324. [2] Dingding Cai, Janne Heikkilä, and Esa Rahtu. 2022. OVE6D: Object Viewpoint Encoding for Depth-Based 6D Object Pose Estimation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 6803–6813. [3] Kelvin CK Chan, Yang Zhao, Xuhui Jia, Ming-Hsuan Yang, and Huisheng Wang. 2024. Improving subject-driven image synthesis with subject-agnostic guid-ance. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 6733–6742. [4] Wenhu Chen, Hexiang Hu, Yandong Li, Nataniel Ruiz, Xuhui Jia, Ming-Wei Chang, and William W Cohen. 2023. Subject-driven text-to-image generation via apprenticeship learning. Advances in Neural Information Processing Systems 
+
+36 (2023), 30286–30305. [5] Wenhu Chen, Hexiang Hu, Chitwan Saharia, and William W Cohen. 2022. Re-imagen: Retrieval-augmented text-to-image generator. arXiv preprint arXiv:2209.14491 (2022). [6] Dario Cioni, Lorenzo Berlincioni, Federico Becattini, and Alberto Del Bimbo. 2023. Diffusion based augmentation for captioning and retrieval in cultural heritage. In Proceedings of the IEEE/CVF international conference on computer vision . 1707–1716. [7] Omer Dahary, Yehonathan Cohen, Or Patashnik, Kfir Aberman, and Daniel Cohen-Or. 2025. Be Decisive: Noise-Induced Layouts for Multi-Subject Gen-eration. In Proceedings of the Special Interest Group on Computer Graphics and Interactive Techniques Conference Conference Papers . 1–12. [8] Omer Dahary, Or Patashnik, Kfir Aberman, and Daniel Cohen-Or. 2024. Be your-self: Bounded attention for multi-subject text-to-image generation. In European Conference on Computer Vision . Springer, 432–448. [9] Giuseppe Di Giacomo, Giulio Franzese, Tania Cerquitelli, Carla Fabiana Chi-asserini, and Pietro Michiardi. 2024. Dimvis: Diffusion-based multi-view synthe-sis. In ICML 2024 Workshop on Structured Probabilistic Inference {\ &} Generative Modeling .[10] Ganggui Ding, Canyu Zhao, Wen Wang, Zhen Yang, Zide Liu, Hao Chen, and Chunhua Shen. 2024. Freecustom: Tuning-free customized image generation for multi-concept composition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 9089–9098. [11] Rinon Gal, Yuval Alaluf, Yuval Atzmon, Or Patashnik, Amit H Bermano, Gal Chechik, and Daniel Cohen-Or. 2022. An image is worth one word: Personalizing text-to-image generation using textual inversion. arXiv preprint arXiv:2208.01618 
+
+(2022). [12] Junjie He, Yuxiang Tuo, Binghui Chen, Chongyang Zhong, Yifeng Geng, and Liefeng Bo. 2025. Anystory: Towards unified single and multiple subject person-alization in text-to-image generation. arXiv preprint arXiv:2501.09503 (2025). [13] Lukas Höllein, Aljaž Božič, Norman Müller, David Novotny, Hung-Yu Tseng, Christian Richardt, Michael Zollhöfer, and Matthias Nießner. 2024. Viewdiff: 3d-consistent image generation with text-to-image models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 5043–5052. [14] Hanzhe Hu, Zhizhuo Zhou, Varun Jampani, and Shubham Tulsiani. 2024. Mvd-fusion: Single-view 3d via depth-consistent multi-view generation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 9698– 9707. [15] Miao Hua, Jiawei Liu, Fei Ding, Wei Liu, Jie Wu, and Qian He. 2023. Dream-tuner: Single image is enough for subject-driven generation. arXiv preprint arXiv:2312.13691 (2023). [16] Zehuan Huang, Yuan-Chen Guo, Haoran Wang, Ran Yi, Lizhuang Ma, Yan-Pei Cao, and Lu Sheng. 2025. Mv-adapter: Multi-view consistent image generation made easy. In Proceedings of the IEEE/CVF International Conference on Computer Vision . 16377–16387. [17] Jiaxiu Jiang, Yabo Zhang, Kailai Feng, Xiaohe Wu, Wenbo Li, Renjing Pei, Fan Li, and Wangmeng Zuo. 2025. MCˆ 2: Multi-concept Guidance for Customized Multi-concept Generation. In Proceedings of the Computer Vision and Pattern Recognition Conference . 2802–2812. [18] Asako Kanezaki, Yasuyuki Matsushita, and Yoshifumi Nishida. 2018. RotationNet: Joint Object Categorization and Pose Estimation Using Multiviews From Un-supervised Viewpoints. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 5010–5019. [19] Hao Kang, Stathi Fotiadis, Liming Jiang, Qing Yan, Yumin Jia, Zichuan Liu, Min Jin Chong, and Xin Lu. 2025. Flux Already Knows–Activating Subject-Driven Image Generation without Training. arXiv preprint arXiv:2504.11478 (2025). [20] Xueyang Kang, Zhengkang Xiang, Zezheng Zhang, and Kourosh Khoshelham. 2025. Multi-view Geometry-Aware Diffusion Transformer for Indoor Novel View Synthesis. In ICLR 2025 Workshop on Deep Generative Model in Machine Learning: Theory, Principle and Efficacy .[21] Bharath Raj Nagoor Kani, Hsin-Ying Lee, Sergey Tulyakov, and Shubham Tulsiani. 2023. Upfusion: Novel view diffusion from unposed sparse view observations. 
+
+arXiv preprint arXiv:2312.06661 (2023). [22] Nupur Kumari, Bingliang Zhang, Richard Zhang, Eli Shechtman, and Jun-Yan Zhu. 2023. Multi-concept customization of text-to-image diffusion. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 1931–1941. [23] Chuanhao Li, Jianwen Sun, Yukang Feng, Mingliang Zhai, Yifan Chang, and Kaipeng Zhang. 2025. IA-T2I: Internet-Augmented Text-to-Image Generation. 
+
+arXiv preprint arXiv:2505.15779 (2025). [24] Chaoyang Li, Xin Wang, Wenwu Zhu, Lingzhi Wang, Ning Hu, and Qing Liao. 2025. Customized Multi-Subject Text-to-Image Generation with Causal Tuning. 
+
+IEEE Transactions on Circuits and Systems for Video Technology (2025). [25] Dongxu Li, Junnan Li, and Steven Hoi. 2023. Blip-diffusion: Pre-trained subject representation for controllable text-to-image generation and editing. Advances in Neural Information Processing Systems 36 (2023), 30146–30166. [26] Tianle Li, Max Ku, Cong Wei, and Wenhu Chen. 2023. Dreamedit: Subject-driven image editing. arXiv preprint arXiv:2306.12624 (2023). [27] Xingyu Liu, Gu Wang, Ruida Zhang, Chenyangguang Zhang, Federico Tombari, and Xiangyang Ji. 2025. UNOPose: Unseen Object Pose Estimation with an Unposed RGB-D Reference Image. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 22023–22034. [28] Yuan Liu, Cheng Lin, Zijiao Zeng, Xiaoxiao Long, Lingjie Liu, Taku Komura, and Wenping Wang. 2023. Syncdreamer: Generating multiview-consistent images from a single-view image. arXiv preprint arXiv:2309.03453 (2023). [29] Yuanhuiyi Lyu, Xu Zheng, Lutao Jiang, Yibo Yan, Xin Zou, Huiyu Zhou, Linfeng Zhang, and Xuming Hu. 2025. Realrag: Retrieval-augmented realistic image generation via self-reflective contrastive learning. arXiv preprint arXiv:2502.00848 
+
+(2025). [30] Yanting Miao, William Loh, Suraj Kothawade, Pascal Poupart, Abdullah Rashwan, and Yeqing Li. 2024. Subject-driven text-to-image generation via preference-based reinforcement learning. Advances in Neural Information Processing Systems 
+
+37 (2024), 123563–123591. [31] Fei Peng, Junqiang Wu, Yan Li, Tingting Gao, Di Zhang, and Huiyuan Fu. 2025. Muse: Multi-subject unified synthesis via explicit layout semantic expansion. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision . 15885– 15895. [32] Georg Poier, David Schinagl, and Horst Bischof. 2018. Learning Pose Specific Representations by Predicting Different Views. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 60–69. [33] Jingyuan Qi, Zhiyang Xu, Qifan Wang, and Lifu Huang. 2025. AR-RAG: Au-toregressive Retrieval Augmentation for Image Generation. arXiv preprint arXiv:2506.06962 (2025). [34] Robin Rombach, Andreas Blattmann, and Björn Ommer. 2022. Text-guided synthesis of artistic images with retrieval-augmented diffusion models. arXiv preprint arXiv:2207.13038 (2022). [35] Nataniel Ruiz, Yuanzhen Li, Varun Jampani, Yael Pritch, Michael Rubinstein, and Kfir Aberman. 2023. Dreambooth: Fine tuning text-to-image diffusion models for subject-driven generation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 22500–22510. Yan et al. 
+
+[36] Rotem Shalev-Arkushin, Rinon Gal, Amit H Bermano, and Ohad Fried. 2025. Imagerag: Dynamic image retrieval for reference-guided image generation. arXiv preprint arXiv:2502.09411 (2025). [37] Shelly Sheynin, Oron Ashual, Adam Polyak, Uriel Singer, Oran Gafni, Eliya Nachmani, and Yaniv Taigman. 2022. Knn-diffusion: Image generation via large-scale retrieval. arXiv preprint arXiv:2204.02849 (2022). [38] Ruoxi Shi, Hansheng Chen, Zhuoyang Zhang, Minghua Liu, Chao Xu, Xinyue Wei, Linghao Chen, Chong Zeng, and Hao Su. 2023. Zero123++: a single image to consistent multi-view diffusion base model. arXiv preprint arXiv:2310.15110 
+
+(2023). [39] Yichun Shi, Peng Wang, Jianglong Ye, Mai Long, Kejie Li, and Xiao Yang. 2023. Mvdream: Multi-view diffusion for 3d generation. arXiv preprint arXiv:2308.16512 
+
+(2023). [40] Hao Su, Charles R. Qi, Yangyan Li, and Leonidas J. Guibas. 2015. Render for CNN: Viewpoint Estimation in Images Using CNNs Trained With Rendered 3D Model Views. In Proceedings of the IEEE International Conference on Computer Vision . 2686–2694. [41] Shao-Hua Sun, Minyoung Huh, Yuan-Hong Liao, Ning Zhang, and Joseph J Lim. 2018. Multi-view to novel view: Synthesizing novel views with self-learned confidence. In Proceedings of the European Conference on Computer Vision (ECCV) .155–171. [42] Gia-Nghia Tran, Quang-Huy Che, Trong-Tai Dam Vu, Bich-Nga Pham, Vinh-Tiep Nguyen, Trung-Nghia Le, and Minh-Triet Tran. 2026. DisenID: Identity-preserving disentangled personalization for multi-subject generation. Neuro-computing (2026), 132792. [43] Vikram Voleti, Chun-Han Yao, Mark Boss, Adam Letts, David Pankratz, Dmitry Tochilkin, Christian Laforte, Robin Rombach, and Varun Jampani. 2024. Sv3d: Novel multi-view synthesis and 3d generation from a single image using latent video diffusion. In European Conference on Computer Vision . Springer, 439–457. [44] Yixin Wan, Di Wu, Haoran Wang, and Kai-Wei Chang. 2024. The factuality tax of diversity-intervened text-to-image generation: Benchmark and fact-augmented intervention. arXiv preprint arXiv:2407.00377 (2024). [45] Shaojin Wu, Mengqi Huang, Wenxu Wu, Yufeng Cheng, Fei Ding, and Qian He. 2025. Less-to-more generalization: Unlocking more controllability by in-context generation. arXiv preprint arXiv:2504.02160 (2025). [46] Xinli Xu, Wenhang Ge, Jiantao Lin, Jiawei Feng, Lie Xu, HanFeng Zhao, Shunsi Zhang, and Ying-Cong Chen. 2025. Flexgen: Flexible multi-view generation from text and image inputs. In Proceedings of the IEEE/CVF International Conference on Computer Vision . 18714–18724. [47] Jiayu Yang, Ziang Cheng, Yunfei Duan, Pan Ji, and Hongdong Li. 2024. Consistnet: Enforcing 3d consistency for multi-view images diffusion. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 7079–7088. [48] Xianghui Yang, Yan Zuo, Sameera Ramasinghe, Loris Bazzani, Gil Avraham, and Anton van den Hengel. 2024. Viewfusion: Towards multi-view consistency via interpolated denoising. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 9870–9880. [49] Huaying Yuan, Ziliang Zhao, Shuting Wang, Shitao Xiao, Minheng Ni, Zheng Liu, and Zhicheng Dou. 2025. Finerag: Fine-grained retrieval-augmented text-to-image generation. In Proceedings of the 31st International Conference on Compu-tational Linguistics . 11196–11205. [50] Shiyue Zhang, Zheng Chong, Xujie Zhang, Hanhui Li, Yuhao Cheng, Yiqiang Yan, and Xiaodan Liang. 2024. Garmentaligner: Text-to-garment generation via retrieval-augmented multi-level corrections. In European Conference on Computer Vision . Springer, 148–164. [51] Xuanmeng Zhang, Zhedong Zheng, Daiheng Gao, Bang Zhang, Pan Pan, and Yi Yang. 2022. Multi-view consistent generative adversarial networks for 3d-aware image synthesis. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 18450–18459. [52] Bo Zhao, Xiao Wu, Zhi-Qi Cheng, Hao Liu, Zequn Jie, and Jiashi Feng. 2018. Multi-view image generation from a single-view. In Proceedings of the 26th ACM international conference on Multimedia . 383–391. [53] Mengdan Zhu, Senhao Cheng, Guangji Bai, Yifei Zhang, and Liang Zhao. 2025. Cross-modal RAG: Sub-dimensional Retrieval-Augmented Text-to-Image Gener-ation. arXiv preprint arXiv:2505.21956 (2025).
