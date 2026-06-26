@@ -1,0 +1,466 @@
+Title: SARIF: Segment Anything for Robust Image Forensics
+
+URL Source: https://arxiv.org/pdf/2606.21108v1
+
+Published Time: Tue, 23 Jun 2026 00:38:12 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# SARIF: Segment Anything for Robust Image Forensics 
+
+Dong-Hyun Moon ∗1 , Ju-Hyeon Nam ∗1 , and Sang-Chul Lee †1
+
+Department of Electrical and Computer Engineering, Inha University, 100 Inha-ro, Michuhol-gu, Incheon, 22212, Republic of Korea 
+
+{22261207, jhnam0514}@inha.edu, sclee@inha.ac.kr 
+
+Abstract. Image forgery localization remains challenging due to di-verse manipulation techniques and distribution shifts. Existing recent forgery localization models achieve high accuracy on benchmarks but often struggle with cross-domain generalization and robustness. In this paper, we propose SARIF (Segment Anything for Robust Im-age Forensics) , a framework that leverages Segment Anything Model (SAM), which has a promptable architecture and generalization ability to overcome these limitations. SARIF introduces a feedback-guided mask decoder and a dual-encoder design that extracts forgery-specific informa-tion to capture forensic traces while exploiting SAM’s architecture. To localize manipulated regions, we design a block-wise prompting mecha-nism that derives forgery-specific cues from residual features between an adapted encoder and its frozen counterpart. These features are fused with the previous mask prompt to drive a feedback-based mask refinement process, enabling automatic forgery segmentation without manual in-put. Extensive experiments on standard forgery-localization benchmarks show that SARIF achieves strong average cross-dataset performance and robustness to common image corruptions. Our SARIF code is available in GitHub Link. 
+
+Keywords: Forgery Localization · Segment Anything Model · Corrup-tion Robustness 
+
+1 Introduction 
+
+Large-scale generative models [36, 46, 47, 64, 80] and widely available commercial editing software [3,5] have made image editing ubiquitous, enabling non-experts to create convincing image forgeries with minimal effort [11, 29, 54]. These ad-vances have heightened concerns, as forged images fuel misinformation, trigger legal disputes, and erode public trust, undermining societal stability [1, 56, 73]. To meet these demands, early image forgery detection relied on traditional hand-crafted features such as illumination inconsistency traces [10,34,38], JPEG compression artifacts [66, 81], sensor pattern noise (SPN) [8, 42, 50], and color  
+
+> *
+
+Equal contribution.  
+
+> †
+
+Corresponding author.  
+
+> arXiv:2606.21108v1 [cs.CV] 19 Jun 2026 2D.-H. Moon, J.-H. Nam, and S.-C. Lee
+
+filter array (CFA) interpolation patterns [12, 16, 67]. However, these methods focus on image-level detection and exhibit poor generalization to unseen forgery types, often requiring specific conditions [28, 78]. Motivated by these limitations, deep learning models, which are now the dom-inant paradigm across diverse vision tasks [15, 21, 24, 33, 84], enable pixel-level forgery localization . Models such as MantraNet [78] and SPAN [28] demonstrate strong performance in automatic forgery-trace extraction. However, these ap-proaches are often computationally intensive and have limited representational capacity, constraining generalization to unseen forgeries [7, 86]. Recently, atten-tion mechanisms [9,27,76] have mitigated these issues, improving both efficiency and accuracy in UNet-like encoder–decoder architectures [23, 48, 86]. Neverthe-less, performance remains inadequate in localization accuracy, out-of-distribution generalization, and robustness to common corruptions.             
+
+> Fig. 1: Motivation .Without the adapter, the encoder focuses on semantic content and misses subtle manipulation artifacts, causing imprecise masks. With the adapter, it learns forgery-specific cues that guide the decoder to produce sharper and more accurate localization. Concretely, this domain gap between the adapted and the frozen encoder repre-sents the adapter-learned forgery-specific information.
+
+To move beyond these limitations, we focus on the Segment Anything Model (SAM) [41], a vision founda-tion model trained on more than abillion mask annotations across mil-lions of images; it provides strong zero- and few-shot generalization and a promptable interface. Recent image forgery localization [44, 83, 85] meth-ods adapt SAM to exploit this capacity. However, many SAM-based pipelines still depend on manual prompts, which is labor-intensive, sensitive to prompt design, and often biased toward ob-ject boundaries rather than manip-ulation evidence, limiting practicality for forgery localization [70]. To ad-dress these issues, IMDPrompter [85] adopts multi-view prompt learning to automate prompt generation with opti-mal prompt selection, yet the method remains computationally heavy and structurally complex due to multiple view-specific encoders and auxiliary modules. Additionally, many recent stud-ies rely solely on SAM’s final embeddings, overlooking hierarchical cues and, critically, the task-specific information , which SAM trained on natural images typically does not provide, needed for accurate forgery localization. Building on these observations, we present Segment Anything for Robust 
+
+Image Forensics ( SARIF ), a SAM-based forgery localization framework that extracts task-specific residual cues from an adapted/frozen dual-encoder pair and refines masks through automatic feedback. This design improves sensitivity to subtle manipulation traces while preserving the strong generalization ability SARIF: Segment Anything for Robust Image Forensics 3
+
+of SAM. Additionally, we introduce a feedback-guided mask decoder to fully exploit SAM’s lightweight decoder and promptable interface. At each feedback iteration, we fuse the previous mask prediction with forgery-specific information to yield the next refined mask, updating it via a lightweight decoder with shared weights. With feedback-guided prompting, boundaries are progressively sharp-ened, spurious regions suppressed, and subtle task-specific cues recovered, while fully exploiting SAM’s lightweight mask decoder and preserving the base en-coder’s strong generalization. Extensive experiments on standard public bench-marks show that SARIF achieves strong average performance, improved cross-domain generalization, and competitive robustness to common corruptions. The contributions of this paper can be summarized as follows: 
+
+– Task-specific prompting. We compute block-wise task-specific features from the differences between the fine-tuned and frozen encoders at selected global-attention blocks and at the final embedding. This design lets us pro-gressively probe what each fine-tuned layer learns during training, producing a coarse-to-fine hierarchy of task-specific information that spans broad se-mantic context down to fine-grained manipulation cues. 
+
+– Feedback-guided mask decoding with prompt–mask fusion. We fuse the previous mask and forgery-specific feature to form the task-specific prompt and feed it to SAM’s mask decoder with shared weights to obtain the cur-rent prediction. This stage-wise refinement accumulates evidence across re-finement stages, stabilizes boundaries, and fully exploits SAM’s promptable design. 
+
+– Extensive experiments. Across diverse benchmarks, our method shows strong localization accuracy, cross-domain generalization, and robustness un-der common post-processing distortions such as JPEG Compression, Gaus-sian Noise and Gaussian Blur. 
+
+2 Related Work 
+
+Deep Learning Based Forgery Localization. 
+
+1) CNN approaches: Representative CNN methods include RGB Noise [87], which extracts SRM based noise for cross type detection, and MantraNet [78] and SPAN [28], which use no pooling for pixel level localization. Several early models still return only bounding boxes, are computationally heavy or require extra fine tuning. To mitigate these issues, RRUNet [4] introduces feedback learning in a UNet style encoder decoder, MT-SENet [86] adds SE blocks [27] with multitask learning to sharpen boundaries, and PSCCNet [48], HDFNet [22], and PIMNet [2] adopt multiscale attention for adaptive fusion. 
+
+2) Transformer approaches: To supply global context missing in prior CNN methods, TransForensics [23] uses Vision Transformer self attention [15] to capture long range dependencies and improve pixel level localization. 
+
+3) Frequency approaches: Frequency features enhance cross domain gen-eralization in various vision applications [57–60, 62]. For forgery localization, 4 D.-H. Moon, J.-H. Nam, and S.-C. Lee 
+
+ObjectFormer [74] and FBINet [18] apply the 2D DCT to expose subtle tamper-ing cues. M2SFormer [61] fuses multiscale and multispectral signals for better generalization and corruption robustness, while DNet [82], AFENet [79], and EITLNet [20] further strengthen generalization using a Haar wavelet transform, a 2D discrete Fourier transform, and a high pass noise filter with RGB inputs, respectively. 
+
+4) Segment Anything approaches: Vision foundation models such as SAM [41,68] provide promptable mask generation with strong zero-shot and few-shot generalization, motivating their use in forgery localization. IMDPrompter [85] freezes the encoder and learns multi-view prompts with a noise-oriented CNN and optimal selection, while SAMIF [83] augments the image encoder with adapters and an SRM branch to emphasize high-frequency cues. SAFIRE [44] reframes forgery localization as source-region partitioning: it performs point-prompted source-region segmentation and aggregates predictions from a grid of automatically generated points to recover source partitions and forged regions. Nevertheless, many SAM-based pipelines remain prompt-dependent or reduce SAM to a single final embedding, leaving hierarchical signals and task-specific manipulation cues underexplored. These limitations motivate our design, which injects hierarchical cues through dual-encoder and automatic feedback refine-ment while preserving SAM’s promptable decoder. 
+
+Segment Anything for Computer Vision. The Segment Anything Model (SAM) [37, 41, 68] comprises an image encoder and a promptable, lightweight mask decoder that accepts points, boxes, or masks as prompts and generalizes in zero-shot across diverse distributions. Enabled by this generalization, SAM is increasingly adopted as a downstream backbone across tasks. In medical imag-ing, MedSAM [51], AutoSAM [70], SAM-Med2D [77], and SAM-Med3D [88] extend SAM to diverse 2D and 3D modalities, delivering versatile organ and le-sion segmentation with minimal prompting. In camouflaged object detection, COD-SAM [17] and SAM-COD+ [6] employ adapters, distillation, and task aware prompting to sharpen subtle boundary cues. For forgery localization, 
+
+SARIF combines parameter-efficient adaptation, dual-encoder residual extrac-tion, and feedback-guided decoding to inject task-specific cues without relying on manual prompts or a single final embedding. 
+
+3 Proposed Method 
+
+3.1 Overall Architecture 
+
+To fully leverage SAM’s hierarchical representations and promptable mask de-coder for forgery localization, we propose our overall framework, Segment Anything for Robust Image Forensics (SARIF), illustrated in Fig. 2. SARIF comprises three modules: ( 1) a dual SAM image encoder , (2) the Forgery-Specific In-formation Extractor (FSIE; Sec. 3.2) , and (3) the Feedback-Guided Mask De-coder (FGMD; Sec. 3.3) . As illustrated in Fig. 2 (a) and (b), we insert LoRA adapters [26] into one image-encoder branch and update only these adapters and mask decoder for forgery localization, while keeping the backbone weights SARIF: Segment Anything for Robust Image Forensics 5  
+
+> Fig. 2: The overall architecture of the proposed SARIF . (a) Fine-tuned SAM Image Encoder. (b) Original SAM Image Encoder. (c) Feedback-Guided Mask Decoder. (d) Forgery-Specific Information Extractor. (e) Notation description used in this paper.
+
+frozen. At each selected transformer block, FSIE computes block-wise residual cues between the adapted and frozen branches to distill forgery-specific infor-mation, which is then fused with the previous mask prompt to produce the next task-specific prompt. At each refinement step, the decoder takes the fine-tuned SAM embedding together with this prompt to predict and refine the mask. The final mask is obtained by leveraging a task-specific prompt derived from the fine-tuned and original embeddings. By capturing what SAM learns through LoRA and fully using SAM’s promptable design and lightweight mask decoder, the framework precisely adapts SAM to the forgery localization task. 
+
+3.2 Forgery Specific Information Extractor 
+
+Motivation. We observe that a single branch adapter setting is parameter ef-ficient but provides no explicit understanding of what the adapter learns for the forgery specific task, limiting sensitivity to subtle manipulations. Motivated by primate biological vision theories [32, 43, 53], where opponent channels and center surround circuitry encode relative contrast rather than absolute inten-sity, we pair the pretrained SAM encoder with its LoRA adapted counterpart and compute blockwise residuals at transformer block to form compact forgery specific cues. To realize this, we introduce the Forgery Specific Information Extractor (FSIE) , which aggregates these features with a lightweight resid-6 D.-H. Moon, J.-H. Nam, and S.-C. Lee 
+
+ual block to produce low cost features that preserve manipulation sensitivity while keeping the dual branch design practical. This design is also inspired by HQ-SAM [37], which taps features immediately after global-attention blocks; accordingly, we therefore compute residual cues only at global-attention blocks, where long-range interactions are explicitly enabled, capturing global inconsis-tencies from forgeries with minimal overhead. FSIE operates in three stages: 1) Feature Similarity Calculation , 2) Feature Enhancement , and 3) Fusion .
+
+Feature Similarity Calculation. Let Ot, Ft ∈ RC×H×W denote the features extracted at iteration t from the original and fine-tuned SAM encoders, respec-tively. We first compute the cosine similarity map  cos t between the input feature maps, which is utilized later in subsequent stages. 
+
+cos tij = ⟨Ot 
+
+> :,ij
+
+, Ft 
+
+> :,ij
+
+⟩∥Ot 
+
+> :,ij
+
+∥2 ∥Ft 
+
+> :,ij
+
+∥2
+
+, cos t ∈ R1×H×W . (1) Where  ⟨· , ·⟩  inner product,  ∥·∥ 2 ℓ2-norm. Then we project both branches to 
+
+C′
+
+< C using 1 × 1 convolution, which reduces computation and aligns the two branches for subsequent enhancement and fusion. 
+
+Feature Enhancement. To estimate the channel importance within the feature map of each stage t, we apply a channel attention mechanism. Specifically, we apply global average pooling and global max pooling over the spatial dimensions to obtain two channel-wise descriptors, processed by a two 1 ×1 convolution layer with an intervening ReLU. 
+
+Ct = Cat  Ft, Ot ∈ R2C′×H×W , (2) 
+
+gt 
+
+> max
+
+= Conv 1×1
+
+ ϕ(Conv 1×1(GMP( Ct))) , (3) 
+
+gt 
+
+> avg
+
+= Conv 1×1
+
+ ϕ(Conv 1×1(GAP( Ct))) . (4) Denote  ϕ is ReLU activation function. Then aggregate their outputs, and ap-ply a sigmoid function to generate channel-wise attention weights. These weights are multiplied with the original feature map to emphasize informative channels while suppressing less relevant ones. 
+
+Gt = σ gt 
+
+> max
+
++ gt
+
+> avg
+
+ , (5) 
+
+Tt 
+
+> ca
+
+= Ct ⊙ Gt ∈ R2C′×H×W . (6) Denote σ(·) is the sigmoid function, ⊙ denotes channel-wise reweighting with spatial broadcasting. 
+
+Fusion. We use the previously computed cosine similarity map as a hint map that guides the network toward forgery-specific information and fuse it with the channel-attended feature map. 
+
+Zt = Cat  Tt
+
+> ca
+
+, cos t ∈ R(2 C′+1) ×H×W . (7) To extract forgery-specific information, we employ a lightweight convolutional layer, GeLU activation, batch normalization with a skip connection. For com-putational efficiency, we reduce the channel dimension to r < C ′, apply a 3 × 3SARIF: Segment Anything for Robust Image Forensics 7   
+
+> Fig. 3: More details about Feedback-Guided Mask Decoder. (a −e) show fea-tures from the 5th, 11th, 17th, and 23rd blocks and the final embedding. We also visualize forgery-specific information maps produced by FSIE. For each FSIE input pair, the left feature map comes from the fine-tuned encoder and the right one comes from the original frozen encoder. At each refinement stage, the previous mask is passed to the prompt encoder (PE) to generate a mask prompt, which is fused with the forgery-specific information produced by FSIE to form a task-specific prompt. This task-specific prompt, together with the fine-tuned image embedding, is fed into the mask decoder (MD) to progressively refine the mask. Green lines denote the bound-aries of the ground truth.
+
+convolution in this reduced space, and then project the features back to the original embedding dimension. 
+
+Tt 
+
+> fs
+
+= Ft ⊕ CGB C′
+
+> 1×1
+
+
+
+CGB 3×3
+
+ CGB r
+
+> 1×1
+
+(Zt)
+
+, (8) We extract forgery-specific features at the global-attention blocks with in-dices {5, 11, 17, 23}, and at final embedding. These stage-wise cues are sequen-tially injected into the Feedback-Guided Mask Decoder together with the image embedding and previous mask prompt to progressively refine masks. 
+
+3.3 Feedback-Guided Mask Decoder 
+
+Motivation. SAM provides a promptable architecture that can be reused at infer-ence, which we leverage to progressively recover fine mask detail [41]. However, most automatic SAM based forgery localization methods do not reuse previous predictions as feedback [83,85]. We therefore design a Feedback-Guided Mask Decoder (FGMD) that, at each refinement stage, fuses the previous mask after SAM prompt encoding with FSIE cues to form a new prompt and refine bound-aries in a coarse to fine hierarchy, consistent with human vision system where center and surround interactions encode relative contrast and recurrent process-ing sharpens perception [31, 40, 45]. This design also accords with evidence that iterative refinement improves segmentation accuracy and boundary fidelity at modest computational cost. FGMD operates in two stages: 1) Forgery-specific Prompt Generation , and 2) Iterative Mask Refinement .
+
+Forgery-specific Prompt Generation. Prior to mask refinement, an initial mask is required to serve as the reference for subsequent updates. We define an initial mask as the mask decoder’s output given only the fine-tuned SAM image 8 D.-H. Moon, J.-H. Nam, and S.-C. Lee 
+
+embeddings, without external prompts. Finally, the previous mask is defined as: 
+
+M(t−1) =
+
+(
+
+None if t = 1 ,
+
+M(t−1) if t > 1, (9) For refinement step t, we encode the previous mask Mt−1 with the prompt encoder and fuse the resulting mask prompt with the t-th forgery-specific cue extracted by FSIE. 
+
+Mask tprompt = PromptEncoder  Mt−1. (10) 
+
+Tt 
+
+> fs
+
+= FSIE  Ft, Ot. (11) Where PromptEncoder denotes SAM’s prompt encoder. To generate the task-specific prompt, the task-specific features are merged with the mask prompt via element-wise summation. 
+
+Tt 
+
+> pt
+
+= ( Mask tP rompt ⊕ Tt
+
+> fs
+
+. (12) 
+
+Stage-wise Mask Refinement. Let Tt 
+
+> pt
+
+denote the task-specific prompt at refinement stage t. The SAM mask decoder D takes the final fine-tuned image embedding Efine and Tt 
+
+> pt
+
+as inputs and produces the refined prediction: 
+
+Mt = σ D Efine , Tt
+
+> pt
+
+ . (13) Here, σ(·) denotes the sigmoid function. The predicted mask is thresholded and passed to the next refinement stage as a mask prompt. Each refinement stage is supervised with the BCE loss against the ground-truth mask: 
+
+LBCE =
+
+> 5
+
+X
+
+> t=0
+
+BCE  Mt, Y , (14) where Y denotes the ground-truth mask. This design injects task cues through the prompt path, preserves accumulated spatial context through the mask path, and performs progressive refinement with a lightweight decoder. Further details of the refinement are shown in Figure 3. 
+
+4 Experiment Results 
+
+4.1 Experiment Settings 
+
+To evaluate model generalization, we train under CASIAv2 [65], then assess cross domain performance on seven external datasets: CASIAv1 [14], Columbia [25], IMD2020 [63], CoMoFoD [72], In the Wild [30], MISD [35] and DIS25k [71]. We emphasize that none of these benchmarks are used for training, in line with SARIF: Segment Anything for Robust Image Forensics 9
+
+Table 1: Segmentation results (DSC) on CASIAv2 [65] training scheme. (·) denotes the standard deviations of five-fold cross-validation experiment results. 
+
+Seen Domain Unseen Domain CASIAv2 [65] DIS25k [71] CASIAv1 [14] Columbia [25] IMD2020 [63] CoMoFoD [72] In the Wild [30] MSID [35] Type Method DSC DSC DSC DSC DSC DSC DSC DSC UNet [69] 32.3 (10.9) 8.7 (1.2) 25.0 (1.9) 19.8 (2.5) 14.9 (1.0) 12.2 (1.0) 18.6 (1.4) 47.3 (2.5) MantraNet [78] 18.8 (8.0) 12.7 (0.8) 19.8 (1.0) 25.0 (1.8) 14.1 (0.5) 11.2 (0.6) 18.2 (1.1) 30.7 (3.5) RRUNet [4] 21.8 (10.4) 10.8 (2.2) 26.7 (2.4) 21.3 (7.2) 14.5 (1.9) 13.7 (2.2) 18.3 (4.2) 32.8 (3.4) TransForensic [23] 40.1 (15.7) 32.3 (2.9) 44.2 (1.6) 35.9 (5.7) 27.2 (2.1) 21.7 (2.0) 31.9 (3.8) 60.0 (1.8) FBINet [18] 35.3 (14.3) 26.3 (2.3) 37.5 (2.1) 18.2 (2.7) 24.2 (1.6) 22.3 (0.8) 25.0 (2.7) 48.0 (2.2) MT-SENet [86] 19.9 (9.9) 7.8 (1.0) 18.4 (1.6) 9.4 (1.1) 11.4 (1.3) 10.6 (2.1) 10.6 (2.1) 22.3 (2.5) 
+
+> Convolution
+
+MVSSNet [13] 31.2 (13.4) 24.9 (3.6) 36.6 (1.6) 33.8 (3.7) 22.8 (2.4) 17.2 (1.2) 27.0 (3.1) 53.9 (3.6) PIMNet [2] 55.8 (15.1) 37.5 (2.4) 49.7 (0.8) 32.5 (5.2) 29.6 (2.7) 24.7 (1.6) 31.2 (2.5) 61.1 (0.9) EITLNet [20] 54.0 (14.7) 30.8 (2.8) 52.9 (1.7) 28.0 (4.6) 25.3 (2.6) 18.1 (1.8) 24.3 (3.6) 58.8 (1.8) 
+
+> Trans.
+
+M2SFormer [61] 58.8 (12.8) 38.5 (2.4) 58.4 (0.7) 42.4 (5.8) 32.6 (2.2) 24.9 (1.3) 35.0 (1.8) 69.1 (0.7) 
+
+SAM [41] 27.1 (12.2) 18.7 (3.4) 33.4 (6.4) 24.6 (11.3) 22.3 (2.7) 19.7 (3.0) 29.6 (8.1) 31.3 (8.1) AutoSAM [70] 49.0 (19.5) 31.4 (1.4) 45.1 (4.1) 28.2 (9.0) 34.0 (3.0) 23.8 (1.7) 36.5 (12.0) 61.3 (5.5) IMDPromter [85] 32.5 (16.9) 28.6 (2.2) 46.1 (2.8) 33.9 (6.6) 28.0 (2.2) 23.0 (1.1) 33.7 (3.1) 47.4 (2.7) SAFIRE [44] 56.8 (10.4) 50.7 (0.9) 61.6 (0.9) 53.1 (4.9) 53.1 (0.6) 39.5 (1.0) 63.3 (2.2) 48.3 (1.5) 
+
+> SAM
+
+SARIF (Ours) 63.1 (12.9) 47.8 (2.5) 58.4 (1.3) 58.4 (3.4) 48.4 (1.7) 65.4 (2.0) 55.7 (3.5) 66.2 (1.9) 
+
+Table 2: Segmentation results (mIoU) on CASIAv2 [65] training scheme. (·) denotes the standard deviations of five-fold cross-validation experiment results. 
+
+Seen Domain Unseen Domain CASIAv2 [65] DIS25K [71] CASIAv1 [14] Columbia [25] IMD2020 [63] CoMoFoD [72] In the Wild [30] MSID [35] Type Method mIoU mIoU mIoU mIoU mIoU mIoU mIoU mIoU UNet [69] 25.8 (9.2) 5.5 (0.8) 19.5 (1.8) 12.2 (1.7) 9.7 (0.6) 7.6 (0.7) 11.9 (1.0) 34.8 (2.2) MantraNet [78] 11.9 (5.7) 7.4 (0.6) 12.1 (0.8) 14.9 (1.2) 8.2 (0.3) 6.5 (0.4) 10.6 (0.8) 19.2 (2.5) RRUNet [4] 15.8 (8.4) 6.9 (1.5) 18.9 (1.7) 13.9 (5.3) 9.4 (3.3) 9.0 (1.7) 11.7 (3.0) 21.4 (2.5) TransForensic [23] 32.0 (13.9) 24.1 (2.5) 35.0 (1.7) 25.0 (4.6) 19.1 (1.6) 14.3 (1.5) 22.4 (3.0) 46.5 (2.1) FBINet [18] 29.2 (12.8) 20.3 (1.9) 30.8 (1.9) 11.7 (2.1) 17.5 (1.3) 15.2 (0.5) 17.8 (2.1) 35.1 (2.0) MT-SENet [86] 14.6 (7.6) 4.8 (0.7) 12.8 (1.3) 5.3 (0.6) 7.2 (1.0) 6.5 (1.5) 6.5 (1.5) 14.0 (1.8) 
+
+> Convolution
+
+MVSSNet [13] 23.4 (11.1) 17.4 (2.9) 27.3 (1.5) 23.3 (3.0) 15.2 (1.8) 10.9 (0.9) 18.3 (2.2) 17.4 (2.9) PIMNet [2] 48.5 (14.6) 30.1 (2.3) 42.2 (1.0) 23.1 (4.3) 22.2 (2.3) 16.8 (1.4) 22.9 (2.2) 48.2 (0.9) EITLNet [20] 47.9 (14.7) 25.6 (2.6) 46.5 (1.5) 20.9 (4.0) 19.7 (2.2) 12.4 (1.4) 19.0 (3.1) 45.9 (1.8) 
+
+> Trans.
+
+M2SFormer [61] 50.8 (12.8) 31.3 (2.3) 50.1 (0.6) 32.4 (5.3) 24.9 (1.9) 16.8 (1.0) 27.4 (1.6) 56.9 (0.8) 
+
+SAM [41] 21.0 (10.5) 14.0 (3.1) 26.9 (6.1) 15.9 (8.0) 16.1 (2.1) 12.8 (2.2) 20.3 (6.9) 20.0 (5.7) AutoSAM [70] 41.7 (19.0) 24.6 (1.6) 38.9 (4.4) 18.9 (7.6) 25.6 (2.3) 16.3 (1.4) 25.6 (11.0) 46.1 (5.9) IMDPromter [85] 25.9 (14.9) 21.3 (2.0) 37.9 (3.3) 22.9 (4.5) 19.7 (2.0) 15.4 (0.8) 23.4 (2.9) 33.1 (2.5) SAFIRE [44] 45.5 (10.9) 40.9 (1.2) 49.6 (0.9) 40.5 (4.7) 41.1 (0.6) 26.4 (0.8) 51.0 (2.2) 33.9 (1.3) 
+
+> SAM
+
+SARIF (Ours) 56.7 (13.3) 41.5 (2.4) 52.0 (1.1) 49.7 (3.1) 40.4 (1.6) 55.8 (2.0) 48.6 (3.6) 53.9 (2.0) 
+
+the evaluation protocol followed by the recent state of the art M2SFormer [61]. Because of page limits, we provide detailed dataset summaries in Table 5 and the exact split definitions for each training scheme in Appendix Section 7. To measure performance, we report Dice Similarity Coefficient (DSC) and mean Intersection over Union (mIoU), which are established metrics for segmentation; formal definitions and implementation details appear in Appendix Section 8. We compare the proposed SARIF (Ours) against thirteen representative forgery localization models, including eight convolutional-based approaches (UNet [69], ManTraNet [78], RRU-Net [4], TransForensics [23], FBI-Net [18], MT-SENet [86], MVSS-Net [13], PIM-Net [2]), two Transformer-based approaches (EITLNet [20], M2SFormer [61]), and four SAM-based approaches (SAM [41] used without prompts, AutoSAM [70], IMDPrompter [85], SAFIRE [44]). For a fair comparison, all methods are trained on the same training set with matched preprocessing and hyperparameters where applicable, and evaluated on an iden-tical held out test set to assess generalization. We report the mean over five-fold cross-validation for reliability. In all tables, Red and Blue denote the best and second best results. 10 D.-H. Moon, J.-H. Nam, and S.-C. Lee    
+
+> Fig. 4: Qualitative comparison of other methods and SARIF under the CASIAv2 train-ing scheme. (a) Input images with ground truth. (b) UNet [69]. (c) MantraNet [78]. (d) RRUNet [4]. (e) TransForensic [23]. (f) FBINet [18]. (g) MT-SENet [86]. (h) MVSS-Net [13]. (i) PIMNet [2]. (j) EITLNet [20]. (k) M2SFormer [61]. (l) SAM [41]. (m) autoSAM [70]. (n) IMDprompter [85]. (o) SAFIRE [44]. (p) SARIF(ours) .Green
+> lines denote the boundaries of the ground truth.
+
+4.2 Implementation Details Training Settings. All models were optimized with Adam [39] starting from an initial learning rate of 10 −4, and the learning rate was annealed to 10 −6
+
+using a cosine schedule [49]. We trained for 100 epochs with a batch size of 32. Because the datasets provide images at heterogeneous native resolutions, we resized all inputs to 256 × 256 for the unified setting. Additionally, to ensure a controlled comparison, we used identical preprocessing, optimizer, and scheduler configurations for all models across all experiments. 
+
+Hyperparameters of SARIF. We adopt SAM’s ViT-L pretrained weights and set LoRA rank as 32 in this paper. We extract intermediate embeddings at global attention block {5, 11, 17, 23} and the final embedding from both the fine-tuned SAM image encoder and the original frozen encoder. 
+
+4.3 Comparison With State-of-the-art Method 
+
+We evaluate our method against a diverse set of representative forgery localiza-tion baselines that span three backbone families: (i) CNN-based architectures such as UNet [69], MantraNet [78], RRUNet [4], TransForensic [23], MT-SENet [86], MVSSNet [13] and FBI-Net [18] which rely on convolutional feature extrac-tors; (ii) Transformer-based architectures such as EITLNet [20], M2SFormer [61], SARIF: Segment Anything for Robust Image Forensics 11 
+
+Table 3: Ablation study on Adapter, FSIE and FGMD. (·) denotes the standard deviations of five-fold cross-validation experiment results. Setting Adapter FSIE FGMD Params(M) FLOPs(G) Seen Unseen DSC mIoU AUC DSC mIoU AUC 1 13.90 490.65 23.6 (9.8) 18.1 (8.4) 63.0 (4.6) 23.3 (6.6) 16.7 (5.0) 59.9 (3.5) 2 ✓ 34.90 503.79 41.2 (14.5) 35.0 (13.6) 71.4 (6.9) 33.0 (11.0) 26.0 (9.7) 64.6 (6.1) 3 ✓ ✓ 41.04 994.88 62.4 (12.9) 56.0 (13.3) 83.0 (5.4) 44.7 (15.2) 38.1 (14.8) 70.2 (8.6) 4 ✓ ✓ 41.34 506.13 62.0 (12.1) 55.5 (12.4) 82.5 (5.1) 42.6 (15.2) 35.4 (14.5) 69.1 (8.6) 5 ✓ ✓ ✓ 52.62 998.43 63.1 (12.9) 56.7 (13.3) 83.3 (5.4) 57.9 (7.1) 49.8 (6.1) 78.3 (3.6) 
+
+PIMNet [2] which leverage global self-attention to capture long-range manipula-tion cues beyond local texture inconsistencies; and (iii) SAM-based architectures such as autoSAM [70], IMDPROMPTER [85], SAFIRE [44] and the original SAM [41], which adapt the Segment Anything Model for manipulation mask prediction. By comparing against all three categories, we ensure that our evalu-ation covers both traditional CNN-style forensic detectors, modern vision trans-former models, and recent SAM-based models, demonstrating that our approach remains competitive across fundamentally different backbone designs. 
+
+Quantitative Result. Tabs. 1-2 report the cross-domain localization results. SARIF achieves the best seen-domain performance and strong average general-ization across unseen datasets. On DSC, SARIF performs best on several unseen benchmarks, while SAFIRE remains stronger on DIS25K, IMD2020, and In the Wild, and M2SFormer is strongest on MISD. On mIoU, SARIF performs best on most datasets, whereas SAFIRE remains stronger on IMD2020 and In the Wild. These results indicate that SARIF is highly competitive across domains and achieves the strongest overall average performance. 
+
+Qualitative Result. Fig. 4 presents qualitative comparisons under the CASIAv2-only training scheme. Compared with CNN- and transformer-based baselines, SARIF more often suppresses background leakage and produces sharper bound-aries. Overall, SARIF tends to produce sharper and more spatially coherent forgery masks than the compared methods. 
+
+4.4 Ablation Studies on FSIE and FGMD 
+
+Under the CASIAv2 training protocol, we conduct ablation studies to isolate the contributions of the dual-encoder Forgery-Specific Information Extractor (FSIE) and the Feedback-Guided Mask Decoder (FGMD). Unless otherwise noted, all ablation settings use the same data split, preprocessing, training schedule, and evaluation protocol as the main experiments. Tab. 3 summarizes the results. Starting from vanilla SAM, adding adapters already provides a substantial improvement, showing that lightweight adapta-tion is effective for forgery localization. Building on this adapter-based base-line, FSIE and FGMD each provide further gains from different perspectives: FSIE improves the quality of forgery-aware features delivered to the decoder, whereas FGMD improves the quality of the predicted masks through iterative refinement. Combining both modules yields the best overall performance, sug-12 D.-H. Moon, J.-H. Nam, and S.-C. Lee          
+
+> Fig. 5: Failure cases .(a) Input image. (b) Ground truth. (c) initial mask. (d −h) refinement stages 1 to 5. (h) indicates final prediction mask.
+> Fig. 6: Authentic Image Pre-diction . Left: Input image, Right: Model prediction.
+
+gesting that forgery-specific cue extraction and feedback-based mask refinement are complementary. 
+
+Setting 1 (Vanilla SAM). Directly applying SAM to forgery localization re-sults in poor performance. Because of the domain gap between natural-object segmentation and image forensics, SAM often fails to attend to manipulation-specific traces, leading to inaccurate localization and noisy segmentation masks. 
+
+Setting 2 (SAM + Adapters). Adding lightweight adapters to the SAM image encoder significantly improves performance over the vanilla SAM baseline. This result indicates that parameter-efficient adaptation helps the model encode forgery-relevant patterns and partially bridge the domain gap. 
+
+Setting 3 (SAM + Adapters + FSIE). When FSIE is added on top of the adapter-based SAM, performance improves further. FSIE extracts forgery-sensitive residual cues from the dual encoder, organizes them into stage-wise prompts, and delivers them to the decoder. Exposing these multi-level cues helps the decoder better localize subtle manipulation artifacts. 
+
+Setting 4 (SAM + Adapters + FGMD). Adding FGMD to the adapter-based SAM also improves performance. By feeding the predicted mask back as a mask prompt, FGMD progressively refines the output and reduces boundary ambiguity, resulting in cleaner masks. However, since FGMD mainly improves mask quality given the available cues, its gain is naturally limited when the underlying forgery-specific features are weak. 
+
+Setting 5 (SARIF). The full model achieves the best overall performance. FSIE supplies hierarchical forgery-aware cues from the dual encoder, while FGMD refines the prediction through feedback-guided decoding. Their combination leads to more robust localization and cleaner segmentation, confirming that the two components are complementary. 
+
+5 Discussion 
+
+In this section, we focus on various questions that naturally arise when assessing SARIF’s practical usability. 
+
+Q1. How does SARIF behave when provided pristine images? Analyz-ing the behavior on pristine images is critical for practical forensic deployment. As shown in Fig. 6, when a fully authentic image is provided, SARIF doesn’t SARIF: Segment Anything for Robust Image Forensics 13          
+
+> Fig. 7: Various distortion tests on CASIAv2 . (a) Gaussian Noise, severity 1, 2, 3 means σ=0.1, 0.3, 0.5. (b) Gaussian Blur, severity 1, 2, 3 means σ=3,5,9. (c) JPEG Compression, severity 1, 2, 3 means q=100, 50, 10. (d) Mixed robustness test, severity 1-4 correspond to (blur & JPEG), (noise & blur), (noise & JPEG), (noise & blur & JPEG), respectively. For each mixed setting, severity level 2 was used for every individual distortion component.
+
+predict an all-zero mask; instead, it may produce sparse low-level responses. Importantly, these responses tend to be spatially scattered , which contrasts with the spatially coherent masks typically observed on manipulated regions. This observation indicates that SARIF may produce sparse responses on pristine images; we therefore report pristine-image false-positive statistics in Appendix Section 9 to quantify this behavior. 
+
+Q2. What are the limitations and typical failure cases of SARIF? Fig. 5 presents failure cases of SARIF. Case 1 . When the initial mask localizes an incorrect region, subsequent refinement tends to reinforce the error and continue refining the wrong area. This indicates that the adapted encoder may capture unreliable forgery cues, causing refinement to amplify an erroneous initial mask. As a result, overall performance largely depends on how effectively the adapter captures forgery cues. Case 2 . The SAM-based architecture can introduce blocky artifacts because the prompt encoder first projects the mask prediction into a low-resolution embedding space, after which the mask decoder upsamples it with transposed convolution. This design can produce staircase-like artifacts. 
+
+Q3. Can SARIF be reliably applied in real-world scenarios? In real-world scenarios, images often suffer from hybrid and variable distortions [75]. To assess practical robustness, we evaluate SARIF under Gaussian noise, Gaussian blur, JPEG compression, and mixed distortions. As shown in Fig. 7, SARIF remains competitive across these settings and maintains strong performance un-der mixed distortions. These results suggest promising robustness in degraded environments. 14 D.-H. Moon, J.-H. Nam, and S.-C. Lee 
+
+Table 4: Model complexity and evaluation on recent forgery datasets Model Model Complexity CocoGlide [19] TGIF [52] Params(M) FLOPs(G) Inference(ms) DSC mIoU AUC DSC mIoU AUC SAM [41] 13.90 490.65 18.8 17.4 (2.1) 11.7 (1.6) 54.9 (0.9) 13.4 (1.6) 9.1 (1.2) 58.8 (1.2) autoSAM [70] 158.53 1087.99 21.4 21.8 (1.0) 14.9 (0.5) 56.8 (0.3) 16.9 (0.9) 11.9 (0.8) 61.2 (0.9) IMDPROMPTER [85] 605.07 989.11 22.5 26.0 (1.4) 17.9 (1.4) 58.8 (0.7) 18.6 (1.5) 12.8 (1.3) 61.6 (1.1) M2SFormer [61] 107.38 15.16 2.5 12.2 (1.6) 7.7 (1.1) 52.0 (0.6) 14.6 (0.8) 10.3 (0.7) 59.8 (0.3) SARIF (Ours) 52.62 998.43 47.5 34.0 (3.7) 27.3 (3.1) 63.7 (1.8) 30.8 (2.6) 23.7 (2.1) 68.7 (1.7) 
+
+Q4. What is SARIF’s computational complexity, and how does it per-form on recent challenging forgery datasets? We further evaluated SARIF on more recent and challenging forgery benchmarks, including an inpainting dataset (CocoGlide [19]) and AI-generated forgery dataset (TGIF [52]) in Tab. 4. SARIF remains competitive on recent and challenging forgery benchmarks, in-cluding CocoGlide [19] and TGIF, indicating strong reliability and generalization to modern forgery patterns. In addition, we report the overall model complexity in Table 4 and the complexity of each module in Table 3. Although SARIF is computationally more expensive than the recent transformer-based M2SFormer, it consistently achieves clear accuracy gains across multiple datasets. We there-fore explicitly present the accuracy–efficiency trade-off. 
+
+6 Conclusion 
+
+In this paper, we attempted to overcome the limitations of existing forgery local-ization methods, which are generalization performance and robustness by intro-ducing SARIF—a fully automatic forgery localization framework that leverages SAM foundation-model for broad generalization and channels it into manipulation-aware prompting and refinement. The pipeline initializes from a prompt-free base mask produced by the mask decoder conditioned only on the fine-tuned SAM embeddings. Forgery-specific features are then derived by integrating the fine-tuned and original image embeddings, and combined with a mask prompt en-coded from the previous prediction to drive the lightweight SAM mask decoder. Iterative, feedback-guided refinement with deep supervision at every stage im-proves boundary fidelity and stabilizes training, yielding consistent gains without manual points, boxes or masks. Experiments across heterogeneous datasets indi-cate strong cross-domain robustness, highlighting the benefit of forgery-specific prompting and feedback-guided mask decoder. Ultimately, by converting task-specific signal into automatic prompts and driving a feedback-guided refinement loop on SAM’s lightweight decoder, our method preserves SAM’s structural ad-vantages while amplifying manipulation cues and cross-domain generalization and establishing a practical foundation for reliable, large-scale automated forgery localization. SARIF: Segment Anything for Robust Image Forensics 15 
+
+Acknowledgements 
+
+This work was supported in part by the National Research Foundation of Ko-rea(NRF) grant funded by the Korea government(MSIT) (RS-2025-16065822) and in part by Inha University Research Grant. 
+
+References 
+
+1. Ahmed, S., Chua, H.W.: Perception and deception: Exploring individual responses to deepfakes across different modalities. Heliyon 9(10) (2023) 2. Bai, N., Wang, X., Han, R., Hou, J., Wang, Y., Pang, S.: Pim-net: Progressive inconsistency mining network for image manipulation localization. Pattern Recog-nition 159 , 111136 (2025) 3. Barnes, C., Shechtman, E., Finkelstein, A., Goldman, D.B.: Patchmatch: A ran-domized correspondence algorithm for structural image editing. ACM Trans. Graph. 28 (3), 24 (2009) 4. Bi, X., Wei, Y., Xiao, B., Li, W.: Rru-net: The ringed residual u-net for image splic-ing forgery detection. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (2019) 5. Caruso, R.D., Postel, G.C.: Image editing with adobe photoshop 6.0. Radiographics 
+
+22 (4), 993–1002 (2002) 6. Chen, H., Wei, P., Guo, G., Gao, S.: Sam-cod+: Sam-guided unified framework for weakly-supervised camouflaged object detection. IEEE Transactions on Circuits and Systems for Video Technology (2024) 7. Chen, X., Dong, C., Ji, J., Cao, J., Li, X.: Image manipulation detection by multi-view multi-scale supervision. In: Proceedings of the IEEE/CVF international con-ference on computer vision. pp. 14185–14193 (2021) 8. Chierchia, G., Poggi, G., Sansone, C., Verdoliva, L.: A bayesian-mrf approach for prnu-based image forgery detection. IEEE Transactions on Information Forensics and Security 9(4), 554–567 (2014) 9. Dai, Y., Gieseke, F., Oehmcke, S., Wu, Y., Barnard, K.: Attentional feature fusion. In: Proceedings of the IEEE/CVF winter conference on applications of computer vision. pp. 3560–3569 (2021) 10. De Carvalho, T.J., Riess, C., Angelopoulou, E., Pedrini, H., de Rezende Rocha, A.: Exposing digital image forgeries by illumination color classification. IEEE Trans-actions on Information Forensics and Security 8(7), 1182–1194 (2013) 11. De Ruiter, A.: The distinct wrong of deepfakes. Philosophy & Technology 34 (4), 1311–1332 (2021) 12. Dirik, A.E., Memon, N.: Image tamper detection based on demosaicing artifacts. In: 2009 16th IEEE International Conference on Image Processing (ICIP). pp. 1497–1500. IEEE (2009) 13. Dong, C., Chen, X., Hu, R., Cao, J., Li, X.: Mvss-net: Multi-view multi-scale super-vised networks for image manipulation detection. IEEE Transactions on Pattern Analysis and Machine Intelligence 45 (3), 3539–3553 (2022) 14. Dong, J., Wang, W., Tan, T.: CASIA image tampering detection evaluation database. In: 2013 IEEE China Summit and International Conference on Signal and Information Processing. IEEE (Jul 2013). https://doi.org/10.1109/chinasip. 2013.6625374 , https://doi.org/10.1109/chinasip.2013.6625374 16 D.-H. Moon, J.-H. Nam, and S.-C. Lee 15. Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., Uszkoreit, J., Houlsby, N.: An image is worth 16x16 words: Transformers for image recognition at scale. In: In-ternational Conference on Learning Representations (2021), https://openreview. net/forum?id=YicbFdNTTy 
+
+16. Ferrara, P., Bianchi, T., De Rosa, A., Piva, A.: Image forgery localization via fine-grained analysis of cfa artifacts. IEEE Transactions on Information Forensics and Security 7(5), 1566–1577 (2012) 17. Gao, D., Zhou, Y., Yan, H., Chen, C., Hu, X.: Cod-sam: Camouflage object detec-tion using sam. Pattern Recognition p. 111826 (2025) 18. Gu, A.R., Nam, J.H., Lee, S.C.: Fbi-net: Frequency-based image forgery local-ization via multitask learning with self-attention. IEEE access 10 , 62751–62762 (2022) 19. Guillaro, F., Cozzolino, D., Sud, A., Dufour, N., Verdoliva, L.: Trufor: Leveraging all-round clues for trustworthy image forgery detection and localization. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion (CVPR). pp. 20606–20615 (June 2023) 20. Guo, K., Zhu, H., Cao, G.: Effective image tampering localization via enhanced transformer and co-attention fusion. In: ICASSP 2024-2024 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP). pp. 4895–4899. IEEE (2024) 21. Guo, M.H., Lu, C.Z., Hou, Q., Liu, Z., Cheng, M.M., Hu, S.M.: Segnext: Rethink-ing convolutional attention design for semantic segmentation. Advances in neural information processing systems 35 , 1140–1156 (2022) 22. Han, R., Wang, X., Bai, N., Wang, Y., Hou, J., Xue, J.: Hdf-net: Capturing ho-mogeny difference features to localize the tampered image. IEEE Transactions on Pattern Analysis and Machine Intelligence (2024) 23. Hao, J., Zhang, Z., Yang, S., Xie, D., Pu, S.: Transforensics: image forgery local-ization with dense self-attention. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 15055–15064 (2021) 24. He, K., Zhang, X., Ren, S., Sun, J.: Deep residual learning for image recognition. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 770–778 (2016) 25. Hsu, Y.F., Chang, S.F.: Detecting image splicing using geometry invariants and camera characteristics consistency. In: International Conference on Multimedia and Expo (2006) 26. Hu, E.J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., Chen, W., et al.: Lora: Low-rank adaptation of large language models. ICLR 1(2), 3 (2022) 27. Hu, J., Shen, L., Sun, G.: Squeeze-and-excitation networks. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 7132–7141 (2018) 28. Hu, X., Zhang, Z., Jiang, Z., Chaudhuri, S., Yang, Z., Nevatia, R.: Span: Spa-tial pyramid attention network for image manipulation localization. In: Computer Vision–ECCV 2020: 16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part XXI 16. pp. 312–328. Springer (2020) 29. Huang, Y., Huang, J., Liu, Y., Yan, M., Lv, J., Liu, J., Xiong, W., Zhang, H., Cao, L., Chen, S.: Diffusion model-based image editing: A survey. IEEE Transactions on Pattern Analysis and Machine Intelligence (2025) 30. Huh, M., Liu, A., Owens, A., Efros, A.A.: Fighting fake news: Image splice detec-tion via learned self-consistency. In: Proceedings of the European conference on computer vision (ECCV). pp. 101–117 (2018) SARIF: Segment Anything for Robust Image Forensics 17 31. Hupé, J., James, A., Payne, B., Lomber, S., Girard, P., Bullier, J.: Cortical feedback improves discrimination between figure and background by v1, v2 and v3 neurons. Nature 394 (6695), 784–787 (1998) 32. Hurvich, L.M., Jameson, D.: An opponent-process theory of color vision. Psycho-logical review 64 (6p1), 384 (1957) 33. Jain, Y., Behl, H., Kira, Z., Vineet, V.: Damex: Dataset-aware mixture-of-experts for visual understanding of mixture-of-datasets. Advances in Neural Information Processing Systems 36 , 69625–69637 (2023) 34. Johnson, M.K., Farid, H.: Exposing digital forgeries by detecting inconsistencies in lighting. In: Proceedings of the 7th workshop on Multimedia and security. pp. 1–10 (2005) 35. Kadam, K.D., Ahirrao, S., Kotecha, K.: Multiple image splicing dataset (misd): a dataset for multiple splicing. Data 6(10), 102 (2021) 36. Kawar, B., Zada, S., Lang, O., Tov, O., Chang, H., Dekel, T., Mosseri, I., Irani, M.: Imagic: Text-based real image editing with diffusion models. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 6007–6017 (2023) 37. Ke, L., Ye, M., Danelljan, M., Tai, Y.W., Tang, C.K., Yu, F., et al.: Segment anything in high quality. Advances in Neural Information Processing Systems 36 ,29914–29934 (2023) 38. Kee, E., O’brien, J.F., Farid, H.: Exposing photo manipulation from shading and shadows. ACM Transactions on Graphics 33 (5), 1–21 (2014) 39. Kingma, D.P., Ba, J.: Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 (2014) 40. Kirchberger, L., Mukherjee, S., Schnabel, U.H., van Beest, E.H., Barsegyan, A., Levelt, C.N., Heimel, J.A., Lorteije, J.A., van der Togt, C., Self, M.W., et al.: The essential role of recurrent processing for figure-ground perception in mice. Science advances 7(27), eabe1833 (2021) 41. Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A.C., Lo, W.Y., et al.: Segment anything. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 4015–4026 (2023) 42. Korus, P., Huang, J.: Multi-scale analysis strategies in prnu-based tampering local-ization. IEEE Transactions on Information Forensics and Security 12 (4), 809–824 (2016) 43. Kuffler, S.W.: Discharge patterns and functional organization of mammalian retina. Journal of neurophysiology 16 (1), 37–68 (1953) 44. Kwon, M.J., Lee, W., Nam, S.H., Son, M., Kim, C.: Safire: Segment any forged image region. In: Proceedings of the AAAI Conference on Artificial Intelligence. vol. 39, pp. 4437–4445 (2025) 45. Lamme, V.A., Roelfsema, P.R.: The distinct modes of vision offered by feedforward and recurrent processing. Trends in neurosciences 23 (11), 571–579 (2000) 46. Lee, H., Kang, M., Han, B.: Diffusion-based conditional image editing through optimized inference with guidance. arXiv preprint arXiv:2412.15798 (2024) 47. Liu, C., Li, X., Ding, H.: Referring image editing: Object-level image editing via referring expressions. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 13128–13138 (2024) 48. Liu, X., Liu, Y., Chen, J., Liu, X.: Pscc-net: Progressive spatio-channel correlation network for image manipulation detection and localization. IEEE Transactions on Circuits and Systems for Video Technology 32 (11), 7505–7517 (2022) 49. Loshchilov, I., Hutter, F.: Sgdr: Stochastic gradient descent with warm restarts. arXiv preprint arXiv:1608.03983 (2016) 18 D.-H. Moon, J.-H. Nam, and S.-C. Lee 50. Lukáš, J., Fridrich, J., Goljan, M.: Detecting digital image forgeries using sen-sor pattern noise. In: Security, steganography, and watermarking of multimedia contents VIII. vol. 6072, pp. 362–372. SPIE (2006) 51. Ma, J., He, Y., Li, F., Han, L., You, C., Wang, B.: Segment anything in medical images. Nature Communications 15 (1), 654 (2024) 52. Mareen, H., Karageorgiou, D., Wallendael, G.V., Lambert, P., Papadopoulos, S.: Tgif: Text-guided inpainting forgery dataset (2024). https://doi.org/10.48550/ arXiv.2407.11566 , accepted at IEEE WIFS 2024 53. McMahon, M.J., Packer, O.S., Dacey, D.M.: The classical receptive field surround of primate parasol ganglion cells is mediated primarily by a non-gabaergic pathway. Journal of Neuroscience 24 (15), 3736–3745 (2004) 54. Meng, C., He, Y., Song, Y., Song, J., Wu, J., Zhu, J.Y., Ermon, S.: Sdedit: Guided image synthesis and editing with stochastic differential equations. arXiv preprint arXiv:2108.01073 (2021) 55. Milletari, F., Navab, N., Ahmadi, S.A.: V-net: Fully convolutional neural networks for volumetric medical image segmentation. In: 2016 fourth international confer-ence on 3D vision (3DV). pp. 565–571. Ieee (2016) 56. Mubarak, R., Alsboui, T., Alshaikh, O., Inuwa-Dutse, I., Khan, S., Parkinson, S.: A survey on the detection and impacts of deepfakes in visual, audio, and textual formats. Ieee Access 11 , 144497–144529 (2023) 57. Nam, J.H., Kang, D.H., Lee, S.C.: M3fpolypsegnet++: Adaptive gaussian fre-quency decomposition with multi-task learning for polyp segmentation. Neuro-computing p. 131134 (2025) 58. Nam, J.H., Lee, S.C.: Random image frequency aggregation dropout in image classification for deep convolutional neural networks. Computer Vision and Image Understanding 232 , 103684 (2023) 59. Nam, J.H., Lee, S.C.: Fsda: Frequency re-scaling in data augmentation for corruption-robust image classification. Pattern Recognition 150 , 110332 (2024) 60. Nam, J.H., Lee, S.C.: Frequency-based boundary-guided attention network for do-main generalizable polyp segmentation from colonoscopy images. Artificial Intelli-gence in Medicine p. 103288 (2025) 61. Nam, J.H., Moon, D.H., Lee, S.C.: M2sformer: Multi-spectral and multi-scale at-tention with edge-aware difficulty guidance for image forgery localization. arXiv preprint arXiv:2506.20922 (2025) 62. Nam, J.H., Syazwany, N.S., Kim, S.J., Lee, S.C.: Modality-agnostic domain gen-eralizable medical image segmentation by multi-frequency in multi-scale atten-tion. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 11480–11491 (2024) 63. Novozamsky, A., Mahdian, B., Saic, S.: Imd2020: A large-scale annotated dataset tailored for detecting manipulated images. In: 2020 IEEE Winter Applications of Computer Vision Workshops (WACVW). pp. 71–80 (March 2020) 64. Pan, X., Tewari, A., Leimkühler, T., Liu, L., Meka, A., Theobalt, C.: Drag your gan: Interactive point-based manipulation on the generative image manifold. In: ACM SIGGRAPH 2023 conference proceedings. pp. 1–11 (2023) 65. Pham, N.T., Lee, J.W., Kwon, G.R., Park, C.S.: Hybrid image-retrieval method for image-splicing validation. Symmetry 11 (1), 83 (2019) 66. Popescu, A.C., Farid, H.: Statistical tools for digital forensics. In: International workshop on information hiding. pp. 128–147. Springer (2004) 67. Popescu, A.C., Farid, H.: Exposing digital forgeries in color filter array interpolated images. IEEE Transactions on Signal Processing 53 (10), 3948–3959 (2005) SARIF: Segment Anything for Robust Image Forensics 19 68. Ravi, N., Gabeur, V., Hu, Y.T., Hu, R., Ryali, C., Ma, T., Khedr, H., Rädle, R., Rolland, C., Gustafson, L., et al.: Sam 2: Segment anything in images and videos. arXiv preprint arXiv:2408.00714 (2024) 69. Ronneberger, O., Fischer, P., Brox, T.: U-net: Convolutional networks for biomed-ical image segmentation. In: Medical image computing and computer-assisted intervention–MICCAI 2015: 18th international conference, Munich, Germany, Oc-tober 5-9, 2015, proceedings, part III 18. pp. 234–241. Springer (2015) 70. Shaharabany, T., Dahan, A., Giryes, R., Wolf, L.: Autosam: Adapting sam to med-ical images by overloading the prompt encoder. arXiv preprint arXiv:2306.06370 (2023) 71. Tahir, E., Bal, M.: Deep image composition meets image forgery (2024) 72. Tralic, D., Zupancic, I., Grgic, S., Grgic, M.: Comofod—new database for copy-move forgery detection. In: Proceedings ELMAR-2013. pp. 49–54. IEEE (2013) 73. Vaccari, C., Chadwick, A.: Deepfakes and disinformation: Exploring the impact of synthetic political video on deception, uncertainty, and trust in news. Social media+ society 6(1), 2056305120903408 (2020) 74. Wang, J., Wu, Z., Chen, J., Han, X., Shrivastava, A., Lim, S.N., Jiang, Y.G.: Objectformer for image manipulation detection and localization. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 2364–2373 (2022) 75. Wang, Y., Li, H., Hou, S., Dong, Z., Gao, R.: Distortion information and edge fea-tures guided network for real-world image restoration. Knowledge-Based Systems 
+
+314 , 113159 (2025). https://doi.org/10.1016/j.knosys.2025.113159 
+
+76. Woo, S., Park, J., Lee, J.Y., Kweon, I.S.: Cbam: Convolutional block attention module. In: Proceedings of the European conference on computer vision (ECCV). pp. 3–19 (2018) 77. Wu, J., Ji, W., Liu, Y., Fu, H., Xu, M., Xu, Y., Jin, Y.: Medical sam adapter: Adapting segment anything model for medical image segmentation (2023) 78. Wu, Y., AbdAlmageed, W., Natarajan, P.: Mantra-net: Manipulation tracing net-work for detection and localization of image forgeries with anomalous features. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recog-nition. pp. 9543–9552 (2019) 79. Xu, X., Chen, J., Lv, W., Wang, W., Zhang, Y.: Image tampering detection with frequency-aware attention and multi-view fusion. IEEE Transactions on Artificial Intelligence (2024) 80. Yang, B., Gu, S., Zhang, B., Zhang, T., Chen, X., Sun, X., Chen, D., Wen, F.: Paint by example: Exemplar-based image editing with diffusion models. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 18381–18391 (2023) 81. Yang, J., Zhang, Y., Zhu, G., Kwong, S.: A clustering-based framework for im-proving the performance of jpeg quantization step estimation. IEEE transactions on circuits and systems for video technology 31 (4), 1661–1672 (2020) 82. Yang, Z., Liu, B., Bi, X., Xiao, B., Li, W., Wang, G., Gao, X.: D-net: A dual-encoder network for image splicing forgery detection and localization. Pattern Recognition 
+
+155 , 110727 (2024) 83. Zhang, L., Zhu, X., He, D., Liao, X., Sun, B.: Samif: Adapting segment anything model for image inpainting forensics. In: Proceedings of the Asian Conference on Computer Vision. pp. 3605–3621 (2024) 84. Zhang, L., Lu, J., Zheng, S., Zhao, X., Zhu, X., Fu, Y., Xiang, T., Feng, J., Torr, P.H.: Vision transformers: From semantic segmentation to dense prediction. Inter-national Journal of Computer Vision 132 (12), 6142–6162 (2024) 20 D.-H. Moon, J.-H. Nam, and S.-C. Lee 85. Zhang, Q., Qi, Y., Tang, X., Fang, J., Lin, X., Zhang, K., Yuan, C.: Imdprompter: Adapting sam to image manipulation detection by cross-view automated prompt learning. In: International Conference on Learning Representations (2025), https: //openreview.net/forum?id=vl7kf0YHwj 
+
+86. Zhang, Y., Zhu, G., Wu, L., Kwong, S., Zhang, H., Zhou, Y.: Multi-task se-network for image splicing localization. IEEE Transactions on Circuits and Systems for Video Technology 32 (7), 4828–4840 (2021) 87. Zhou, P., Han, X., Morariu, V.I., Davis, L.S.: Learning rich features for image manipulation detection. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 1053–1061 (2018) 88. Zhu, J., Hamdi, A., Qi, Y., Jin, Y., Wu, J.: Medical sam 2: Segment medical images as video via segment anything model 2 (2024) SARIF: Segment Anything for Robust Image Forensics 1
+
+SARIF: Segment Anything for Robust Image Forensics 
+
+Supplementary Material                           
+
+> Dataset Name Total Images Copy-Move Splicing CASIAv2 [65] 5,123 3,274 1,849 CASIAv1 [14] 920 459 461 DIS25k [71] 24,964 024,964 Columbia [25] 180 0180 IMD2020 [63] 2,010 --CoMoFoD [72] 260 260 0In the Wild [30] 201 0201 MISD [35] 300 0300
+
+Table 5: Summary of the datasets used in this paper. 
+
+7 Dataset Descriptions 
+
+– CASIAv1 [14] and CASIAv2 [65]: The CASIAv1 dataset consists of JPG images with a resolution of 384 × 256, including 459 copy move and 461 splicing images. CASIAv2 is more complex than CASIAv1, containing 5,123 tampered ones which consists of 3274 copy move images and 1849 splicing images. The image sizes range from 320 × 240 to 800 × 600 and are available in multiple formats, such as uncompressed BMP and TIFF. 
+
+– DIS25k [71]: The DIS25k dataset is a large-scale image splicing dataset de-signed to enhance the realism and complexity of manipulated images. It con-tains 24,964 spliced images, generated using image composition techniques, such as deep image matting and harmonization, to improve the seamlessness of manipulation. The dataset was created by leveraging the OPA dataset for rational object placement and refining the images with advanced blend-ing techniques, making the forgeries harder to detect. The image sizes vary but generally range from 512 × 512 to 1920 × 1080, ensuring diversity in resolution. 
+
+– Columbia [25]: The Columbia dataset is predominantly altered using splic-ing and contains high-resolution images. The manipulated regions often span large portions of scenes. Image sizes range from 757 × 568 to 1152 × 768 and are provided in TIFF or BMP formats. In total, it includes 180 tampered images. 
+
+– IMD2020 [63]: The IMD2020 dataset features a diverse set of tampered images collected from real-world sources on the internet, totaling approx-imately 2,010 manipulated samples. The images are provided in JPG and TIFF formats. 
+
+– CoMoFoD [72]: The CoMoFoD dataset is specifically designed for Copy-Move Forgery Detection (CMFD) and comprises 260 forged image sets, di-vided into two resolution categories: small (512 × 512) and large (3000 ×2 D.-H. Moon, J.-H. Nam, and S.-C. Lee 
+
+2000). The images are classified into five groups based on the type of manip-ulation applied: translation, rotation, scaling, combination, and distortion. Various post-processing techniques, including JPEG compression, blurring, noise addition, and color reduction, are applied to both the tampered and original images. 
+
+– In the Wild [30]: The In-the-Wild dataset is a collection of 201 manipulated images gathered from online sources such as THE ONION (a parody news website) and REDDIT PHOTOSHOP BATTLES (an online community fo-cused on image manipulations). These images represent real-world, naturally occurring spliced forgeries. The images in this dataset come in various sizes, reflecting the diversity of online manipulations. 
+
+– MISD [35]: The Multiple Image Splicing Dataset (MSID) is the first publicly available dataset specifically designed for multiple image splicing detection. It contains 300 multiple spliced images, all in JPG format with a resolution of 384 × 256. The dataset was created by combining images from the CASIAv1 dataset and applying multiple splicing operations using Figma software. The spliced images feature various post-processing techniques such as rotation and scaling to enhance realism. 
+
+8 Metrics Descriptions 
+
+In this section, we describe the metrics used in this paper. For convenience, we denote T P, F P , and F N as the number of samples of true positive, false positive, and false negative between two binary masks A and B.
+
+– The Mean Dice Similarity Coefficient (DSC) [55] measures the similarity be-tween two samples and is widely used to assess the performance of segmenta-tion tasks, such as image segmentation or object detection. Higher is better .For given two binary masks A and B, DSC is defined as follows: 
+
+DSC (A, B ) = 2 × | A ∩ B||A ∪ B| = 2 × T P 
+
+2 × T P + F P + F N  (15) 
+
+– The Mean Intersection over Union (mIoU) measures the ratio of the inter-section area to the union area between predicted and ground truth masks in segmentation tasks. Higher is better . For given two binary masks A and 
+
+B, mIoU is defined as follows: 
+
+mIoU (A, B ) = A ∩ BA ∪ B = T P T P + F P + F N  (16) 
+
+– The Area Under the Curve (AUC) measures the overall discriminative ability of a model across all possible decision thresholds and is particularly useful for evaluating binary classification or pixel-wise detection tasks where threshold selection can bias results. Higher is better . AUC summarizes the relation-ship between the True Positive Rate (TPR) and False Positive Rate (FPR) SARIF: Segment Anything for Robust Image Forensics 3
+
+Table 6: Segmentation results on CASIAv2 [65]. mIoU is reported on the seen-domain CASIAv2, while FPR is reported on CASIAv2 authentic [65]. (·) denotes the standard deviations of five-fold cross-validation experiment results. Red and Blue denote the best and second best results.                                   
+
+> Seen Domain Authentic CASIAv2 [65] CASIAv2_Authentic [65] Type Method mIoU FPR UNet [69] 25.8 (9.2) 22.4 (5.9) MantraNet [78] 11.9 (5.7) 9.6 (2.9) RRUNet [4] 15.8 (8.4) 10.8 (5.6) TransForensic [23] 32.0 (13.9) 17.0 (7.3) FBINet [18] 29.2 (12.8) 3.0 (0.7)
+> MT-SENet [86] 14.6 (7.6) 5.4 (0.4)
+> Convolution
+> MVSSNet [13] 23.4 (11.1) 10.2 (4.7) PIMNet [2] 48.5 (14.6) 15.5 (4.7) EITLNet [20] 47.9 (14.7) 5.5 (0.3)
+> Trans.
+> M2SFormer [61] 50.8 (12.8) 10.1 (1.2) SAM [41] 21.0 (10.5) 10.5 (0.8) AutoSAM [70] 41.7 (19.0) 8.5 (1.5) IMDPromter [85] 25.9 (14.9) 9.4 (1.3) SAFIRE [44] 45.5 (10.9) 11.6 (2.7)
+> SAM
+> SARIF (Ours) 56.7 (13.3) 5.1 (0.8)
+
+by computing the area under the Receiver Operating Characteristic (ROC) curve. Formally, it is expressed as: 
+
+AUC =
+
+Z 10
+
+TPR (t), d (FPR (t))  (17) where TPR (t) = T P T P +F N and FPR (t) = F P F P +T N at threshold t. A higher AUC value indicates that the model achieves better separation between the manipulated (positive) and authentic (negative) samples across varying de-cision thresholds. 
+
+9 False positives on pristine images. 
+
+For pristine images, the ground-truth mask is entirely zero; therefore, any acti-vated pixel is counted as a false positive. In Table 6, the FPR on the CASIAv2 au-thentic set [65] can therefore be interpreted as a compact measure of the residual response each method produces on authentic inputs. Read together with Fig. 6, this metric complements the qualitative observation that SARIF may still yield weak activations on pristine images, while these responses remain limited rather than forming broad, spatially coherent masks. The same table also reports mIoU on the seen-domain, allowing localization accuracy on manipulated images and false responses on authentic images to be considered jointly. Under the training scheme based on CASIAv2 [65], SARIF achieves the high-est mIoU while also attaining the lowest FPR among the SAM-based methods and the second-lowest overall on the authentic set. Among the methods with sim-ilarly low false-positive behavior, SARIF still provides the strongest localization performance, outperforming EITLNet [20], FBINet [18], and MT-SENet [86]. Compared with FBINet [18], SARIF improves mIoU by 27.5 points with only a 4 D.-H. Moon, J.-H. Nam, and S.-C. Lee 
+
+Table 7: Representative AUC results under the CASIAv2 [65] training scheme. AUC is reported on the seen-domain CASIAv2 and seven unseen-domain datasets. (·) denotes the standard deviations of five-fold cross-validation experiment results. Red and Blue 
+
+denote the best and second best results.                                                         
+
+> Seen Domain Unseen Domain CASIAv2 [65] DIS25K [71] CASIAv1 [14] Columbia [25] IMD2020 [63] CoMoFoD [72] In the Wild [30] MSID [35] Type Method
+> AUC AUC AUC AUC AUC AUC AUC AUC
+> Conv.
+> MVSSNet [13] 69.2 (8.1) 64.9 (2.8) 69.7 (1.6) 58.8 (1.3) 64.4 (2.2) 59.9 (2.2) 60.6 (1.9) 73.6 (1.6)
+> Trans.
+> M2SFormer [61] 83.8 (5.1) 71.7 (1.4) 81.3 (0.8) 64.7 (3.4) 68.5 (1.4) 64.7 (1.2) 64.7 (0.9) 79.5 (0.6)
+> IMDPrompter [85] 66.8 (7.3) 65.8 (1.3) 72.0 (1.6) 59.6 (3.1) 64.4 (1.4) 60.9 (0.8) 63.0 (2.3) 67.0 (1.4) SAFIRE [44] 79.7 (1.8) 76.0 (0.8) 78.5 (0.4) 69.7 (2.4) 79.4 (0.7) 73.5 (0.8) 81.2 (1.3) 67.9 (0.7)
+> SAM
+> SARIF (Ours) 83.3 (5.4) 76.1 (1.5) 79.3 (0.9) 73.2 (1.7) 77.1 (1.2) 83.8 (1.2) 76.2 (2.3) 77.8 (1.0)
+
+Table 8: IoU/DSC results across refinement stages. Intermediate masks are evaluated without retraining. IoU and DSC are reported in the form of IoU/DSC. Red denotes the best or tied-best result.                                
+
+> Seen Domain Unseen Domain CASIAv2 [65] DIS25K [71] CASIAv1 [14] IMD2020 [63] Stage
+> IoU/DSC IoU/DSC IoU/DSC IoU/DSC Init mask 53.3/61.9 39.6/45.8 50.2/57.3 38.2/46.6 5-block 54.0/62.5 40.3/46.5 51.0/57.7 38.7/47.5 11-block 54.4/62.8 41.0/47.1 51.5/58.0 39.3/47.9 17-block 55.6/62.8 41.3/47.4 51.6/58.2 39.6/48.0 23-block 56.4/63.0 41.5/47.7 51.8/58.3 40.0/48.2 Final mask 56.7/63.1 41.5/47.8 52.0/58.4 40.4/48.4
+
+2.1 percentage-point increase in FPR. Taken together, these results support the qualitative observation that SARIF maintains strong localization performance while keeping responses on pristine images relatively limited. 
+
+10 Additional Threshold-Independent Evaluation 
+
+Table 7 reports representative AUC results under the CASIAv2 training scheme. AUC evaluates threshold-independent pixel-level separability and therefore com-plements the DSC and mIoU results reported in the main paper. SARIF achieves the best AUC on DIS25K, Columbia, and CoMoFoD, and obtains the second-best result on CASIAv2, CASIAv1, IMD2020, In the Wild, and MSID. These results indicate that SARIF maintains strong discriminative ability across both seen and unseen domains, rather than relying on a particular binarization thresh-old. Although SAFIRE shows stronger AUC on IMD2020 and In the Wild, and M2SFormer performs best on CASIAv2, CASIAv1, and MSID, SARIF re-mains consistently competitive across all evaluated datasets, supporting its cross-domain robustness. 
+
+11 Refinement-Stage Analysis 
+
+Table 8 shows that the mask quality improves progressively across refinement stages. Starting from the initial mask, both IoU and DSC generally increase as the feedback-guided decoder receives additional forgery-specific cues from the SARIF: Segment Anything for Robust Image Forensics 5
+
+selected SAM-ViT global-attention blocks. The final mask achieves the best or tied-best result on all evaluated datasets, indicating that the proposed refinement process accumulates useful spatial evidence rather than merely repeating the same decoding operation. The gains become smaller in later stages, suggesting a saturating refinement behavior and an accuracy–efficiency trade-off when earlier stopping is required. 
+
+12 Technical Novelty and Positioning 
+
+To clarify the technical distinction of SARIF from recent SAM-based forgery lo-calization methods, we provide a method-specific comparison with IMDPrompter, SAMIF, and SAFIRE. IMDPrompter learns multi-view prompts and selects ef-fective prompts for image manipulation detection, whereas SARIF derives its prompts from the residual features between frozen and LoRA-adapted SAM en-coders. SAMIF incorporates a high-frequency branch to adapt SAM for inpaint-ing forensics, while SARIF focuses on extracting task-specific residual cues from a dual-encoder design. SAFIRE performs grid-prompted source-region segmen-tation and aggregates the resulting predictions, whereas SARIF refines masks through feedback-guided prompting using the previous prediction as a mask prompt. Therefore, SARIF is not merely another automatic prompt-generation variant; its core novelty lies in coupling dual-encoder residual extraction with feedback-guided prompting for robust image forgery localization.
