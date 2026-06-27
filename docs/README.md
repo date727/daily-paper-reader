@@ -6,79 +6,85 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-06-26
-- 运行时间：2026-06-26 21:29:45 UTC
+- 最新运行日期：2026-06-27
+- 运行时间：2026-06-27 20:58:01 UTC
 - 运行状态：成功
-- 本次总论文数：19
-- 精读区：7
+- 本次总论文数：21
+- 精读区：9
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读7篇、速读12篇论文，聚焦生成模型与因果推理等前沿方向。  
-高分论文集中探讨生成模型在图像合成与数据校准中的优化策略，并深入分析因果推理在AI决策中的挑战与突破。  
-建议关注生成模型与因果推理的交叉应用，了解AI在复杂任务中的最新进展。
-- 详情：[/202606/26/README](/202606/26/README)
+今日精读9篇高分论文，速读12篇前沿研究，聚焦AI生成模型与领域适应技术突破。  
+高分论文揭示视觉标记扩散模型在跨域应用中的潜力及训练免费检测器的脆弱性。  
+建议关注领域适应技术如何提升模型泛化能力，并了解AI检测器在预处理与压缩下的可靠性问题。
+- 详情：[/202606/27/README](/202606/27/README)
 
 ### 精读区论文标签
-1. [Few-Shot Hyperspectral Aphid Detection via FastGAN Synthetic Data Generation, Transformer-Based Classification and Explainable AI](/202606/26/2606.21267v1-few-shot-hyperspectral-aphid-detection-via-fastgan-synthetic-data-generation-transformer-based-classification-and-explainable-ai)  
+1. [VT-DUDA: Visual Token Conditioning for Diffusion-guided Unsupervised Domain Adaptation](/202606/27/2606.21700v1-vt-duda-visual-token-conditioning-for-diffusion-guided-unsupervised-domain-adaptation)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-2. [Are Text-to-Image Models Inductivist Turkeys? A Counterfactual Benchmark for Causal Reasoning](/202606/26/2606.24548v2-are-text-to-image-models-inductivist-turkeys-a-counterfactual-benchmark-for-causal-reasoning)  
+   evidence：使用扩散模型生成对抗扰动图像
+2. [NullFlow: One-Step Generative Reconstruction](/202606/27/2606.22696v1-nullflow-one-step-generative-reconstruction)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-3. [MIRAGE: Protecting against Malicious Image Editing via False Moderation](/202606/26/2606.26199v1-mirage-protecting-against-malicious-image-editing-via-false-moderation)  
+   evidence：涉及生成式图像对抗扰动与鲁棒性
+3. [Are Safety Guarantees in Neural Networks Safe? How to Compute Trustworthy Robustness Certifications](/202606/27/2606.23858v1-are-safety-guarantees-in-neural-networks-safe-how-to-compute-trustworthy-robustness-certifications)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击防御方法
-4. [Adversarial Diffusion Across Modalities: A Fusion Survey of Attacks, Defenses, and Evaluation for Text, Vision, and Vision-Language Models](/202606/26/2606.26566v1-adversarial-diffusion-across-modalities-a-fusion-survey-of-attacks-defenses-and-evaluation-for-text-vision-and-vision-language-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-5. [Full spectrum Unlearnable Examples via Spectral Equalization](/202606/26/2606.26719v1-full-spectrum-unlearnable-examples-via-spectral-equalization)  
+   evidence：鲁棒性认证方法
+4. [S1-Omni-Image: A Unified Model for Scientific Image Understanding, Generation, and Editing](/202606/27/2606.24441v1-s1-omni-image-a-unified-model-for-scientific-image-understanding-generation-and-editing)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：生成式图像对抗鲁棒性
-6. [When AUC Misleads: Polarization-Aware Evaluation of Deepfake Detectors under Domain Shift](/202606/26/2606.19184v1-when-auc-misleads-polarization-aware-evaluation-of-deepfake-detectors-under-domain-shift)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动下的深度伪造检测评估方法
-7. [Adversarial Bandit Optimization with Globally Bounded Perturbations to Convex Losses](/202606/26/2606.19891v2-adversarial-bandit-optimization-with-globally-bounded-perturbations-to-convex-losses)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
+5. [AdversaBench: Automated LLM Red-Teaming with Multi-Judge Confirmation and Cross-Model Transferability](/202606/27/2606.24589v1-adversabench-automated-llm-red-teaming-with-multi-judge-confirmation-and-cross-model-transferability)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击生成方法研究
+6. [IV-CoT: Implicit Visual Chain-of-Thought for Structure-Aware Text-to-Image Generation](/202606/27/2606.24849v1-iv-cot-implicit-visual-chain-of-thought-for-structure-aware-text-to-image-generation)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：生成式图像对抗扰动
+7. [Transferable Attack against Face Swapping in an Extended Space](/202606/27/2606.25376v1-transferable-attack-against-face-swapping-in-an-extended-space)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击生成方法
+8. [Security and Privacy in Retrieval-Augmented Generation: Architectures, Threats, Defenses, and Future Directions for Building Trustworthy Systems](/202606/27/2606.25533v1-security-and-privacy-in-retrieval-augmented-generation-architectures-threats-defenses-and-future-directions-for-building-trustworthy-systems)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：涉及对抗攻击的防御技术
+9. [Neural Architecture Search for Generative Adversarial Networks: A Comprehensive Review and Critical Analysis](/202606/27/2606.26169v1-neural-architecture-search-for-generative-adversarial-networks-a-comprehensive-review-and-critical-analysis)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：生成对抗网络架构搜索的全面综述
 
 ### 速读区论文标签
-1. [Calibrating Generative Models to Feature Distributions with MMD Finetuning](/202606/26/2606.19496v1-calibrating-generative-models-to-feature-distributions-with-mmd-finetuning)  
+1. [How Fragile Are Training-Free AI-Generated Image Detectors? A Controlled Audit of Score Direction, Preprocessing, and Compression](/202606/27/2606.20488v1-how-fragile-are-training-free-ai-generated-image-detectors-a-controlled-audit-of-score-direction-preprocessing-and-compression)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动生成方法
-2. [Neural Additive and Basis Models with Feature Selection and Interactions](/202606/26/2606.19850v1-neural-additive-and-basis-models-with-feature-selection-and-interactions)  
+   evidence：训练无关检测器评估
+2. [Adversarial observations in probabilistic State-Space Models for robust Reinforcement Learning](/202606/27/2606.20880v1-adversarial-observations-in-probabilistic-state-space-models-for-robust-reinforcement-learning)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-3. [MetaResearcher: Scaling Deep Research via Self-Reflective Reinforcement Learning in Adversarial Virtual Environments](/202606/26/2606.19893v1-metaresearcher-scaling-deep-research-via-self-reflective-reinforcement-learning-in-adversarial-virtual-environments)  
+   evidence：对抗攻击的防御策略
+3. [OTTER: A Red-Teaming System for Toxicity-Evading Jailbreak Prompt Optimization](/202606/27/2606.21077v1-otter-a-red-teaming-system-for-toxicity-evading-jailbreak-prompt-optimization)  
    标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击防御方法
+4. [DIPBox: A Multi-scale Testing Framework for Tracking Dataset Regeneration](/202606/27/2606.21240v1-dipbox-a-multi-scale-testing-framework-for-tracking-dataset-regeneration)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击生成技术
+5. [Reconstructing Randomly Masked Spectra Helps DNNs Identify Discriminant Wavenumbers](/202606/27/2606.21289v1-reconstructing-randomly-masked-spectra-helps-dnns-identify-discriminant-wavenumbers)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动下的光谱重建
+6. [LambdaMark: Semantic Audio Watermarking for Robustness and Radioactivity](/202606/27/2606.21365v1-lambdamark-semantic-audio-watermarking-for-robustness-and-radioactivity)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动下的图像模型保护
+7. [Causal Variational Deep Embedding: A Family of Interventional Generators for Confounded Images](/202606/27/2606.21806v1-causal-variational-deep-embedding-a-family-of-interventional-generators-for-confounded-images)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动与因果生成
+8. [Nonparametric Deconvolution and Denoising using Simulation Based Inference](/202606/27/2606.21907v1-nonparametric-deconvolution-and-denoising-using-simulation-based-inference)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：基于模拟的图像去噪与反卷积
+9. [Object-Centric Dataset Resources for Constrained-Data Image Generation and Augmentation](/202606/27/2606.21113v1-object-centric-dataset-resources-for-constrained-data-image-generation-and-augmentation)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：生成式图像对抗扰动
+10. [Context-Aware Generative AI for Automated Telecom Test Script Generation](/202606/27/2606.21151v1-context-aware-generative-ai-for-automated-telecom-test-script-generation)  
+   标签：评分：6.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+11. [BadDreamer: Transferable Backdoor Attacks against Video World Models for Autonomous Driving](/202606/27/2606.21172v1-baddreamer-transferable-backdoor-attacks-against-video-world-models-for-autonomous-driving)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：视频世界模型对抗攻击
+12. [Boundary-by-Mask: Few-Shot Instance Segmentation with Mask-Conditioned Boundary Learning for Texture-Poor Industrial Parts](/202606/27/2606.21594v1-boundary-by-mask-few-shot-instance-segmentation-with-mask-conditioned-boundary-learning-for-texture-poor-industrial-parts)  
+   标签：评分：6.0/10、query:image-adversarial
    evidence：对抗攻击与防御方法
-4. [BAFIS: Dataset + Framework to assess occupational Bias and Human Preference in modern Text-to-image Models](/202606/26/2606.20241v1-bafis-dataset--framework-to-assess-occupational-bias-and-human-preference-in-modern-text-to-image-models)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型影响
-5. [Modest, artistic, and radical solutions to the environmental impact of image-generating machine learning](/202606/26/2606.19957v1-modest-artistic-and-radical-solutions-to-the-environmental-impact-of-image-generating-machine-learning)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-6. [UNITY: Attention Flow Networks for Adaptive Conditioning in Diffusion](/202606/26/2606.20971v1-unity-attention-flow-networks-for-adaptive-conditioning-in-diffusion)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：研究生成式图像对抗鲁棒性
-7. [FlowCodec: One-Step Flow Prior for Generative Image Compression](/202606/26/2606.21030v1-flowcodec-one-step-flow-prior-for-generative-image-compression)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成技术
-8. [SARIF: Segment Anything for Robust Image Forensics](/202606/26/2606.21108v1-sarif-segment-anything-for-robust-image-forensics)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：图像篡改检测方法
-9. [Training-Free Metrics for Synthetic Object Detection Data: A Proxy for Detector Performance](/202606/26/2606.19817v1-training-free-metrics-for-synthetic-object-detection-data-a-proxy-for-detector-performance)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的合成数据评估
-10. [Analyzing Defensive Misdirection Against Model-Guided Automated Attacks on Agentic AI Systems](/202606/26/2606.20470v1-analyzing-defensive-misdirection-against-model-guided-automated-attacks-on-agentic-ai-systems)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：生成模型的鲁棒性
-11. [Balancing Performance and Diversity in GRPO Autoregressive Text-to-Image Post-Training](/202606/26/2606.21498v1-balancing-performance-and-diversity-in-grpo-autoregressive-text-to-image-post-training)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的策略优化
-12. [PaaF: Raising the perceived quality of INR-Based Image Compression](/202606/26/2606.21655v1-paaf-raising-the-perceived-quality-of-inr-based-image-compression)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对图像压缩的影响
 
 
 ### ⚡ 这个站点能做什么

@@ -1,0 +1,1526 @@
+Title: DIPBox: A Multi-scale Testing Framework for Tracking Dataset Regeneration
+
+URL Source: https://arxiv.org/pdf/2606.21240v1
+
+Published Time: Tue, 23 Jun 2026 00:42:37 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# DIPBox : A Multi-scale Testing Framework for Tracking Dataset Regeneration 
+
+# Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗,Hao Chen §
+
+> ∗
+
+Shanghai Jiao Tong University, China 
+
+> †
+
+Southeast University, China 
+
+> ‡
+
+Guizhou University, China 
+
+> §
+
+The University of Hong Kong, China 
+
+## Abstract 
+
+Training datasets have tremendous proprietary value and are vul-nerable to unauthorized copying. Existing defenses mainly focus on tracking individual data points, but pay little attention to the threat of dataset regeneration. Through a measurement study of public tumor datasets, we identify substantial real-world partial-dataset replication, raising concerns about potential license noncompliance. To counter the challenge of tracking previously unknown adversar-ial regeneration, our key insight is that regeneration that preserves model utility inevitably preserves measurable signals across multi-ple feature scales. We categorize these dataset features into sample-, set-, and distribution-level features and design four similarity met-rics to accurately identify regeneration. Based on these metrics, we develop DIPBox , which to our knowledge is the first testing frame-work that tracks regeneration suspects via multi-scale similarity testing across a spectrum of defender access settings, from limited to full information. We further provide a learning-theoretic analysis that justifies these multi-scale metrics and formalizes an inherent utility–divergence trade-off, implying fundamental limits on eva-sive regeneration. Extensive experiments on 16 vision and text base datasets, 320 regenerated datasets, and 590 derived models validate that DIPBox outperforms previous solutions while characterizing its robustness and limits under three adaptive attacks. 
+
+## CCS Concepts 
+
+• Security and privacy → Digital rights management .
+
+## Keywords 
+
+Dataset regeneration, unauthorized usage, similarity testing 
+
+## 1 Introduction 
+
+Training datasets are copyrightable assets because of the high cost of curation and the increasing scarcity of high-quality data sources [ 21 ], but they are routinely replicated and used without the owner’s con-sent, leading to potential copyright or license violations [ 64 ]. For example, more than 8,284 open-source datasets on Hugging Face use Creative Commons Non-Commercial licenses, among which 1,621 also prohibit derivatives, but practical compliance mechanisms are lacking [ 45 ]. Even worse, the absence of an explicit license for over 70% of datasets on GitHub and Hugging Face complicates legal accountability [45]. Existing dataset tracking approaches can be categorized into 
+
+proactive and passive defenses. Proactive defenses watermark datasets prior to release via backdoors [ 40 , 41 ] or feature perturbations [ 32 ,Source dataset (Data, Label) Regeneration                          
+
+> Attack
+> Same
+> (,0) (,5)
+> (,2) (,1)
+> (,3) (,4)
+> (,0) (,4)
+> (,4) (,1)
+> (,5) (,3)
+> Protected dataset Released dataset Pirated dataset
+> Protections before release
+> Watermark
+> Fingerprint (,0) (,5)
+> (,2) (,1)
+> (,3) (,4)
+> Tracking
+> Independent
+
+Figure 1: The adversary regenerates a derived dataset to evade detection and gain economic benefit. 
+
+55 ]. Passive defenses, which apply to in-the-wild datasets, instead exploit model memorization to infer whether a model was trained on a target dataset in whole or in part [ 18 , 19 , 31 , 42 , 49 ]. A key limitation of prior art is its reliance on memorization of individual data points to track a dataset in its entirety, together with the as-sumption that adversaries directly reuse or at most mildly modify the pirated data. This leaves room for real-world adversaries to evade detection via regeneration attacks (see Figure 1), including ag-gressive per-datum modification, set regrouping [ 45 ], or generative reproduction ( e.g. , using Stable Diffusion) that yields no identical samples while preserving equivalent model-training utility [67]. To validate this threat, we first conduct a measurement study of publicly available tumor datasets and identify substantial duplica-tion that suggests potential license noncompliance. For example, a dataset licensed to restrict derivatives and commercial use appears to have been repackaged into four other open-source datasets, with an exact-duplicate overlap rate ranging from 49% to 100%. These measurements confirm the existence of regenerated datasets in practice and motivate our research question: How can we robustly track dataset regeneration for datasets released on public platforms? 
+
+Similar to other digital artifacts, the core challenge lies in han-dling varied and unforeseen regeneration strategies under the con-straints of limited access ( e.g. , a pirated trial subset) or no access ( e.g. , only a trained model) to the full pirated dataset. To tackle this challenge, we observe that, regardless of efforts to obfuscate regen-eration, an adversary typically seeks to preserve dataset quality so that equally accurate models can be trained—an objective that re-sembles software infringement. Consequently, inspired by software copyright protections that compare multiple components [ 1, 16 ]( e.g. , code, functionality, interfaces), we adopt a multi-scale similar-ity testing approach that delivers robustness and extensibility to new tracking metrics. 
+
+> 1
+> arXiv:2606.21240v1 [cs.CR] 19 Jun 2026 Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗, and Hao Chen §
+
+Table 1: Comparison with prior work on dataset regeneration tracking. In the suspect-dataset access column, denotes no dataset access and G#denotes access to a subset. In the suspect-model access column, denotes black-box query access and 
+
+#denotes white-box access. Commas indicate support for multiple settings. Methods Type Non-Invasiveness Access to Suspect Dataset XA                                          
+
+> Access to Suspect Model 𝑓 A
+> Regeneration Attacks
+> ❶Post-processing ❷Reorganization ❸Polishing Radioactive data [55], DVBW [41] Watermarking ✗#,✗✗✗
+> Data-use Audit [32] Watermarking ✗✓✓✗
+> Dataset Inference (DI) [48, 49] Inference ✓#,✗✗✗
+> EMA [31], MeFA [42], RAI 2[18] Inference ✓✓✓✗
+> ORL-AUDITOR [19] Inference ✓✗✓✗
+> DIPBox (Ours) Similarity Testing ✓G#,#,✓✓✓
+
+This paper introduces DIPBox , which to our knowledge is the first framework designed for third parties ( e.g. , responsible shar-ing platforms) to track dataset regeneration via multi-scale testing against the source. We identify three core feature levels targeted by regeneration attacks: sample-level, set-level (shallow features), and distribution-level (deep features). To quantify feature discrep-ancy, in addition to existing metrics such as output distance [18 , 19 ]and sample distance that primarily capture shallow features, we introduce two new metrics— gradient distance and distribution dis-tance —to generalize testing across scales. We further design metric-adaptive test-case selection and a principled decision procedure, covering a broader spectrum of regeneration attacks under wider access settings compared with prior work (see Table 1) and provide a learning-theoretic analysis (see Section 4.5) that (i) justifies why utility-preserving regeneration retains detectable signals, and (ii) formalizes a utility-divergence trade-off for evasive regeneration. We implement DIPBox as an automated toolbox to support fu-ture measurement and defense research. To evaluate, we build a regeneration benchmark covering 320 regenerated datasets derived from 16 widely used base datasets and 590 trained models spanning 12 classic and foundational model architectures. The results show that DIPBox provides accurate, evidence-based identification of regenerated datasets, remains model-agnostic, and is resilient to diverse adversarial training conditions and regeneration attacks. For instance, DIPBox can track all distribution-level regeneration variants of FairFace containing 128 ×128 facial images. Additionally, 
+
+DIPBox surpasses state-of-the-art methods [18, 32] with at least a 25% higher TPR, due to its holistic, multi-scale characterization of dataset features. Finally, we show that in our evaluated adaptive at-tacks, evading DIPBox requires substantial utility loss or additional computation and memory cost. 
+
+Contribution. In summary, our contributions are: 
+
+• We conduct a measurement study of real-world datasets and identify substantial duplication that suggests potential license noncompliance. 
+
+• We formalize the problem of tracking dataset regeneration and present attack primitives. 
+
+• We propose DIPBox , which to our knowledge is the first exten-sible framework for identifying dataset regeneration based on multi-scale testing metrics with a learning-theoretic analysis. 
+
+• We conduct extensive evaluations and implement DIPBox as an automated toolbox to support future research. 
+
+Table 2: Statistics of tumor datasets in the measurement. Dataset Size Classes License Repository ID                                 
+
+> D0 275 10 CC-BY-NC-ND-4.0 TrainingDataPro/brain-mri-dataset D1 447 4CC-BY-NC-ND-4.0 haydenbanz/TumorVisionDatasets D2 800 4Apache-2.0 thubZ9/MRI_Classification-Tumor D3 506 //miladfa7/Brain-MRI-Images-for-Brain-Tumor-Detection D4 7342 3/youngp5/BrainMRI D5 1429 2/tanzuhuggingface/brainmri D6 3264 4MIT sartajbhuvaji/Brain-Tumor-Classification D7 7023 4/Simezu/brain-tumour-MRI-scan
+
+D1 D2 
+
+(a) Exact dupli-cate examples. D0 D1 D2 D3 D4 D5 D6 D7                                                         
+
+> Target Dataset
+> D0 D1 D2 D3 D4 D5 D6 D7
+> Source Dataset
+> 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 0.00 0.00 0.51 0.04 0.15 0.49 1.00 0.57
+> 0.00 0.31 0.00 0.03 0.14 0.50 0.93 1.00
+> 0.00 0.08 0.11 0.00 0.34 0.33 0.38 0.45
+> 0.00 0.01 0.03 0.07 0.00 0.07 0.07 0.38
+> 0.00 0.31 0.41 0.06 0.17 0.00 1.00 1.00
+> 0.00 0.22 0.31 0.03 0.08 0.44 0.00 0.78
+> 0.00 0.07 0.17 0.05 0.23 0.25 0.39 0.00
+
+(b) Proportion of common samples in the source dataset among the measured datasets. 
+
+Figure 2: Measurement on open-source brain tumor datasets. 
+
+## 2 Motivating Measurement 
+
+We conduct a measurement of real-world datasets and identify potentially regenerated datasets. We manually screened over 74 datasets with keywords “brain” and “tumor” on Hugging Face to ensure they target the same domain and task. We filter for datasets with license “CC-BY-NC-ND-4.0”, which restricts commercial use and derivative works. Then, we select datasets with less restrictive or unspecified licenses using the following criteria: (i) the dataset has been downloaded at least 10 times; (ii) the dataset is not de-scribed as derived from existing datasets; and (iii) the dataset is downloadable and usable. In the end, we gathered 8 datasets (see Table 2), annotated from “D0” to “D7”, where “D0” and “D1” have li-censes forbidding commercial use and derivatives, while the rest are more permissive or unspecified. We unify the data size to 256 × 256 
+
+and convert all images to grayscale. We observe exact duplicate samples among the collected datasets. Figure 2a presents examples of common samples ( 𝐿 2 distance is 0)  
+
+> 2DIPBox : A Multi-scale Testing Framework for Tracking Dataset Regeneration
+
+between two datasets D1 and D2. Furthermore, for all datasets, we identify candidate duplicates by thresholding 𝐿 2 distance at 0.1 and manually verify the resulting pairs (see Section D.1 for verification details). In Figure 2b, each grid shows the proportion of duplicate samples in the source dataset. There are three notable findings: (1) D0 has no overlapping samples with the measured datasets, which is also verified through manual checking. Consider-ing that D0 is a trial subset for attracting users to purchase the complete dataset, it may originate from a different data source than the commonly used tumor data. (2) Despite the more restrictive license, D1 dataset might be composed of the existing samples ( e.g. , subset of D6), be-cause D1 was uploaded later than the other datasets. This might raise compliance and attribution concerns. (3) Dataset regeneration is more prevalent among datasets with more permissive or unspecified licenses. This not only confuses users about data sources but also causes potential disputes in the future. These findings suggest that real-world dataset regeneration can arise as sample-level or set-level reuse (Attack ❶ and ❷ defined in Section 3) and motivate us to investigate whether existing defenses remain robust under such regeneration primitives. For example, since D0 is a trial subset used to attract users, an adversary may purchase, regenerate and resell the full dataset. 
+
+## 3 Problem Statement 
+
+In this section, we formalize the problem of tracking regenerated datasets and present the adversary’s goals and capacities. 
+
+## 3.1 Formulation & Threat Model 
+
+We focus on small-scale domain datasets , typically used for train-ing specialized classification models [ 75 ] and widely used across the AI sector [ 25 ]. Constructing high-quality domain datasets is resource-intensive, with data source quality being crucial for ensur-ing model performance with real-world test data [ 45 , 50 ]. Consider an example of Electroencephalography (EEG) datasets: a medical company using up-to-date infrastructure from its clients’ EEG data developed the FACED [ 14 ] dataset and achieved a 77.6% accuracy for emotion recognition. In contrast, competitors without access to FACED but using similar yet lower-quality EEG datasets like SEED-IV [ 77 ] and DEAP [ 36 ] could only achieve up to 27.1% accuracy (Appendix D.2), highlighting the need for dataset tracking in the event of data breaches. We consider three parties: the victim V, the adversary A, and the defender ( a.k.a. , auditor). V owns a proprietary dataset XV .The victim also trains a model 𝑓 V on XV . The value of XV lies in the fact that its distribution PV closely matches the real-world distribution, leading to models that achieve higher accuracy on live test data P𝑡 after deployment, i.e. , XV ∼ P V ≈ P 𝑡 . For the adversary A, directly collecting in-distribution data is infeasible due to exclusive data sources [ 6] or high cost. We assume A has access only to a distribution P (0)A not identically distributed as 
+
+P𝑡 [76 ], thus the model 𝑓 P (0)A
+
+trained on P (0)A achieves at least 𝜀 𝑢      
+
+> V,ADataset Regeneration Attacks
+> Attack ❶: Sample-level
+> Attack ❷: Set-level
+> Attack ❸: Distribution-level
+> Train Generate
+> Mix
+> Source Dataset
+> Onion-layer view
+> Sample Distribution
+> Data samples
+> Distribution
+> Distribution
+> Distribution
+> Data samples
+> Data samples
+
+Figure 3: Overview of the regeneration attack primitives on our identified dataset features. The dataset has an onion-layered structure, where the surface-level feature ( e.g. , da-tum) is the skin and the inner feature ( i.e. , distribution) rep-resents the onion core. The adversary can construct a pirated dataset by regeneration attacks at three levels. 
+
+lower test accuracy: 
+
+E
+
+> (x,𝑦 )∼P 𝑡
+
+[𝑣 (𝑓 P (0)A
+
+(x), 𝑦 )] < E
+
+> (x,𝑦 )∼P 𝑡
+
+[𝑣 (𝑓 V (x), 𝑦 )] − 𝜀 𝑢 
+
+> V,A
+
+, (1) where 𝑣 is the utility function and E is the expectation. We denote the adversary’s auxiliary dataset drawn from P (0)A as 
+
+X (0)A ∼ P (0)A .We assume the adversary obtains XV through leakage or other unauthorized means, and then crafts and distributes XA on plat-forms for profit. The adversary also knows the existing protec-tions [ 32 , 40 , 41 ], thus cannot directly reuse XV ; instead, they regenerate their dataset XA (of distribution PA ) based on XV and train their model 𝑓 A . The adversary can perform hyperparameter tuning to maximize the accuracy of 𝑓 A . Formally, we model the regeneration and tracking as an adversarial game: 1. Initially, the adversary has X (0)A and XV .2. The adversary regenerates XA ← A (X V , X (0)A ).3. The defender calculates 𝑑 V,A ← DIST (X V , XA ).4. The adversary wins if 𝑑 V,A > 𝜏 V,A and achieves: 
+
+E
+
+> (x,𝑦 )∼P 𝑡
+
+[𝑣 (𝑓 A (x), 𝑦 )] − E
+
+> (x,𝑦 )∼P 𝑡
+
+[𝑣 (𝑓 V (x), 𝑦 )] < 𝜀 𝑢 
+
+> V,A
+
+, (2) where 𝑣 is the dataset utility function, 𝜀 𝑢  
+
+> V,A
+
+is the utility drop limit, 𝜏 V,A is the predefined threshold by V.In this formulation, DIST (· , ·) is a generic distance-based auditing procedure; DIPBox instantiates it using multiple distances and a joint decision rule (see Section 4). The adversary aims to win the game by: 
+
+• Preserving Utility : 𝑓 A has comparable accuracy on P𝑡 .
+
+• Evading Defense : XA cannot be judged as a copy of XV .
+
+## 3.2 Attack Primitives 
+
+To satisfy Eq. 2, an adversary must perturb the dataset while ensur-ing its utility. Motivated by software infringement analysis, which leverages both shallow ( e.g. , layout) and inherent ( e.g. , source code) features, we propose a top-down dataset feature hierarchy. As shown in Figure 3, we distinguish shallow features at the sam-ple and set levels from deep features at the distribution level, and 
+
+> 3Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗, and Hao Chen §
+
+categorize attack primitives accordingly into sample-, set-, and distribution-level primitives. 
+
+• Attack ❶: Post-processing Attack. The adversary post-processes (e.g. , via Gaussian blurring) all samples in XV to prevent the auditor from identifying copied samples. 
+
+• Attack ❷: Reorganization Attack. The adversary changes the dataset organization by combining a subset of XV with curated data following P (0)A to build XA .
+
+• Attack ❸: Polishing Attack. The adversary uses a generator (i.e. , generative models trained on XV or public foundation models) to learn PV . The generator produces XA from the same distribution as XV which has no identical sample but can train models of comparably high test accuracy [58, 67]. We find that dataset regenerations can generally be decomposed into a combination of three attack primitives. However, combining them ( e.g. , combining ❸ and ❶) often compromises a dataset’s util-ity (see Section 5). Therefore, instead of studying these complex combinations, we focus on individual primitives and vary their intensity to evaluate our tracking framework’s robustness. Recog-nizing that new primitives may appear in the future, we design our framework to be extensible (see Section 4). 
+
+## 4 System Design of DIPBox 
+
+In this section, we elaborate DIPBox ’s design goals, defender as-sumptions, and workflow overview. 
+
+## 4.1 Overview 
+
+4.1.1 Design Goals. DIPBox is tailored for tracking datasets from exclusive or scarce sources because of their proprietary value and the low likelihood of a coincidental match, which reflects a broader industry trend [ 46 ]. DIPBox can serve as a technical tool for audi-tors to support downstream legal assessment. Moreover, DIPBox 
+
+can automatically screen uploaded datasets for potential regenera-tion attempts, analogous to automated plagiarism detection [ 4] on preprint platforms. To sum up, the design goals include: 
+
+• Non-intrusiveness : The tracking should not damage the source dataset utility .
+
+• Robustness : The regeneration threat should be accurately iden-tified as long as the model-training utility is preserved. 
+
+• Efficiency : The tracking algorithm is of low complexity and only requires a small proportion of audited datasets. 
+
+• Extensibility : The framework should easily incorporate newer tracking metrics and should work under a variety of access levels to 𝑓 A and XA .
+
+4.1.2 Defender Assumptions. To support varying access settings, we consider the weakest defense assumption ( i.e. , black-box access to 𝑓 A and no access to XA ) and provide more accurate tracking as the defender capacity improves ( i.e. , white-box access to 𝑓 A and a subset of XA ). We clarify the defender capacity as follows: 1. Access to the suspect model 𝑓 A . We consider two possibilities: 1) black-box access. The defender can only query 𝑓 A to ob-tain confidence scores. 2) white-box access. The defender ( e.g. ,platform) can acquire 𝑓 A weights. 
+
+Algorithm 1: DIPBox (𝑓 V , XV , 𝑓 A, X𝑠 
+
+> A
+
+, 𝑁 𝑀 𝑎𝑢𝑑𝑖𝑡 , 𝑁 𝐷 𝑎𝑢𝑑𝑖𝑡 , 𝑠𝑒𝑒𝑑, MA, 𝑅 J )                                                                   
+
+> Input: Victim’s model 𝑓 Vand dataset XV, suspect model 𝑓 Aand subset X𝑠
+> A, audit set sizes 𝑁 𝑀 𝑎𝑢𝑑𝑖𝑡 and 𝑁 𝐷 𝑎𝑢𝑑𝑖𝑡 , random seed
+> 𝑠𝑒𝑒𝑑 , access mode MA, and judge requirement 𝑅 J
+> Output: Judgment J
+> // Audit set generation (Section 4.2)
+> 1X𝑀
+> J,X𝐷
+> J←GenerateAuditSet
+> (𝑓 V,XV, 𝑁 𝑀 𝑎𝑢𝑑𝑖𝑡 , 𝑁 𝐷 𝑎𝑢𝑑𝑖𝑡 , 𝑠𝑒𝑒𝑑 )
+> // Similarity metrics (Section 4.3)
+> 2sJ←SimilarityChecking ( X 𝑀
+> J,X𝐷
+> J, 𝑓 V,(𝑓 A,X𝑠
+> A),MA)
+> // Judge derived dataset (Section 4.4)
+> 3J ← Judging (sJ, 𝑅 J)
+> 4return J
+
+2. Access to the suspect dataset XA . Similarly, the defender has 1) no access to XA ’s samples, and 2) white-box access to the suspect sub-dataset X𝑠  
+
+> A
+
+, which is assumed to be uniformly sampled from XA .Note that white-box access to a subset X𝑠  
+
+> A
+
+is realistic. For in-stance, current open-source or commercial platforms often pro-vide a free preview subset ( e.g. , D0 in Table 2). Moreover, plat-forms or other parties responsible for copyright and license com-pliance [ 52 , 70 ], can, subject to sharer authorization or regulatory mandates, leverage privacy-preserving computing techniques ( e.g. ,Trusted Execution Environments (TEEs) [ 43 ]) to obtain partial or complete access to the dataset. 
+
+4.1.3 Workflow of DIPBox . As Figure 4 shows, DIPBox consists of three modules and four similarity metrics spanning sample-, set-, and distribution-level features. Algorithm 1 depicts the procedure of DIPBox .The Audit Set Creation module generates two audit sets X𝑀 
+
+> J
+
+and X𝐷  
+
+> J
+
+that are used by model-access and dataset-access metrics, respectively (Line 1). To ensure efficiency, the audit sets should be small-sized and represent the source dataset. To ensure extensibility, the Similarity Calculation module con-tains multiple metrics (Line 2) that depend on the defender’s access to (𝑓 A, XA ), denoted by access mode MA . For each metric sup-ported under MA , the defender computes a metric value (a distance; smaller indicates higher similarity) and then thresholds it in the next module. Finally, the Regeneration Judgment module accomplishes the judgment based on the comprehensive evaluation of requirements 
+
+𝑅 J , which will be elaborated in Section 4.4. The decision is accom-panied by per-metric scores, which help interpret which feature scale drives the decision. 
+
+## 4.2 Audit Set Creation 
+
+The defender first generates an audit set from XV . The audit set should be small to reduce computing cost and to well characterize the source dataset XV so that the derived datasets can be more accurately detected and independent datasets are less likely to be mistaken as a copy. We consider two audit sets X𝐷  
+
+> J
+
+and X𝑀 
+
+> J
+
+used to calculate similarities for dataset metrics and model metrics, respectively. The audit-set sizes are denoted by 𝑁 𝐷 𝑎𝑢𝑑𝑖𝑡 and 𝑁 𝑀 𝑎𝑢𝑑𝑖𝑡      
+
+> 4DIPBox : A Multi-scale Testing Framework for Tracking Dataset Regeneration ��and ��from �
+> Auditor
+
+1. Audit Set Creation  
+
+> Pirated Model ��
+> Audit Set
+
+2. Similarity Checking  
+
+> Pirated Dataset ��
+> Black-box access?
+> White-box access?
+> Partial white-box
+> access?
+
+3. Regeneration Detection 
+
+��
+
+> �
+
+��
+
+> �
+> No
+> Yes
+> Accountability
+> Provenance
+> Copyright
+> Privacy
+> Judge:
+> regenera
+> ted copy?
+> Output Distance (OD)
+> Gradient Distance (GD)
+> Sample Distance (SD)
+> Distribution Distance (DD)
+> OD Threshold
+> GD Threshold
+> SD Threshold
+> DD Threshold
+
+Figure 4: The workflow of DIPBox . With the created audit set, the auditor measures the similarity scores based on their access to the target model/dataset. The final judgment is based on thresholding and applies to multiple downstream investigations. (b)  𝒫𝒫 𝒱𝒱  ≇ 𝒫𝒫 𝑖𝑖𝑖𝑖𝑖𝑖𝑖𝑖𝑖𝑖 
+
+> 𝓟𝓟 𝓥𝓥
+
+(a)  𝒫𝒫 𝒱𝒱  ≅ 𝒫𝒫 𝒜𝒜 
+
+> 𝓟𝓟 𝓐𝓐
+> 𝓟𝓟 𝓥𝓥
+> 𝓟𝓟 𝒊𝒊𝒊𝒊𝒊𝒊𝒊𝒊𝒊𝒊
+
+Projection  Distribution 
+
+Samples from  𝒫𝒫 𝒜𝒜  Samples from  𝒫𝒫 𝒱𝒱  Samples from  𝒫𝒫 𝑖𝑖𝑖𝑖𝑖𝑖𝑖𝑖𝑖𝑖 
+
+Outlier space 
+
+Figure 5: Intuition of our audit set generation. The distribu-tion of a regenerated dataset is close to the victim’s distri-bution ( PV  PA ). On the other hand, for an independent dataset, the underlying distribution P𝑖𝑛𝑑𝑒𝑝 has larger distance to the victim’s distribution ( PV  P𝑖𝑛𝑑𝑒𝑝 ). We select the out-lier points ( i.e. , points on the shaded area) for further testing as they characterize the distribution contour. 
+
+for X𝐷  
+
+> J
+
+and X𝑀  
+
+> J
+
+, respectively. In Algorithm 1, we implement these steps as GenerateAuditSet (𝑓 V , XV , 𝑁 𝑀 𝑎𝑢𝑑𝑖𝑡 , 𝑁 𝐷 𝑎𝑢𝑑𝑖𝑡 , 𝑠𝑒𝑒𝑑 ) that outputs (X 𝑀  
+
+> J
+
+, X𝐷  
+
+> J
+
+). When the defender has access to the suspect sub-dataset X𝑠  
+
+> A
+
+, we uniformly sample from the victim dataset, i.e. , X𝐷  
+
+> J
+
+=
+
+Uniform (X V , 𝑁 𝐷 𝑎𝑢𝑑𝑖𝑡 , 𝑠𝑒𝑒𝑑 ), to better represent the distribution of 
+
+XV , where Uniform denotes a uniform sampler seeded with 𝑠𝑒𝑒𝑑 .Considering the case with black-box or white-box access to the suspect model 𝑓 A , our insight is leveraging outliers to enlarge the difference between regenerated and independent datasets. As illustrated in the Figure 5 (a), such outliers depict the dataset shape in the distribution space. Hence, the regeneration effect on models can be amplified on the outliers, leading to more accurate detection. For an independent dataset which follows a different P𝑖𝑛𝑑𝑒𝑝 
+
+PV , as shown in Figure 5 (b), the peripheral points can better char-acterize the distribution shift than the in-distribution points which are basically easy-to-fit samples. Since the outliers are generally hard to fit, we sample 𝑁 𝑀 𝑎𝑢𝑑𝑖𝑡 high-loss points as our audit set: 
+
+X𝑀  
+
+> J
+
+= Sample ({ 𝑥 |𝑥 ∈ X V ∧ 𝑙 (𝑓 V (𝑥 )) ≥ 𝜏 𝑎𝑢𝑑𝑖𝑡 }, 𝑁 𝑀 𝑎𝑢𝑑𝑖𝑡 ), (3) where 𝑙 is the loss function, 𝜏 𝑎𝑢𝑑𝑖𝑡 is the threshold of outlier range. 
+
+## 4.3 Similarity Calculation 
+
+In this section, we present the four similarity metrics under different access modes. As illustrated in Figure 4, the metrics are divided 
+
+Table 3: Summary of similarity metrics. Similarity Metric Defense Target Defender Access           
+
+> XA𝑓 A
+> Output Distance (OD) Sample & set features /
+> Gradient Distance (GD) /#
+> Sample Distance (SD) G#/Distribution Distance (DD) Distribution features G#/
+> : black-box; #: white-box; G#: partial white-box; /: not involved.
+
+into two categories: metrics requiring model access and metrics requiring dataset access. Table 3 presents the defender access and target for each metric. If the defender does not have the required access for a metric, then DIPBox skips this metric and proceeds with the rest. Note that metrics designed for black-box model access can also be tested with white-box model access, and all metrics can be evaluated when the auditor has white-box access to the suspect model and partial white-box access to the suspect dataset. The final judgment (Section 4.4) is based on the holistic evaluation of metrics. 
+
+4.3.1 Metrics with Model Access. Inspired by previous works [ 19 ,49 ], we found model memorization on training samples can reli-ably assess shallow dataset features. Based on the access to the suspect model 𝑓 A , we propose two model-agnostic metrics, Output Distance (OD), adapting from prior work [ 18 , 19 ] and our novel metric Gradient Distance (GD), respectively. 
+
+Output Distance. The OD measures the distance of outputs on the audit set X𝑀  
+
+> J
+
+between the victim’s model 𝑓 V and the adversary’s model 𝑓 A . Since the audit set typically comprises hard-to-learn sam-ples, a lower value indicates a higher likelihood that the adversarial model 𝑓 A has also been trained on these audit samples. We use 𝑙 𝑝 
+
+norm to measure the distance between outputs: 
+
+𝑂𝐷 (𝑓 V , 𝑓 A, X𝑀  
+
+> J
+
+) = 1
+
+X𝑀 
+
+> J
+
+∑︁ x∈ X 𝑀 
+
+> J
+
+∥𝑓 V (x) − 𝑓 A (x)∥ 𝑝 , (4) where ∥·∥ 𝑝 means the 𝑙 𝑝 norm. There are also other similar metrics such as Jensen-Shannon distance [ 22 ] in place of 𝑙 𝑝 norm, but they are shown to have equivalent performance as OD [ 13 ], thus we consider only 𝑙 𝑝 and implement other metrics in future work. 
+
+Gradient Distance. We propose GD for more detailed analysis with white-box access to 𝑓 A . Empirically, for well-trained models, training data often exhibit lower loss, which correlates with smaller per-example gradients [ 49 ] under common losses (Figure 6). We propose to compute the layer-wise normalized gradients , 𝐿𝑁𝐺 (𝑓 , x),as a practical proxy signal, to quantify the self-influence of point x
+
+> 5Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗, and Hao Chen §
+
+Training samples 
+
+Non -training samples 
+
+Gradient 
+
+Decision boundary 
+
+𝑔 𝑛𝑡𝑟 
+
+> 𝑔 𝑡𝑟
+
+Figure 6: Intuition of GD: Training samples tend to induce smaller per-example gradients than non-training samples under converged training. 
+
+on model 𝑓 :
+
+LNG (𝑓 , 𝑥 ) ≜ 1
+
+𝑁 𝑓 𝑁 𝑓 ∑︁ 
+
+> 𝑖 =1
+
+𝑔 𝑖 (𝑓 , 𝑥 )
+
+w𝑓 𝑖 𝑝 + 𝜀 num 
+
+, (5) where 𝑁 𝑓 is the number of layers of 𝑓 , w𝑓 𝑖 is the weight ma-trix of 𝑖 -th layer and where 𝑔 𝑖 (𝑓 , 𝑥 ) ≜ ∇w𝑓 𝑖 ℓ (𝑓 (𝑥 ), 𝑦 ) 𝑝 and 
+
+∇w𝑓 𝑖 ℓ (𝑓 (𝑥 ), 𝑦 ) denotes the per-example gradient of the loss with respect to the parameters of the 𝑖 -th layer, evaluated at input x.Here, 𝑦 denotes the ground-truth label associated with x. The lower normalized gradient reflects the smaller impact of data x to the weight, and the layer-wise average represents the impact of x to the whole model. Our novel metric GD is computed based on distance between 𝐿𝑁𝐺 :
+
+𝐺𝐷 (𝑓 V , 𝑓 A, X𝑀  
+
+> J
+
+) = 1
+
+X𝑀 
+
+> J
+
+∑︁ x∈ X 𝑀 
+
+> J
+
+|𝐿𝑁𝐺 (𝑓 V , x) − 𝐿𝑁𝐺 (𝑓 A, x)| .
+
+(6) 
+
+4.3.2 Metrics with Dataset Access. With the suspect sub-dataset 
+
+X𝑠  
+
+> A
+
+, the auditor can obtain more detailed testing results. We incorpo-rate two metrics in DIPBox : Sample Distance (SD) and Distribution Distance (DD). 
+
+Sample Distance. As demonstrated in Section 2, SD estimates the fraction of audit samples in X𝐷  
+
+> J
+
+whose identical or similar copy also appears in X𝑠  
+
+> A
+
+, providing an approximation of actual proportion of duplicates. As the adversary preserves the dataset quality, regenerated samples should have small distance to the original ones. We use the closed 𝑟 -ball B𝑑 (x, 𝑟 ) = {x′ |𝑑 (x′, x) ≤ 𝑟 }
+
+for each x ∈ X 𝐷  
+
+> J
+
+to delineate the border of similar copies. Formally: 
+
+𝑆𝐷 (X 𝐷 
+
+> J
+
+, X𝑠 
+
+> A
+
+, 𝑟 ) = {x|x ∈ X 𝐷  
+
+> J
+
+∧ B 𝑑 (x, 𝑟 ) ∩ X 𝑠  
+
+> A
+
+≠ ∅} / X𝐷  
+
+> J
+
+.
+
+(7) 
+
+Distribution Distance. It is hard to directly measure distribution-level similarity, especially with only a small suspect subset. To simultaneously satisfy the design goals, inspired by the notion of Maximum Mean Discrepancy (MMD) [ 9, 24 ], we propose to empirically estimate the distribution gap between X𝐷  
+
+> J
+
+and X𝑠 
+
+> A
+
+with: 
+
+𝐷𝐷 (X 𝐷 
+
+> J
+
+, X𝑠  
+
+> A
+
+) = E𝜃 ∼P 𝜃 
+
+> 1
+> X𝐷
+> J
+
+Í X𝐷  
+
+> J
+> 𝑖 =1
+
+𝜓 𝜃 (x𝑖 ) − 1
+
+> X𝑠
+> A
+
+Í X𝑠  
+
+> A
+> 𝑗 =1
+
+𝜓 𝜃 (x′ 
+
+> 𝑗
+
+)
+
+> 𝑝
+
+,
+
+(8) 
+
+Algorithm 2: Judging (sJ, 𝑅 J )
+
+Input: Metric values sJ (smaller indicates higher similarity), and judge requirement 𝑅 J
+
+Output: Judgment J 
+
+> 1
+
+if ∃𝜆 ∈ { 𝑂𝐷, 𝐺𝐷 } such that sJ [𝜆 ] ≤ 𝑅 J [𝜆 ] then  
+
+> 2
+
+if 𝑆𝐷 is tested then  
+
+> 3
+
+return Attack ❶ / ❷ with sJ [𝑆𝐷 ]. 
+
+> 4
+
+else  
+
+> 5
+
+return Attack ❶ / ❷. 
+
+> 6
+
+else  
+
+> 7
+
+if sJ [𝐷𝐷 ] ≤ 𝑅 J [𝐷𝐷 ] then  
+
+> 8
+
+return Attack ❸. 
+
+> 9
+
+return Independent. 
+
+where 𝜓 𝜃 is the feature extractor of parameter 𝜃 , x𝑖 ∈ X 𝐷  
+
+> J
+
+and 
+
+x′ 
+
+> 𝑗
+
+∈ X 𝑠  
+
+> A
+
+. Appendix D presents the implementation details of 𝜓 𝜃 .
+
+## 4.4 Regeneration Judgment 
+
+The judgment is based on the pre-computed threshold contained in the judge requirement 𝑅 J and the thresholding pattern among available metrics. Inspired by one-sided hypothesis testing [ 13 ], we calibrate each metric-specific threshold 𝜏 𝜆 using surrogate neg-ative datasets {X 𝑖 𝑛𝑒𝑔 }𝑖 (independently constructed datasets). For 
+
+𝜆 ∈ { 𝑂𝐷, 𝐺𝐷 }, we train negative models {𝑓 𝑖 𝑛𝑒𝑔 }𝑖 on {X 𝑖 𝑛𝑒𝑔 }𝑖 and compute 𝑠 𝑖 𝑛𝑒𝑔 = 𝜆 (𝑓 V , 𝑓 𝑖 𝑛𝑒𝑔 , X𝑀  
+
+> J
+
+). For 𝜆 = 𝐷𝐷 , we compute 𝑠 𝑖 𝑛𝑒𝑔 =
+
+𝐷𝐷 (X 𝐷 
+
+> J
+
+, (X 𝑖 𝑛𝑒𝑔 )𝑠 ), where (X 𝑖 𝑛𝑒𝑔 )𝑠 is a uniformly sampled audited subset of X𝑖 𝑛𝑒𝑔 . We then set 𝜏 𝜆 = 𝛼 𝜆 · min 𝑖 𝑠 𝑖 𝑛𝑒𝑔 , where 0 < 𝛼 𝜆 ≤ 1
+
+controls the sensitivity (larger 𝛼 𝜆 is more permissive). Since smaller distances indicate stronger similarity to XV , using the closest nega-tive score makes the threshold conservative for a small negative set. The thresholding pattern consists of metrics whose values are lower than the corresponding thresholds (see Algorithm 2), serving as sup-porting evidence for the auditor to assess the regeneration attack implemented by the adversary. When surrogate negative datasets are unavailable, the defender can alternatively set 𝜏 𝜆 = 𝛼 𝜆 ·max 𝑖 𝑠 𝑖 𝑝𝑜𝑠 
+
+based on potential pirated datasets {X 𝑖 𝑝𝑜𝑠 }𝑖 , where 𝑠 𝑖 𝑝𝑜𝑠 is computed analogously. In this case, the threshold can also be determined via empirical strategies, e.g. , simulating dataset modifications with sur-rogate datasets and selecting 𝜏 𝜆 to balance false positives and false negatives. The computational cost mainly comes from surrogate model training, leading to a complexity of 𝑂 (𝑁 𝑓 + 𝑁 𝑔 ), where 𝑁 𝑓 is the number of surrogate models and 𝑁 𝑔 is the number of surrogate generators for simulating attacks. We analyze threshold sensitivity in Appendix E.5. 
+
+## 4.5 Theoretical Analysis 
+
+To provide a rigorous justification for DIPBox , we analyze (i) why our similarity metrics are principled, and (ii) the utility-evasion trade-off faced by a regeneration adversary. Detailed proofs are deferred to the Section E. We also analyze the final judgment as a statistical test in Appendix E.5. 
+
+4.5.1 Justification of Multi-Scale Similarity Metrics. Our metrics capture distinct, fundamental properties of the learning pipeline.  
+
+> 6DIPBox : A Multi-scale Testing Framework for Tracking Dataset Regeneration
+
+OD is motivated by prediction stability : under the utility con-straint in Eq. (2), a successful regeneration should preserve gener-alization behavior, suggesting limited sensitivity to small data per-turbations, leading to close outputs on the audit set (Appendix E.1). GD is motivated by influence-function analysis: the self-influence of a sample is controlled by a quadratic form involving its gradient and the inverse Hessian; GD serves as an efficient proxy for distin-guishing seen-like samples from unseen-like ones (Appendix E.2). DD estimates an MMD-inspired RKHS integral probability metric. Under a characteristic kernel, the corresponding mean embedding is identifiable; in our implementation, we approximate this idea using finite random neural feature maps [ 3, 23 , 57 , 74 ], yielding a practical distribution-level similarity test (Appendix E.3). 
+
+4.5.2 Detectability via Domain Adaptation. The adversary faces a trade-off between evading detection and preserving utility (Eq. (2) ). We model this trade-off using domain adaptation theory. Let PA
+
+denote the adversary’s (regenerated) training distribution and PV
+
+denote the victim’s distribution on which utility is evaluated. A standard generalization bound suggests that performing well on 
+
+PV depends on both (i) low risk on PA and (ii) small distributional divergence between PA and PV .
+
+Theorem 4.1 (Utility–Evasion Trade-off) . Let H be a hypothesis class and consider the 0–1 loss. For any ℎ ∈ H ,
+
+𝑅 PV (ℎ) ≤ 𝑅 PA (ℎ) + 12 𝑑 HΔH (P A, PV ) + 𝜆, (9) where 𝜆 = min ℎ∈ H 
+
+ 𝑅 PA (ℎ) + 𝑅 PV (ℎ) is the ideal joint error and 
+
+𝑑 HΔH (· , ·) is the H ΔH -divergence. Theorem 4.1 highlights a generic trade-off between preserving utility on PV and increasing cross-domain discrepancy between 
+
+PA and PV . Our DD metric instantiates a practical, distribution-level MMD-inspired discrepancy that is well-suited for detecting generative polishing, while the bound uses 𝑑 HΔH to capture disagreement-based domain shift. We treat these two notions as complementary rather than equivalent; empirically, increasing distribution-level deviation to evade DD tends to make maintaining high utility on 
+
+PV harder. 
+
+## 5 Evaluation 
+
+In this section, we first present the experimental settings in Sec-tion 5.1. Then, in Sections 5.2 to 5.4, we evaluate the effectiveness of DIPBox under different defender access assumptions against Attack ❶, Attack ❷, and Attack ❸, respectively. We report OD, GD, and DD values to represent the defender’s black-box model access, white-box model access, and white-box access to a partial suspect dataset, respectively. Next, we compare the True Positive Rate (TPR) of DIPBox with previous baselines in Section 5.5 and analyze potential false positives in Appendix E.5. Finally, we study adaptive attacks in Section 5.6. 
+
+## 5.1 Datasets & Setup 
+
+We use widely adopted AI training datasets ( e.g. , CIFAR-10) for our evaluation. For each task, the victim holds a training dataset as 
+
+XV and trains models achieving high accuracy on corresponding test data (simulated as real-world data of distribution P𝑡 ). The adversary only has access to independent (negative) datasets for the same task, whose distributions are similar but not identical to 
+
+XV . For text data, we use BERT [CLS] embeddings so that inputs are represented as vectors, analogous to image features. 
+
+Regenerated Datasets. We craft 320 regenerated datasets in total. For the Attack ❶, we first test the 6 post-processing attacks as listed in Table 4 (see Figure 13 Figure 14 for examples), and fix the post-processing severity to the low level. We then increase the severity to test the robustness in Section 5.2 and extend to 20 different post-processing attack variants in Table 8. For the set-level attack (Attack ❷), we consider the adversary randomly mixing a subset of the victim dataset XV with one independent dataset to form XA with overlap ratio 𝑝 V ∈ { 0.2, 0.4, 0.6, 0.8} where 
+
+𝑝 V = |X V ∩ X A | /|X V |. For the distribution-level attack (Attack 
+
+❸), we consider both generative adversarial networks (GANs) and diffusion models in our experiments as they represent common generation strategies. We use the conditional GAN for MNIST and one of the state-of-the-art diffusion models EDM [ 33 ] for CIFAR-10. For FairFace, we train the GAN model StyleGAN3 [ 35 ]. For text data, we use a ChatGPT-enhanced T5 paraphraser [65]. 
+
+Negative Datasets. Prior work [ 18 , 31 , 32 , 49 ] evaluates on nega-tive datasets from the same distribution as the victim dataset, which, although valid for tracking sample use, contradicts our attack as-sumption: an adversary does not need to regenerate the dataset if they already have access to data from the same distribution. To the best of our knowledge, there is no public benchmark to evaluate dataset regeneration. Therefore, we build a benchmark with research-permissive open-source datasets. We select negative datasets that are different from the victim dataset but address the same task to induce distributional discrepancy; however, few public datasets provide an exact class match. To ensure broad coverage, we surveyed 26 public datasets reported in prior work and, after man-ually harmonizing labels, selected the three most similar datasets as negatives (see Table 4). Note that the rarity of negative datasets with similar data dis-tributions supports our assumption that attackers typically cannot obtain a dataset with the same distribution. Nevertheless, there are honest but coincident cases. For CIFAR-10, due to the limited choices of negative datasets, we sample negative datasets from Im-ageNet, which shares a common source (WordNet) with CIFAR-10. 
+
+Audit Set. In terms of the audit set X𝑀  
+
+> J
+
+(Section 4.2), we set 𝜏 𝑎𝑢𝑑𝑖𝑡 =
+
+0.2 and 𝑁 𝑀 𝑎𝑢𝑑𝑖𝑡 = 1000 , and sample X𝑀  
+
+> J
+
+uniformly at random from the high-loss set induced by 𝜏 𝑎𝑢𝑑𝑖𝑡 . To compute SD and DD, we set 
+
+𝑁 𝐷 𝑎𝑢𝑑𝑖𝑡 = 0.01 · |X V | and sample X𝐷  
+
+> J
+
+uniformly from XV , and we set |X 𝑠  
+
+> A
+
+| = 0.01 · |X A | by uniformly sampling a fixed subset from 
+
+XA ; both subsets remain unchanged throughout the experiments. We approximate the expectation in DD (Eq. 8) by averaging over 1000 random draws of 𝜓 𝜃 . Each draw corresponds to sampling the parameters 𝜃 of a two-layer MLP from N ( 0, 1) as a universal feature map 𝜓 𝜃 [3, 23, 57, 74] (Appendix D). 
+
+Models. In total, we trained 590 classification and generative mod-els. We choose one widely studied architecture for the victim model 
+
+𝑓 V for each task. In addition to the same architecture as the victim, the adversary chooses more advanced architectures as listed in Table 4 to make up for the dataset utility degradation. The default 
+
+> 7
+
+Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗, and Hao Chen §
+
+Table 4: Details of benchmark datasets and experimental setup. For each task, we adopt one widely used training dataset as the victim’s dataset XV , and select three most similar public datasets used in the prior literature as the independent (negative) ones. Task Victim’s Dataset Domain Input Size # of Classes Victim’s Architecture Additional Architecture for 𝑓 A                             
+
+> Post-processing in Attack ❶
+> Generators for Attack ❸
+> Independent Datasets
+> Handwritten Digit Classification MNIST Image 32 ×32 10 LeNet-5 3-layer MLP Glass blur, Impulse noise, JPEG compression, Pixelate, Spatter, Speckle noise Conditional DCGAN DIDA [39] (Neg-1), ARDIS [38] (Neg-2), SVHN [51] (Neg-3) Object Classification CIFAR-10 Image 32 ×32 10 ResNet-18 [29] MobileNet-v2 [56], VGG-13 [59] EDM [33] STL-10 [15] (Neg-1), ImageNet-Set1 (Neg-2), ImageNet-Set2 (Neg-3) Facial Attribute Classification FairFace Image 128 ×128 20 ResNet-101 EfficientNet-v2-s [61], RegNet-y-8gf [53] StyleGAN3 [35] LFWA+ [44] (Neg-1), PubFig [37] (Neg-2), UTKFace [73] (Neg-3) News Classification AG-News Text 768 4Tiny-BERT [62] Mini-BERT, Small-BERT [8] Word Addition, Word Deletion, Synonym Swap ChatGPT-enhanced T5 paraphraser [65] Yahoo-News [69] (Neg-1), CNN-News [63] (Neg-2), Guardian News (Guard-News) [28] (Neg-3)
+
+Table 5: Similarity measurement with our proposed metrics on regenerated datasets produced by the sample-level attack and on the independent datasets for vision tasks. Dataset Type MNIST CIFAR-10 FairFace 
+
+UR (%) OD GD SD DD UR (%) OD GD SD DD UR (%) OD GD SD DD Suspect Dataset (Positive) Glass blur 73.77 0.155 0.338 0.0 7.988 90.17 0.235 0.438 0.254 1.336 84.13 0.032 0.158 0.946 2.485 Impulse noise 98.60 0.066 0.148 0.0 2.889 92.36 0.197 0.421 0.0 1.427 82.67 0.075 0.374 0.0 3.200 JPEG compression 98.34 0.041 0.122 1.0 1.453 90.78 0.209 0.383 0.988 1.262 85.25 0.044 0.228 1.0 2.348 Pixelate 98.28 0.068 0.171 0.002 3.241 89.96 0.296 0.691 0.988 1.269 87.46 0.027 0.117 1.0 2.393 Spatter 96.97 0.070 0.155 0.008 3.479 92.58 0.240 0.497 0.129 2.693 82.22 0.056 0.284 0.006 4.272 Speckle noise 98.73 0.033 0.106 0.526 2.374 91.08 0.259 0.508 0.597 1.321 76.27 0.061 0.305 0.068 2.768 Independent Dataset (Negative) Neg-1 13.48 1.254 4.073 0.0 35.927 32.19 1.053 5.951 0.0 4.586 15.23 1.122 6.256 0.000 9.441 Neg-2 18.10 1.309 4.693 0.0 33.181 77.16 0.467 4.944 0.009 1.652 22.05 1.098 6.018 0.000 13.258 Neg-3 63.78 0.339 0.901 0.0 26.737 82.74 0.451 4.860 0.008 1.870 58.60 0.995 6.598 0.001 13.589 
+
+Table 6: Similarity measurement with our metrics in the news classification task. Modification Type UR (%) OD GD SD DD Suspect Dataset (Positive) Insertion 99.98 0.106 2.967 0.002 4.789 Deletion 99.31 0.137 5.123 0.084 5.952 Synonym 99.48 0.160 3.493 0.002 7.104 Independent Dataset (Negative) Neg-1 47.95 1.070 15.786 0.0 11.294 Neg-2 60.83 1.069 19.709 0.0 13.913 Neg-3 80.78 0.600 15.157 0.0 13.165 
+
+training setting is in Section D. We further evaluate DIPBox ’s ro-bustness against different training strategies by altering training epochs, architecture, and attack severity. 
+
+Utility Metrics. We quantify the adversary’s gain by the Utility Retention (UR), reported as a percentage: 𝑈 𝑅 = 100 × 𝑣 (𝑓 A )/ 𝑣 (𝑓 V ),where 𝑣 is the test accuracy. Take CIFAR-10 as an example, 𝑣 (𝑓 V )
+
+represents the test accuracy on 10,000 test samples of model 𝑓 V
+
+trained on 50,000 training samples. A UR closer to 100% indicates greater utility retention. 
+
+## 5.2 Defending Sample-level Attack 
+
+We first evaluate the effectiveness of DIPBox for the sample-level attack (Attack ❶) with the default training setting. Then, we inves-tigate the robustness against various training settings of 𝑓 A and the post-processing severity. We mainly report OD, GD and DD results for the defender with access to the black-box suspect model, white-box suspect model and partial suspect dataset. 
+
+Effectiveness. In Table 5, we present the metric values on datasets regenerated by Attack ❶ and on the negative datasets for the vision data. Table 6 shows corresponding results for the text data, where the text embeddings produced by 𝑓 V are compared. We also provide the UR to assess utility loss during regeneration. 
+
+Judging Results. Under low attack severity, DIPBox can consis-tently flag datasets regenerated under the sample-level attack (At-tack ❶) as shallow-feature regeneration (Attack ❶/❷) following Algorithm 2. We observe that OD, GD and DD have lower values for datasets regenerated by our tested post-processing approaches. Besides, their metric values on negative datasets are all higher than on the positive cases and the determined threshold. Consequently, the auditor can identify these cases as shallow-feature regeneration following Algorithm 2 under any defender access mode in Table 3. 
+
+Unequal Effect of Post-processing Methods. We note that the same post-processing approach can produce unequal impact across differ-ent datasets or models. For example, MNIST data are more sensitive to the “Glass blur” than the other two vision tasks (CIFAR-10 and FairFace) because of larger accuracy degradation. In addition, facial attribute data are more sensitive across post-processing methods. 
+
+Utility Gap of Negative Datasets. The negative datasets have lower UR than datasets regenerated under Attack ❶ because of the in-herent data distribution discrepancy. For example, the negative datasets of the facial attribute classification have less balanced 
+
+8DIPBox : A Multi-scale Testing Framework for Tracking Dataset Regeneration 
+
+data, which hinders the model from learning facial features equally among races and genders. This also implies that, in case of exclusive data source, a dataset of almost equal model-training utility to the proprietary dataset is more suspicious for unauthorized copying under the exclusive-source assumption. 
+
+Results on Texts. We have similar observations for text data (Table 6): the models trained on datasets that undergo random insertion, synonym swap, and deletion for 30% words can achieve near-perfect UR on test data. We note that the URs of derived datasets are much higher and close to 100%. This signifies that the text embedding models are not fully influenced by individual words but also the semantic meaning of input texts. 
+
+Evaluation of SD. It is worth noting that SD metric generates unsta-ble values for the sample-level regeneration attack. Ideally, nearly all samples are copied from the original dataset with additional modification, thus SD should be close to 1. However, the value of SD varies from 0 to 1. For instance, the SD is significantly lower than other post-processing methods for CIFAR-10 post-processed by “Im-pulse noise” and is nearly 0 for the facial dataset post-processed by “Spatter”. The reason is that we choose a conservative radius for SD and a single choice of radius cannot fully characterize closeness between samples. Higher radius should be better for capturing the post-processed samples but can cause more false positives. Another potential reason is that we adopt classic 𝐿 𝑝 norm to compare sample closeness, which is computationally efficient but does not capture the visual similarity. We will investigate the more robust metrics (e.g., LPIPS [72]) in the future work. 
+
+Robustness. Figure 7 also validates the robustness of our frame-work when the adversary adopts different settings to train their model 𝑓 A , and post-processing methods of medium and high sever-ity. For OD and GD, we investigate the robustness against the adversary’s different training settings. As expected, more training epochs (More Epochs) or more advanced model architecture (Diff. Archi.) result in better generalization over the modified samples and thus higher UR; however, these settings do not enable evasion and the regenerated datasets remain detectable under our previously determined thresholds. Besides, we also investigate when the adver-sary increases the modification severity (Higher Sev.): amplifying the post-processing to medium and high level. 
+
+Trade-off between UR and Similarity. From the results of vision (Table 5) and text data (Table 6), we notice the trade-off between UR and the value of OD, GD and DD: dissimilar datasets result in lower UR and higher metric values, and datasets regenerated by the sample-level attack have higher UR and lower metric values. Note that the trade-off is not linear: some negative datasets can achieve simultaneously higher UR and lower testing metric value than another negative dataset. However, they are still separable from the regenerated datasets. In Figure 7, we visualize the trade-off under more complicated training and post-processing settings. The red vertical line repre-sents the decision threshold determined previously. We observe that there are clear intervals between positive and negative datasets for OD and GD, which ensures the accurate judgment by Algorithm 2. As we consider the sample-level attack, the inherent data distri-bution can be shifted from the original distribution, leading to a 0 1               
+
+> OD
+> 50 100
+> MNIST
+> Original Higher Sev. More Epochs Diff. Archi. 01
+> OD
+> 50 75 100 CIFAR-10
+> 01
+> OD
+> 25 50 75
+> Facial
+> 0.5 1.0
+> OD
+> 60 80 100
+> AG-News
+> 0.0 2.5
+> GD
+> 50 100 05
+> GD
+> 50 75 100 05
+> GD
+> 25 50 75 10 20
+> GD
+> 50 75 100 020
+> DD
+> 50 100 24
+> DD
+> 50 75 510
+> DD
+> 25 50 75 510
+> DD
+> 50 75 100
+> UR (%) UR (%) UR (%)
+
+Figure 7: Robustness evaluation for defending the Attack ❶.We show the trade-off between UR and distances under var-ious attack settings, where each point represents a model. The vertical dashed line is the threshold. 
+
+DD value higher than the decision threshold. In summary, we ob-serve the trade-off between the UR and our metrics: the adversary cannot simultaneously achieve high UR and evade our tracking by Algorithm 2 under different attack settings. 
+
+Case Study: CIFAR-10 and ImageNet. In Figure 7, we observe two negative datasets for CIFAR-10 are closer to the positive datasets than other tasks. After manual checking, they are sampled from ImageNet. The reason is both CIFAR-10 and ImageNet are sampled from the same source ( i.e. , searching on Internet using hierarchical structure of WordNet during close periods). Therefore, they are more similar than other tasks. 
+
+Takeaway 1: DIPBox can effectively detect datasets regenerated under Attack ❶ on both vision and text data and is robust against various sample-level attack settings. 
+
+## 5.3 Defending Set-level Attack 
+
+In this section, we first study the effectiveness against set-level regeneration under overlap ratios 𝑝 V ∈ { 0.2, 0.4, 0.6, 0.8}, then show robustness under different training strategies for 𝑓 A .
+
+Effectiveness. We investigate the model-level metrics (OD and GD) in Figure 8 under defender’s black-box and white-box access to the suspect model, and the dataset-level metrics (SD and DD) in Figure 9 when the defender can access partial suspect dataset. 
+
+Evaluation of OD and GD. Figure 8 presents the UR-metric trade-off for OD and GD on our tested severity. We show the test intersection ratios in different colors and use the point style ( e.g. , circle or square) to represent the mixed independent datasets. As a higher similarity means more mixed instances in the suspect dataset, the OD and GD have smaller value as the intersection ratio increases due to sample-level closeness. Note that we do not aim to estimate the exact similarity but only to judge whether the suspect dataset contains a significant proportion of victim samples. Additionally, we note that the GDs measured on models finetuned on AG-News         
+
+> 9Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗, and Hao Chen §01
+> OD
+> 50 100
+> MNIST
+> 0.2 0.4 0.6 0.8 0.0 Neg-1 Neg-3 Neg-2 0.2 0.4
+> OD
+> 80 90
+> CIFAR-10
+> 0.5 1.0
+> OD
+> 25 50 75
+> Facial
+> 0.5 1.0
+> OD
+> 60 80 100
+> AG-News
+> 0.0 2.5
+> GD
+> 50 100 2.5 5.0
+> GD
+> 80 90 2.5 5.0
+> GD
+> 25 50 75 10 20
+> GD
+> 50 75 100
+> UR (%) UR (%)
+
+Figure 8: Trade-off between the measured distances (OD and GD) and the UR for intersection ratios 0.2, 0.4, 0.6, 0.8 and the negative ones ( i.e. , ratio 0.0), where each point represents a model. The vertical dashed line is the threshold. 0.0 0.5 1.0         
+
+> Distance  MNIST
+> SD Scaled DD 0.0 0.5 1.0
+> Distance  Facial
+> 0.2 0.4 0.6 0.8
+> Intersection
+> 0.0 0.5 1.0
+> Distance  CIFAR-10
+> 0.2 0.4 0.6 0.8
+> Intersection
+> 0.0 0.5 1.0
+> Distance  AG-News
+> 80 90 100 80 90 100 80 90 100 80 90 100 UR UR UR UR
+
+Figure 9: Trade-off between dataset metrics (SD and DD) and the UR for the intersection ratios 0.2, 0.4, 0.6, 0.8 and the nega-tive one 0.0. The red curve is the UR (right axis). 
+
+are close to or higher than the threshold. We provide the in-depth analysis along with the robustness. However, we observe that in general the trade-off between UR and our metrics (OD and GD) holds, and that the adversary cannot craft a mixed dataset under Attack ❷ without sacrificing the utility. 
+
+Evaluation of SD and DD. We plot the results in Figure 9. These two metrics are evaluated with access to the audit set and suspect sub-dataset, enabling a more direct dataset-level comparison. Here, SD estimates sample-level overlap based on the audit set, while DD captures distribution-level distance, which decreases as the ground-truth overlap ratio increases. 
+
+Robustness. Figure 10 evaluates the robustness under different training settings for the adversary’s model. DIPBox can correctly detect datasets regenerated under Attack ❷ setting because the GD metric can accurately distinguish the positive and negative datasets on the vision task. Note that there are tested positive models with OD values higher than the threshold for CIFAR-10, because Im-ageNet, from which the two negative datasets are sampled with manual annotation alignment, is similar to CIFAR-10 and often selected as the source for CIFAR-10 alternatives ( e.g. , CINIC [ 17 ]). 0 1          
+
+> OD
+> 50 100
+> MNIST
+> Original Diff. Archi. More Epochs Combined 01
+> OD
+> 50 75 100
+> CIFAR-10
+> 0.5 1.0
+> OD
+> 50 100
+> Facial
+> 0.5 1.0
+> OD
+> 60 80 100
+> AG-News
+> 0.0 2.5
+> GD
+> 50 100 05
+> GD
+> 50 75 100 2.5 5.0
+> GD
+> 50 100 10 20
+> GD
+> 50 75 100
+> UR (%) UR (%)
+
+Figure 10: Robustness evaluation of defending Attack ❷. The trade-off between the UR and our metrics under different attack severity and adversary model training settings. The vertical dashed line represents the threshold. 0.5 1.0             
+
+> OD
+> 50 100
+> MNIST
+> Original Diff. Archi. More Epochs Combined 0.5 1.0
+> OD
+> 50 75
+> CIFAR-10
+> 0.8 1.0 1.2
+> OD
+> 25 50 75
+> Facial
+> 0.5 1.0
+> OD
+> 60 80 100
+> AG-News
+> 24
+> GD
+> 50 100 2.5 5.0
+> GD
+> 50 75 510 15
+> GD
+> 25 50 75 10 20
+> GD
+> 50 75 100
+> UR (%) UR (%)
+
+Figure 11: The trade-off between the UR and the model met-rics (OD and GD) under different attack severity for Attack ❸
+
+and adversary model training settings. The blue and orange points are positive and negative datasets. 
+
+On the other hand, the STL-10 is more different from CIFAR-10 (e.g., in terms of the image tone) and is accurately detected. For the text classification, the GD metric is not reliable. The reason is rooted in the architecture difference: the models are based on the pretrained LMs of more parameters than the conventional CNNs thus have more complex decision boundary and can be sen-sitive to the non-training samples. We examined the evaded cases and found the cases of GD values higher than threshold are those with a small intersection ratio 0.2 and with more finetuning epochs. Nevertheless, the OD metric guarantees the correct judgment. 
+
+Takeaway 2: For the Attack ❷, OD and GD are robust against various training settings adopted by the adversary, and SD and DD can correctly quantify the regeneration ratio in the adver-sary’s dataset. 
+
+## 5.4 Defending Distribution-level Attack 
+
+In this section, we investigate the effectiveness and robustness against the distribution-level dataset regeneration attack. For vi-sion tasks, we train generative models (see Table 4) and select  
+
+> 10 DIPBox : A Multi-scale Testing Framework for Tracking Dataset Regeneration
+
+Table 7: Robustness against Attack ❸ with different generator types and generation sizes of the advanced generator. Adversary Setting MNIST CIFAR-10 FairFace AG-News                                                
+
+> UR (%) DD UR (%) DD UR (%) DD UR (%) DD Default Generator 95.59 1.43 92.87 1.36 66.09 2.52 96.75 8.23 Advanced Generator 97.44 1.18 95.63 1.45 93.50 2.53 97.40 8.22 Double size 97.69 0.94 97.29 1.13 91.93 2.06 97.63 8.00 Half size 96.89 1.18 93.39 1.47 81.36 2.68 96.34 8.21 Threshold /24.03 /1.49 /8.37 /10.17
+
+checkpoints to obtain generated content of varying quality. For the default generator, we train the EDM model on CIFAR-10 (size 
+
+32 × 32 ) to an FID score of 2.341 and train StyleGAN3 on FairFace (size 128 × 128 ) to an FID score of 12.151, which is comparable to the reported performance [33, 35]. 
+
+Limitation of OD and GD. We provide the evaluation results of model-level metrics in Figure 11 which are measurable when the defender has black-box or white-box model access and no access to partial suspect dataset. As the adversary dataset is re-sampled from the same distribution as the source dataset, our model metrics can fail under different training settings. We observe that multi-ple positive derivatives (blue points) can have both high UR and higher values of OD or GD than the negative ones at the same time. Take the facial dataset as an example, a remarkable proportion of positive models achieves ∼75% UR (the same level as Attack ❶ in Figure 7 and Attack ❷ in Figure 8) and has both model metrics higher than the threshold. This is expected, because there are no exact overlapping samples and the training-data distribution shift between the positive models and the source model is minimized by the generative model. Therefore, it is necessary for the dataset metric to identify the distribution-level regenerated dataset. 
+
+Evaluation of SD and DD. Now we investigate whether the SD and DD, measurable under defender’s access to partial suspect dataset, can track the distribution-level regeneration. As the dataset is regenerated, there are very few samples that resemble the original data samples, and thus the SD values are close to 0 for all the four benchmarks we selected. As for DD, we evaluate the robustness by varying the attack settings and summarize the results in Table 7. In particular, we evaluate two different generative models for each benchmark. For the vision task, we use GANs and diffusion models of appropriate scales: we use the StyleGAN2-Ada [ 34 ] for CIFAR-10 and the Denoising Diffusion Probabilistic Models (DDPM) [ 30 ] for MNIST and FairFace. For the text, we use both back-translation and Pegasus-based paraphraser [ 54 , 71 ] as advanced generator. We also test if the adversary generates dataset of double or half size of the source dataset. In Table 7, we denote the generators that produce training data enabling model to achieve higher UR by “Advanced” and the other one as the “Default”, and we report the generator checkpoint that achieves the highest UR. Regardless of the generator type or the size of generated dataset, our DD can effectively and robustly evaluate the closeness between the distributions of the regenerated dataset 
+
+Table 8: Comparison with existing methods. Each entry is TP/Total for the corresponding attack, and “Overall TPR” is computed over all attacks. Method CIFAR-10 FairFace                                                                       
+
+> A❶A❷A❸Overall TPR (%) A❶A❷A❸Overall TPR (%) Radioactive [55] 1 / 20 1 / 9 0 / 13 4.76 0 / 20 1 / 8 0 / 7 2.86 DI [49] 1 / 20 2 / 9 0 / 13 7.14 0 / 20 1 / 8 0 / 7 2.86 EMA [31] 3 / 20 2 / 9 0 / 13 11.90 0 / 20 1 / 8 0 / 7 2.86 UBW [40] 4 / 20 3 / 9 0 / 13 16.67 0 / 20 1 / 8 0 / 7 2.86 RAI 2[18] 6 / 20 5 / 9 0 / 13 26.19 18 / 20 7 / 8 0 / 7 71.43 Data-use [32] 15 / 20 7 / 9 0 / 13 52.38 18 / 20 8 / 8 0 / 7 74.29
+> Ours 20 / 20 9 / 9 13 / 13 100.0 20 / 20 8 / 8 7 / 7 100.0
+
+and the source dataset. Next, we perform an in-depth analysis of the factors involved in distribution-level regeneration. 
+
+Generator Capacity. The adversary may adopt a more advanced generator to produce more in-distribution samples. The dataset produced by the advanced generator has higher quality but not necessarily lower DD value, because our DD assesses the closeness between the distribution of two datasets, instead of the dataset utility closeness. We manually inspect the difference between gen-erators and found that the better quality comes from finer details ( e.g. , clearer facial contours) in the generation, which can amelio-rate the model convergence to the target distribution. Nonetheless, the DD remains robust in identifying the regenerated dataset. 
+
+Amount of Generated Samples. We note that having fewer gener-ated samples for training is a limiting factor in developing a highly accurate suspect model. Consequently, the Attack ❸ may be pre-ferred by the adversary because the adversary can further improve the model performance by increasing the training data size. How-ever, this comes at the cost of additional computation for generator training, finetuning, and especially inference. For example, if the adversary’s dataset size doubles, the training time also roughly doubles, not counting the cost of dataset generation. Therefore, we consider doubled data size in this paper and leave larger sizes for future work. Among the tested cases ( i.e. , double-size), our dataset metrics achieve robust tracking. 
+
+Takeaway 3: DIPBox can perform accurate dataset tracking with DD under stronger distribution-level attacks. 
+
+## 5.5 Comparison with Baselines 
+
+Setup. We compare with state-of-the-art methods including dataset watermarking UBW [ 40 ] and data-use audit [ 32 ], inference-based auditing EMA [ 31 ] and RAI 2 [18 ]. We use CIFAR-10 and FairFace as they are two representative benchmarks used in prior work. Since detection tasks typically prioritize a high TPR to minimize missed detections, we compare TPR, defined as 𝑇 𝑃𝑅 = 𝑇 𝑃 /( 𝑇 𝑃 +
+
+𝐹 𝑁 ), which also aligns with previous work [ 18 , 31 , 32 , 40 , 49 ] that mainly reports the detection rate. For fair comparison, we need to unify the output format. Note that UBW and EMA output binary auditing results that align with DIPBox ’s output format, while RAI 2
+
+estimates the proportion of copied samples in the form of a dataset similarity score ranging from 0 to 1. We map the output to 1 if the dataset similarity is higher than 0.5, and 0 otherwise. We use 0.5 as a midpoint for binarization; other thresholds trade off misses and false alarms and would require task-specific threshold selection. In 
+
+> 11 Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗, and Hao Chen §
+
+Table 9: Evaluation of DP-based adaptive attacks on MNIST. Red / green indicates values above/below the threshold, re-spectively. Attacks 𝜀 = 1 𝜀 = 10                                
+
+> UR (%) OD GD DD UR (%) OD GD DD DP-SGD [2] 76.15 0.248 4.725 /91.14 0.109 1.637 /DP-MERF [26] 65.76 1.070 4.864 2.577 71.78 1.213 5.224 2.582 PrivSet [11] 73.36 1.323 9.482 12.67 92.33 1.362 8.402 11.73
+
+terms of testing samples, we add up to 20 sample-level modifications for Attack ❶ to expand attack settings, select all possible overlap settings for Attack ❷, and consider datasets generated from various intermediate checkpoints of the generator for Attack ❸. In total, we obtain 42 and 35 tested regenerated datasets for CIFAR-10 and FairFace, respectively. 
+
+Comparison Results . In Table 8, we observe that DIPBox system-atically outperforms prior work across different threats and bench-marks. The improvement comes from more robust detection against Attack ❶ and Attack ❷ and the coverage of Attack ❸. For instance, 
+
+DIPBox can robustly detect sample-level attacks while previous watermarking ( e.g. , [ 55 ]) can be bypassed by certain sample-level perturbations ( e.g. , Glass blur) because of watermark loss caused by compression. Notably, on FairFace, RAI 2 [18 ] and Data-use [ 32 ]have comparable performance with our DIPBox in detecting the sample-level and set-level attacks but fail to detect the distribution-level attack. This signifies the necessity of a holistic approach to track dataset regeneration. 
+
+Takeaway 4: DIPBox outperforms previous approaches in terms of the detection rate through its multi-scale testing. 
+
+## 5.6 Robustness to Adaptive Attacks 
+
+The adversary can attack our framework from the model level and the dataset level with knowledge of DIPBox ’s procedure, including the audit set selection and the metric design. The main goal is to weaken the signals captured by DIPBox . To achieve this goal, we consider three types of adaptive attacks: 1) a universal adaptive attack based on differential privacy (DP) that reduces the influence of the original training data on the suspect model or dataset, 2) a metric-specific adaptive attack that optimizes against a given metric to raise the metric value above the threshold known by the adversary, and 3) an audit set-targeted adaptive attack where the adversary knows the audit set design and adjusts the suspect dataset before training or preview release. We do not additionally combine these adaptive attacks with every base attack from Attack ❶ to Attack ❸ because such combinations introduce additional utility loss. We mainly use MNIST and FairFace as they represent datasets of simple and complex features. 
+
+Evaluation of DP-based Adaptive Attack. For the DP-based adaptive attack, the adversary can exploit DP-SGD [ 2] for model-level metrics OD and GD. For our SD and DD metrics, the adver-sary generates data with DP for the distribution-level attack in order to increase the difference between regenerated and protected datasets. We consider MNIST here because existing DP generation techniques mainly focus on simple benchmarks such as MNIST. For DP-generated data, we use DP-MERF [ 26 ] to train a genera-tor that can produce data of better quality ( i.e. , enabling training models of higher test accuracy) than conventional DP GANs. In addition, the adversary can directly distill the target dataset into a much smaller dataset using dataset distillation techniques [ 74 ]. We adopt PrivSet [ 11 ] as the most recent dataset condensation solution with DP constraints. Table 9 shows the results of DP-based attacks against our framework DIPBox .
+
+Model-level DP-based Attack. As expected, DP applied during train-ing on MNIST has a negative impact on utility ( i.e. , test accuracy). The small budget 𝜀 = 1 can reduce the UR to ∼ 70% , while the large budget 𝜀 = 10 only results in a slight UR drop; it still achieves UR over 90%, compared to UR ≈ 98% under Attack ❶. According to Algorithm 2, our framework DIPBox still flags these cases because at least one decisive model metric (OD or GD) remains below the de-termined threshold. This suggests that the DP-based attack against OD/GD does not enable evasion without incurring a noticeable utility loss in our setting. 
+
+Dataset-level DP-based Attack. We evaluate the DP-based attack against our remaining dataset metrics. As the bottom two rows of Table 9 show, the regenerated datasets are not identified as the sample-level attack or the set-level attack according to our frame-work DIPBox because the OD and GD values are higher than the threshold. In addition, similar to the evaluation in Section 5.4, the SD values are almost 0 because there are few approximate sample pairs between the original and regenerated datasets. Hence, we rely on DD to distinguish whether the regenerated dataset has a nearly identical distribution. As Table 9 shows, the DD values are below the threshold, demonstrating that the dataset-level attack does not evade DIPBox . Compared to the MNIST results of Table 7, the DD values of dataset-distillation-generated datasets ( i.e. , PrivSet) are higher than those previously evaluated with naïve generators, fur-ther confirming that a smaller regeneration dataset size can increase DD at the cost of degraded UR. 
+
+Metric-specific Adaptive Attacks. With knowledge of the metric design and the target threshold ( i.e. , estimated from the design of DIPBox ), the adversary can add a metric-maximization term weighted by 𝑤 to the optimization objective to increase the met-ric value for their trained model or generated dataset. When the defender can only compute OD and GD metrics, the adversary minimizes the model-training loss minus 𝑤 · 𝑑 (𝑓 V , 𝑓 A, XAJ ), where 
+
+𝑑 ∈ { 𝑂𝐷, 𝐺𝐷 } and X (𝑀, A ) J is an adversary-generated audit set following the same procedure as X𝑀  
+
+> J
+
+. As the adversary does not know the actual X𝑀  
+
+> J
+
+due to random sampling, the X (𝑀, A ) J is sam-pled in each step. The adversary can adopt better hyperparameters than the default setting, so we applied a grid search on optimizers, training epochs from 10 to 200, learning rates {0.001 , 0.01 , 0.1}, and finally selected training of 200 epochs with learning rate 0.1 using Adam. For the DD-specific attack ( i.e. , improving Attack ❸), we mainly focus on MNIST because of lower training cost. We use conditional GAN on MNIST for experiments, and add DD as an op-timization term with different penalty weights 𝑤 . We apply similar hyperparameter optimization on the generator training.  
+
+> 12 DIPBox : A Multi-scale Testing Framework for Tracking Dataset Regeneration 0.05
+> 0.1
+> 0.2
+> 0.5
+> 1
+> 2
+> w
+> 60
+> 80
+> 100
+> UR
+> (a) MNIST (OD-specific)
+> 5e-3
+> 0.01
+> 0.02
+> 0.05
+> 0.1
+> 0.5
+> w
+> 40
+> 60
+> 80
+> (b) MNIST (GD-specific)
+> 0.05
+> 0.1
+> 0.2
+> 0.5
+> 1
+> 2
+> w
+> 20
+> 40
+> 60
+> 80
+> (c) Facial (OD-specific)
+> 1e-3
+> 0.05
+> 0.1
+> 0.5
+> 1
+> 2
+> w
+> 45
+> 60
+> 75
+> (d) Facial (GD-specific)
+> 1e-4
+> 5e-4
+> 1e-3
+> 0.01
+> 0.1
+> 1
+> 2
+> 3
+> w
+> 30
+> 45
+> 60
+> (e) MNIST (DD-specific)
+> 0.25
+> 0.50
+> 0.75
+> 0.8
+> 1.6
+> 2.4
+> 0.6
+> 1.2
+> 1.8
+> 2.4
+> 4
+> 8
+> 12
+> 15
+> 30
+> 45
+> Metric Value
+
+Figure 12: Evaluation of metric-specific adaptive attacks. Table 10: Evaluation of audit set-targeted adaptive attacks on FairFace. Target Strategy UR Judgment                
+
+> OD/GD 10% high-loss sample removal 86.86% Attack ❶/❷
+> 20% high-loss sample removal 85.71% Attack ❶/❷
+> 30% high-loss sample removal 84.24% Independent DD 10% Low-loss sampled preview -Attack ❸
+> 10% High-loss sampled preview -Independent Single-class preview -Independent
+
+Figure 12 (a) and Figure 12 (c) show the OD-specific adaptive attacks on MNIST and FairFace, respectively. We can see that small 
+
+𝑤 is already effective to increase the auditing metrics and large penalty weight 𝑤 can significantly degrade the model utility. The sweet spot between the utility and the auditing metric value differs between MNIST and FairFace. For instance, on MNIST the adversary begins to bypass OD-only auditing around 𝑤 = 0.5, but the UR has already dropped below 80% and decreases further as 𝑤 grows. Meanwhile, on FairFace, 𝑤 = 0.5 retains about 60% UR but remains near the OD threshold, while larger weights cross the threshold at substantially lower UR because the facial data are of larger scale and make the model more sensitive to the metric penalty. For the GD-specific adaptive attacks on MNIST and FairFace in Figure 12 (b) and Figure 12 (d), we observe a similar trend but the model’s performance is more sensitive to the GD penalty, as UR drops faster than under the OD penalty. This is expected because the GD penalty can have a larger impact on the model weights during training through gradients of larger norms. To make GD higher than our predefined threshold, the UR is around 70% and less than 60% for MNIST and FairFace respectively, suggesting that GD is harder to attack adaptively. Meanwhile, it increases the adversary’s computational cost because GD depends on per-example parameter gradients, and optimizing it builds a second-order computation graph which slows the training and occupies more memory. For the DD-specific adaptive attack shown in Figure 12 (e), we found that the UR values are generally lower than those in previous OD-specific and GD-specific adaptive attacks on MNIST. Specif-ically, in this case, the generative model is more sensitive to the penalty weight and often fails to converge stably to a low loss. Therefore, the final generator produces low-quality images, which makes the data unlearnable for the subsequent classification models. The results demonstrate a trade-off between the adaptive attack strength ( i.e. , 𝑤 ) and the final model or dataset utility: increasing the metric-specific penalty enough to bypass detection comes with utility loss. 
+
+Adaptive Attacks for Audit Set. We consider two adaptive strate-gies with knowledge of the design of X𝑀  
+
+> J
+
+and X𝐷  
+
+> J
+
+, targeting the model-level metrics OD/GD and dataset-level metrics SD/DD, re-spectively. The adversary cannot control X𝑀  
+
+> J
+
+but can remove po-tential audit-set samples by filtering out samples with loss higher than 𝜏 𝑎𝑢𝑑𝑖𝑡 . Since 𝜏 𝑎𝑢𝑑𝑖𝑡 is a hyperparameter set by the defender and should be adjusted based on the adversary’s own model, one direct method for the adversary is to remove high-loss samples. Then, the adversary directly trains 𝑓 A on the remaining data. The top half of Table 10 shows that removing 30% of the samples can lead to an independent judgment by Algorithm 2 when the audit is limited to model-level metrics (OD/GD). Further exploration on the removed data shows that our previous 𝜏 𝑎𝑢𝑑𝑖𝑡 corresponds to the top 24%, and removing less than 20% high-loss samples is equivalent to Attack ❷,which is detectable as shown in Figure 8. Although removing 30% can evade model-level tracking with OD/GD, without knowledge of 𝜏 𝑎𝑢𝑑𝑖𝑡 , the adversary cannot reliably guess the correct removal ratio to win the game in Section 3.1 and still risks utility loss or being tracked. In addition, we consider an adversary that regenerates with At-tack ❸ and controls X𝐷  
+
+> J
+
+(e.g. , an adversary-controlled preview sub-set on the platform), which is sampled from regenerator-produced data of 10% low-loss or high-loss samples assessed by a surrogate model directly trained on the obtained XA , or from a random sin-gle class. In the bottom half of Table 10, we find that DD can still track the low-loss case but fails for single-class and high-loss cases because of significant distribution shift. Although the adversarial selection of X𝐷  
+
+> J
+
+does not degrade XA , the high-loss samples can contain low-quality generated data, and a single class does not fully represent XA well enough to attract users. 
+
+Takeaway 5: The evaluated adaptive attacks against DIPBox 
+
+can evade detection by increasing metric values or manipulating the audit set, but they incur dataset utility degradation, poorer preview representativeness, or memory and computational cost. 
+
+## 6 Related Work 
+
+In this section, we review existing copyright protections and audit-ing strategies for models and datasets. 
+
+Models. The owner can watermark the proprietary model before release and testify the watermark to claim ownership, but this type of watermarking can be vulnerable to various adaptive attacks [ 47 ]. Similarly, white-box watermarking, which manipulates the weights with watermarking order in a functionality-preserving way, is also shown unreliable [ 68 ] under adversarial settings. Another direction 
+
+> 13
+
+Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗, and Hao Chen §
+
+is leveraging the inherent model patterns for ownership verifica-tion. For example, PublicCheck [ 66 ] realizes public verification of a deployed model at runtime through fingerprint samples. RAI 2 [18 ]verifies model identity using random projection without the need for fingerprints or watermarks. DeepJudge [ 13 ] implements a test-ing framework of six metrics for model similarity testing. Our work also informs model ownership disputes by auditing dataset usage, which directly affects model performance. 
+
+Datasets. There is also a line of work attempting to track dataset us-age [ 20 ]. Dataset watermarking [ 41 , 55 ] refers to marking datasets with backdoor-alike samples. Yet, the robustness is questionable under white-box access and low-sample settings [ 5]. On the other hand, non-invasive auditing can better preserve the dataset utility. Dataset Inference [ 49 ] tests whether the model is trained on the source dataset and is recently extended to the LLM datasets [ 48 ]. EMA [ 31 ] infers the dataset identity through enhanced member-ship inference to the suspect model. RAI 2 [18 ] uses a look-up table to estimate dataset similarity via black-box querying of the sus-pect model. ORL-AUDITOR [ 19 ] audits trajectory usage to protect the copyright of offline reinforcement learning datasets. Never-theless, prior methods largely provide binary evidence of dataset use from shallow signals ( e.g. , memorization) and typically do not aim to attribute the underlying regeneration mechanism, especially for distribution-level polishing. Our framework covers more ad-vanced regeneration attacks and provides holistic auditing with coarse-grained attribution between shallow-feature regeneration (Attack ❶/❷) and distribution-level polishing (Attack ❸). In addi-tion to the sample-, user-, and dataset-level categories surveyed in prior work [ 20 ], we further study distribution-level dataset tracking. 
+
+## 7 Discussion & Conclusion 
+
+In this work, we propose DIPBox , a multi-scale testing framework to track regenerated datasets. We validate the effectiveness and robustness of our framework on vision and text classification tasks. 
+
+Limitation & Future Work. DIPBox currently assumes white-box model access and partial dataset access to enable full-scale testing with all metrics. This assumption is realistic for platform-based au-dits, but it limits the applicability of DIPBox in offline transactions where the auditor cannot inspect the suspect model or dataset. In the black-box regime, tracking regenerated datasets is particularly challenging under distribution-scale perturbations, because there may be no near-duplicate samples whose memorization can be reli-ably detected from model outputs alone. As future work, we plan to explore deep-learning interpretability techniques to extract and compare learned representations from black-box models, which may provide stronger signals for tracking regenerated datasets. 
+
+Scalability. Although DIPBox is currently designed for domain-specific datasets that are typically small, scaling to larger datasets used to train classification or generative models is also feasible. For large classification datasets, we can adopt a divide-and-conquer strategy. Specifically, we can measure local similarity between the suspect and source datasets and aggregate the results into a global similarity assessment. The downstream judgment process should also be adapted accordingly. For large datasets used to train gener-ative models, we can, for example, adapt OD and GD to generative models by replacing the output with latent representations because the model’s internal representations can also memorize training data [12]. 
+
+## References 
+
+[1] 10Duke. 2023. Software Copyright – Basics Explained. https://www.10duke.com/resources/glossary/software-copyright. [2] Martín Abadi, Andy Chu, Ian J. Goodfellow, H. Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. 2016. Deep Learning with Differential Privacy. In 
+
+Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communications Security, 2016 . ACM, 308–318. [3] Ehsan Amid, Rohan Anil, Wojciech Kotlowski, and Manfred K. Warmuth. 2022. Learning from Randomly Initialized Neural Network Features. CoRR 
+
+abs/2202.06438 (2022). [4] arXiv. 2026. arXiv moderation. https://info.arxiv.org/help/moderation/index. html. [5] Buse Gul Atli Tekgul and N. Asokan. 2022. On the Effectiveness of Dataset Watermarking. In Proceedings of the 2022 ACM on International Workshop on Se-curity and Privacy Analytics (IWSPA ’22) . Association for Computing Machinery, 93–99. [6] Ms Aayushi Bansal, Dr Rewa Sharma, and Dr Mamta Kathuria. 2022. A systematic review on data scarcity problem in deep learning: solution and applications. ACM Computing Surveys (Csur) 54, 10s (2022), 1–29. [7] Shai Ben-David, John Blitzer, Koby Crammer, Alex Kulesza, Fernando Pereira, and Jennifer Wortman Vaughan. 2010. A theory of learning from different domains. Machine learning 79, 1 (2010), 151–175. [8] Prajjwal Bhargava, Aleksandr Drozd, and Anna Rogers. 2021. Generalization in NLI: Ways (Not) To Go Beyond Simple Heuristics. arXiv:2110.01518 [cs.CL] [9] Mikolaj Binkowski, Danica J. Sutherland, Michael Arbel, and Arthur Gretton. 2018. Demystifying MMD GANs. In 6th International Conference on Learning Representations, ICLR 2018 .[10] Olivier Bousquet and André Elisseeff. 2002. Stability and generalization. Journal of machine learning research 2, Mar (2002), 499–526. [11] Dingfan Chen, Raouf Kerkouche, and Mario Fritz. 2022. Private Set Generation with Discriminative Information. In Advances in Neural Information Processing Systems (NeurIPS) .[12] Dingfan Chen, Ning Yu, Yang Zhang, and Mario Fritz. 2020. GAN-Leaks: A Taxonomy of Membership Inference Attacks against Generative Models. In 
+
+Proceedings of the 2020 ACM SIGSAC Conference on Computer and Communications Security (CCS ’20) . ACM, New York, NY, USA, 343–362. [13] Jialuo Chen, Jingyi Wang, Tinglan Peng, Youcheng Sun, Peng Cheng, Shouling Ji, Xingjun Ma, Bo Li, and Dawn Song. 2022. Copy, Right? A Testing Framework for Copyright Protection of Deep Learning Models. In 43rd IEEE Symposium on Security and Privacy, SP 2022 . IEEE, 824–841. [14] Jingjing Chen, Xiaobin Wang, Chen Huang, Xin Hu, Xinke Shen, and Dan Zhang. 2023. A large finer-grained affective computing EEG dataset. Scientific Data 10, 1 (2023), 740. [15] Adam Coates, Andrew Ng, and Honglak Lee. 2011. An analysis of single-layer networks in unsupervised feature learning. In Proceedings of the fourteenth inter-national conference on artificial intelligence and statistics . JMLR Workshop and Conference Proceedings, 215–223. [16] Former Contributor. 2015. Five Reasons To Copyright Register Your Software Now. https://www.forbes.com/sites/oliverherzfeld/2015/10/26/five-reasons-to-copyright-your-software-now. [17] Luke N Darlow, Elliot J Crowley, Antreas Antoniou, and Amos J Storkey. 2018. Cinic-10 is not imagenet or cifar-10. arXiv preprint arXiv:1810.03505 (2018). [18] Tian Dong, Shaofeng Li, Guoxing Chen, Minhui Xue, Haojin Zhu, and Zhen Liu. 2023. RAI2: Responsible Identity Audit Governing the Artificial Intelligence. In 
+
+30th Annual Network and Distributed System Security Symposium, NDSS 2023 .The Internet Society. [19] Linkang Du, Min Chen, Mingyang Sun, Shouling Ji, Peng Cheng, Jiming Chen, and Zhikun Zhang. 2024. ORL-AUDITOR: Dataset Auditing in Offline Deep Reinforcement Learning. In 31st Annual Network and Distributed System Security Symposium, NDSS 2024 . The Internet Society. [20] Linkang Du, Xuanru Zhou, Min Chen, Chusong Zhang, Zhou Su, Peng Cheng, Jiming Chen, and Zhikun Zhang. 2025. SoK: Dataset Copyright Auditing in Machine Learning Systems. In IEEE Symposium on Security and Privacy, SP 2025 .IEEE. [21] The Economist. 2024. AI firms will soon exhaust most of the internet’s data. https://www.economist.com/schools-brief/2024/07/23/ai-firms-will-soon-exhaust-most-of-the-internets-data. [22] Bent Fuglede and Flemming Topsøe. 2004. Jensen-Shannon divergence and Hilbert space embedding. In Proceedings of the 2004 IEEE International Symposium on Information Theory, ISIT 2004 . IEEE, 31. [23] Raja Giryes, Guillermo Sapiro, and Alexander M. Bronstein. 2016. Deep Neural Networks with Random Gaussian Weights: A Universal Classification Strategy? 14 DIPBox : A Multi-scale Testing Framework for Tracking Dataset Regeneration 
+
+IEEE Trans. Signal Process. 64, 13 (2016), 3444–3457. [24] Arthur Gretton, Karsten M. Borgwardt, Malte J. Rasch, Bernhard Schölkopf, and Alexander J. Smola. 2012. A Kernel Two-Sample Test. J. Mach. Learn. Res. 13 (2012), 723–773. [25] Kathrin Grosse, Lukas Bieringer, Tarek R. Besold, and Alexandre M. Alahi. 2024. Towards More Practical Threat Models in Artificial Intelligence Security. In Proc. of USENIX Security .[26] Frederik Harder, Kamil Adamczewski, and Mijung Park. 2021. DP-MERF: Differ-entially Private Mean Embeddings with RandomFeatures for Practical Privacy-preserving Data Generation. In The 24th International Conference on Artificial Intelligence and Statistics, AISTATS 2021 (Proceedings of Machine Learning Re-search, Vol. 130) . PMLR, 1819–1827. [27] Moritz Hardt, Ben Recht, and Yoram Singer. 2016. Train faster, generalize better: Stability of stochastic gradient descent. In International conference on machine learning . PMLR, 1225–1234. [28] Sameed Hayat. 2026. Guardian News Dataset. https://www.kaggle.com/datasets/ sameedhayat/guardian-news-dataset. Accessed: 2026-06-18. [29] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. 2016. Deep residual learning for image recognition. In Proc. of IEEE CVPR .[30] Jonathan Ho, Ajay Jain, and Pieter Abbeel. 2020. Denoising Diffusion Proba-bilistic Models. In Advances in Neural Information Processing Systems 33: Annual Conference on Neural Information Processing Systems 2020, NeurIPS 2020 .[31] Yangsibo Huang, Chun-Yin Huang, Xiaoxiao Li, and Kai Li. 2022. A Dataset Auditing Method for Collaboratively Trained Machine Learning Models. IEEE Transactions on Medical Imaging (2022). [32] Zonghao Huang, Neil Zhenqiang Gong, and Michael K. Reiter. 2024. A General Framework for Data-Use Auditing of ML Models. In Proceedings of the 2024 ACM SIGSAC Conference on Computer and Communications Security, 2024 . ACM. [33] Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. 2022. Elucidating the Design Space of Diffusion-Based Generative Models. In NeurIPS .[34] Tero Karras, Miika Aittala, Janne Hellsten, Samuli Laine, Jaakko Lehtinen, and Timo Aila. 2020. Training Generative Adversarial Networks with Limited Data. In Proc. NeurIPS .[35] Tero Karras, Miika Aittala, Samuli Laine, Erik Härkönen, Janne Hellsten, Jaakko Lehtinen, and Timo Aila. 2021. Alias-Free Generative Adversarial Networks. In Advances in Neural Information Processing Systems 34: Annual Conference on Neural Information Processing Systems 2021, NeurIPS 2021 . 852–863. [36] Sander Koelstra, Christian Muhl, Mohammad Soleymani, Jong-Seok Lee, Ashkan Yazdani, Touradj Ebrahimi, Thierry Pun, Anton Nijholt, and Ioannis Patras. 2011. Deap: A database for emotion analysis; using physiological signals. IEEE transactions on affective computing 3, 1 (2011), 18–31. [37] Neeraj Kumar, Alexander C. Berg, Peter N. Belhumeur, and Shree K. Nayar. 2009. Attribute and simile classifiers for face verification. In IEEE 12th International Conference on Computer Vision, ICCV 2009 . IEEE Computer Society, 365–372. [38] Huseyin Kusetogullari, Amir Yavariabdi, Abbas Cheddad, Håkan Grahn, and Johan Hall. 2020. ARDIS: a Swedish historical handwritten digit dataset. Neural Comput. Appl. 32, 21 (2020), 16505–16518. [39] Huseyin Kusetogullari, Amir Yavariabdi, Johan Hall, and Niklas Lavesson. 2021. DIGITNET: A Deep Handwritten Digit Detection and Recognition Method Using a New Historical Handwritten Digit Dataset. Big Data Res. 23 (2021), 100182. [40] Yiming Li, Yang Bai, Yong Jiang, Yong Yang, Shu-Tao Xia, and Bo Li. 2022. Untar-geted Backdoor Watermark: Towards Harmless and Stealthy Dataset Copyright Protection. In Advances in Neural Information Processing Systems (NeurIPS) .[41] Yiming Li, Mingyan Zhu, Xue Yang, Yong Jiang, Tao Wei, and Shu-Tao Xia. 2023. Black-box Dataset Ownership Verification via Backdoor Watermarking. IEEE Transactions on Information Forensics and Security (2023), 1–1. doi:10.1109/TIFS. 2023.3265535 [42] Gaoyang Liu, Tianlong Xu, Xiaoqiang Ma, and Chen Wang. 2022. Your Model Trains on My Data? Protecting Intellectual Property of Training Data via Mem-bership Fingerprint Authentication. IEEE Trans. Inf. Forensics Secur. 17 (2022), 1024–1037. [43] Hui Liu, Hongzhi Luo, Shaofeng Li, Tian Dong, Guoxing Chen, Yan Meng, and Haojin Zhu. 2023. Privacy Computing with Right to Be Forgotten in Trusted Execution Environment. In IEEE Global Communications Conference (GlobeCom), Kuala Lumpur, Malaysia .[44] Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. 2015. Deep Learning Face Attributes in the Wild. In Proceedings of International Conference on Computer Vision (ICCV) .[45] Shayne Longpre, Robert Mahari, Anthony Chen, Naana Obeng-Marnu, Damien Sileo, William Brannon, Niklas Muennighoff, Nathan Khazam, Jad Kabbara, Kartik Perisetla, et al . 2024. A large-scale audit of dataset licensing and attribution in AI. Nature Machine Intelligence 6, 8 (2024), 975–987. [46] Shayne Longpre, Robert Mahari, Ariel Lee, Campbell Lund, Hamidah Oderinwale, William Brannon, Nayan Saxena, Naana Obeng-Marnu, Tobin South, Cole Hunter, Kevin Klyman, Christopher Klamm, Hailey Schoelkopf, Nikhil Singh, Manuel Cherep, Ahmad Mustafa Anis, An Dinh, Caroline Chitongo, Da Yin, Damien Sileo, Deividas Mataciunas, Diganta Misra, Emad Alghamdi, Enrico Shippole, Jianguo Zhang, Joanna Materzynska, Kun Qian, Kush Tiwary, Lester Miranda, Manan Dey, Minnie Liang, Mohammed Hamdy, Niklas Muennighoff, Seonghyeon Ye, Seungone Kim, Shrestha Mohanty, Vipul Gupta, Vivek Sharma, Vu Minh Chien, Xuhui Zhou, Yizhi Li, Caiming Xiong, Luis Villa, Stella Biderman, Hanlin Li, Daphne Ippolito, Sara Hooker, Jad Kabbara, and Sandy Pentland. 2024. Consent in Crisis: The Rapid Decline of the AI Data Commons. In Advances in Neural Information Processing Systems , A. Globerson, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang (Eds.), Vol. 37. Curran Associates, Inc., 108042–108087. [47] Nils Lukas, Edward Jiang, Xinda Li, and Florian Kerschbaum. 2022. SoK: How Robust is Image Classification Deep Neural Network Watermarking?. In 43rd IEEE Symposium on Security and Privacy, SP 2022 . IEEE, 787–804. [48] Pratyush Maini, Hengrui Jia, Nicolas Papernot, and Adam Dziedzic. 2024. LLM Dataset Inference: Did you train on my dataset?. In The Thirty-eighth Annual Conference on Neural Information Processing Systems .[49] Pratyush Maini, Mohammad Yaghini, and Nicolas Papernot. 2021. Dataset Infer-ence: Ownership Resolution in Machine Learning. In International Conference on Learning Representations .[50] Bertin Martens. 2018. The importance of data access regimes for artificial in-telligence and machine learning. JRC Digital Economy Working Paper 2018-09 
+
+(2018). [51] Yuval Netzer, Tao Wang, Adam Coates, Alessandro Bissacco, Bo Wu, and An-drew Y Ng. 2011. Reading digits in natural images with unsupervised feature learning. NIPS Workshop on Deep Learning and Unsupervised Feature Learning 
+
+(2011). [52] Google Play. 2024. Intellectual Property Policy. https://support.google.com/ googleplay/android-developer/answer/9888072. [53] Ilija Radosavovic, Raj Prateek Kosaraju, Ross B. Girshick, Kaiming He, and Piotr Dollár. 2020. Designing Network Design Spaces. In Proc. of IEEE/CVF CVPR .[54] Arpit Rajauria. 2020. pegasus paraphrase. https://huggingface.co/tuner007/ pegasus_paraphrase. [55] Alexandre Sablayrolles, Matthijs Douze, Cordelia Schmid, and Hervé Jégou. 2020. Radioactive data: tracing through training. In Proceedings of the 37th International Conference on Machine Learning, ICML 2020 (Proceedings of Machine Learning Research, Vol. 119) . PMLR, 8326–8335. [56] Mark Sandler, Andrew G. Howard, Menglong Zhu, Andrey Zhmoginov, and Liang-Chieh Chen. 2018. MobileNetV2: Inverted Residuals and Linear Bottle-necks. In 2018 IEEE Conference on Computer Vision and Pattern Recognition, CVPR 2018 . Computer Vision Foundation / IEEE Computer Society, 4510–4520. [57] Andrew M. Saxe, Pang Wei Koh, Zhenghao Chen, Maneesh Bhand, Bipin Suresh, and Andrew Y. Ng. 2011. On Random Weights and Unsupervised Feature Learn-ing. In Proceedings of the 28th International Conference on Machine Learning, ICML 2011 . Omnipress, 1089–1096. [58] Ilia Shumailov, Zakhar Shumaylov, Yiren Zhao, Nicolas Papernot, Ross Anderson, and Yarin Gal. 2024. AI models collapse when trained on recursively generated data. Nature 631, 8022 (2024), 755–759. [59] Karen Simonyan and Andrew Zisserman. 2014. Very deep convolutional net-works for large-scale image recognition. arXiv preprint arXiv:1409.1556 (2014). [60] Bharath K. Sriperumbudur, Arthur Gretton, Kenji Fukumizu, Bernhard Schölkopf, and Gert R. G. Lanckriet. 2010. Hilbert Space Embeddings and Metrics on Probability Measures. J. Mach. Learn. Res. 11 (2010), 1517–1561. [61] Mingxing Tan and Quoc V. Le. 2021. EfficientNetV2: Smaller Models and Faster Training. In Proceedings of the 38th International Conference on Machine Learning, ICML 2021 (Proceedings of Machine Learning Research, Vol. 139) . PMLR, 10096– 10106. [62] Iulia Turc, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2019. Well-read students learn better: The impact of student initialization on knowledge distillation. arXiv preprint arXiv:1908.08962 (2019). [63] Hadas Unger, CHERGUELAINE Ayoub, and BOUBEKRI Faycal. 2023. CNN News Articles from 2011 to 2022. https://huggingface.co/datasets/AyoubChLin/CNN_ News_Articles_2011-2022. [64] James Vincent. 2023. Meta’s powerful AI language model has leaked online. https://www.theverge.com/2023/3/8/23629362/meta-ai-language-modelllama-leak-online-misuse. [65] Maxim Kuznetsov Vladimir Vorobev. 2023. A paraphrasing model based on ChatGPT paraphrases. https://huggingface.co/humarin/chatgpt_paraphraser_ on_T5_base. [66] Shuo Wang, Sharif Abuadbba, Sidharth Agarwal, Kristen Moore, Ruoxi Sun, Minhui Xue, Surya Nepal, Seyit Camtepe, and Salil Kanhere. 2022. PublicCheck: Public Integrity Verification for Services of Run-time Deep Models. In 2023 IEEE Symposium on Security and Privacy (SP) . IEEE Computer Society, 1239–1256. [67] Yifei Wang, Jizhe Zhang, and Yisen Wang. 2024. Do Generated Data Always Help Contrastive Learning?. In The Twelfth International Conference on Learning Representations .[68] Yifan Yan, Xudong Pan, Mi Zhang, and Min Yang. 2023. Rethinking White-Box Watermarks on Deep Learning Models under Neural Structural Obfuscation. In 
+
+32nd USENIX Security Symposium, USENIX Security 2023 . USENIX Association, 2347–2364. 15 Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗, and Hao Chen §                   
+
+> [69] Ze Yang, Can Xu, Wei Wu, and Zhoujun Li. 2019. Read, Attend and Comment: A Deep Architecture for Automatic News Comment Generation. In Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing, EMNLP-IJCNLP 2019 . Association for Computational Linguistics, 5076–5088. [70] Yuxia Zhan, Yan Meng, Yichang Xiong Lu Zhou, Xiaokuan Zhang, Lichuan Ma, Guoxing Chen, Qingqi Pei, and Haojin Zhu. 2024. VPVet: Vetting Privacy Policies of Virtual Reality Apps. In Proceedings of the 2024 ACM SIGSAC Conference on Computer and Communications Security, 2024 . ACM. [71] Jingqing Zhang, Yao Zhao, Mohammad Saleh, and Peter J. Liu. 2020. PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization. In
+> Proceedings of the 37th International Conference on Machine Learning, ICML 2020 (Proceedings of Machine Learning Research, Vol. 119) . PMLR, 11328–11339. [72] Richard Zhang, Phillip Isola, Alexei A. Efros, Eli Shechtman, and Oliver Wang. 2018. The Unreasonable Effectiveness of Deep Features as a Perceptual Metric. In 2018 IEEE Conference on Computer Vision and Pattern Recognition, CVPR 2018 .Computer Vision Foundation / IEEE Computer Society, 586–595. [73] Zhifei Zhang, Yang Song, and Hairong Qi. 2017. Age Progression/Regression by Conditional Adversarial Autoencoder. In Proc. of IEEE CVPR .[74] Bo Zhao and Hakan Bilen. 2023. Dataset Condensation with Distribution Match-ing. In IEEE/CVF Winter Conference on Applications of Computer Vision, WACV 2023 . IEEE, 6503–6512. [75] Haodong Zhao, Wei Du, Fangqi Li, Peixuan Li, and Gongshen Liu. 2023. Fed-prompt: Communication-efficient and privacy-preserving prompt tuning in fed-erated learning. In ICASSP 2023-2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) . IEEE, 1–5. [76] Yue Zhao, Meng Li, Liangzhen Lai, Naveen Suda, Damon Civin, and Vikas Chan-dra. 2018. Federated Learning with Non-IID Data. CoRR abs/1806.00582 (2018). [77] Wei-Long Zheng, Wei Liu, Yifei Lu, Bao-Liang Lu, and Andrzej Cichocki. 2018. Emotionmeter: A multimodal framework for recognizing human emotions. IEEE transactions on cybernetics 49, 3 (2018), 1110–1122.
+
+## A Ethical Considerations 
+
+Context and Goal. This work studies dataset-regeneration (piracy) threats and proposes DIPBox , a multi-scale testing framework that helps an auditor assess whether a suspect dataset is regenerated from a protected victim dataset under sample-, set-, and distribution-level regeneration primitives. Our experiments are conducted of-fline on datasets and models obtained from open-source platforms ( e.g. , Hugging Face) or prior literature, under the permissions and licenses specified by those sources. We obtained IRB approval from the authors’ institutions and did not recruit or interact with human participants. 
+
+Stakeholders. We consider the following stakeholders potentially impacted by our research: (1) Dataset creators or owners (i.e. , victim in the paper) whose proprietary or scarce datasets may be pirated; (2) Model developers or data users who may be accused of piracy (rightly or wrongly); (3) Platforms and auditors ( e.g. , model or dataset hosting ser-vices) who may deploy auditing pipelines; (4) Data subjects represented in datasets, especially sensitive domains (e.g., facial or biometric); (5) End users and society who benefit from accountable AI sup-ply chains and reduced illicit reuse; (6) Adversaries who may attempt to evade auditing or misuse released artifacts. 
+
+Potential Benefits. DIPBox can improve transparency and ac-countability of dataset usage by enabling non-intrusive detection signals beyond exact-sample matching, including distribution-level evidence, which can support dispute resolution and deter dataset piracy. It may also incentivize better governance for scarce and high-value datasets. 
+
+Potential Harms and Rights Considerations. Any tracking result may be misinterpreted as definitive proof of wrongdoing, potentially harming legitimate users through reputational or legal consequences. Adversaries could use the insights to tune regenera-tion procedures or evade detection, potentially increasing piracy success at high cost. Although we do not collect new personal data, some evaluated benchmarks may involve human-related content ( e.g. , FairFace dataset). Mishandling or over-sharing derived arti-facts could amplify privacy risks. Dataset licenses and terms of use vary; irresponsible redistribution of datasets or derivative artifacts could violate legal constraints. 
+
+Mitigations. We position DIPBox as an auditing support tool rather than a standalone legal verdict. Therefore, conclusions should be corroborated with additional evidence and human review. We limit the release of materials that would directly enable dataset piracy at scale (see details in the Open Science section), while still providing sufficient artifacts to evaluate our defensive methodology. We do not probe or test live systems or services without consent, and we do not perform vulnerability exploitation on third-party infrastructure. We rely on publicly available datasets and models and follow their usage constraints. We do not attempt to re-identify individuals, and we avoid publishing any new sensitive annotations or linking information beyond what is already present in the original sources. 
+
+Decision Rationale. Balancing benefits ( i.e. , deterrence and ac-countability for dataset piracy, and improved auditing capabilities) against harms ( i.e. , dual-use and misinterpretation risks), our work is ethically justified with mitigations : careful release choices, and avoidance of new human-subject data collection. We will revisit the release of additional artifacts only if and when doing so does not materially increase misuse risk, and if appropriate safeguards are available. 
+
+## B Open Science 
+
+We release the implementation of DIPBox 1, including the end-to-end auditing pipeline and a user-friendly interface, together with environment specifications and installation instructions to facilitate reproducibility. To reduce misuse risk, we do not release turnkey implementations of the three dataset-regeneration attacks studied in this paper. Nevertheless, we provide sufficient methodological details to re-implement these attacks. Moreover, all evaluations are conducted on publicly available datasets; thus, interested users can readily re-create the experimental setup and test the described at-tack primitives on open datasets without requiring any proprietary dataset. 
+
+## C Generative AI Usage 
+
+We used GPT-5.2 and GPT-5.4 as a writing assistant to improve clarity and presentation ( e.g. , polishing wording, reorganizing para-graphs, and improving readability) during manuscript revision. The tool was not used to generate experimental data, run experiments, produce figures, or create new technical claims.    
+
+> 1https://zenodo.org/records/20746861 16 DIPBox : A Multi-scale Testing Framework for Tracking Dataset Regeneration MNIST
+> original
+> glass
+> blur
+> impulse
+> noise
+> jpeg
+> compression pixelate spatter
+> speckle
+> noise
+> CIFAR-10 Facial
+
+Figure 13: Examples of sample-level regeneration attack. Origin  Insertion  Deletion  Synonym                                                   
+
+> Rand falls on shock SA rate cut Interest rates are trimmed to 7.5 by the South African central bank, but the lack of warning hits the rand and surprises markets.
+> Rand falls on stake
+> shock SA rate cut
+> surprise Interest rates are trimmed to 7.5 by the South African central
+> fundamental bank, but the lack of warning hits the rand septenary and
+> fin surprises markets.
+> Rand falls on shock
+> SA rate cut interest
+> rates are trimmed
+> to 7.5 by the South
+> African central
+> bank , but the lack of warning hits the rand and surprises markets.
+> Reef downfall on
+> cushion SA rate
+> issue concern rates are dress to 7.5 by the SAfrican central bank, but the lack of discourage hit the rand and surprises markets.
+
+Figure 14: Text examples of sample-level regeneration attack. The modified words are highlighted. 
+
+## D Additional Experimental Details D.1 Measurement Details 
+
+The verification process was conducted by three authors. Initially, two authors compared suspected duplicate samples filtered by 𝐿 2
+
+distance to confirm whether they were identical. The criterion for judging two samples as exact duplicates is that they represent the same content and details. We use an 𝐿 2 filter with threshold 0.1 as a preliminary step; zero 𝐿 2 distance indicates exact duplicates. The manual comparison aimed to exclude cases of small non-zero 
+
+𝐿 2 distance where discrepancies arose due to noise, image post-processing ( e.g. , overexposure), or incomplete images ( e.g. , nearly blank images). For the inter-annotator agreement protocol, if the two evaluators reached conflicting conclusions, a third author with a background in AI and medicine resolved the disagreement by determining whether the tumor images were identical. This process ensured the reliability of the manual verification and the reproducibility of the duplication findings. 
+
+## D.2 Details and Additional Evaluation 
+
+Evaluation on tumor datasets. We evaluated DIPBox on the tu-mor datasets measured in the paper and on additional open datasets collected after our initial measurement study. In total, we gathered 13 datasets. In our initial analysis, DIPBox reports signals consistent with potential post-processing (Attack ❶) and exact duplication (Attack ❷) among 10 datasets, and no such signals in the remaining 3 datasets. This aligns with our measurement results. 
+
+Default Training. In the default setting, we train models for 200 epochs with learning rate 0.1 and with SGD to ensure convergence. For the text, the default finetuning setting for the pretrained smaller BERT models is 3 epochs with learning rate 5e-4. DEAP       
+
+> (2012)
+> SEED-IV
+> (2019)
+> FACED
+> (2023)
+> Training shard
+> DEAP (2012)
+> SEED-IV (2019)
+> FACED (2023)
+> Test shard
+> 56.6% 23.7% 22.9%
+> 25.5% 89.3% 27.1%
+> 28.1% 21.5% 77.6%
+
+Figure 15: An example experiment of transfer accuracy be-tween different EEG feature datasets, each of which is split into training and test shards. For each training shard, we train a model and test across three test shards. Low transfer accuracy indicates the importance of in-distribution dataset for specific tasks. Metric Setting. We set 𝐿 2 norm to measure the data distance in the metrics. As for the metric SD, we set the closed ball’s radius 
+
+𝑟 = 16 /255 = 0.0625 for image data and 2.77 as the 𝐿 2 norm of a full-0.1 embedding. For DD, we instantiate 𝜓 𝜃 as a two-layer ReLU MLP with hidden dimension 128 and output dimension 128, with all parameters (weights and biases) sampled i.i.d. from N ( 0, 1) and kept fixed (not trained). For vision tasks, the MLP input is the raw pixel vector (flattened image); for text tasks, the MLP input is the BERT [CLS] embedding as described in Section 5.1. Following the selection process of prior work [ 13 ], we use the default threshold ratio 𝛼 𝜆 = 0.9 for 𝜆 ∈ { 𝑂𝐷, 𝐺𝐷, 𝐷𝐷 }.
+
+Experiments on EEG Datasets. We justify the dataset importance for domain-specific task through an example of emotion classifi-cation via Electroencephalography (EEG) data in Figure 15. We surveyed and chose three classic and latest representative (licensed) EEG feature benchmarks: DEAP [ 36 ], SEED-IV [ 77 ] and FACED [ 14 ]. Although we manually unify labels, the transfer accuracy scores are low, possibly because of unbalanced labeling and different col-lections, indicating that, given test data, training accurate models requires its in-distribution data, which may not be accessible to external developers and thus worth protection. In Figure 15, we test transferred accuracy of emotion classification using ResNet-18, where we observe the consistent degradation of data distribution discrepancy, indicating the uniqueness of dataset for building ex-clusive AI products. 
+
+Combined Attacks. Without loss of generality, we consider the combination of shallow and deep feature attacks: the adversary applies Attack ❶ or ❷ to the dataset generated by the “Advanced generator” trained on MNIST (Table 7). We apply high severity of post-processing in Table 5 for Attack ❶. Among the tested post-processing variants, Speckle noise yields the highest UR (93.57%) and Glass blur yields the lowest UR (69.81%), with DD values 3.14 and 11.12, respectively. Both DD values are under the threshold of MNIST, indicating the Attack ❶ is detectable. However, in this case our judgment cannot reliably distinguish the two shallow-feature attack types (Attack ❶ vs. ❷). For Attack ❷, we tested ratio {0.6, 0.8}
+
+which leads to UR values 95.44% and 96.63% with DD values 13.79 and 6.38, respectively. Therefore, the simple combination cannot increase the measured distances without degrading data utility. 
+
+> 17 Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗, and Hao Chen §
+
+## E Theoretical Analysis 
+
+We provide detailed justifications for OD, GD and DD. 
+
+## E.1 Justification of OD 
+
+We formalize why OD is informative under a standard stability route. We emphasize that stability is a sufficient (not necessary) condition for generalization; we adopt it to obtain a transparent bound. We first introduce the uniform stability [10]. 
+
+Definition E.1 (Uniform stability) . A learning algorithm 𝐿 has uniform stability 𝛽 > 0 w.r.t. loss ℓ if for any two datasets 𝑆, 𝑆 ′ of size 𝑛 that differ in at most one example, 
+
+sup 
+
+> 𝑧
+
+ℓ (𝐿 (𝑆 ), 𝑧 ) − ℓ (𝐿 (𝑆 ′), 𝑧 ) ≤ 𝛽. (10) A classical result links uniform stability to expected generaliza-tion gap for bounded losses. We use it as motivation; our OD bound below relies on prediction stability. 
+
+Lemma E.1 (Expected generalization gap under stability) . Assume 
+
+ℓ ∈ [ 0, 1] and 𝐿 has uniform stability 𝛽 . Then 
+
+E𝑆 
+
+𝑅 (𝐿 (𝑆 )) − 𝑅 𝑆 (𝐿 (𝑆 ))  ≤ 𝛽, (11) where 𝑅 (·) is population risk and 𝑅 𝑆 (·) is empirical risk on 𝑆 .
+
+Prediction stability. Uniform stability is defined on loss and does not automatically upper-bound output differences ∥𝑓 𝑆 (𝑥 ) − 
+
+𝑓 𝑆 ′ (𝑥 )∥ without additional assumptions. We therefore introduce a prediction-stability condition. This condition is standard in stability-based analyses for regularized learning algorithms [ 27 ] ( e.g. , DNN training), and we treat it as an explicit modeling assumption for our setting. 
+
+Definition E.2 (Prediction stability) . Let 𝑓 𝑆 = 𝐿 (𝑆 ) denote the learned predictor. We say 𝐿 is prediction-stable with parameter 𝛽 𝑓 
+
+if for any adjacent datasets 𝑆, 𝑆 ′ (differing in one example), 
+
+sup 
+
+> 𝑥
+
+∥𝑓 𝑆 (𝑥 ) − 𝑓 𝑆 ′ (𝑥 )∥ ≤ 𝛽 𝑓 . (12) Intuitively, 𝛽 𝑓 upper-bounds the worst-case output perturbation 
+
+(measured in the same norm as OD) induced by replacing a single training example; it depends on the learning algorithm, regulariza-tion, optimization dynamics, and early stopping. 
+
+OD bound for 𝑘 -sample regeneration. Let XV be the victim dataset and XA be a regenerated dataset that differs by at most 𝑘 samples. Construct a sequence 𝑆 0, . . . , 𝑆 𝑘 such that 𝑆 0 = XV , 𝑆 𝑘 = XA , and 
+
+𝑆 𝑖 +1 differs from 𝑆 𝑖 in one example. Let 𝑓 𝑖 = 𝐿 (𝑆 𝑖 ).
+
+Proposition 1 (OD scales at most linearly with 𝑘 under predic-tion stability) . Assume 𝐿 is prediction-stable with parameter 𝛽 𝑓 
+
+(Definition E.2). Then for any audit set 𝑋 𝐽 ,
+
+1
+
+|𝑋 𝐽 |∑︁ 𝑥 ∈𝑋 𝐽 
+
+∥𝑓 V (𝑥 ) − 𝑓 A (𝑥 )∥ ≤ 𝑘 𝛽 𝑓 , (13) where 𝑓 V = 𝐿 (X V ) and 𝑓 A = 𝐿 (X A ). Consequently, OD (𝑓 V , 𝑓 A, 𝑋 𝐽 ) =
+
+𝑂 (𝑘 ).
+
+Proof. By triangle inequality, 
+
+∥𝑓 V (𝑥 ) − 𝑓 A (𝑥 )∥ = ∥𝑓 0 (𝑥 ) − 𝑓 𝑘 (𝑥 )∥ ≤  
+
+> 𝑘 −1
+
+∑︁ 
+
+> 𝑖 =0
+
+∥𝑓 𝑖 (𝑥 ) − 𝑓 𝑖 +1 (𝑥 )∥ . (14) Applying Definition E.2 to each adjacent pair gives ∥𝑓 𝑖 (𝑥 )− 𝑓 𝑖 +1 (𝑥 )∥ ≤ 
+
+𝛽 𝑓 for all 𝑥 , hence ∥𝑓 V (𝑥 )− 𝑓 A (𝑥 )∥ ≤ 𝑘𝛽 𝑓 . Averaging over 𝑋 𝐽 yields the claim. □
+
+Proposition 1 shows that OD is upper-bounded by a term linear in 𝑘 , the number of training points that differ between XV and XA .For Attack ❷, if the adversary preserves an overlap ratio 𝑝 with the victim set, then 𝑘 ≈ ( 1 − 𝑝 )|X V |, which explains the near-linear OD trend observed in Figure 10. This also clarifies why achieving simultaneously small OD and high utility requires keeping the effective perturbation size 𝑘 limited, motivating our complementary GD/DD checks for stronger adversaries. 
+
+## E.2 Justification of GD 
+
+We connect GD to influence-function analysis and clarify the as-sumptions needed for a rigorous interpretation. For twice-differentiable empirical risk minimization with optimum ˆ𝜃 , the (upweighting) influence of a training point 𝑧 train on the loss at a test point 𝑧 test 
+
+admits the classical approximation: 
+
+𝐼 up (𝑧 train , 𝑧 test ) ≈ ∇ 𝜃 ℓ (𝑧 test , ˆ𝜃 )⊤𝐻 −1ˆ𝜃 ∇𝜃 ℓ (𝑧 train , ˆ𝜃 ), (15) where 𝐻 ˆ𝜃 is the Hessian of the empirical objective at ˆ𝜃 .
+
+Self-influence and a curvature-controlled upper bound. The self-influence of a point 𝑧 is often summarized by the quadratic form 
+
+𝐼 self (𝑧 ) := ∇𝜃 ℓ (𝑧, ˆ𝜃 )⊤𝐻 −1ˆ𝜃 ∇𝜃 ℓ (𝑧, ˆ𝜃 ). (16) The 𝐿𝑁𝐺 (𝑓 , 𝑥 ) metric, and by extension GD, is a computationally efficient, Hessian-free surrogate for a sample’s self-influence . Under the classical influence-function approximation, the (self-)influence of a sample 𝑧 = (𝑥, 𝑦 ) around the optimum ˆ𝜃 takes the quadratic form 𝐼 self (𝑧 ) = 𝑔 (𝑧 )⊤𝐻 −1ˆ𝜃 𝑔 (𝑧 ), where 𝑔 (𝑧 ) = ∇𝜃 ℓ (𝑧 ; ˆ𝜃 ) and 𝐻 ˆ𝜃 is the Hessian of the empirical objective. Since 𝐿𝑁𝐺 (𝑓 , 𝑥 ) measures the magnitude of per-sample parameter gradients across layers (with scale normalization), it serves as a Hessian-free proxy for 𝑔 (𝑧 ).
+
+Proposition 2 (Gradient norm controls self-influence under strong convexity / local curvature) . Assume 𝐻 ˆ𝜃 ⪰ 𝜇𝐼 for some 𝜇 > 0. Then for any point 𝑧 ,
+
+𝐼 self (𝑧 ) ≤ 1
+
+𝜇 ∇𝜃 ℓ (𝑧, ˆ𝜃 ) 22. (17) 
+
+Proof. Since 𝐻 ˆ𝜃 ⪰ 𝜇𝐼 , we have 𝐻 −1ˆ𝜃 ⪯ 1 
+
+> 𝜇
+
+𝐼 . Therefore 𝑔 ⊤𝐻 −1ˆ𝜃 𝑔 ≤ 
+
+> 1
+> 𝜇
+
+𝑔 ⊤𝑔 with 𝑔 = ∇𝜃 ℓ (𝑧, ˆ𝜃 ), because 𝜆 min (𝐻 ˆ𝜃 ) ≥ 𝜇 > 0 implies 
+
+𝜆 max (𝐻 −1ˆ𝜃 ) ≤ 1/𝜇 . □
+
+A sample (𝑥, 𝑦 ) that was part of the training set has, by definition, contributed to the learned parameters ˆ𝜃 . However, for modern over-parameterized and non-convex models, it is generally not 
+
+guaranteed that every training sample satisfies ∥∇ 𝜃 ℓ (𝑓 ˆ𝜃 (𝑥 ), 𝑦 )∥ ≈ 0
+
+at convergence. What we can rely on is a weaker and standard stationarity implication: at a (local) stationary point of ERM, the 
+
+aggregate gradient over the training set vanishes (or is small), and well-fitted samples typically exhibit smaller per-example gradients in practice. Therefore, GD should be interpreted as a diagnostic proxy : a low GD value on an audit point 𝑥 indicates that 𝑓 A treats 𝑥 as a low-gradient point under its learned representation, which is consistent  
+
+> 18 DIPBox : A Multi-scale Testing Framework for Tracking Dataset Regeneration
+
+with (but does not mathematically guarantee) 𝑥 being “seen-like” data for 𝑓 A . This is sufficient for our detection goal, where GD is used as one component in a multi-scale evidence set rather than as a stand-alone proof of membership. 
+
+## E.3 Justification of DD 
+
+In our implementation, DD is computed on randomized representa-tions 𝜓 𝜃 (x). Specifically, 𝜓 𝜃 is a two-layer ReLU MLP with hidden dimension 128 and output dimension 128, whose parameters 𝜃 are sampled i.i.d. from N ( 0, 1) and kept fixed; each draw of 𝜃 yields one random neural feature map. For vision tasks, the input is the flattened raw pixel vector; for text tasks, the input is the BERT 
+
+[CLS] embedding (Appendix D). DD (Eq. (8) ) is a randomized mean-embedding discrepancy : it compares the empirical feature means of 𝜓 𝜃 (·) under two datasets and averages over random draws of 𝜃 . This is motivated by the Maximum Mean Discrepancy (MMD), which is defined as a distance between distributions via differences of mean embeddings in an RKHS. Specifically, given two probability distributions 𝑃 and 𝑄 , and a Reproducing Kernel Hilbert Space (RKHS) H with kernel 𝑘 (· , ·) ,the squared MMD is the distance between the mean embeddings of the distributions in H :
+
+𝑀𝑀𝐷 2 (𝑃, 𝑄 ) = ∥𝜇 𝑃 − 𝜇 𝑄 ∥2
+
+> H
+
+, (18) where 𝜇 𝑃 = E𝑥 ∼𝑃 [𝑘 (𝑥, ·)] is the mean embedding of 𝑃 . This can be expanded as: 
+
+𝑀𝑀𝐷 2 (𝑃, 𝑄 ) = E 
+
+> 𝑥,𝑥 ′∼𝑃
+
+[𝑘 (𝑥, 𝑥 ′)]+ E 
+
+> 𝑦,𝑦 ′∼𝑄
+
+[𝑘 (𝑦, 𝑦 ′)]− 2 E 
+
+> 𝑥 ∼𝑃,𝑦 ∼𝑄
+
+[𝑘 (𝑥, 𝑦 )] 
+
+(19) When 𝜓 𝜃 is chosen as a random-feature map for a character-istic kernel ( e.g. , random Fourier features for Gaussian RBF), DD recovers a standard random-feature approximation of MMD and inherits its identifiability properties in the limit. Our instantiation uses random neural feature maps as a practical surrogate while pre-serving the key structural principle: matching distributions implies matching feature expectations. The theoretical motivation comes from the following theorem about MMD. 
+
+Theorem E.2 (Identifiability of MMD under characteristic ker-nels [ 24 , 60 ]) . Let 𝑘 be a characteristic kernel on X with RKHS 
+
+H𝑘 . Then the kernel mean embedding 𝜇 𝑃 := E𝑥 ∼𝑃 [𝑘 (𝑥, ·)] ∈ H 𝑘 is injective, and 
+
+MMD 𝑘 (𝑃, 𝑄 ) = ∥𝜇 𝑃 − 𝜇 𝑄 ∥H𝑘 = 0 ⇐⇒ 𝑃 = 𝑄. (20) 
+
+Proof sketch. By definition, MMD 𝑘 (𝑃, 𝑄 ) = ∥𝜇 𝑃 − 𝜇 𝑄 ∥H𝑘 .Thus MMD 𝑘 (𝑃, 𝑄 ) = 0 iff 𝜇 𝑃 = 𝜇 𝑄 . For characteristic kernels, the mean embedding map 𝑃 ↦ → 𝜇 𝑃 is injective, i.e., 𝜇 𝑃 = 𝜇 𝑄 ⇒ 𝑃 = 𝑄 .Therefore MMD 𝑘 (𝑃, 𝑄 ) = 0 iff 𝑃 = 𝑄 . □
+
+Implication for distribution-level regeneration. A successful “polish-ing” attack aims to make the adversary distribution PA match the victim distribution PV , i.e., PA ≈ P V . In particular, if PA = PV ,then for any fixed 𝜃 we have E𝑥 ∼P A [𝜓 𝜃 (𝑥 )] = E𝑥 ∼P V [𝜓 𝜃 (𝑥 )] , so the population version of DD is 0. Therefore, the more the adversary succeeds in matching PV , the smaller DD tends to be, increasing the likelihood of being flagged by DIPBox .
+
+## E.4 Derivation of the Detection-Utility Trade-off Bound 
+
+Here, we provide the formal derivation for Theorem 4.1. We model the adversary’s problem using the standard framework of domain adaptation. 
+
+• Source Domain ( 𝑆 ): The adversary’s distribution PA .
+
+• Target Domain ( 𝑇 ): The victim’s distribution PV .The adversary trains on the source domain, minimizing 𝑅 𝑆 (ℎ) =
+
+E(𝑥,𝑦 )∼P A [ℓ (ℎ(𝑥 ), 𝑦 )] , while utility is evaluated on the target do-main 𝑅 𝑇 (ℎ) = E(𝑥,𝑦 )∼P V [ℓ (ℎ(𝑥 ), 𝑦 )] .The key to bounding the relationship between these two risks is the H ΔH -divergence, which measures the dissimilarity between two distributions 𝑃 and 𝑄 relative to a hypothesis class H .
+
+Definition E.3. The H ΔH -divergence between two distributions 
+
+𝑃 and 𝑄 is: 
+
+𝑑 HΔH (𝑃, 𝑄 ) = 2 sup  
+
+> ℎ,ℎ ′∈ H
+
+| Pr  
+
+> 𝑥 ∼𝑃
+
+[ℎ(𝑥 ) ≠ ℎ′ (𝑥 )] − Pr  
+
+> 𝑥 ∼𝑄
+
+[ℎ(𝑥 ) ≠ ℎ′ (𝑥 )]| 
+
+This quantity measures the maximum disagreement between the two domains over the regions where any two hypotheses in H
+
+disagree. 
+
+Risk Definition. For clarity, we state the standard binary-classification form with the 0–1 loss. For a hypothesis ℎ ∈ H , define the source/target risks as 
+
+𝑅 𝑆 (ℎ) ≜ Pr 
+
+> (𝑥,𝑦 )∼P A
+
+[ℎ(𝑥 ) ≠ 𝑦 ] , 𝑅 𝑇 (ℎ) ≜ Pr 
+
+> (𝑥,𝑦 )∼P V
+
+[ℎ(𝑥 ) ≠ 𝑦 ] .
+
+(21) Since under the 0–1 loss and for any hypothesis ℎ ∈ H [7]: 
+
+𝑅 𝑇 (ℎ) ≤ 𝑅 𝑆 (ℎ) + 12 𝑑 HΔH (P A, PV ) + 𝜆, (22) where 𝜆 = min ℎ∗ ∈ H (𝑅 𝑆 (ℎ∗) + 𝑅 𝑇 (ℎ∗)) is the ideal joint error , rep-resenting the minimum achievable error on both domains by an optimal hypothesis ℎ∗. Substituting our domain definitions, we get Theorem 4.1: 
+
+𝑅 PV (ℎ) ≤ 𝑅 PA (ℎ) + 12 𝑑 HΔH (P A, PV ) + 𝜆 (23) 
+
+Implication: This bound formalizes a utility–divergence trade-off: 
+
+• 𝑅 PV (ℎ) is the adversary’s utility loss (they want this to be low). 
+
+• 𝑅 PA (ℎ) is the risk on their own data (they can minimize this via training). 
+
+• 𝑑 HΔH (P A, PV ) captures a hypothesis-disagreement no-tion of domain shift between the adversary and victim dis-tributions. 
+
+• 𝜆 is the ideal joint error, determined by how well the best hypothesis in H can perform simultaneously on both do-mains. The inequality shows that as cross-domain discrepancy increases, the upper bound on the victim-domain risk becomes looser, making high-utility transfer harder to guarantee. Therefore, to maintain high utility on the victim-side distribution, the adversary gener-ally needs to keep the cross-domain discrepancy controlled, which constrains how far the regenerated distribution can drift to evade distribution-level detection in our evaluated settings. 
+
+> 19 Tian Dong ∗, Yan Meng ∗, Shaofeng Li †, Guoxing Chen ∗, Yuling Chen ‡, Zhen Liu ∗, Haojin Zhu ∗, and Hao Chen §
+
+Table 11: Leave-one-negative-out threshold sensitivity based on the negative datasets in Tables 5 and 6. Thresholds are set separately within each task, and the false positives are aggregated over four tasks. Threshold ratio 𝛼 𝜆 FP/Total FPR (%) TNR (%)             
+
+> 0.80 3/12 25.0 75.0 0.90 5/12 41.7 58.3 0.95 6/12 50.0 50.0 1.00 8/12 66.7 33.3
+
+## E.5 False Positive and Power Analysis 
+
+We now analyze the final judgment as a statistical test. For each metric 𝜆 ∈ { 𝑂𝐷, 𝐺𝐷, 𝐷𝐷 }, let 𝑆 𝜆 be the measured value. The null hy-pothesis 𝐻 0 is that the suspect dataset is independently constructed and the alternative hypothesis 𝐻 1 is that the suspect dataset is regen-erated from XV . Since smaller distances indicate higher similarity to XV , the rejection region is 𝑆 𝜆 ≤ 𝜏 𝜆 .
+
+False Positive & Threshold. For a fixed task and a single metric, the false-positive rate is Pr [𝑆 𝜆 ≤ 𝜏 𝜆 | 𝐻 0]. The threshold 𝜏 𝜆 = 𝛼 𝜆 ·
+
+min 𝑖 𝑠 𝑖 𝑛𝑒𝑔 defined in Section 4.4 uses the closest available negative score for that task. If the 𝑚 negatives used to set the threshold and a future independent dataset for the same task are drawn in the same way from the same population, the future negative is equally likely to take any rank among the 𝑚 + 1 scores and therefore falls below all 𝑚 negatives with probability 1/( 𝑚 + 1). When 𝛼 𝜆 < 1,the threshold is smaller than the closest negative score, making the test more conservative under the same assumptions. This bound is limited when only a few negatives are available and does not apply when those negatives do not represent future honest datasets, such as common-source datasets close to XV . Algorithm 2 combines multiple metrics. Therefore, the overall false positive probability can be larger than the false positive probability of a single metric. A direct union-bound upper bound gives Pr [FP ] ≤ Pr [𝑆 𝑂𝐷 ≤ 𝜏 𝑂𝐷 |
+
+𝐻 0] + Pr [𝑆 𝐺𝐷 ≤ 𝜏 𝐺𝐷 | 𝐻 0] + Pr [𝑆 𝐷𝐷 ≤ 𝜏 𝐷𝐷 | 𝐻 0] over the decisive distance metrics available to the auditor. This bound explains why each metric threshold should be conservative. It also explains why the judgment should be treated as technical evidence rather than a standalone proof. To empirically understand how 𝛼 𝜆 affects false positives, in Ta-ble 11, we test threshold sensitivity by varying 𝛼 𝜆 for the negative datasets in Tables 5 and 6. For each task, we leave one negative out and use the other two negatives from the same task to set the thresholds. In total, we have 12 cases aggregating three held-out choices for each of the four tasks. At the default 𝛼 𝜆 = 0.9, the 5 leave-one-out false positives come from the closest held-out negatives (MNIST Neg-3, CIFAR-10 Neg-2, FairFace Neg-1, and AG-News Neg-1/Neg-3). Specifically, MNIST Neg-3 and AG-News Neg-3 are triggered by model-level metrics, while CIFAR-10 Neg-2, FairFace Neg-1, and AG-News Neg-1 are triggered by DD. The results with 
+
+𝛼 𝜆 ∈ { 0.80 , 0.90 , 0.95 , 1.00 } show that larger 𝛼 𝜆 is more permissive and increases FPR while reducing TNR. We also check the posi-tive side on Table 7: after setting each task’s DD threshold from its three negatives, 𝛼 𝜆 = 0.80 would miss three DD positives in CIFAR-10 (13/16 detected), while 𝛼 𝜆 ≥ 0.90 detects all 16 DD posi-tives. Together, we observe the threshold-ratio trade-off: a smaller 
+
+𝛼 𝜆 can reduce false positives but miss positives, while reliability still depends on the number and representativeness of task-specific negatives. 
+
+Power analysis. The power of a metric test is Pr [𝑆 𝜆 ≤ 𝜏 𝜆 | 𝐻 1].Suppose metric 𝜆 separates regenerated datasets from the negatives used to set the threshold. Let 𝜇 0 and 𝜇 1 be the expected metric values under independent and regenerated datasets, with 𝜇 1 < 𝜇 0. Under a normal or delta-method approximation, the power is approxi-mately Φ(( 𝜏 𝜆 − 𝜇 1)/( 𝜎 1/√𝑛 eff )) , where 𝜎 21 is the variance under regenerated datasets and 𝑛 eff is the effective number of audited measurements. When 𝜇 1 < 𝜏 𝜆 , this approximation suggests that power increases with larger positive-negative separation, larger audit-set or random-feature sample size, and lower metric variance. This formula is used to explain the trend rather than to provide an exact guarantee. For OD, this means that a larger gap between the OD values of regenerated and negative models, together with more audit samples, makes the OD test more likely to trigger on regenerated datasets. For GD, the interpretation applies when re-generated and independent datasets produce separated gradient statistics, since GD is a diagnostic proxy rather than a per-sample guarantee. For DD, this trend is consistent with its mean-embedding interpretation in Section E.3: more audited samples or random fea-ture draws reduce the variance of the empirical mean discrepancy when the population DD values are separated. For SD, |X 𝐷  
+
+> J
+
+| · 𝑆𝐷 
+
+behaves like a count of matched audit samples under a binomial approximation, so the probability of observing enough matches increases with the true overlap ratio and with |X 𝐷  
+
+> J
+
+|. In Algorithm 2, SD mainly provides supporting evidence for sample-level and set-level regeneration after the model metrics trigger the judgment. Overall, the power analysis suggests that increasing the audit-set size or the number of random feature draws reduces estimation noise and improves detection power, while close negatives or small audit sets can make regenerated datasets harder to separate from independent ones.
