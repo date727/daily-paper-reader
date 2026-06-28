@@ -1,0 +1,972 @@
+Title: Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation
+
+URL Source: https://arxiv.org/pdf/2606.22351v1
+
+Published Time: Tue, 23 Jun 2026 02:01:15 GMT
+
+Number of Pages: 29
+
+Markdown Content:
+# Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 
+
+Adam Koziak 1 and Yuhong Guo 1,2 
+
+> 1
+
+School of Computer Science, Carleton University, Ottawa, Canada  
+
+> 2
+
+Canada CIFAR AI Chair, Amii, Canada 
+
+adamkoziak@cmail.carleton.ca yuhong.guo@carleton.ca 
+
+Abstract. Test-time adaptation (TTA) can mitigate domain shift with-out source data, but it is highly brittle under adversarially contaminated test streams, where corrupted inputs also destabilize online updates. We study robust test-time adaptation (RTTA) in the adversarial-stream set-ting, which remains comparatively underexplored relative to standard TTA, and propose SAFER (Stochastic Augmentation Framework for Enhanced Robustness ), a training-free reliability-guided augmentation wrapper for RTTA. SAFER preserves the wrapped TTA objective while replacing brittle single-view predictions with a reliability-guided pooled predictor. For each test sample, SAFER generates stochastic augmen-tations and aggregates their predictions through correlation-weighted pooling with outlier detection. We further study an adaptive-mixing ex-tension that improves clean-performance retention by adjusting original-versus-augmentation weighting using feature disagreement signals. We evaluate on PACS, VLCS, and OfficeHome under PGD attacks at vari-ous attack rates. Across benchmarks, SAFER improves resilience of TTA methods to adversarial attacks while maintaining competitive clean per-formance. 
+
+Keywords: Test-Time Adaptation · Adversarial Robustness · Domain Generalization 
+
+## 1 Introduction 
+
+Deep models often degrade substantially when deployed on test data whose dis-tribution differs from that seen during training. In computer vision, such domain shifts can arise from changes in appearance, acquisition conditions, corruption patterns, or broader differences between source and target environments. Test-time adaptation (TTA) has emerged as a practical response to this problem: instead of requiring source data during deployment, TTA updates a pretrained model online using only unlabeled target-domain test samples [27, 18, 30]. Rep-resentative methods such as Tent [27], pseudo-label-based adaptation [16], and self-distillation or feature-regularized approaches such as TSD [28] demonstrate that test-time updates can substantially improve robustness to ordinary distri-bution shift without changing the original source-training pipeline.  
+
+> arXiv:2606.22351v1 [cs.LG] 21 Jun 2026 2A. Koziak and Y. Guo
+
+Despite this promise, standard TTA remains fragile when the test stream is adversarially contaminated. In this setting, perturbed samples do not merely harm their own predictions: they can also corrupt the statistics, pseudo-labels, and update directions that drive online adaptation, thereby degrading predic-tions on future samples as well [29]. This failure mode is especially concerning in deployment settings where adaptation is attractive precisely because envi-ronments are changing online and source data is unavailable. While adversarial robustness has been studied extensively in supervised settings [9, 19, 3], com-paratively fewer works study robust test-time adaptation under adversarially perturbed online streams [29, 30]. A straightforward response is to apply a fixed input transformation such as JPEG compression, blur, or low-pass filtering before adaptation [10]. Such transforms can partially suppress adversarial perturbations, but they are blunt instruments: when applied uniformly, they may also erase useful information from clean samples and reduce adaptation quality. More broadly, relying on a single transformed view remains brittle, since any individual view may it-self be uninformative or overly distorted. This suggests that robustness in ad-versarial RTTA should be framed not as trusting one view more, but as esti-mating which views are reliable enough to trust at all. We therefore propose 
+
+SAFER (Stochastic Augmentation Framework for Enhanced Robustness ), a training-free reliability-guided stochastic augmentation wrapper for robust test-time adaptation. 3 SAFER replaces brittle single-view predictions with pooled multi-augmentation predictions computed from the original input together with several stochastic augmentations. Rather than averaging these views uniformly, SAFER estimates view reliability from cross-view feature agreement, removes the least reliable view, and pools the remaining predictions with reliability-guided weights. The resulting predictor can be used as a plug-in wrapper around existing TTA methods while preserving their native adaptation objectives. In this way, SAFER targets a central weakness of online TTA under attack: over-committing adaptation to a single potentially corrupted view. Unlike generic prediction en-sembling or static test-time transformation averaging [22], SAFER couples a 
+
+specific cross-view reliability signal and explicit outlier suppression with the wrapped method’s own online update, so that the reliability-guided prediction shapes not only the current output but also future adaptation (Fig. 4). We ad-ditionally study an adaptive-mixing extension designed to better retain clean accuracy. Because SAFER is designed as a modular wrapper rather than a replacement adaptation algorithm, our evaluation focuses on whether the same reliability-guided predictor can consistently stabilize several representative TTA methods under attacked streams. We evaluate SAFER on PACS [17], VLCS [24], and OfficeHome [26] under black-box projected gradient descent (PGD) adversar-ial attacks. We compare against source-only anchors, standard TTA baselines, and stronger robustness- or stability-oriented baselines including EATA [20] and TeSLA [23], as well as simple single-transform defenses such as JPEG, blur, and    
+
+> 3Code available at https://github.com/AdamKoziak1/RobustTestTimeAdaptation .Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 3
+
+FFT low-pass filtering. Across datasets and wrapped TTA methods, SAFER consistently strengthens robustness under adversarially contaminated streams while maintaining competitive clean accuracy. These results support reliability-guided stochastic ensembling as a practical and modular design principle for adversarial robust test-time adaptation. In summary, our key contributions are as follows: 
+
+– We formulate robust test-time adaptation under adversarially contaminated online test streams and position it as a comparatively underexplored setting within the broader TTA literature. 
+
+– We propose SAFER, a training-free wrapper that pools multi-view predic-tions via a reliability signal and explicit outlier dropping rather than generic ensembling, and show that this aggregation rule, not mere view multiplicity, drives the robustness gains. 
+
+– We evaluate the SAFER wrapper on multiple standard TTA baselines, across PACS, VLCS, and OfficeHome under black-box adversarial attacks. 
+
+## 2 Related Work 
+
+2.1 Test-Time Adaptation 
+
+Test-time adaptation (TTA) addresses distribution shift by adapting a pre-trained source model using unlabeled target-domain test data at deployment time, without requiring access to source samples during inference [27, 18, 30]. Compared with conventional domain adaptation, this setting is operationally attractive because it does not assume offline access to the full target set, and com-pared with domain generalization it allows the model to exploit target-domain information online. Early and influential TTA methods adapt model parameters by entropy min-imization on incoming batches. Tent [27], for example, updates normalization statistics and affine parameters online by minimizing prediction entropy. Subse-quent methods broadened this design space: pseudo-label-based adaptation uses model-generated labels to drive test-time updates [16], and T3A [14] avoids back-propagation and instead adjusts class prototypes at inference time using confi-dent target features. TSD [28] combines feature uniformity and feature alignment through self-distillation and local clustering, together with filtering mechanisms to reduce the impact of noisy labels. EATA [20] improves efficiency and stability by selecting informative samples and regularizing updates to reduce forgetting. TeSLA [23] further introduces teacher-student self-learning with automatic ad-versarial augmentation, making it particularly relevant to our study because it already leverages augmentation during adaptation. Our work is complementary to these methods rather than replacing their adaptation objectives. Rather than proposing yet another standalone TTA loss, we show that adversarially contaminated test streams expose a common weak-ness across diverse TTA algorithms, brittle reliance on single-view predictions, and address it with a plug-in prediction wrapper that strengthens multiple ex-isting TTA objectives without modifying their native update rules. 4 A. Koziak and Y. Guo 
+
+2.2 Robust and Stability-Oriented Test-Time Adaptation 
+
+As TTA matured, a growing body of work began to study settings beyond be-nign i.i.d. test streams. NOTE [7] highlights the failure of standard TTA under temporally correlated streams and introduces instance-aware normalization and balanced sampling to improve continual adaptation. SoTTA [8] studies noisy test streams and proposes screening mechanisms together with parameter-stability strategies to reduce the influence of harmful samples. RoTTA [32] targets dy-namic scenarios with correlated and changing streams through robust normaliza-tion, memory-based sampling, and time-aware reweighting. MedBN [21] focuses specifically on malicious test samples by making BN statistic estimation more robust, replacing the usual batch mean in test-time normalization with median-based statistics so that a small number of harmful samples has less influence on adaptation. These methods are important context, but they address robustness notions that differ from the one studied here. Their emphasis is typically on non-i.i.d. sampling, temporal correlation, noisy or out-of-distribution samples, or highly scarce wild adaptation regimes. By contrast, our paper focuses specifically on 
+
+adversarially perturbed online test streams, where malicious examples are in-jected into the target stream and can influence both current predictions and future adaptation updates. This setting remains comparatively limited within the current TTA literature [29, 30]. The closest security-motivated evidence comes from [29], which shows that TTA introduces new adversarial vulnerabilities because malicious samples can invade the adaptation dynamics of benign ones. Our work differs in emphasis: rather than primarily analyzing attacks on TTA, we develop a modular defense mechanism for adversarial robust test-time adaptation that can be wrapped around existing TTA methods. 
+
+2.3 Transformation-Based and Multi-View Robustness Mechanisms 
+
+A large body of adversarial-robustness work studies defenses based on adversar-ial training, feature denoising, or input purification and transformation [19, 31, 10, 6]. However, many such approaches assume labeled source data, retraining, or deployment conditions that do not align naturally with fully online, source-free TTA. In adversarial RTTA, the defense must operate without source labels, without offline retraining, and under continual target-stream updates. Within the broader test-time adaptation literature, augmentation and multi-view rea-soning have also been used to improve robustness to distribution shift. MEMO [33] adapts models using entropy minimization on the marginal prediction across augmentations, showing that multiple augmented views can provide a stronger adaptation signal than a single input alone. TeSLA [23], introduced above, like-wise makes augmentation an explicit part of the adaptation process. Most directly related to our setting, Perez et al. [22] propose test-time trans-formation ensembling (TTE), which averages predictions over a fixed set of input Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 5
+
+transformations to improve adversarial robustness without retraining. Their ap-proach, which we refer to as Static TTE (mean), computes a no-adaptation mean-pooled prediction over augmented views. TTE establishes that aggregat-ing transformed views is an effective training-free robustness mechanism, but it produces a single static robust prediction through uniform averaging and does not perform any online model update. Our method is related in spirit to these approaches, but differs in both mechanism and scope. SAFER does not rely on a single fixed transformation or a dedicated augmentation-trained module; it is closer to a reliability-guided multi-view inference wrapper than to a stan-dalone transformation-based TTA objective. Relative to static transformation ensembling, SAFER differs along three axes: (i) it is a wrapper around an online TTA method that preserves the wrapped method’s native adaptation objective and update rule, rather than a one-shot static predictor; (ii) it replaces uniform transform-averaging with reliability-guided weighting derived from cross-view feature agreement, together with explicit outlier dropping; and (iii) it targets the RTTA-specific failure mode in which contamination corrupts future adapta-tion, not only the current prediction. We make this contrast quantitative in our ablations, where reliability-guided pooling ( cc_drop ) consistently outperforms uniform mean pooling of the same augmentation library (Table 4). 
+
+## 3 Method 
+
+We study robust test-time adaptation for a pretrained source-domain image classifier deployed on an unseen target domain, where unlabeled target samples arrive sequentially in mini-batches and a subset of the stream may be adversari-ally perturbed. The adapting model has no access to source data or target labels at test time. We focus on a black-box setting in which adversarial examples are prepared offline on a surrogate model and injected into the online test stream; we detail this threat model and the injection protocol in Sec. 4.1. Our goal is to im-prove the robustness of existing TTA algorithms in this setting without changing their native adaptation objectives. For a model f , we denote the featurizer h,the prediction head g such that z = h(x; θh) denotes the feature representation, and p = g(z; θg ) denotes the class-probability prediction. Standard test-time adaptation typically updates the model from a single prediction per input us-ing an unsupervised surrogate objective such as entropy minimization. Under adversarial contamination this is brittle: a corrupted input can both induce a wrong prediction and steer subsequent online updates in a harmful direction, while a uniformly applied suppressive transform can reduce perturbations but also damage clean inputs. SAFER is designed around this tradeoff (Fig. 1). For each sample, it con-structs multiple stochastic augmentations in addition to the original view, esti-mates cross-view reliability from feature agreement, removes the least reliable view, and pools the remaining predictions into a robust predictor. This reduces reliance on any single possibly corrupted view while preserving compatibility with the wrapped TTA objective; we examine the underlying assumption, in-6 A. Koziak and Y. Guo 
+
+> Input Image
+> xb
+> Original View
+> x(0)
+> b
+> Stochastic Augment 1
+> x(1)
+> b
+
+...Stochastic Augment N  
+
+> x(N)
+> b
+> Shared Featurizer
+> h(·;θh)
+> z(0)
+> b
+> z(1)
+> b
+
+...   
+
+> z(N)
+> b
+> Shared Classifier
+> g(·;θg)
+> p(0)
+> b
+> p(1)
+> b
+
+...       
+
+> p(N)
+> b
+> Feature Agreement &cc_drop
+> Reliability-Guided Pooling
+> SAFER-A Adaptive Mixing
+> Dropped
+> Weights ˆwb,v Base ¯pbase
+> b
+> Disagreement Signal sfeat
+> b
+> Final Prediction ¯ppred
+> b
+> Wrapped Unsupervised TTA Objective & Online Parameter Update
+
+Fig. 1. Overview of the SAFER framework. For each incoming test batch, the input is expanded into N stochastic augmented views alongside the original view. A shared featurizer extracts representations used to compute cross-view feature agreement. The least reliable view is discarded ( cc_drop ), and the remaining views pass through the classifier to form a reliability-weighted base prediction. The optional SAFER-A module then adaptively mixes this base prediction with the original prediction according to a feature disagreement signal. The final pooled prediction is fed into the wrapped TTA method’s native objective to update the network online. 
+
+cluding the case of multiple corrupted views, in the Assumptions and Design Rationale discussion that closes Sec. 3.2. We additionally study an adaptive-mixing variant, SAFER-A, for applications that prioritize clean-stream reten-tion. 
+
+3.1 Stochastic Augmentation Construction 
+
+For each incoming test sample xb, SAFER constructs a set of V = N + 1 aug-mentations, where N is the number of stochastic augmentations and index 0 is always the unaltered original: 
+
+x(0) 
+
+b = xb, x(v)
+
+b = Tωb,v (xb), v = 1 , . . . , N, (1) where Tωb,v denotes a stochastic transformation parameterized by random vari-able ωb,v . Each view is processed by the same featurizer and classifier, pro-ducing a feature representation z(v)
+
+b and class-probability prediction p(v)
+
+b . The transformation family is chosen to induce diverse perturbation-suppressing and appearance-altering views, so that agreement across views provides a signal of prediction reliability. Concretely, the family draws from smoothing and fre-quency operators (Gaussian blur, FFT low-pass filtering), additive Gaussian noise, photometric transforms, and lightweight geometric transforms. Each sam-pled pipeline applies at most three operators, and one must be a smoothing Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 7
+
+or frequency operator, so that every view attenuates high-frequency adversar-ial artifacts. Full operator definitions and parameter ranges are deferred to the supplementary material. 
+
+3.2 Reliability-Guided Pooling 
+
+Intuitively, views that produce feature representations more consistent with the other views are treated as more reliable, while views that disagree strongly with the rest are downweighted or removed. Let p(v) 
+
+> b
+
+∈ ∆K−1 and z(v) 
+
+> b
+
+∈ Rd denote the class-probability prediction and feature vector of view v for sample b. SAFER computes nonnegative reliability weights ˆw = ( ˆ w0, . . . , ˆwN ) over views and forms the base pooled prediction 
+
+¯pbase  
+
+> b
+
+=
+
+> N
+
+X
+
+> v=0
+
+ˆwv p(v) 
+
+> b
+
+,
+
+> N
+
+X
+
+> v=0
+
+ˆwv = 1 , ˆwv ≥ 0. (2) The weights are derived from cross-view feature agreement. For each view v,we compute batch-standardized features 
+
+˜z(v) 
+
+> b,k
+
+= z(v) 
+
+> b,k
+
+− μ(v)
+
+> k
+
+σ(v)
+
+> k
+
+, (3) where μ(v) 
+
+> k
+
+and σ(v) 
+
+> k
+
+denote the mean and standard deviation of feature dimension 
+
+k over the batch of size B for view v. We then define the reliability of view v by its average agreement with the remaining views: 
+
+rv = 1
+
+N
+
+> N
+
+X
+
+> u=0
+> u̸=v
+
+"
+
+1
+
+d
+
+> d
+
+X
+
+> k=1
+
+1
+
+B
+
+> B
+
+X
+
+> b=1
+
+˜z(v) 
+
+> b,k
+
+˜z(u)
+
+> b,k
+
+!# 
+
+. (4) In words, rv is simply the average feature cross-correlation between view v
+
+and every other view: it is high when view v “sees the same thing” as the rest of the ensemble, and low (or negative) when it disagrees. To improve robustness to anomalous views, SAFER clips negative reliabilities, removes the least reliable view, and renormalizes: 
+
+ρv = max( rv , 0) , m = arg min  
+
+> v
+
+ρv , (5) 
+
+˜ρv =
+
+(
+
+0, v = m, ρv , v̸ = m, ˆwv = ˜ρv
+
+PNu=0 ˜ρu
+
+. (6) This yields a reliability-weighted pooled predictor with lightweight outlier sup-pression. The removed view may be either the original view or an augmented view, depending on which is least consistent with the remainder of the set. For brevity, this cross-correlation weighting scheme with outlier dropping is referred to as cc_drop .8 A. Koziak and Y. Guo        
+
+> Fig. 2. Per-view predictions and cross-view reliability rv(Eq. 4) for a single attacked sample; cc_drop removes the adversarial input as the lowest-rvview, while the higher-
+> rvaugmented views also recover the correct label ( horse ).
+
+Assumptions and Design Rationale. Because each augmented view applies at least one smoothing or frequency operator (Sec. 3.1), the perturbation is atten-uated in every augmentation, leaving the un-augmented original as its dominant carrier. The working assumption is therefore not that “few of many independent samples are attacked,” but that augmentation concentrates the surviving per-turbation in one identifiable view, which then exhibits low cross-view agreement (Eq. 4) and is flagged as a feature-space outlier while the smoothed views agree on the underlying semantics. This is also why we drop exactly one view: remov-ing the single least-agreeing view discards this dominant carrier while preserving ensemble diversity. The intuition is supported empirically, as dropping the worst view ( cc → cc_drop ) yields a further accuracy gain at the highest attack rate (Table 4, Sec. 4.3), and Fig. 2 grounds the mechanism in a concrete attacked sample, showing the per-view reliability scores rv and the view that cc_drop 
+
+removes. The method does not hinge on exactly one view being corrupted: although only one view is hard-dropped, the clipped-and-renormalized weights (Eq. 6) con-tinue to softly down-weight every remaining low-agreement view, so additional contaminated views are still suppressed, giving graceful degradation rather than sharp failure. Clipping negative reliabilities (Eq. 5) is deliberate: a negative mean cross-correlation marks a view as anti-correlated with the consensus and unin-formative, so clipping keeps it from distorting the normalized weights. 
+
+3.3 Adaptive Clean-Retention Extension 
+
+By default, the SAFER predictor returns the base pooled prediction ¯pbase  
+
+> b
+
+di-rectly, a deliberately robustness-oriented choice. We further study an extension, denoted SAFER-A , that instead adaptively mixes original-view mass with aug-mentation mass to better retain clean accuracy when the original view appears reliable, that is, when cross-view disagreement is low. SAFER-A is thus a sec-ondary clean-retention variant; default SAFER remains the primary configura-tion when adversarial robustness is the goal. Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 9
+
+We quantify disagreement between the original view and the augmented en-semble using feature-space discrepancy: 
+
+sfeat  
+
+> b
+
+= 1 − cos z(0)  
+
+> b
+
+, 1
+
+N
+
+> N
+
+X
+
+> v=1
+
+z(v)
+
+> b
+
+!
+
+, (7) A larger value of sfeat  
+
+> b
+
+indicates greater disagreement between the original view and its augmentations. This signal is mapped to a mixing coefficient through 
+
+qb = σ κ(sfeat  
+
+> b
+
+− τ ) , αb = αclean + qb (αatk − αclean ) , (8) where σ(·) denotes the logistic sigmoid function. αatk < α clean are hyperparam-eters bounding the range of αb, which is the weight assigned to the original prediction relative to the augmented ensemble, with larger disagreement giving smaller weight. The final prediction weights are 
+
+˜wb, 0 = αb, ˜wb,v = (1 − αb) ˆwb,v 
+
+PNu=1 ˆwb,u 
+
+, v = 1 , . . . , N, (9) yielding the final SAFER prediction 
+
+¯ppred  
+
+> b
+
+=
+
+> N
+
+X
+
+> v=0
+
+˜wb,v p(v) 
+
+> b
+
+. (10) Thus, SAFER places more weight on the augmentations when the original view disagrees strongly with augmented views, and otherwise retains greater trust in the original input. 
+
+3.4 Plug-In Integration with Existing TTA Methods 
+
+SAFER acts as a plug-in input wrapper for an existing TTA method. That is, SAFER changes the prediction interface seen by the wrapped method, without altering the wrapped method’s underlying unsupervised objective or update rule. Denoting the final SAFER prediction by ¯ppred  
+
+> b
+
+, the wrapped method optimizes its native test-time objective using ¯ppred  
+
+> b
+
+in place of the prediction from the original input alone. For methods whose adaptation objective depends on intermediate features rather than only final predictions, SAFER analogously provides pooled features using the base reliability weights: 
+
+¯zb =
+
+> N
+
+X
+
+> v=0
+
+ˆwb,v z(v) 
+
+> b
+
+. (11) These pooled features use the base non-adaptive reliability weights rather than the adaptive original-view mixing of SAFER-A: adaptive mixing affects 10 A. Koziak and Y. Guo 
+
+Table 1. PACS accuracy (%) under ℓ∞ attacks with attack rates 0% and 100% per target domain (bold: best, underline: second best per column). Method Art Painting Cartoon Photo Sketch 0% 100% 0% 100% 0% 100% 0% 100% ERM 78.82 ±2.00 12.40 ±3.28 75.51 ±2.22 22.94 ±3.20 94.99 ±0.42 59.34 ±3.60 71.10 ±1.86 55.61 ±1.14 
+
+Robust ERM 47.69 ±0.93 47.23 ±0.89 64.04 ±1.47 63.77 ±1.62 62.20 ±0.62 62.08 ±0.60 58.45 ±1.94 58.29 ±1.95 
+
+TeSLA 82.21 ±0.91 45.38 ±4.63 80.86 ±0.42 61.43 ±1.09 95.11 ±0.09 71.32 ±3.28 74.16 ±0.60 52.93 ±3.90 
+
+EATA 81.61 ±0.71 7.39 ±1.62 81.40 ±0.73 36.08 ±3.10 95.27 ±0.51 38.00 ±4.52 73.00 ±0.91 28.54 ±4.95 
+
+Tent 83.72 ±0.35 4.98 ±1.89 83.45 ±0.79 35.62 ±5.95 95.91 ±0.66 40.82 ±5.20 78.31 ±1.15 29.91 ±6.33 
+
+Tent +MedBN 82.62 ±0.93 4.57 ±1.56 81.41 ±0.47 39.55 ±2.78 95.87 ±0.59 29.16 ±5.09 75.35 ±1.05 26.73 ±7.50 
+
+Tent +SAFER 80.06 ±1.25 71.74 ±0.52 83.11 ±0.67 79.24 ±0.23 94.63 ±0.19 90.78 ±0.87 80.28 ±0.92 76.33 ±0.83 
+
+Tent +SAFER-A 82.60 ±1.17 48.44 ±1.86 83.73 ±0.77 64.68 ±0.46 95.71 ±0.46 75.27 ±1.10 81.14 ±1.01 66.61 ±2.98 
+
+PL 85.76 ±2.02 2.78 ±1.32 82.10 ±3.34 37.54 ±1.92 95.37 ±0.88 35.19 ±8.23 72.91 ±5.82 28.34 ±9.69 
+
+PL +SAFER 79.13 ±3.13 72.97 ±1.02 85.00 ±1.75 79.62 ±1.99 93.93 ±0.95 89.92 ±1.29 74.73 ±1.80 70.61 ±6.43 
+
+PL +SAFER-A 83.63 ±1.47 42.02 ±2.97 84.33 ±2.83 63.41 ±3.15 94.43 ±1.20 71.82 ±12 .41 77.76 ±7.03 64.43 ±6.28 
+
+TSD 86.90 ±1.59 1.61 ±0.75 88.10 ±0.62 45.05 ±4.41 96.31 ±0.89 45.63 ±9.06 78.90 ±3.75 32.72 ±15 .87 
+
+TSD +SAFER 83.32 ±1.20 71.18 ±3.13 87.57 ±1.22 82.20 ±0.16 94.21 ±1.05 90.12 ±0.33 76.00 ±1.04 71.45 ±3.86 
+
+TSD +SAFER-A 85.87 ±1.89 56.01 ±2.93 88.41 ±0.97 64.56 ±1.44 95.53 ±1.16 79.38 ±0.33 78.62 ±1.97 64.82 ±0.90 
+
+Table 2. VLCS accuracy (%) under ℓ∞ attacks with attack rates 0% and 100% per target domain (bold: best, underline: second best per column). Method Caltech101 LabelMe SUN09 VOC2007 0% 100% 0% 100% 0% 100% 0% 100% ERM 95.27 ±1.80 49.63 ±3.76 64.76 ±0.76 20.36 ±4.74 68.96 ±0.82 7.33 ±3.43 72.27 ±3.35 8.71 ±4.36 
+
+Robust ERM 61.51 ±0.11 61.48 ±0.12 53.61 ±0.57 53.69 ±0.52 43.70 ±0.90 43.65 ±0.78 48.68 ±0.58 48.52 ±0.54 
+
+TeSLA 82.54 ±3.44 63.86 ±2.59 59.60 ±1.37 40.51 ±2.13 61.84 ±0.90 36.25 ±0.32 72.02 ±1.42 46.26 ±2.62 
+
+EATA 82.38 ±3.02 47.94 ±1.39 59.50 ±1.32 20.39 ±3.68 61.95 ±0.98 13.84 ±3.34 71.03 ±1.57 22.10 ±2.47 
+
+Tent 87.59 ±3.86 53.80 ±3.46 62.44 ±0.92 15.95 ±6.02 65.99 ±1.76 9.18 ±5.21 72.62 ±1.29 21.45 ±3.63 
+
+Tent +MedBN 85.84 ±2.43 50.44 ±4.33 62.09 ±1.00 19.99 ±5.75 64.04 ±0.81 11.35 ±3.42 71.38 ±2.54 20.16 ±3.08 
+
+Tent +SAFER 87.02 ±4.07 83.67 ±2.94 62.42 ±0.85 56.76 ±0.87 61.08 ±1.23 48.21 ±1.23 67.03 ±0.96 59.73 ±0.18 
+
+Tent +SAFER-A 87.92 ±3.59 73.26 ±1.83 65.89 ±0.59 42.32 ±6.23 64.46 ±0.63 33.99 ±3.97 67.57 ±0.88 48.84 ±1.46 
+
+PL 90.62 ±6.88 52.25 ±5.02 65.59 ±1.66 4.46 ±1.22 65.60 ±7.99 4.70 ±2.73 68.02 ±3.16 20.44 ±5.04 
+
+PL +SAFER 87.49 ±6.25 84.31 ±5.09 61.66 ±0.64 53.82 ±1.94 50.98 ±1.08 41.30 ±2.20 64.72 ±1.98 53.92 ±2.45 
+
+PL +SAFER-A 88.81 ±6.96 72.08 ±2.29 62.46 ±2.10 45.68 ±11 .73 55.13 ±6.52 36.62 ±3.83 62.99 ±0.98 51.55 ±1.04 
+
+TSD 95.64 ±2.32 48.62 ±7.41 63.77 ±0.52 8.36 ±5.84 67.14 ±1.56 2.51 ±1.47 66.44 ±6.11 13.57 ±3.83 
+
+TSD +SAFER 94.61 ±1.38 84.71 ±6.21 64.12 ±0.94 56.94 ±4.91 66.72 ±2.74 42.92 ±1.47 58.51 ±3.83 48.30 ±1.14 
+
+TSD +SAFER-A 94.49 ±1.66 75.81 ±1.06 63.83 ±0.71 51.51 ±0.66 69.37 ±1.95 36.23 ±1.16 60.20 ±2.08 48.75 ±2.35 
+
+only the final prediction returned at inference time, while wrapped feature-driven objectives continue to receive the base reliability-guided pooled features. This keeps SAFER compatible with both prediction-driven and feature-driven TTA methods while preserving the wrapped algorithm’s adaptation mechanism. SAFER adds no new parameters and no extra adaptation step; we analyze its per-batch overhead in Sec. 4.1 (Fig. 3). 
+
+## 4 Experiments 
+
+4.1 Experimental Settings Datasets. Following recent work in TTA [12], we evaluate SAFER on three standard domain generalization datasets: PACS [17], VLCS [24], and Office-Home [26]. For each dataset, we follow the standard leave-one-domain-out pro-Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 11 
+
+Table 3. OfficeHome accuracy (%) under ℓ∞ attacks with attack rates 0% and 100% per target domain (bold: best, underline: second best per column). Method Art Clipart Product RealWorld 0% 100% 0% 100% 0% 100% 0% 100% ERM 56.15 ±0.27 2.94 ±0.37 49.00 ±0.19 8.71 ±0.94 71.50 ±0.62 13.29 ±0.47 73.77 ±0.68 4.32 ±0.26 
+
+Robust ERM 28.80 ±1.15 28.58 ±1.18 35.54 ±0.36 35.57 ±0.37 43.20 ±0.36 43.08 ±0.25 44.43 ±0.54 44.28 ±0.53 
+
+TeSLA 55.49 ±0.75 26.15 ±2.81 47.28 ±0.70 29.37 ±2.38 70.26 ±0.18 48.36 ±3.27 72.61 ±0.44 41.06 ±2.28 
+
+EATA 54.95 ±0.78 3.98 ±0.31 49.60 ±0.48 11.96 ±1.05 70.50 ±0.14 20.57 ±1.26 72.91 ±0.21 7.73 ±0.61 
+
+Tent 56.43 ±1.14 2.62 ±0.36 51.43 ±0.34 11.66 ±2.15 71.70 ±0.49 19.61 ±1.19 73.36 ±0.52 4.04 ±0.27 
+
+Tent +MedBN 54.66 ±1.55 2.84 ±0.39 47.96 ±0.33 14.24 ±0.69 67.58 ±0.11 21.21 ±1.56 72.10 ±0.54 5.35 ±0.48 
+
+Tent +SAFER 51.16 ±0.87 40.26 ±0.33 51.04 ±0.71 46.10 ±1.06 67.30 ±0.72 60.03 ±0.45 68.63 ±0.31 60.55 ±0.73 
+
+Tent +SAFER-A 54.73 ±1.11 19.91 ±1.23 51.83 ±0.82 32.01 ±1.49 70.18 ±0.70 44.81 ±0.77 71.13 ±0.12 38.10 ±0.76 
+
+PL 51.22 ±1.20 3.15 ±0.43 39.12 ±1.74 11.42 ±0.57 65.80 ±1.12 14.89 ±4.81 65.70 ±0.95 3.37 ±0.56 
+
+PL +SAFER 44.14 ±1.34 30.56 ±0.31 33.47 ±2.16 30.10 ±2.91 56.60 ±1.06 45.96 ±0.32 55.95 ±2.23 44.42 ±0.69 
+
+PL +SAFER-A 47.05 ±0.93 15.89 ±0.65 36.77 ±5.85 20.66 ±0.94 60.08 ±0.97 29.38 ±2.27 59.54 ±2.86 20.67 ±3.59 
+
+TSD 56.32 ±0.51 2.51 ±0.51 48.10 ±1.60 12.09 ±2.38 69.56 ±1.20 19.32 ±1.28 69.42 ±0.57 3.03 ±0.50 
+
+TSD +SAFER 51.41 ±0.99 40.98 ±1.04 44.50 ±0.93 38.06 ±1.37 63.26 ±1.89 54.01 ±0.68 63.06 ±1.14 48.98 ±1.95 
+
+TSD +SAFER-A 54.58 ±1.09 20.31 ±0.33 46.09 ±1.40 30.44 ±1.01 66.33 ±2.06 42.73 ±0.35 65.71 ±0.86 32.64 ±2.62 
+
+Table 4. Single-transform defenses and SAFER pooling rules on Tent (PACS average). Method 0% 50% 100% Tent 85.35 53.08 27.83 Tent + JPEG 84.59 80.12 75.82 Tent + FFT 83.55 73.23 65.86 Tent + Blur 85.05 58.52 37.60 Tent + SAFER (mean) 84.34 80.39 76.78 Tent + SAFER (entropy) 84.58 80.16 76.18 Tent + SAFER (cc) 84.46 80.63 78.36 Tent + SAFER (cc_drop) 84.55 80.75 79.83 
+
+tocol: one domain is held out as the target test domain, and the remaining domains are used to train the source model. At test time, test data arrives as an online stream and each method performs a single sequential pass over the stream without access to source data or target labels. Adversarial attacks are added to the test data. We report test accuracy results, including both the means and standard deviations over three runs with random seeds. 
+
+Attack Setting. We evaluate robust test-time adaptation under a black-box adversarial threat model. We consider an adversary that, for each target do-main, injects ℓp-bounded perturbations into a subset of the online test stream at deployment. We assume the adversary has no access to the deployed model parameters, no gradients through the test-time updates, and no control over the future batch order used by adaptation. The adversary does, however, have access to a labeled dataset drawn from a distribution sufficiently similar to the target domain, on which it trains a surrogate model. Using this surrogate, adversarially attacked test instances ˜x = x + ϵ are generated offline with iterative projected gradient descent (PGD) [19], where each step updates 
+
+ϵ ←− ϵ + η∇ϵLCE (x + ϵ, θ ⋆t ) (12) 12 A. Koziak and Y. Guo         
+
+> Table 5. Alpha-mode ablation for Tent + SAFER, accuracy over the Art Painting domain of PACS. Method 0% 50% 100% Tent 83.72 44.78 4.98 Tent + SAFER 80.19 74.50 73.10 Tent + SAFER-A (Step) 82.57 72.09 61.15 Tent + SAFER-A (Linear) 82.75 71.73 59.68 Tent + SAFER-A (Sigmoid) 83.54 66.81 49.87
+> Fig. 3. Single-domain sensitivity plots on PACS:Art Painting for Tent+SAFER. Left: effect of the number of views. Right: effect of the number of operations per augmenta-tion.
+
+followed by projection onto the ℓp ball. The perturbed instance ˜x then replaces x
+
+in the test stream. We primarily consider an ℓ∞ attack, which enforces ∥ϵ∥∞ ≤
+
+8/255 over 20 PGD steps with step size η = 2 /255 . We set these parameters empirically such that the surrogate θ⋆t has accuracy near 0% under a 100% 
+
+attack rate. We pre-generate and store the attacked streams for reproducible comparisons, and all methods are evaluated on identical precomputed streams for a given seed. 
+
+How attacks are injected. At an attack rate γ ∈ [0% , 100%] , γ percent of images per batch are replaced by their adversarial counterpart ˜x. Intermedi-ate rates therefore yield mini-batches that mix clean and adversarial samples. We primarily report 0% (clean) and 100% (fully attacked) in the main tables, with 50% reported in the supplementary material and a finer sweep analyzed in Sec. 4.3 (Fig. 4). 
+
+Why black-box transfer. This is the realistic deployment threat for an online wrapper, and it matches the setting in which TTA-specific adversarial risks were first identified [29]. Adaptive white-box attacks that differentiate through the evolving adaptation loop are a separate, substantially harder study: such evalu-ations are prone to gradient-obfuscation pitfalls and must be tailored per defense to be meaningful [1, 25, 4], and stochastic input transforms like ours specifically require Expectation-over-Transformation-style attacks to be assessed soundly [2]. We therefore scope this study to the transfer setting and treat adaptive at-tacks as future work. The supplementary material substantiates this scope on Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 13  
+
+> Fig. 4. Single-domain diagnostics on PACS:Art Painting for Tent-based methods. Left: batch-stability diagnostic using rolling batch accuracy (window 16) for Tent, Tent+SAFER, Tent+SAFER-A, and the no-adaptation Static TTE (mean) reference under a fully attacked ( 100% ) stream. Right: accuracy versus attack rate for the same four methods, over a finer grid (5% steps).
+
+PACS:Art: SAFER’s protection is essentially unchanged when PGD is replaced by the stronger AutoAttack ensemble at the same budget and degrades gracefully as ϵ grows to 16 /255 , whereas a defense-aware Expectation-over-Transformation attack that differentiates through the stochastic augmentations does collapse it, confirming that the gains reported here are specific to the black-box transfer threat model. 
+
+Comparison Baselines. We compare SAFER against source-only anchors (ERM, Robust ERM), standard TTA baselines (Tent [27], PL [16], TSD [28], TeSLA [23]), and robustness-oriented baselines (EATA, Tent+MedBN), span-ning adaptation strategies based on optimization, pseudo-labels, prototypes/memory, and stability. Robust ERM contextualizes SAFER against an adversarially trained backbone rather than only standard source models, EATA adds explicit sample filtering and update regularization, and Tent+MedBN (Sec. 2) is a natural com-parator because it likewise defends against malicious test samples in a modular way, by making BN statistic estimation robust during adaptation. 
+
+Implementation Details. Following prior works [28], for source domain train-ing, we split the images to 80% for training and 20% for validation. We use the Adam optimizer [15] with a learning rate of 5e−5, with weights of source models initialized to a pretrained ImageNet-1K [5] baseline. Source model training is done with a batch size of 32, and a maximum of 50 epochs. Dropout probability and weight decay are set to 0. All images are resized to 224 × 224 , and training data is augmented with random cropping, horizontal flipping, color jitter, and intensity changes. For fully online test-time adaptation, we only perform one pass over the test domain, with a batch size of 64, and one adaptation/gradient step per batch. TSD [28] and T3A [14] both use 100 supports following their litera-ture. The Pseudo-label [16] confidence is set to 0.9 following [28]. All methods use a ResNet-18 [11] backbone with Batch Normalization [13]. For Tent+MedBN, we 14 A. Koziak and Y. Guo 
+
+use the same Tent adaptation pipeline but replace the standard BN test-batch mean statistic with the MedBN normalization rule during adaptation. For all TTA baselines, as well as the backbone and source domain training code, we use implementations from the released code of the TSD library [28]. 
+
+SAFER Configuration. Unless otherwise stated, SAFER uses N = 4 stochas-tic augmentations in addition to the original view, drawn from the operator family of Sec. 3.1 (full definitions and parameter ranges are in the supplemen-tary material). We report two variants (Sec. 3.3): the default SAFER , which pools over all views directly, and the optional adaptive-mixing SAFER-A . For SAFER-A, we set τ = 0 .2, κ = 3 .0, αatk = 0 .25 , and αclean = 0 .65 . These four SAFER-A values are fixed across all datasets and wrapped methods : they were chosen once on a cross-dataset, cross-domain diagnostic, never re-tuned per benchmark. We stress that the default SAFER has essentially two knobs (the number of views N and the pooling rule), whereas the additional hyperparam-eters ( τ, κ, α atk , α clean ) appear only in the optional SAFER-A clean-retention variant. A sensitivity analysis for these parameters is summarized in Sec. 4.3 and detailed in the supplementary material. 
+
+Computational Cost. SAFER adds no new parameters and no extra adap-tation step , so the wrapped method still performs a single gradient update per batch, now on the pooled prediction. The overhead is each batch being expanded into V = N + 1 stochastic views processed through the shared backbone, so both the forward pass and the backpropagation through it grow linearly in V ;the augmentation operators themselves are inexpensive pixel-space transforms. Fig. 3 (left) reports the measured per-step wall-clock time alongside accuracy across N ∈ { 1, 2, 3, 4}: the measured cost confirms the analytic estimate. Be-cause the largest robustness gains already appear by N = 2 , the approximately 
+
+3×-compute configuration offers a budget operating point when inference cost is constrained. 
+
+4.2 Experimental Results 
+
+Main black-box transfer results are shown in Tables 1, 2, and 3. In the +SAFER rows, SAFER wraps the base TTA method without modifying its native adapta-tion objective. +SAFER denotes the default reliability-guided pooled predictor, while +SAFER-A denotes the optional adaptive-mixing variant from Sec. 3.3. Across datasets, SAFER consistently strengthens robustness under adver-sarially contaminated streams. While several standard TTA baselines degrade sharply under attack, their SAFER-wrapped versions remain substantially more stable; on PACS and VLCS in particular, Tent+SAFER and TSD+SAFER re-tain much stronger accuracy under attack than their unwrapped counterparts, indicating that the reliability-guided multi-view predictor materially reduces the vulnerability of online adaptation to adversarial contamination. SAFER also remains competitive against stronger robustness- or stability-oriented baselines, not only standard TTA methods such as Tent, PL, and TSD. Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 15 
+
+TeSLA is a meaningful comparator because it too exploits augmentation during test-time learning, yet SAFER is often stronger in the adversarial-stream setting, indicating that how views are selected, weighted, and pooled matters, not merely that augmentation is used. Robust ERM provides a non-adaptive robust-source anchor: in some heavily attacked settings it is more stable than fragile online TTA, but SAFER frequently recovers the benefits of adaptation while avoiding much of that collapse. The relative behavior of SAFER and SAFER-A reveals a consistent trade-off between robustness and clean accuracy: SAFER usually achieves the highest attacked-stream accuracy, especially at 100% attack rate, while SAFER-A re-tains more trust in the original view when disagreement is low, improving clean-stream retention in some settings at the cost of robustness. The clean-stream cost of default SAFER is dataset-dependent: it is typically within one to two points of the unwrapped baseline on PACS and VLCS, but reaches several points on some OfficeHome domains (e.g., Tent on Art and RealWorld), which is precisely the regime SAFER-A is designed to mitigate. That the same wrapper improves multiple underlying TTA methods reinforces SAFER’s modularity: it is not tied to one particular adaptation loss but stabilizes several distinct TTA objectives under attacked streams. 
+
+4.3 Ablation Results 
+
+All ablations below are conducted on the PACS dataset using the Art Paint-ing domain as the target, unless otherwise stated. We next examine whether the gains of SAFER come from the specific reliability-guided pooling rule and stochastic multi-view design, rather than from merely adding transformed views. 
+
+Pooling and Single-Transform Ablation. Table 4 compares SAFER against simple single-transform defenses and several view-pooling rules on the same Tent backbone, averaged over PACS domains. JPEG and FFT low-pass filtering, and all pooling variants, substantially improve robustness over the unwrapped base-line, confirming that suppressive transforms and multi-view prediction are each already beneficial in adversarial RTTA. However, full SAFER performs best: the reliability-guided variants are consistently stronger than uniform or entropy-based pooling, especially at high attack rate, and cc_drop achieves the best 100% attack-rate performance, exceeding mean pooling, entropy weighting, and every single-transform defense while preserving competitive clean accuracy. The further gain of cc_drop over cc shows that some views, augmented or original, are actively harmful to include, so lightweight outlier removal is an integral part of the design rather than a cosmetic refinement. SAFER is thus not reducible to a single preprocessing defense or to view multiplicity alone: not all trans-formed views should contribute equally, and the reliability-guided aggregation itself contributes meaningfully. 
+
+Alpha Mode. Table 5 isolates the adaptive mixing curve while fixing the rest of the SAFER wrapper. The three adaptive variants differ only in how the disagree-ment signal sfeat  
+
+> b
+
+is converted into the mixing score qb used in Eq. equation 8: Step 16 A. Koziak and Y. Guo 
+
+applies a hard threshold at τ (the original view receives αclean when sfeat  
+
+> b
+
+< τ 
+
+and αatk otherwise), Linear replaces the threshold with a clipped linear ramp of fixed width around τ , and Sigmoid is the smooth logistic curve of Eq. equation 8 itself. The default SAFER setting (no adaptive mixing; the Tent + SAFER row) is strongest at 100% attack rate (73.10), while all adaptive variants trade robust-ness for cleaner-stream retention. Among adaptive choices, step and linear are stronger than sigmoid at 100% attack rate, but still below the no-alpha setting. 
+
+Views and Augmentation Budget Sensitivity. Figure 3 shows two clear trends. First, increasing views from 1 to 4 consistently improves clean and at-tacked accuracy, with the largest jump from 1 to 2 views. Second, increasing augmentation budget beyond 3 hurts robustness and clean performance, indi-cating that overly strong augmentation chains can become destructive. 
+
+Accuracy versus Attack Rate. Fig. 4 (right) traces accuracy across a finer grid of attack rates, adding Static TTE (mean) [22] as a no-adaptation reference. The curves span a robustness–plasticity spectrum: unwrapped Tent starts high-est but collapses almost linearly to near-chance, dropping below Tent+SAFER almost immediately and below Static TTE by γ ≈ 25% , since adaptation helps most on clean streams but is also what an attacker destabilizes first; Static TTE never updates on the stream, so it starts lowest but decays only mildly. Tent+SAFER dominates nearly the whole sweep, starting close to Tent but degrading so gradually that the gap widens steadily with γ rather than only at the 100% extreme. Tent+SAFER-A makes the tradeoff from Sec. 3.3 con-crete: it tracks (and briefly exceeds) Tent at low γ but degrades faster than Tent+SAFER, converging to the Static TTE/Tent floor by γ = 100% . SAFER and SAFER-A thus push the same base method to more favorable points on this spectrum, prioritizing robustness and clean-stream retention respectively. 
+
+Batch Stability over Time. Figure 4 (left) reports rolling batch accuracy over the test stream under 100% attack for Tent, Tent+SAFER, Tent+SAFER-A, and Static TTE (mean), the no-adaptation reference. Each adaptation step is one test batch of 64 samples with a single gradient update (Sec. 4.1), and each plotted value is the accuracy averaged over a trailing window of the 16 
+
+most recent batches. Unwrapped Tent remains near collapse throughout (final rolling accuracy ≈ 3.6), while Tent+SAFER stays high and stable ( ≈ 75 .5). Tent+SAFER-A and Static TTE (mean) track each other closely at an inter-mediate level, finishing around ≈ 53 and ≈ 47 respectively, both well above unwrapped Tent but below Tent+SAFER, consistent with the robustness order-ing observed across the attack-rate sweep. 
+
+## 5 Conclusion 
+
+We presented SAFER, a reliability-guided stochastic augmentation ensemble wrapper for robust test-time adaptation on adversarially contaminated streams. Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 17 
+
+SAFER replaces brittle single-view predictions with predictions pooled over the original view and stochastic augmentations, downweights unreliable views through feature agreement, and attaches to existing TTA methods without mod-ifying their native adaptation objectives; the optional SAFER-A extension im-proves the robustness–clean tradeoff when stronger clean-performance retention is desired. Across PACS, VLCS, and OfficeHome under PGD attacks and varying attack rates, SAFER consistently improves the adversarial robustness of multi-ple TTA baselines while maintaining competitive clean performance, supporting reliability-guided stochastic ensembling as a practical and broadly compatible design principle for stabilizing online adaptation under attacked target streams. 
+
+## References 
+
+1. Athalye, A., Carlini, N., Wagner, D.: Obfuscated gradients give a false sense of security: Circumventing defenses to adversarial examples. In: ICML (2018) 2. Athalye, A., Engstrom, L., Ilyas, A., Kwok, K.: Synthesizing robust adversarial examples. In: ICML (2018) 3. Croce, F., Andriushchenko, M., Sehwag, V., Debenedetti, E., Flammarion, N., Chi-ang, M., Mittal, P., Hein, M.: Robustbench: a standardized adversarial robustness benchmark. In: NeurIPS Datasets and Benchmarks Track (2021) 4. Croce, F., Gowal, S., Brunner, T., Shelhamer, E., Hein, M., Cemgil, T.: Evaluating the adversarial robustness of adaptive test-time defenses. In: ICML (2022) 5. Deng, J., Dong, W., Socher, R., Li, L.J., Li, K., Fei-Fei, L.: Imagenet: A large-scale hierarchical image database. In: CVPR (2009) 6. Ferrari, C., Becattini, F., Galteri, L., Bimbo, A.D.: (compress and re-store)n: A robust defense against adversarial attacks on image classifica-tion. ACM Trans. Multimedia Comput. Commun. Appl. 19 (1s) (Jan 2023). https://doi.org/10.1145/3524619 7. Gong, T., Jeong, J., Kim, T., Kim, Y., Shin, J., Lee, S.J.: Note: Robust continual test-time adaptation against temporal correlation. In: NeurIPS (2022) 8. Gong, T., Kim, Y., Lee, T., Chottananurak, S., Lee, S.J.: Sotta: Robust test-time adaptation on noisy data streams. In: NeurIPS (2023) 9. Goodfellow, I., Shlens, J., Szegedy, C.: Explaining and harnessing adversarial ex-amples. In: ICLR (2015) 10. Guo, C., Rana, M., Cisse, M., van der Maaten, L.: Countering adversarial images using input transformations. In: ICLR (2018) 11. He, K., Zhang, X., Ren, S., Sun, J.: Deep residual learning for image recognition. In: CVPR (2016) 12. Hu, Y., Qiao, C., Geng, X., Xu, N.: Selective label enhancement learning for test-time adaptation. In: ICLR (2025) 13. Ioffe, S., Szegedy, C.: Batch normalization: Accelerating deep network training by reducing internal covariate shift. In: ICML (2015) 14. Iwasawa, Y., Matsuo, Y.: Test-time classifier adjustment module for model-agnostic domain generalization. In: NeurIPS (2021) 15. Kingma, D.P., Ba, J.: Adam: A method for stochastic optimization. In: ICLR (2015) 16. Lee, D.H.: Pseudo-label: The simple and efficient semi-supervised learning method for deep neural networks. In: ICML Workshop on Challenges in Representation Learning (2013) 18 A. Koziak and Y. Guo 17. Li, D., Yang, Y., Song, Y.Z., Hospedales, T.M.: Deeper, broader and artier domain generalization. In: ICCV (2017) 18. Liang, J., He, R., Tan, T.: A comprehensive survey on test-time adaptation under distribution shifts. IJCV 133 (1), 31–64 (2025) 19. Madry, A., Makelov, A., Schmidt, L., Tsipras, D., Vladu, A.: Towards deep learning models resistant to adversarial attacks. In: ICLR (2018) 20. Niu, S., Wu, J., Zhang, Y., Chen, Y., Zheng, S., Zhao, P., Tan, M.: Efficient test-time model adaptation without forgetting. In: ICML (2022) 21. Park, H., Hwang, J., Mun, S., Park, S., Ok, J.: Medbn: Robust test-time adaptation against malicious test samples. In: CVPR (2024) 22. Pérez, J.C., Alfarra, M., Jeanneret, G., Rueda, L., Thabet, A., Ghanem, B., Ar-beláez, P.: Enhancing adversarial robustness via test-time transformation ensem-bling. In: ICCV Workshops (2021) 23. Tomar, D., Vray, G., Bozorgtabar, B., Thiran, J.P.: Tesla: Test-time self-learning with automatic adversarial augmentation. In: CVPR (2023) 24. Torralba, A., Efros, A.: Unbiased look at dataset bias. In: CVPR (2011) 25. Tramer, F., Carlini, N., Brendel, W., Madry, A.: On adaptive attacks to adversarial example defenses. In: NeurIPS (2020) 26. Venkateswara, H., Eusebio, J., Chakraborty, S., Panchanathan, S.: Deep hashing network for unsupervised domain adaptation. In: CVPR (2017) 27. Wang, D., Shelhamer, E., Liu, S., Olshausen, B., Darrell, T.: Tent: Fully test-time adaptation by entropy minimization. In: ICLR (2021) 28. Wang, S., Zhang, D., Yan, Z., Zhang, J., Li, R.: Feature alignment and uniformity for test time adaptation. In: CVPR (2023) 29. Wu, T., Jia, F., Qi, X., Wang, J.T., Sehwag, V., Mahloujifar, S., Mittal, P.: Un-covering adversarial risks of test-time adaptation. In: ICML (2023) 30. Xiao, Z., Snoek, C.G.M.: Beyond model adaptation at test time: A survey (2024), 
+
+https://arxiv.org/abs/2411.03687 
+
+31. Xie, C., Wu, Y., van der Maaten, L., Yuille, A., He, K.: Feature denoising for improving adversarial robustness. In: CVPR (2019) 32. Yuan, L., Xie, B., Li, S.: Robust test-time adaptation in dynamic scenarios. In: CVPR (2023) 33. Zhang, M., Levine, S., Finn, C.: Memo: Test time robustness via adaptation and augmentation. In: NeurIPS (2022) Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 19 
+
+## Supplementary Materials 
+
+Additional SAFER Implementation Details A. Stochastic augmentation pipeline SAFER applies augmentations in pixel space. If an incoming tensor is already normalized, we first invert nor-malization using the backbone’s image statistics, apply augmentations in [0 , 1] ,and then re-normalize before forwarding the augmented views through the net-work. Each stochastic augmentation is sampled from the operator library. The corresponding parameter ranges used in the implementation are: 
+
+Operator Sampled parameters 
+
+Gaussian blur kernel size = 9 , σ ∼ U (1 .0, 3.0) 
+
+Gaussian noise noise scale σ ∼ U (0 .01 , 0.10) 
+
+FFT low-pass keep ratio ∼ U (0 .2, 0.6) 
+
+Equalize no continuous parameter Invert no continuous parameter Solarize threshold ∼ U (0 .1, 0.9) 
+
+Posterize bits ∈ { 2, 3, 4, 5}
+
+Contrast factor ∼ U (0 .4, 1.6) 
+
+Brightness factor ∼ U (0 .4, 1.6) 
+
+Saturation factor ∼ U (0 .4, 1.6) 
+
+Sharpness factor ∼ U (0 , 10) 
+
+Shear-X / Shear-Y angle ∼ U (−20 ◦, 20 ◦)
+
+Translate-X / Translate-Y relative shift ∼ U (−0.2, 0.2) 
+
+Rotate angle ∼ U (−30 ◦, 30 ◦)
+
+Unless otherwise stated, the reported SAFER runs use the default stochastic sampler with the following constraints: 
+
+– each sampled pipeline contains at most three operations; 
+
+– every pipeline is required to include at least one smoothing or frequency-based operator from {gaussian_blur , fft_low_pass };
+
+– operator order is randomized subject to these constraints; 
+
+– continuous parameters are re-sampled per image, yielding instance-level vari-ation within a batch. In practice, this design encourages each view to preserve coarse semantic content while perturbing appearance in diverse ways. The smoothing/frequency constraint is particularly important for robust test-time adaptation, since it en-sures that each sampled view includes at least one transformation intended to suppress high-frequency adversarial artifacts. 
+
+B. Implemented view-weighting variants The main paper uses cc_drop 
+
+pooling. For completeness, SAFER also implements several alternative view-weighting strategies used in ablations: 20 A. Koziak and Y. Guo 
+
+Mean Pooling. All views receive uniform weight. 
+
+Entropy Weighting. Each view is weighted by a normalized inverse-entropy score computed from its predictive distribution, so lower-entropy views receive greater mass. 
+
+Cross-Correlation Weighting ( cc ). View weights are computed from cross-view feature agreement as defined in Eqs. (3)–(4) of the main paper, followed by clipping at zero and renormalization, but without removing any view. 
+
+Cross-Correlation with Dropping ( cc_drop ). This is the primary configuration used in the paper. Negative reliabilities are clipped to zero, the least reliable view is removed, and the remaining weights are renormalized as in Eq. (6) of the main paper. 
+
+Top-1 Confidence Weighting. A simple confidence-based variant assigns view weights according to normalized top-1 predicted probability. For the feature-agreement variants ( cc and cc_drop ), the weights are shared across the batch because they are estimated from batch-level feature statistics. 
+
+C. Adaptive mixing implementation The main paper reports two predic-tion modes: SAFER , which uses the pooled predictor directly, and SAFER-A ,which additionally applies adaptive mixing with the original view. Adaptive mixing affects only the final prediction used at inference; it does not alter the wrapped TTA objective itself. The main SAFER-A setting uses the feature-disagreement signal from Eq. (7) of the main paper. In implementation, cosine similarity is computed on flattened features and numerically clamped to a valid range before forming the disagree-ment score. The resulting signal is then mapped to an original-view weight using Eq. (8) of the main paper, with 
+
+τ = 0 .2, κ = 3 .0, αatk = 0 .25 , αclean = 0 .65 . (13) Thus, larger disagreement pushes the original-view weight toward αatk , while smaller disagreement keeps it closer to αclean .Beyond the reported sigmoid setting, the implementation also supports two simpler families for ablation: 
+
+ob =
+
+(
+
+sb − τ, if larger values of sb indicate greater suspicion ,τ − sb, otherwise , (14) and then 
+
+qb =
+
+
+
+1, step and ob ≥ 0,
+
+0, step and ob < 0,
+
+clip  0.5 + ob 
+
+> δ
+
+, 0, 1 , linear ,σ(κo b), sigmoid .
+
+(15) Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 21            
+
+> Fig. 5. Single-domain alpha-parameter sensitivity on PACS:Art Painting (Tent+SAFER-A ,feat_disagreement ), with both 0% and 100% attack-rate curves shown in each panel. Top-left: threshold τ. Top-right: sigmoid slope κ. Bottom-left:
+> αatk . Bottom-right: αclean .
+
+The experiments in the main paper use only the sigmoid family. The implementation also exposes several candidate mixing signals for abla-tion: 
+
+– confidence- and margin-based: orig_conf , orig_margin , aug_margin ;
+
+– entropy-based: orig_entropy , aug_entropy ;
+
+– gap-based: margin_gap , entropy_gap ;
+
+– disagreement-based: prob_disagreement , feat_disagreement .Among these, feat_disagreement is used in all reported SAFER-A results. 
+
+D. Wrapper runtime configuration For the wrapper experiments reported in the main paper, SAFER uses the following runtime setting unless otherwise stated: N = 4 , s_primary_view_pool = cc_drop ,
+
+s_alpha_mode ∈ { none , sigmoid }. (16) Here, setting s_alpha_mode to none corresponds to SAFER , while setting it to 
+
+sigmoid corresponds to SAFER-A . In both cases, the wrapped TTA method re-tains its original optimization rule and update parameters; SAFER only changes the predictor supplied to that method. 22 A. Koziak and Y. Guo                                        
+
+> Fig. 6. Joint (τ, κ )sensitivity of Tent+SAFER-A (feat_disagreement ) on PACS:Art Painting, at 0% (left) and 100% (right) attack rate. Clean accuracy is flat at 84%
+> across the whole grid; the attacked-stream heatmap reveals an interaction the one-dimensional sweeps in Fig. 5 cannot show. κacts as a multiplier on whatever τalready does: a high κis an asset when τis small (best cell in the grid: 73% at τ= 0 .02 , κ = 12 )but the single most damaging combination when τis large ( 30 –37% at τ∈ { 0.4,0.5}
+> with κ∈ { 8,12 }, the worst region of the entire grid). At low κ(≤2), accuracy is comparatively insensitive to τ, staying in a narrower 56 –67% band.
+
+Alpha-Parameter Sensitivity. Figure 5 shows one-dimensional sweeps with both 0% (clean) and 100% attack-rate curves. Clean accuracy is almost flat across all tested alpha hyperparameters (about 83.8–83.9). In contrast, the 100% curves are sensitive: in isolation, lower τ and higher κ look better, increasing αatk sharply hurts robustness (more trust in the original view under attack), and sensitivity to αclean is comparatively mild. However, τ and κ do not act independently: Figure 6 sweeps them jointly and shows that κ is better read as a multiplier on τ ’s effect rather than as an independently "good" knob: a high κ is the best choice when τ is small, but the worst choice when τ is large, while low κ leaves accuracy comparatively insensitive to τ .
+
+E. What is fixed across reported SAFER runs To make the reported comparisons interpretable, the following SAFER design choices are fixed across the main wrapper experiments: 
+
+– four stochastic augmentations in addition to the original view; 
+
+– the same augmentation library and parameter ranges across datasets and wrapped methods; 
+
+– cc_drop as the primary reliability-guided pooling rule; 
+
+– one forward pass per sampled view, with shared backbone parameters; 
+
+– no source data, no source labels, and no additional training beyond the wrapped TTA procedure. Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 23 
+
+This separation is deliberate: the main claim of the paper is that the same SAFER wrapper can be attached to different TTA objectives with minimal mod-ification, rather than that each wrapped method requires a heavily customized defense. 
+
+Additional Threat Models and Robustness Checks 
+
+AutoAttack Transfer Set. To verify that SAFER’s gains are not specific to PGD or to surrogate-side gradient masking, we regenerate the surrogate’s attacked stream with AutoAttack (Croce & Hein, ICML 2020), the standard parameter-free ensemble of APGD-CE, APGD-T, FAB-T, and the black-box Square attack, at the same ℓ∞ budget ϵ = 8 /255 on a single domain (PACS:Art), and compare 
+
+Tent against Tent+SAFER at a 100% attack rate. This experiment deliberately keeps the same black-box transfer threat model as the main paper: the pertur-bations are crafted offline on the independent surrogate and replayed into the test stream, and the deployed adaptation model is never differentiated through. It therefore isolates a single question, namely whether the main-paper result is an artifact of PGD as an attack family, and is complementary to the adaptive, defense-aware setting studied separately below (where the attacker instead tar-gets the deployed SAFER predictor directly). At this budget AutoAttack drives the surrogate to 0% accuracy (APGD-CE alone flips every surrogate predic-tion), so the resulting stream is at least as strong as the 20 -step PGD stream used elsewhere. The result confirms that SAFER’s robustness is not specific to PGD. Un-wrapped Tent is already near collapse under transfer PGD (at 4.98% ) and falls even lower under the stronger AutoAttack stream (to 2.69% ), consistent with AutoAttack being the harder attack. By contrast, Tent+SAFER is statistically in-distinguishable across the two attacks: 73 .10% versus 73 .31% , a gap well within the seed-to-seed deviation. Swapping the attack family for a stronger, qualita-tively different one thus leaves the wrapper’s protection intact. This is expected under the transfer threat model: SAFER’s reliability-guided cross-view pooling suppresses whichever views a transferred perturbation has corrupted, and that mechanism is largely agnostic to how the perturbation was optimized on the surrogate. 
+
+Perturbation-Budget Sweep. We further sweep the attack budget ϵ over the val-ues 2/255 , 4/255 , 8/255 , and 16 /255 on a single domain, comparing Tent and 
+
+Tent+SAFER , to characterize graceful degradation as the perturbation strength grows. 
+
+Defense-Aware (Adaptive) Attack. As a stress test, we consider an attacker aware of SAFER’s stochastic augmentations and explicitly designed to defeat them: an Expectation-over-Transformation (EOT) attack (Athalye et al., ICML 2018), which estimates the PGD gradient by averaging over K freshly sampled SAFER views per step rather than attacking a single (surrogate) view. Even a partial or negative result here is informative, since it bounds SAFER’s robustness under a 24 A. Koziak and Y. Guo                            
+
+> Fig. 7. Accuracy versus ℓ∞budget ϵ∈ { 2,4,8,16 }/255 on PACS:Art at a 100% attack rate, for Tent vs Tent+SAFER .Tent collapses already at ϵ= 2 /255 (from ∼23% down to ∼2% at ϵ= 16 /255 ), whereas Tent+SAFER degrades gracefully, staying above 65%
+> across the full sweep, confirming that SAFER’s gains hold across perturbation strengths rather than at a single tuned ϵ.
+
+defense-aware adversary and directly addresses the “what if the attacker knows about SAFER?” question. This is a genuine negative result for the defense-aware setting: a single EOT sample already collapses all three SAFER variants from ∼80–84% at K = 0 
+
+to ∼13–18%, and the accuracy continues to erode toward the unwrapped Tent 
+
+floor ( ∼1–2%) as K grows, reaching ∼6–9% at K = 4 and ∼6–7% at K = 8 , a roughly tenfold drop from the black-box transfer numbers reported in the main paper. Pooling strategy makes little difference under this attack: SAFER , SAFER-A ,and mean pooling all converge to essentially the same curve, indicating that the vulnerability lies in the stochastic-augmentation mechanism itself (which EOT directly targets by averaging it out of the gradient) rather than in any particular reliability-weighting choice. A small residual margin over unwrapped 
+
+Tent persists even at K = 8 , but it is far smaller than the gains SAFER provides against transfer-based attacks. These results confirm that SAFER’s robustness guarantees are scoped to the black-box transfer threat model studied in the main paper, and that a fully adaptive, defense-aware adversary remains an open and important challenge for stochastic-augmentation defenses in RTTA. Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 25 
+
+Fig. 8. Accuracy on PACS:Art at ϵ = 8 /255 and a 100% attack rate as a function of the number of EOT samples per PGD step, K ∈ { 0, 1, 4, 8} (K = 0 is the standard transfer-PGD attack used elsewhere in the paper), for Tent+SAFER , Tent+SAFER-A , and a mean-pooling Tent+SAFER variant, against the unwrapped Tent floor (dashed). 26 A. Koziak and Y. Guo 
+
+Table 6. PACS accuracy (%) under ℓ∞ attacks with vertically stacked clean/mixed/fully attacked subtables per target domain. 
+
+Clean (0%) 
+
+Method Art Painting Cartoon Photo Sketch ERM 78.82 ±2.00 75.51 ±2.22 94.99 ±0.42 71.10 ±1.86 
+
+Robust ERM 47.69 ±0.93 64.04 ±1.47 62.20 ±0.62 58.45 ±1.94 
+
+Tent 83.72 ±0.35 83.45 ±0.79 95.91 ±0.66 78.31 ±1.15 
+
+Tent+MedBN 82.62 ±0.93 81.41 ±0.47 95.87 ±0.59 75.35 ±1.05 
+
+PL 85.76 ±2.02 82.10 ±3.34 95.37 ±0.88 72.91 ±5.82 
+
+EATA 81.61 ±0.71 81.40 ±0.73 95.27 ±0.51 73.00 ±0.91 
+
+TSD 86.90 ±1.59 88.10 ±0.62 96.31 ±0.89 78.90 ±3.75 
+
+TeSLA 82.21 ±0.91 80.86 ±0.42 95.11 ±0.09 74.16 ±0.60 
+
+Tent + SAFER-A 82.60 ±1.17 83.73 ±0.77 95.71 ±0.46 81.14 ±1.01 
+
+PL + SAFER-A 83.63 ±1.47 84.33 ±2.83 94.43 ±1.20 77.76 ±7.03 
+
+TSD + SAFER-A 85.87 ±1.89 88.41 ±0.97 95.53 ±1.16 78.62 ±1.97 
+
+Tent + SAFER 80.06 ±1.25 83.11 ±0.67 94.63 ±0.19 80.28 ±0.92 
+
+PL + SAFER 79.13 ±3.13 85.00 ±1.75 93.93 ±0.95 74.73 ±1.80 
+
+TSD + SAFER 83.32 ±1.20 87.57 ±1.22 94.21 ±1.05 76.00 ±1.04 
+
+Mixed (50%) 
+
+Method Art Painting Cartoon Photo Sketch ERM 45.26 ±2.46 48.66 ±2.14 77.43 ±1.48 63.16 ±1.08 
+
+Robust ERM 47.54 ±0.88 63.84 ±1.55 62.18 ±0.58 58.39 ±1.90 
+
+Tent 44.78 ±1.23 57.71 ±1.75 60.50 ±2.81 49.32 ±6.19 
+
+Tent+MedBN 43.73 ±1.32 60.00 ±1.36 57.21 ±1.50 50.75 ±4.34 
+
+PL 45.07 ±2.08 58.79 ±0.66 64.53 ±0.86 44.48 ±10 .24 
+
+EATA 43.99 ±1.31 57.47 ±1.70 60.90 ±1.94 47.12 ±3.68 
+
+TSD 44.87 ±1.10 65.27 ±1.13 59.16 ±4.45 47.45 ±17 .77 
+
+TeSLA 63.66 ±1.87 70.93 ±0.79 81.24 ±2.04 60.84 ±2.85 
+
+Tent + SAFER-A 66.50 ±0.61 74.15 ±0.37 86.41 ±1.12 72.78 ±1.89 
+
+PL + SAFER-A 65.77 ±2.96 73.18 ±1.04 87.15 ±0.74 69.52 ±3.23 
+
+TSD + SAFER-A 73.18 ±1.59 78.91 ±1.22 87.88 ±1.12 69.86 ±3.14 
+
+Tent + SAFER 73.47 ±0.23 80.08 ±0.53 91.66 ±0.35 76.68 ±0.92 
+
+PL + SAFER 74.79 ±2.61 81.74 ±0.86 91.10 ±0.81 72.61 ±2.87 
+
+TSD + SAFER 75.68 ±1.39 83.86 ±1.74 92.22 ±0.99 74.30 ±1.85 
+
+Fully attacked (100%) 
+
+Method Art Painting Cartoon Photo Sketch ERM 12.40 ±3.28 22.94 ±3.20 59.34 ±3.60 55.61 ±1.14 
+
+Robust ERM 47.23 ±0.89 63.77 ±1.62 62.08 ±0.60 58.29 ±1.95 
+
+Tent 4.98 ±1.89 35.62 ±5.95 40.82 ±5.20 29.91 ±6.33 
+
+Tent+MedBN 4.57 ±1.56 39.55 ±2.78 29.16 ±5.09 26.73 ±7.50 
+
+PL 2.78 ±1.32 37.54 ±1.92 35.19 ±8.23 28.34 ±9.69 
+
+EATA 7.39 ±1.62 36.08 ±3.10 38.00 ±4.52 28.54 ±4.95 
+
+TSD 1.61 ±0.75 45.05 ±4.41 45.63 ±9.06 32.72 ±15 .87 
+
+TeSLA 45.38 ±4.63 61.43 ±1.09 71.32 ±3.28 52.93 ±3.90 
+
+Tent + SAFER-A 48.44 ±1.86 64.68 ±0.46 75.27 ±1.10 66.61 ±2.98 
+
+PL + SAFER-A 42.02 ±2.97 63.41 ±3.15 71.82 ±12 .41 64.43 ±6.28 
+
+TSD + SAFER-A 56.01 ±2.93 64.56 ±1.44 79.38 ±0.33 64.82 ±0.90 
+
+Tent + SAFER 71.74 ±0.52 79.24 ±0.23 90.78 ±0.87 76.33 ±0.83 
+
+PL + SAFER 72.97 ±1.02 79.62 ±1.99 89.92 ±1.29 70.61 ±6.43 
+
+TSD + SAFER 71.18 ±3.13 82.20 ±0.16 90.12 ±0.33 71.45 ±3.86 Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 27 
+
+Table 7. VLCS accuracy (%) under ℓ∞ attacks with vertically stacked clean/mixed/fully attacked subtables per target domain. 
+
+Clean (0%) 
+
+Method Caltech101 LabelMe SUN09 VOC2007 ERM 95.27 ±1.80 64.76 ±0.76 68.96 ±0.82 72.27 ±3.35 
+
+Robust ERM 61.51 ±0.11 53.61 ±0.57 43.70 ±0.90 48.68 ±0.58 
+
+Tent 87.59 ±3.86 62.44 ±0.92 65.99 ±1.76 72.62 ±1.29 
+
+Tent+MedBN 85.84 ±2.43 62.09 ±1.00 64.04 ±0.81 71.38 ±2.54 
+
+PL 90.62 ±6.88 65.59 ±1.66 65.60 ±7.99 68.02 ±3.16 
+
+EATA 82.38 ±3.02 59.50 ±1.32 61.95 ±0.98 71.03 ±1.57 
+
+TSD 95.64 ±2.32 63.77 ±0.52 67.14 ±1.56 66.44 ±6.11 
+
+TeSLA 82.54 ±3.44 59.60 ±1.37 61.84 ±0.90 72.02 ±1.42 
+
+Tent + SAFER-A 87.92 ±3.59 65.89 ±0.59 64.46 ±0.63 67.57 ±0.88 
+
+PL + SAFER-A 88.81 ±6.96 62.46 ±2.10 55.13 ±6.52 62.99 ±0.98 
+
+TSD + SAFER-A 94.49 ±1.66 63.83 ±0.71 69.37 ±1.95 60.20 ±2.08 
+
+Tent + SAFER 87.02 ±4.07 62.42 ±0.85 61.08 ±1.23 67.03 ±0.96 
+
+PL + SAFER 87.49 ±6.25 61.66 ±0.64 50.98 ±1.08 64.72 ±1.98 
+
+TSD + SAFER 94.61 ±1.38 64.12 ±0.94 66.72 ±2.74 58.51 ±3.83 
+
+Mixed (50%) 
+
+Method Caltech101 LabelMe SUN09 VOC2007 ERM 72.89 ±1.75 42.78 ±2.54 37.78 ±1.55 39.95 ±1.85 
+
+Robust ERM 61.48 ±0.12 53.65 ±0.55 43.70 ±0.82 48.62 ±0.50 
+
+Tent 60.21 ±5.42 42.46 ±3.94 38.96 ±0.69 46.63 ±3.71 
+
+Tent+MedBN 59.32 ±2.44 43.88 ±3.38 39.28 ±0.55 45.27 ±2.58 
+
+PL 55.88 ±8.77 45.38 ±5.57 38.22 ±1.15 48.96 ±3.72 
+
+EATA 58.35 ±2.58 42.14 ±2.09 38.38 ±0.50 43.97 ±1.88 
+
+TSD 56.44 ±8.73 32.91 ±2.93 37.00 ±3.79 42.83 ±3.05 
+
+TeSLA 69.21 ±3.50 50.00 ±2.58 48.94 ±0.63 58.47 ±1.94 
+
+Tent + SAFER-A 79.27 ±2.31 53.92 ±3.17 48.74 ±2.34 57.66 ±1.53 
+
+PL + SAFER-A 81.41 ±4.40 56.61 ±2.15 46.18 ±2.91 57.28 ±1.52 
+
+TSD + SAFER-A 87.87 ±2.61 59.15 ±1.23 54.13 ±3.00 53.54 ±1.95 
+
+Tent + SAFER 84.41 ±2.86 59.06 ±0.61 53.43 ±0.99 62.76 ±0.84 
+
+PL + SAFER 81.88 ±4.28 58.41 ±1.74 46.01 ±1.19 61.11 ±2.10 
+
+TSD + SAFER 93.80 ±1.68 61.70 ±1.16 50.50 ±9.77 51.60 ±6.48 
+
+Fully attacked (100%) 
+
+Method Caltech101 LabelMe SUN09 VOC2007 ERM 49.63 ±3.76 20.36 ±4.74 7.33 ±3.43 8.71 ±4.36 
+
+Robust ERM 61.48 ±0.12 53.69 ±0.52 43.65 ±0.78 48.52 ±0.54 
+
+Tent 53.80 ±3.46 15.95 ±6.02 9.18 ±5.21 21.45 ±3.63 
+
+Tent+MedBN 50.44 ±4.33 19.99 ±5.75 11.35 ±3.42 20.16 ±3.08 
+
+PL 52.25 ±5.02 4.46 ±1.22 4.70 ±2.73 20.44 ±5.04 
+
+EATA 47.94 ±1.39 20.39 ±3.68 13.84 ±3.34 22.10 ±2.47 
+
+TSD 48.62 ±7.41 8.36 ±5.84 2.51 ±1.47 13.57 ±3.83 
+
+TeSLA 63.86 ±2.59 40.51 ±2.13 36.25 ±0.32 46.26 ±2.62 
+
+Tent + SAFER-A 73.26 ±1.83 42.32 ±6.23 33.99 ±3.97 48.84 ±1.46 
+
+PL + SAFER-A 72.08 ±2.29 45.68 ±11 .73 36.62 ±3.83 51.55 ±1.04 
+
+TSD + SAFER-A 75.81 ±1.06 51.51 ±0.66 36.23 ±1.16 48.75 ±2.35 
+
+Tent + SAFER 83.67 ±2.94 56.76 ±0.87 48.21 ±1.23 59.73 ±0.18 
+
+PL + SAFER 84.31 ±5.09 53.82 ±1.94 41.30 ±2.20 53.92 ±2.45 
+
+TSD + SAFER 84.71 ±6.21 56.94 ±4.91 42.92 ±1.47 48.30 ±1.14 28 A. Koziak and Y. Guo 
+
+Table 8. OfficeHome accuracy (%) under ℓ∞ attacks with vertically stacked clean/mixed/fully attacked subtables per target domain. 
+
+Clean (0%) 
+
+Method Art Clipart Product RealWorld ERM 56.15 ±0.27 49.00 ±0.19 71.50 ±0.62 73.77 ±0.68 
+
+Robust ERM 28.80 ±1.15 35.54 ±0.36 43.20 ±0.36 44.43 ±0.54 
+
+Tent 56.43 ±1.14 51.43 ±0.34 71.70 ±0.49 73.36 ±0.52 
+
+Tent+MedBN 54.66 ±1.55 47.96 ±0.33 67.58 ±0.11 72.10 ±0.54 
+
+PL 51.22 ±1.20 39.12 ±1.74 65.80 ±1.12 65.70 ±0.95 
+
+EATA 54.95 ±0.78 49.60 ±0.48 70.50 ±0.14 72.91 ±0.21 
+
+TSD 56.32 ±0.51 48.10 ±1.60 69.56 ±1.20 69.42 ±0.57 
+
+TeSLA 55.49 ±0.75 47.28 ±0.70 70.26 ±0.18 72.61 ±0.44 
+
+Tent + SAFER-A 54.73 ±1.11 51.83 ±0.82 70.18 ±0.70 71.13 ±0.12 
+
+PL + SAFER-A 47.05 ±0.93 36.77 ±5.85 60.08 ±0.97 59.54 ±2.86 
+
+TSD + SAFER-A 54.58 ±1.09 46.09 ±1.40 66.33 ±2.06 65.71 ±0.86 
+
+Tent + SAFER 51.16 ±0.87 51.04 ±0.71 67.30 ±0.72 68.63 ±0.31 
+
+PL + SAFER 44.14 ±1.34 33.47 ±2.16 56.60 ±1.06 55.95 ±2.23 
+
+TSD + SAFER 51.41 ±0.99 44.50 ±0.93 63.26 ±1.89 63.06 ±1.14 
+
+Mixed (50%) 
+
+Method Art Clipart Product RealWorld ERM 28.84 ±0.07 28.26 ±0.78 42.07 ±0.37 38.29 ±0.44 
+
+Robust ERM 28.68 ±1.10 35.53 ±0.39 43.13 ±0.35 44.38 ±0.49 
+
+Tent 28.38 ±0.86 30.64 ±1.64 43.34 ±0.40 37.53 ±0.25 
+
+Tent+MedBN 27.94 ±0.62 30.92 ±0.81 44.82 ±0.80 37.56 ±0.21 
+
+PL 27.44 ±1.02 26.87 ±1.31 39.20 ±0.95 35.16 ±0.44 
+
+EATA 27.58 ±0.41 29.60 ±1.20 43.46 ±0.54 37.11 ±0.07 
+
+TSD 28.54 ±0.62 29.38 ±1.79 44.14 ±2.79 36.58 ±0.43 
+
+TeSLA 40.30 ±2.22 37.48 ±1.24 58.21 ±1.93 54.80 ±1.20 
+
+Tent + SAFER-A 36.92 ±1.28 41.92 ±0.76 57.35 ±0.31 54.56 ±0.25 
+
+PL + SAFER-A 32.58 ±1.49 28.02 ±3.56 47.05 ±0.06 42.84 ±0.96 
+
+TSD + SAFER-A 36.79 ±1.51 37.72 ±1.03 54.70 ±1.20 50.03 ±0.32 
+
+Tent + SAFER 43.50 ±0.81 47.78 ±0.23 61.74 ±0.61 62.21 ±0.61 
+
+PL + SAFER 34.42 ±1.59 31.07 ±4.25 47.23 ±1.61 49.11 ±1.06 
+
+TSD + SAFER 43.72 ±0.32 41.28 ±1.08 57.01 ±1.00 54.72 ±0.87 
+
+Fully attacked (100%) 
+
+Method Art Clipart Product RealWorld ERM 2.94 ±0.37 8.71 ±0.94 13.29 ±0.47 4.32 ±0.26 
+
+Robust ERM 28.58 ±1.18 35.57 ±0.37 43.08 ±0.25 44.28 ±0.53 
+
+Tent 2.62 ±0.36 11.66 ±2.15 19.61 ±1.19 4.04 ±0.27 
+
+Tent+MedBN 2.84 ±0.39 14.24 ±0.69 21.21 ±1.56 5.35 ±0.48 
+
+PL 3.15 ±0.43 11.42 ±0.57 14.89 ±4.81 3.37 ±0.56 
+
+EATA 3.98 ±0.31 11.96 ±1.05 20.57 ±1.26 7.73 ±0.61 
+
+TSD 2.51 ±0.51 12.09 ±2.38 19.32 ±1.28 3.03 ±0.50 
+
+TeSLA 26.15 ±2.81 29.37 ±2.38 48.36 ±3.27 41.06 ±2.28 
+
+Tent + SAFER-A 19.91 ±1.23 32.01 ±1.49 44.81 ±0.77 38.10 ±0.76 
+
+PL + SAFER-A 15.89 ±0.65 20.66 ±0.94 29.38 ±2.27 20.67 ±3.59 
+
+TSD + SAFER-A 20.31 ±0.33 30.44 ±1.01 42.73 ±0.35 32.64 ±2.62 
+
+Tent + SAFER 40.26 ±0.33 46.10 ±1.06 60.03 ±0.45 60.55 ±0.73 
+
+PL + SAFER 30.56 ±0.31 30.10 ±2.91 45.96 ±0.32 44.42 ±0.69 
+
+TSD + SAFER 40.98 ±1.04 38.06 ±1.37 54.01 ±0.68 48.98 ±1.95 Reliability-Guided Adaptive Ensembling for Robust Test-Time Adaptation 29 
+
+Table 9. AutoAttack transfer set on PACS:Art at ϵ = 8 /255 and a 100% attack rate. Accuracy ( %, mean ± std over seeds {0, 1, 2}). Both columns use the identical black-box transfer protocol; only the surrogate-side attack family differs ( 20 -step PGD vs. the AutoAttack standard ensemble). Tent+SAFER is essentially unchanged between the two attacks, whereas unwrapped Tent collapses further under the stronger AutoAttack. Method PGD ( 8/255 ) AutoAttack ( 8/255 )
+
+Tent 4.98 ± 1.89 2.69 ± 0.77 
+
+Tent+SAFER 73.10 ± 0.68 73.31 ± 0.92
