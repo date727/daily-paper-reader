@@ -6,85 +6,100 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-06-29
-- 运行时间：2026-06-29 20:55:48 UTC
+- 最新运行日期：2026-06-30
+- 运行时间：2026-06-30 21:43:41 UTC
 - 运行状态：成功
-- 本次总论文数：21
-- 精读区：9
+- 本次总论文数：26
+- 精读区：14
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读9篇、速读12篇论文，聚焦AI生成技术与安全评估  
-2) 高分论文集中于文本到图像生成优化及安全生成方法，速读内容涉及物理一致性验证与扩散模型内容审查突破  
-3) 建议优先阅读精读列表中关于语义优先扩散模型和生成速度控制的论文，了解当前AI创作技术的核心进展
-- 详情：[/202606/29/README](/202606/29/README)
+1) 今日完成26篇AI前沿论文精读与速读，聚焦因果推理、隐私保护及模型可解释性等方向  
+2) 高分论文揭示文本生成模型因果推理缺陷，并提出联邦学习隐私验证新方案  
+3) 建议关注因果基准测试方法与知识编辑中的擦除幻觉现象研究
+- 详情：[/202606/30/README](/202606/30/README)
 
 ### 精读区论文标签
-1. [SeFi-Image: A Text-to-Image Foundation Model with Semantic-First Diffusion](/202606/29/2606.22568v3-sefi-image-a-text-to-image-foundation-model-with-semantic-first-diffusion)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：图像生成技术的最新进展
-2. [Safe Few-Step Generation via Velocity Editing](/202606/29/2606.23267v1-safe-few-step-generation-via-velocity-editing)  
+1. [Are Text-to-Image Models Inductivist Turkeys? A Counterfactual Benchmark for Causal Reasoning](/202606/30/2606.24548v1-are-text-to-image-models-inductivist-turkeys-a-counterfactual-benchmark-for-causal-reasoning)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-3. [MGI: Member vs Generated Inference](/202606/29/2606.23872v1-mgi-member-vs-generated-inference)  
+   evidence：对抗扰动对生成模型的影响
+2. [Homomorphic Encryptions for Privacy Preserving Vision](/202606/30/2606.25216v1-homomorphic-encryptions-for-privacy-preserving-vision)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：基于对抗扰动的生成式图像保护
-4. [Yuvion VL: A Multimodal Foundation Model for Adversarial Content and AI Safety](/202606/29/2606.25034v2-yuvion-vl-a-multimodal-foundation-model-for-adversarial-content-and-ai-safety)  
+   evidence：图像对抗扰动生成技术
+3. [Minimalist Preprocessing Approach for Image Synthesis Detection](/202606/30/2606.25297v1-minimalist-preprocessing-approach-for-image-synthesis-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的防御方法
-5. [Shoot the Honey, Cloak the Player: Towards Zero-Runtime-Overhead Proactive Defense and Detection for Visual Game Cheating](/202606/29/2606.25734v1-shoot-the-honey-cloak-the-player-towards-zero-runtime-overhead-proactive-defense-and-detection-for-visual-game-cheating)  
+   evidence：生成式对抗扰动检测
+4. [Color Matters: Trigger Color Affects Success in Federated Backdoor Attacks](/202606/30/2606.25858v1-color-matters-trigger-color-affects-success-in-federated-backdoor-attacks)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：与对抗攻击的图像防御策略相关
-6. [Halt Fast! Early Stopping for Certified Robustness](/202606/29/2606.27694v1-halt-fast-early-stopping-for-certified-robustness)  
+   evidence：对抗扰动对生成模型的影响
+5. [MIMFlow: Integrating Masked Image Modeling with Normalizing Flows for End-to-End Image Generation](/202606/30/2606.26016v1-mimflow-integrating-masked-image-modeling-with-normalizing-flows-for-end-to-end-image-generation)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：结合掩码建模与归一化流的图像生成框架
+6. [Safe Autoregressive Image Generation with Iterative Self-Improving Codebooks](/202606/30/2606.27147v1-safe-autoregressive-image-generation-with-iterative-self-improving-codebooks)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击下图像生成模型的安全性
+7. [TruEye: Fine-Grained Detection of AI-Generated Human Subjects in Images](/202606/30/2606.27505v1-trueye-fine-grained-detection-of-ai-generated-human-subjects-in-images)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动对生成模型的影响
+8. [AEGIS: A Semantic GAN and Evidential Learning Frameworkfor Robust Adversarial Detection in Vision Sensors](/202606/30/2606.28416v1-aegis-a-semantic-gan-and-evidential-learning-frameworkfor-robust-adversarial-detection-in-vision-sensors)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-7. [What Was That Again? Certified Robustness for Automatic Speech Recognition](/202606/29/2606.27698v1-what-was-that-again-certified-robustness-for-automatic-speech-recognition)  
+9. [Bit-ViP: Leveraging Bit-planes to Preserve Visual Privacy in Images through Obfuscation](/202606/30/2606.29417v1-bit-vip-leveraging-bit-planes-to-preserve-visual-privacy-in-images-through-obfuscation)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的认证鲁棒性
-8. [AdvScan: Black-Box Adversarial Example Detection at Runtime through Power Analysis](/202606/29/2606.27704v1-advscan-black-box-adversarial-example-detection-at-runtime-through-power-analysis)  
+   evidence：对抗扰动对生成模型的影响
+10. [Closing the Activation-Cone Blind Spot: Response-Time Probing and Unified Defense](/202606/30/2606.29441v1-closing-the-activation-cone-blind-spot-response-time-probing-and-unified-defense)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：不相关
-9. [Improving Adversarial Robustness via Activation Amplification and Attenuation](/202606/29/2606.27784v1-improving-adversarial-robustness-via-activation-amplification-and-attenuation)  
+   evidence：对抗攻击的图像防御策略
+11. [The Platonic Defense: Backdoor Defense for Self-Supervised Encoders in the Era of Large Scale Pre-training](/202606/30/2606.29451v1-the-platonic-defense-backdoor-defense-for-self-supervised-encoders-in-the-era-of-large-scale-pre-training)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：激活放大与减弱提升鲁棒性
+   evidence：对抗攻击的图像防御策略
+12. [Adversarial robustness of a U-Net-based model observer for CT protocol optimization](/202606/30/2606.30115v1-adversarial-robustness-of-a-u-net-based-model-observer-for-ct-protocol-optimization)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：使用对抗样本探测CT协议优化模型的脆弱性
+13. [A Classifier-Agnostic Zero-Shot Adversarial Attack Detection via CLIP](/202606/30/2606.30342v1-a-classifier-agnostic-zero-shot-adversarial-attack-detection-via-clip)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+14. [$μ$Flow: Leveraging Average Images for Improving Generalisation of Deepfake Faces Detectors](/202606/30/2606.30528v1-flow-leveraging-average-images-for-improving-generalisation-of-deepfake-faces-detectors)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：深度伪造检测方法
 
 ### 速读区论文标签
-1. [Reference-Free Assessment of Physical Consistency in World Model-based Video Generation](/202606/29/2606.22363v1-reference-free-assessment-of-physical-consistency-in-world-model-based-video-generation)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：视频生成的物理一致性评估
-2. [Numerical and essential numerical ranges on $\ell_p$](/202606/29/2606.22693v1-numerical-and-essential-numerical-ranges-on-ellp)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-3. [One-Prompt Censorship Evasion via Generative Diffusion Models](/202606/29/2606.22717v1-one-prompt-censorship-evasion-via-generative-diffusion-models)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络相关
-4. [DE-FIVE: Detecting Malicious Image Prompts via Fourier Features and Image Vector Embeddings](/202606/29/2606.22779v1-de-five-detecting-malicious-image-prompts-via-fourier-features-and-image-vector-embeddings)  
+1. [Endogenous Randomness from Adversarial Market Learning](/202606/30/2606.22743v1-endogenous-randomness-from-adversarial-market-learning)  
    标签：评分：8.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-5. [T-IMPACT: A Severity-Aware Benchmark for Contextual Image-Text Manipulation](/202606/29/2606.22339v1-t-impact-a-severity-aware-benchmark-for-contextual-image-text-manipulation)  
+2. [FedOT: Ownership Verification and Leakage Tracing via Watermarks for Federated LDMs](/202606/30/2606.22875v1-fedot-ownership-verification-and-leakage-tracing-via-watermarks-for-federated-ldms)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+3. [Exposing the Illusion of Erasure in Knowledge Editing for LLMs](/202606/30/2606.23276v1-exposing-the-illusion-of-erasure-in-knowledge-editing-for-llms)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+4. [dVLA-RL: Reinforcement Learning over Denoising Trajectories for Discrete Diffusion Vision-Language-Action Models](/202606/30/2606.23623v1-dvla-rl-reinforcement-learning-over-denoising-trajectories-for-discrete-diffusion-vision-language-action-models)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击与生成模型结合
+5. [Towards Robust Personalized Federated Learning: Vulnerability Assessment and Defense Co-Design](/202606/30/2606.22782v1-towards-robust-personalized-federated-learning-vulnerability-assessment-and-defense-co-design)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对图像篡改的影响
-6. [RAVEN: Agentic RAG for Automated Vulnerability Repair](/202606/29/2606.22647v1-raven-agentic-rag-for-automated-vulnerability-repair)  
+   evidence：联邦学习中的对抗攻击防御
+6. [RS-Gen: A Multi-Stage Agentic Framework for Reasoning and Search-Augmented Image Generation](/202606/30/2606.23221v1-rs-gen-a-multi-stage-agentic-framework-for-reasoning-and-search-augmented-image-generation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的生成模型修复方法
-7. [One-Step Flow Matching for Generative Modeling of Path-Dependent Physical Fields](/202606/29/2606.22752v1-one-step-flow-matching-for-generative-modeling-of-path-dependent-physical-fields)  
+   evidence：对抗攻击的图像防御策略
+7. [TooBad: Backdoor Diffusion Models with Ultra-Low Poison Rate and Imperceptible Trigger](/202606/30/2606.23362v1-toobad-backdoor-diffusion-models-with-ultra-low-poison-rate-and-imperceptible-trigger)  
    标签：评分：7.0/10、query:image-adversarial
+   evidence：针对扩散模型的后门攻击方法
+8. [IMAGIN-4D: Image-Guided Controllable Interaction Generation](/202606/30/2606.23675v1-imagin-4d-image-guided-controllable-interaction-generation)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击下图像生成模型的安全性
+9. [When Distortion Helps: Secure GNN Precoding with Nonlinear Power Amplifiers](/202606/30/2606.23141v1-when-distortion-helps-secure-gnn-precoding-with-nonlinear-power-amplifiers)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：利用非线性失真提升GNN安全性
+10. [C^2GR: Coupled Comprehensive Generative Replay for a Continually Learnable Universal Segmentation Model](/202606/30/2606.23473v1-c2gr-coupled-comprehensive-generative-replay-for-a-continually-learnable-universal-segmentation-model)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+11. [Trimming the Long-Tail of Visual World Modeling Evaluation](/202606/30/2606.24256v1-trimming-the-long-tail-of-visual-world-modeling-evaluation)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗扰动对生成模型的影响
+12. [FLUX3D: High-Fidelity 3D Gaussian Generation with Diffusion-Aligned Sparse Representation](/202606/30/2606.24874v1-flux3d-high-fidelity-3d-gaussian-generation-with-diffusion-aligned-sparse-representation)  
+   标签：评分：6.0/10、query:image-adversarial
    evidence：生成式图像对抗鲁棒性
-8. [PixJail: Self-Evolving Paper-to-Pipeline Reproduction for Text-to-Image Jailbreak Evaluation](/202606/29/2606.24081v1-pixjail-self-evolving-paper-to-pipeline-reproduction-for-text-to-image-jailbreak-evaluation)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-9. [Encoder-Decoder Manifold Alignment for Idempotent Generation](/202606/29/2606.22304v1-encoder-decoder-manifold-alignment-for-idempotent-generation)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：生成对抗扰动与生成模型的鲁棒性
-10. [Escaping the Variance Trap: Jacobian-Free Dynamics for Root-Finding Bilevel Optimization](/202606/29/2606.22433v1-escaping-the-variance-trap-jacobian-free-dynamics-for-root-finding-bilevel-optimization)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
-11. [Trajectory Forcing: Structure-First Generation with Controllable Semantic Trajectories](/202606/29/2606.22527v1-trajectory-forcing-structure-first-generation-with-controllable-semantic-trajectories)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：生成模型的轨迹控制
-12. [SeFi-Image: A Text-to-Image Foundation Model with Semantic-First Diffusion](/202606/29/2606.22568v2-sefi-image-a-text-to-image-foundation-model-with-semantic-first-diffusion)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动生成技术
 
 
 ### ⚡ 这个站点能做什么

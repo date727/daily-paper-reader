@@ -1,0 +1,44 @@
+# 日报 · 2026-06-30
+
+- 生成时间：2026-06-30 21:43:41 UTC
+- 当次推荐总数：26
+- 精读区：14
+- 速读区：12
+
+## 今日简报（AI）
+1) 今日精读14篇、速读12篇AI前沿论文，聚焦因果推理与隐私保护等关键议题。  
+2) 高分论文揭示因果推理模型局限性，并探索联邦学习中隐私保护与版权追踪的新方法。  
+3) 建议关注因果推理模型评估与联邦学习隐私保护技术，速读文章可优先了解水印机制在版权追踪中的应用。
+
+## 精读区
+1. [Are Text-to-Image Models Inductivist Turkeys? A Counterfactual Benchmark for Causal Reasoning](/202606/30/2606.24548v1-are-text-to-image-models-inductivist-turkeys-a-counterfactual-benchmark-for-causal-reasoning) （9.0/10）
+2. [Homomorphic Encryptions for Privacy Preserving Vision](/202606/30/2606.25216v1-homomorphic-encryptions-for-privacy-preserving-vision) （9.0/10）
+3. [Minimalist Preprocessing Approach for Image Synthesis Detection](/202606/30/2606.25297v1-minimalist-preprocessing-approach-for-image-synthesis-detection) （9.0/10）
+4. [Color Matters: Trigger Color Affects Success in Federated Backdoor Attacks](/202606/30/2606.25858v1-color-matters-trigger-color-affects-success-in-federated-backdoor-attacks) （9.0/10）
+5. [MIMFlow: Integrating Masked Image Modeling with Normalizing Flows for End-to-End Image Generation](/202606/30/2606.26016v1-mimflow-integrating-masked-image-modeling-with-normalizing-flows-for-end-to-end-image-generation) （9.0/10）
+6. [Safe Autoregressive Image Generation with Iterative Self-Improving Codebooks](/202606/30/2606.27147v1-safe-autoregressive-image-generation-with-iterative-self-improving-codebooks) （9.0/10）
+7. [TruEye: Fine-Grained Detection of AI-Generated Human Subjects in Images](/202606/30/2606.27505v1-trueye-fine-grained-detection-of-ai-generated-human-subjects-in-images) （9.0/10）
+8. [AEGIS: A Semantic GAN and Evidential Learning Frameworkfor Robust Adversarial Detection in Vision Sensors](/202606/30/2606.28416v1-aegis-a-semantic-gan-and-evidential-learning-frameworkfor-robust-adversarial-detection-in-vision-sensors) （9.0/10）
+9. [Bit-ViP: Leveraging Bit-planes to Preserve Visual Privacy in Images through Obfuscation](/202606/30/2606.29417v1-bit-vip-leveraging-bit-planes-to-preserve-visual-privacy-in-images-through-obfuscation) （9.0/10）
+10. [Closing the Activation-Cone Blind Spot: Response-Time Probing and Unified Defense](/202606/30/2606.29441v1-closing-the-activation-cone-blind-spot-response-time-probing-and-unified-defense) （9.0/10）
+11. [The Platonic Defense: Backdoor Defense for Self-Supervised Encoders in the Era of Large Scale Pre-training](/202606/30/2606.29451v1-the-platonic-defense-backdoor-defense-for-self-supervised-encoders-in-the-era-of-large-scale-pre-training) （9.0/10）
+12. [Adversarial robustness of a U-Net-based model observer for CT protocol optimization](/202606/30/2606.30115v1-adversarial-robustness-of-a-u-net-based-model-observer-for-ct-protocol-optimization) （9.0/10）
+13. [A Classifier-Agnostic Zero-Shot Adversarial Attack Detection via CLIP](/202606/30/2606.30342v1-a-classifier-agnostic-zero-shot-adversarial-attack-detection-via-clip) （9.0/10）
+14. [$μ$Flow: Leveraging Average Images for Improving Generalisation of Deepfake Faces Detectors](/202606/30/2606.30528v1-flow-leveraging-average-images-for-improving-generalisation-of-deepfake-faces-detectors) （9.0/10）
+
+## 速读区
+1. [Endogenous Randomness from Adversarial Market Learning](/202606/30/2606.22743v1-endogenous-randomness-from-adversarial-market-learning) （8.0/10）
+2. [FedOT: Ownership Verification and Leakage Tracing via Watermarks for Federated LDMs](/202606/30/2606.22875v1-fedot-ownership-verification-and-leakage-tracing-via-watermarks-for-federated-ldms) （8.0/10）
+3. [Exposing the Illusion of Erasure in Knowledge Editing for LLMs](/202606/30/2606.23276v1-exposing-the-illusion-of-erasure-in-knowledge-editing-for-llms) （8.0/10）
+4. [dVLA-RL: Reinforcement Learning over Denoising Trajectories for Discrete Diffusion Vision-Language-Action Models](/202606/30/2606.23623v1-dvla-rl-reinforcement-learning-over-denoising-trajectories-for-discrete-diffusion-vision-language-action-models) （8.0/10）
+5. [Towards Robust Personalized Federated Learning: Vulnerability Assessment and Defense Co-Design](/202606/30/2606.22782v1-towards-robust-personalized-federated-learning-vulnerability-assessment-and-defense-co-design) （7.0/10）
+6. [RS-Gen: A Multi-Stage Agentic Framework for Reasoning and Search-Augmented Image Generation](/202606/30/2606.23221v1-rs-gen-a-multi-stage-agentic-framework-for-reasoning-and-search-augmented-image-generation) （7.0/10）
+7. [TooBad: Backdoor Diffusion Models with Ultra-Low Poison Rate and Imperceptible Trigger](/202606/30/2606.23362v1-toobad-backdoor-diffusion-models-with-ultra-low-poison-rate-and-imperceptible-trigger) （7.0/10）
+8. [IMAGIN-4D: Image-Guided Controllable Interaction Generation](/202606/30/2606.23675v1-imagin-4d-image-guided-controllable-interaction-generation) （7.0/10）
+9. [When Distortion Helps: Secure GNN Precoding with Nonlinear Power Amplifiers](/202606/30/2606.23141v1-when-distortion-helps-secure-gnn-precoding-with-nonlinear-power-amplifiers) （6.0/10）
+10. [C^2GR: Coupled Comprehensive Generative Replay for a Continually Learnable Universal Segmentation Model](/202606/30/2606.23473v1-c2gr-coupled-comprehensive-generative-replay-for-a-continually-learnable-universal-segmentation-model) （6.0/10）
+11. [Trimming the Long-Tail of Visual World Modeling Evaluation](/202606/30/2606.24256v1-trimming-the-long-tail-of-visual-world-modeling-evaluation) （6.0/10）
+12. [FLUX3D: High-Fidelity 3D Gaussian Generation with Diffusion-Aligned Sparse Representation](/202606/30/2606.24874v1-flux3d-high-fidelity-3d-gaussian-generation-with-diffusion-aligned-sparse-representation) （6.0/10）
+
+---
+使用键盘方向键可在日报/论文之间快速切换。
