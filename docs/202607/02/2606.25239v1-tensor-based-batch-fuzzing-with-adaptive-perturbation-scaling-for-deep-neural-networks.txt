@@ -1,0 +1,971 @@
+Title: Tensor-Based Batch Fuzzing with Adaptive Perturbation Scaling for Deep Neural Networks
+
+URL Source: https://arxiv.org/pdf/2606.25239v1
+
+Published Time: Thu, 25 Jun 2026 00:22:50 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Tensor-Based Batch Fuzzing with Adaptive Perturbation Scaling for Deep Neural Networks 
+
+# Guanqin Zhang 
+
+University of New South Wales Sydney, Australia guanqin.zhang@unsw.edu.au 
+
+# Yulei Sui 
+
+University of New South Wales Sydney, Australia y.sui@unsw.edu.au 
+
+## Abstract 
+
+Deep neural networks (DNNs) are increasingly deployed in safety-critical domains such as autonomous driving and medical diagnosis, yet their opaque, high-dimensional parameter spaces make it dif-ficult to systematically assess model reliability on unseen inputs. Existing coverage-guided sequential fuzzing frameworks for DNN inherit a one-input-per-iteration design from traditional software fuzzing and apply uniform perturbation budgets across all input dimensions, limiting both testing throughput (i.e., inputs processed per unit time) and the precision of input-space exploration. We present a new specification-aware batch fuzzing framework with adaptive perturbation scaling that addresses both limitations. Rather than relying on a fixed global perturbation radius 𝜖 , our approach derives mutation step sizes from specification-defined feasible ranges (i.e., the gap between lower and upper bounds) us-ing a shared scale factor. This scaling can be applied either as a global scalar ( isotropic ) or as per-dimension step sizes ( anisotropic ), enabling perturbations to remain consistent with the underlying constraint structure. As a result, the fuzzer can explore input spaces with heterogeneous feature scales more effectively across all spec-ifications in the batch. We embed input constraints and output property checks directly into the network as non-trainable layers, yielding a wrapped model that processes 𝐵 specification instances in a single batched iteration, which substantially improves fuzzing efficiency and exploration of counterexamples. We evaluate our framework extensively on three benchmarks, covering six networks and over 400 specifications across Traffic-Signs , Cifar100 , and TinyImageNet . Our tensor-based fuzzing achieves up to 40 × higher throughput and 4 × more violations than the sequential baseline under the same time budget, demonstrating significantly improved effectiveness in specification-guided fuzzing. 
+
+## CCS Concepts 
+
+• Software and its engineering → Search-based software engi-neering ; Software testing and debugging .
+
+## Keywords 
+
+deep neural network testing, coverage-guided fuzzing, batch tensor parallelism, adaptive perturbation, robustness specifications 
+
+ACM Reference Format: 
+
+Guanqin Zhang and Yulei Sui. 2026. Tensor-Based Batch Fuzzing with Adaptive Perturbation Scaling for Deep Neural Networks. In Proceedings of Make sure to enter the correct conference title from your rights confirma-tion email (Conference acronym ’XX). ACM, New York, NY, USA, 12 pages. https://doi.org/XXXXXXX.XXXXXXX 
+
+## 1 Introduction 
+
+DNNs have achieved strong performance across image classifica-tion, object detection, and natural language understanding, and are increasingly deployed in safety-critical domains such as au-tonomous driving [ 5 ], medical diagnosis, and cyber-physical con-trol [ 2, 12 ], where incorrect predictions can have severe robustness issues. This trend has prompted growing attention toward estab-lishing rigorous assurance for DNN-based systems [6, 29]. 
+
+Existing efforts . Coverage-guided grey- or white-box fuzzing has emerged as the new paradigm for assessing DNN reliability, adapt-ing techniques from traditional software fuzzing [ 4, 26 ]. The fuzzing process revolves around three key elements: a coverage metric that quantifies how thoroughly a test suite exercises the DNN internal computation, a test case selection strategy that prioritizes promising inputs (high energy inputs), and a mutation strategy that generates new candidate inputs. These elements form an iterative loop in which selected seeds are mutated, fed through the network, and evaluated against the coverage metric; candidates that increase coverage are retained for subsequent rounds. DeepXplore [ 32 ] in-troduced neuron coverage (NC) as the white-box adequacy crite-rion, measuring the fraction of neurons whose activation exceeds a threshold, and DeepGauge [ 24 ] extended this to multi-granularity criteria. Building on these metrics, DeepHunter [40] applies meta-morphic mutation under coverage feedback, TensorFuzz [ 30 ] uses approximate nearest-neighbour coverage, DeepTest [ 38 ] generates domain-specific transformations, and DLFuzz [ 17 ] maximizes cov-erage via gradient-guided differential fuzzing. 
+
+Limitations . Existing DNN fuzzing methods like DeepHunter [ 40 ]suffer from two key limitations. First, they are fundamentally orga-nized around a one-input-per-iteration fuzzing paradigm from tradi-tional software fuzzing, where each mutated input is executed inde-pendently [ 4 , 28 ]. However, DNN inference is inherently tensorized: a forward pass natively supports batched evaluation, allowing 𝐵 in-puts to be processed with nearly the same kernel-launch overhead as a single input, with computation amortized by hardware-level parallelism [ 1 , 31 ]. While TensorFuzz [ 30 ], which is designed for TensorFlow programs, exploits batching for model evaluation, its core fuzzing operators (NumPy-based mutation and per-element coverage feedback) are not tensor-based transformations (e.g., Py-Torch tensors) across the batch, resulting in underutilized through-put. Second, most approaches adopt a fixed mutation strategy (i.e., a uniform perturbation 𝜖 ) across all input dimensions [ 15 , 25 ]. In practice, each dimension 𝑑 ∈ 𝐷 may correspond to a pixel intensity or a physical feature, and can be constrained by its own interval 
+
+[𝑙 𝑑 , 𝑢 𝑑 ] defined in the input specification. Formal formats such as  
+
+> arXiv:2606.25239v1 [cs.SE] 23 Jun 2026 Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Guanqin Zhang and Yulei Sui
+
+VNNLib [ 7, 8] explicitly support such non-uniform, per-dimension bounds. Ignoring this structure forces the fuzzer to either under-explore loosely constrained dimensions or over-explore tightly constrained ones, leading to inefficient search. 
+
+Our approach . To address the above limitations, we introduce specification-aware batch fuzzing, shifting DNN fuzzing from se-quential input-level mutation to batch specification-level execution. Fuzzing is lifted to the specification level, not the input level, with the entire loop expressed in tensor-level semantics to avoid sequen-tial per-input processing in prior works [ 30 , 40 ]. We embed specifi-cation constraints directly into the network as non-trainable layers, yielding a wrapped model 𝑀 wrapped that integrates constraints and property checking into standard forward execution. The model encodes per-sample input bounds [𝑙 𝑏 , 𝑢 𝑏 ] ∈ R𝐷 alongside output specifications, enabling batched inputs 𝑋 ∈ R𝐵 ×𝐷 to be processed in a single pass with per-sample verdicts. These bounds are reused throughout the pipeline for projection, adaptive perturbation scal-ing and validity checking, providing a specification-aware batch pipeline to significantly improve fuzzing effectiveness. Table 1 compares sequential and batch fuzzing. Our formulation lifts all phases of the fuzzing loop (i.e., seed selection, mutation, inference, coverage tracking, and feedback) to operate over a 𝐵 -sample batch within a single iteration, where each sample (batch element) corresponds to a specification instance consisting of an input and its associated input constraints and output property. This effectively leverages the batch dimension as a throughput multiplier without introducing additional algorithmic approximations. To address the fixed perturbation limitation, we introduce adap-tive perturbation scaling which derives mutation magnitudes from specification-defined feasible ranges via a shared scale factor 𝑠 . Our approach supports both isotropic scaling , where a global step size is adaptively derived from feasible ranges, and anisotropic scaling ,which assigns per-dimension step sizes from these ranges, enabling consistent exploration under heterogeneous input constraints. As shown in Table 1, the three paradigms differ primarily in bounds handling and perturbation scaling. Sequential fuzzing ap-plies a fixed step size 𝜂 to individual samples without adaptation. Batch isotropic fuzzing shares bounds [𝒍 , 𝒖 ] across 𝐵 samples and computes a scalar step size 𝜂 = ¯𝑟 ·𝑠 from the mean range ¯𝑟 , broadcast-ing uniform perturbations across all dimensions. In contrast, batch anisotropic fuzzing maintains per-element bounds [𝒍 , 𝒖 ] ∈ R𝐵 ×𝐷 
+
+and computes a scaling tensor S𝑏,𝑑 = (𝒖 𝑏,𝑑 − 𝒍 𝑏,𝑑 ) · 𝑠 , assigning larger steps to loosely constrained dimensions and finer steps to tightly constrained ones. The “spec heterogeneity” row highlights that the anisotropic formulation supports different specifications per sample within the same batch. 
+
+Our contributions are summarized as below: 
+
+• We introduce a specification-aware batch fuzzing framework that operates at the level of specification instances rather than individual inputs. The full fuzzing loop, including seed selection, mutation, inference, coverage tracking, and feed-back, is expressed as a unified data-parallel pipeline. By em-bedding input bounds and output checks as non-trainable layers in a wrapped model, specifications are evaluated in a single forward pass, significantly improving fuzzing effi-ciency and specification-guided exploration. 
+
+• We propose an adaptive perturbation scaling scheme that de-rives mutation magnitudes from specification-defined bounds. It supports two scaling methods: isotropic scaling, where a global step size is adaptively derived from feasible ranges, and anisotropic scaling, which assigns per-dimension step sizes from the same ranges, enabling consistent exploration under heterogeneous input constraints. 
+
+• We implement the framework in PyTorch and evaluate it extensively on six networks with over 400 specifications, demonstrating significant performance gains and achieving up to 40 × higher throughput than the sequential baseline. Our tensor-based batch fuzzing processes all 𝐵 specifications simultaneously within a single 60 s window and discovers 4× more violations, whereas the sequential baseline requires 
+
+𝐵 × 60 ,s to cover the same specifications. 
+
+## 2 Preliminaries and Sequential DNN Fuzzing 
+
+Neural Network. A feed-forward neural network 𝑓 : R𝑛 → R𝑛 ′
+
+transforms an 𝑛 -dimensional input through 𝑘 ∈ 𝐾 successive layers to produce an 𝑛 ′-dimensional output. For our fuzzing, we treat 𝑓 
+
+as a grey-box network under test: gradient-driven mutation opera-tors (PGD, FGSM) require differentiable access via the backward pass, while heuristic operators ( Random , Boundary ) require only forward evaluation. In either case, no knowledge of the training procedure or dataset beyond the model weights is assumed. 
+
+Specification and Property Violation. A specification (Φ, Ψ)
+
+pairs an input constraint Φ with an output property Ψ : R𝑛 ′
+
+→{true , false }. The feasible perturbation region induced by Φ takes the form of a box constraint 
+
+⟦Φ⟧ := 𝒙 ∈ R𝑛 | 𝒍 ≤ 𝒙 ≤ 𝒖 , (1) where 𝒍 and 𝒖 are given directly in explicit box specification (e.g., per-dimension VNNLib bounds [ 7, 8]). 𝒍 = 𝒐𝒊 − 𝜀 , 𝒖 = 𝒐𝒊 + 𝜀 can also be derived from ℓ∞-balls specifications with an original image 
+
+𝒐𝒊 and perturbation radius 𝜀 . The output property Ψ requires that the predicted class remains unchanged for all inputs within ⟦Φ⟧:
+
+Ψ(𝑓 (𝒙 )) = true ⇐⇒ min 
+
+> 𝑐 ≠𝑐 ∗
+
+ 𝑓 (𝒙 )𝑐 ∗ − 𝑓 (𝒙 )𝑐 
+
+ > 0, (2) where 𝑐 ∗ = arg max 𝑐 𝑓 (𝒙 0)𝑐 is the reference predicted class with the maximum score, and 𝑐 is any other candidate class and 𝑓 (𝒙 0)𝑐 
+
+is the score/logit for class 𝑐 . More generally, Ψ can encode any linear inequality over the output, accommodating margin and range constraints [ 14 , 23 ]. One of the main objectives of fuzzing is to find a counterexample : a candidate input ˜𝒙 ∈ ⟦ Φ⟧ such that Ψ(𝑓 ( ˜𝒙 )) =
+
+false , constituting a concrete property violation (e.g., an incorrectly predicted class). 
+
+Sequential DNN Fuzzing. Algorithm 1 presents a classical one-input-per-iteration fuzzing loop that underpins existing tools such as DeepHunter [40] and TensorFuzz [30]. The loop revolves around a mutable seed corpus P, initialized with (𝒙 0, 𝑒 0) (Line 1), where 𝒙 0 is the original seed input and 𝑒 0 ∈
+
+R> 0 is its initial energy. Each seed 𝒙 defines a feasible perturbation region ⟦Φ⟧ within which mutations are confined. Seeds are sampled Tensor-Based Batch Fuzzing with Adaptive Perturbation Scaling for Deep Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Table 1: Comparison of Fuzzing approaches. Lower and upper bounds: 𝒍 , 𝒖 ∈ R𝐵 ×𝐷 with batch size 𝐵 , input dim 𝐷 (e.g., 𝐷 =784 
+
+for MNIST), output dim 𝐷 ′. Mutation: 𝜂 · Δ (uniform scalar) or S ⊙ Δ (per-element; ⊙: Hadamard product), where Δ ∈ R𝐵 ×𝐷 
+
+is the mutation direction matrix whose 𝑏 -th row equals the per-sample direction 𝜹 (𝑏 ) (FGSM, PGD, etc.), and 𝜹 =Δ when 𝐵 =1. Mean range: ¯𝑟 = 1
+
+> 𝐵𝐷
+
+Í𝑏,𝑑 (𝑢 𝑏,𝑑 − 𝑙 𝑏,𝑑 ) across all samples and dimensions. Uniform scaling: 𝜂 = ¯𝑟 · 𝑠 . Per-element scaling tensor: 
+
+S𝑏,𝑑 = (𝑢 𝑏,𝑑 − 𝑙 𝑏,𝑑 ) · 𝑠 gives each sample-dimension pair its own perturbation magnitude, where parameter 𝑠 ∈ ( 0, 1] adaptively controls granularity (e.g., 𝑠 = 0.1 means each step moves 10% of the feasible range, requiring ∼10 steps to traverse from 𝒍 to 𝒖 ). Aspect Sequential Batch Isotropic (Ours) Batch Anisotropic (Ours) 
+
+Seed selection 𝒙 ∈ R𝐷 𝑿 ∈ R𝐵 ×𝐷 𝑿 ∈ R𝐵 ×𝐷 
+
+Perturbation value 𝜂 ∈ R 𝜂 ∈ R S ∈ R𝐵 ×𝐷 
+
+Perturbation scaling Fixed (e.g., 𝜂 =0.01 ) Adaptive scalar ( 𝜂 = ¯𝑟 · 𝑠 ) Adaptive tensor ( S𝑏,𝑑 = (𝒖 𝑏,𝑑 − 𝒍 𝑏,𝑑 ) · 𝑠 )Mutation ˜𝒙 = 𝒙 + 𝜂 · 𝜹 ˜𝑿 = 𝑿 + 𝜂 · Δ ˜𝑿 = 𝑿 + S ⊙ Δ
+
+Inference 𝑓 : R𝐷 → R𝐷 ′
+
+𝑓 : R𝐵 ×𝐷 → R𝐵 ×𝐷 ′
+
+𝑓 : R𝐵 ×𝐷 → R𝐵 ×𝐷 ′
+
+Samples per iteration 1 𝐵 𝐵 
+
+Bounds handling Single [𝒍 , 𝒖 ] / fixed Shared [𝒍 , 𝒖 ] / uniform Per-sample [𝒍 𝑏 , 𝒖 𝑏 ] / non-uniform Spec heterogeneity Homogeneous Homogeneous Heterogeneous 
+
+Algorithm 1 Sequential DNN Fuzzing (baseline) 
+
+Require: Network 𝑓 ; specification (Φ, Ψ); timeout 𝑡 max 
+
+Ensure: Counterexample set C; coverage Cov global 
+
+/∗ Initialization ∗/  
+
+> 1:
+
+P ← { ( 𝒙 0, 𝑒 0 ) } ; C ← ∅ ; 𝑡 ← 0 
+
+> 2:
+
+∀𝑘 : 𝒎 𝑘 ← 0𝑑 𝑘 ; 𝒎 ← concat 𝑘 (𝒎 𝑘 ); ⊲ coverage 𝒎 𝑘 for layer 𝑘  
+
+> 3:
+
+while Clock () < 𝑡 max do 
+
+/∗ Phase 1 – Seed Selection ∗/  
+
+> 4:
+
+𝒙 ← SeedSelect ( P ) ⊲ one seed ∈ R𝑛 
+
+/∗ Phase 2 – Mutation (under input constraints) ∗/  
+
+> 5:
+
+˜𝒙 ← Π⟦Φ⟧
+
+ 𝒙 + 𝜂 · 𝜹  ⊲ perturbation direction 𝜹 ; step size 𝜂 
+
+/∗ Phase 3 – Execution ∗/  
+
+> 6:
+
+𝐴, ˜𝒚 ← 𝑓 ( ˜𝒙 ) ⊲ activation map 𝐴 with one mutant 
+
+/∗ Phase 4 – Feedback and update ∗/  
+
+> 7:
+
+𝑞, 𝒎 ← CoverageUpdate (𝐴, 𝒎 ) ⊲ coverage gain 𝑞 ∈ { 0, 1} 
+
+> 8:
+
+𝑣 ← Ψ( ˜𝒚 ) = false  ⊲ spec violation 𝑣 ∈ { 0, 1} 
+
+> 9:
+
+𝑒 ← 𝑞𝛼 + 𝑣𝛽 ⊲ coverage/violation reward weights 𝛼 /𝛽  
+
+> 10:
+
+if 𝑞 ∨ 𝑣 then P.Insert ( ˜𝒙 , energy = 𝑒 ) 
+
+> 11:
+
+if 𝑣 then C ← C ∪ { ˜𝒙 } 
+
+> 12:
+
+end while  
+
+> 13:
+
+Cov global ←    
+
+> Í𝑘 ∥𝒎 𝑘 ∥0Í𝑘 𝑑 𝑘
+
+⊲ 𝒎 𝑘 ∈ { 0, 1}𝑑 𝑘 ; 𝑑 𝑘 : neuron num at layer 𝑘  
+
+> 14:
+
+return C, Cov global 
+
+proportionally to their energy based on feedback from the coverage bitmap 𝒎 (Line 2), and new candidates are added to P if they increase neuron coverage or trigger a property violation (Line 10). At each iteration, a single seed 𝒙 is drawn from the corpus pro-portionally to its energy (Line 4), a perturbation 𝜹 is applied and projected onto the feasible region ⟦Φ⟧ (Line 5), and the mutated input is forwarded through 𝑓 to obtain the output and intermediate activations 𝐴 (Line 6). The perturbation direction 𝜹 can be con-structed via gradient-driven methods such as Projected Gradient Descent (PGD) [25]: 
+
+𝜹 = 𝛼 · sign  ∇𝒙 L( 𝑓 (𝒙 ), 𝑦 ) (3) where L is the classification loss, 𝑦 is the ground-truth label, and 
+
+𝛼 ≤ 𝜂 is the step size; alternatively, 𝜹 may be sampled from a heuristic distribution such as uniform [38] or Gaussian noise [30]. The quality of mutated inputs is evaluated via neuron cover-age [ 24 , 32 ] (Line 7). During the forward pass, PyTorch hooks [ 31 ]intercept intermediate activations 𝐴 𝑘 at each layer 𝑘 without mod-ifying the computation graph; spatial activations (convolutional layers) are reduced per-channel via absolute-value max-pooling, while fully connected layers use 𝐴 𝑘 [ 𝑗 ] directly, where 𝑗 is the neu-ron index within layer 𝑘 . Two coverage strategies are typically sup-ported. Global coverage maintains a per-layer bitmap 𝒎 𝑘 ∈ { 0, 1}𝑑 𝑘 
+
+recording which neurons have ever fired (i.e., |𝐴 𝑘 [ 𝑗 ]| > 𝜏 , threshold 
+
+𝜏 > 0) [24, 32]: 
+
+Cov global =
+
+Í𝑘 ∥𝒎 𝑘 ∥0
+
+Í𝑘 𝑑 𝑘 
+
+. (4) 
+
+Best-input coverage requires no persistent bitmap; it tracks the running maximum of the per-input fraction 𝜌 ( ˜𝒙 ) = 1 
+
+> 𝐷
+
+|{( 𝑘, 𝑗 ) | |𝐴 𝑘 [ 𝑗 ]| > 𝜏 }| , reporting Cov global = max ˜𝒙 𝜌 ( ˜𝒙 ). In both cases, 𝑞 = 1
+
+if ˜𝒙 strictly improves the current coverage state. Coverage serves as the structural feedback signal that guides corpus growth: an input that activates a previously uncovered neuron is treated as interesting and retained for subsequent mutation, analogous to the new-edge criterion in traditional coverage-guided fuzzers [ 26 ]. Line 8 checks whether the output property Ψ is violated. Seeds satisfying either criterion are inserted into the corpus with up-dated energy (lines 9–10), and any violating inputs are recorded as counterexamples (lines 11). 
+
+## 3 Overview of Our Batch DNN Fuzzing 
+
+We first present a high-level overview of our batch fuzzing approach, as depicted in Figure 1. We then provide the overview algorithm (Algorithm 2) for batch fuzzing with isotropic and anisotropic per-turbations, which contrasts directly with the sequential version (Algorithm 1). Each phase is then detailed in Section 4, including its internal workflows and associated sub-algorithms. Figure 1 illustrates the four-phase fuzzing pipeline. The pre-processing stage synthesises a wrapped model by composing the network with an InputSpecLayer and OutputSpecLayer , encod-ing the input constraint Φ and output property Ψ as tensor-native Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Guanqin Zhang and Yulei Sui 
+
+Figure 1: Overview of our tensor-based batch fuzzing framework, which processes specification instances in parallel across four phases (i.e., seed selection, mutation, execution, and feedback), each operating on batched tensors of size 𝐵 .
+
+layers alongside the initial seed corpus. In Phase 1 , seeds are drawn from the corpus by energy-weighted sampling, prioritising inputs that previously triggered new coverage or property violations. In 
+
+Phase 2 , the selected batch is perturbed and projected onto the feasible region defined by Φ, producing batched mutated inputs ˜𝑋 
+
+that satisfy the hard input constraints by construction. Phase 3 runs a single batched forward pass: PyTorch activation hooks capture the layer-wise activation map 𝐴 , while the OutputSpecLayer per-forms a vectorised property check, flagging samples that violate 
+
+Ψ. The analysis and feedback loop then computes per-sample en-ergy 𝑒 = Δcov · 𝛼 + 1[violation ] · 𝛽 , updates the coverage tracker, and re-orders the seed corpus accordingly; the loop repeats un-til the termination condition is met, after which an output report summarizing counterexamples and final coverage is produced. Algorithm 2 presents the overview algorithm for batch fuzzing, formalising the four phases shown in Figure 1. Its tensor-based data structures and adaptive perturbation scaling contrast with the sequential algorithm introduced earlier in Algorithm 1. The key differences are threefold. First, seed selection (Line 4) draws a batch 
+
+𝑋 ∈ R𝐵 ×𝐷 in a single call rather than one seed at a time, with all 𝐵 
+
+samples mutated in parallel. Second, Lines 5–6 introduce a dedicated perturbation scaling step that replaces the fixed scalar 𝜂 : under 
+
+isotropic mode a single scalar 𝜂 = ¯𝑟 ·𝑠 is adaptively derived from the mean feasible range ¯𝑟 , while under anisotropic mode a per-element tensor S ∈ R𝐵 ×𝐷 with S𝑏,𝑑 = (𝒖 𝑏,𝑑 − 𝒍 𝑏,𝑑 ) · 𝑠 assigns each sample– dimension pair its own perturbation magnitude; both modes apply the same mutation step at line 7, ˜𝑋 = Π⟦Φ⟧ (𝑋 + 𝜂 ⊙ Δ), where ⊙
+
+reduces to scalar multiplication in the isotropic case. Third, lines 9– 13 lift the feedback variables 𝒒 , 𝒗 , and 𝒆 from scalars to length-
+
+𝐵 vectors, with energy assignment and corpus insertion applied element-wise across the batch. All other algorithmic structures, including coverage bitmap update (line 9), spec violation check (line 10), and the final Cov global formula (line 15), are identical to the sequential case. 
+
+## 4 Detailed Design of Our Approach 
+
+We detail the four phases shown in Figure 1 and expand Algorithm 2 to cover implementation details, including illustrative workflows and the formulation of the internal subalgorithms. 
+
+Algorithm 2 Batch DNN Fuzzing (Isotropic & Anisotropic) 
+
+Require: Network 𝑓 ; specification (Φ, Ψ); timeout 𝑡 max ; batch size 𝐵 ; strat-egy weights 𝑊 ; reward weights 𝛼, 𝛽 ; activation threshold 𝜏 ; minimum energy 𝑒 min ; perturbation mode 𝜋 ∈ { isotropic , anisotropic }; granular-ity 𝑠 ∈ ( 0, 1]
+
+Ensure: Counterexample set C; coverage Cov global 
+
+/∗ Initialization ∗/  
+
+> 1:
+
+P ← { ( 𝒙 0, 𝑒 0 ) } ; C ← ∅ ⊲ 𝑒 0 = 1 
+
+> 2:
+
+∀𝑘 : 𝒎 𝑘 ← 0𝑑 𝑘 ; 𝒎 ← concat 𝑘 (𝒎 𝑘 ) ⊲ 𝒎 𝑘 ∈ { 0, 1}𝑑 𝑘 : coverage map  
+
+> 3:
+
+while Clock () < 𝑡 max do 
+
+/∗ Phase 1 – Seed Selection ∗/  
+
+> 4:
+
+𝑿 ← SeedSelect ( P , 𝐵 ) ⊲ 𝑿 ∈ R𝐵 ×𝐷 , sampled ∝ energy 
+
+/∗ Phase 2 – Mutation ∗/  
+
+> 5:
+
+𝑠 ← 1 − ( 1 − 𝑠 ) 𝑛 +1 ⊲ 𝑛 : cumulative selection count of seed  
+
+> 6:
+
+𝜂 ←
+
+
+
+¯𝑟 · 𝑠 ∈ R, where ¯𝑟 = 1
+
+> 𝐵𝐷
+
+Í𝑏,𝑑 (𝒖 𝑏,𝑑 − 𝒍 𝑏,𝑑 ) 𝜋 = isotropic 
+
+S ∈ R𝐵 ×𝐷 , S𝑏,𝑑 = (𝒖 𝑏,𝑑 − 𝒍 𝑏,𝑑 ) · 𝑠 𝜋 = anisotropic  
+
+> 7:
+
+˜𝑿 ← Π⟦Φ⟧ (𝑿 + 𝜂 ⊙ Δ) ⊲ Δ ∈ R𝐵 ×𝐷 : direction matrix; ⊙
+
+broadcasts when 𝜂 ∈ R
+
+/∗ Phase 3 – Execution ∗/  
+
+> 8:
+
+( ˆ𝒀 , 𝐴 ) ← 𝑓 ( ˜𝑿 ) ⊲ batched forward inference; ˆ𝒀 ∈ R𝐵 ×𝐷 ′
+
+/∗ Phase 4 – Feedback and update ∗/  
+
+> 9:
+
+𝒒 , 𝒎 ← CoverageUpdate (𝐴, 𝒎 ) ⊲ 𝒒 ∈ { 0, 1}𝐵 : per-sample coverage gain  
+
+> 10:
+
+𝒗 ← Ψ( ˆ𝒀 ) = false  ⊲ 𝒗 ∈ { 0, 1}𝐵 : per-sample spec violation  
+
+> 11:
+
+𝒆 ← max (𝒒 𝛼 + 𝒗 𝛽, 𝑒 min ) ⊲ element-wise; 𝒆 ∈ R𝐵  
+
+> 12:
+
+for 𝑏 where 𝑞 𝑏 ∨ 𝑣 𝑏 : P.Insert ( ˜𝑿 [𝑏 ], energy = 𝑒 𝑏 ) 
+
+> 13:
+
+C ← C ∪ { ˜𝑿 [𝑏 ] | 𝑣 𝑏 = 1} 
+
+> 14:
+
+end while  
+
+> 15:
+
+Cov global ←
+
+Í𝑘 ∥𝒎 𝑘 ∥0
+
+Í𝑘 𝑑 𝑘 
+
+⊲ 𝑑 𝑘 : neuron count at layer 𝑘  
+
+> 16:
+
+return C, Cov global 
+
+## 4.1 Preprocess - Model & Specification Synthesis 
+
+The pipeline begins with the specification creator , which accepts either VNNLib-compliant property files [ 7 , 8] (SMT-LIB format with 
+
+X_i /Y_j variables) or PyTorch dataset/model pairs [ 31 ] to produce 
+
+𝐵 specification pairs {( Φ(𝑏 ) , Ψ)} 𝐵 𝑏 =1. Each input specification Φ(𝑏 )
+
+constrains the feasible perturbation region around a seed, taking the form of either box constraints ⟦Φ⟧ = {𝒙 ∈ R𝐷 | 𝒍 ≤ 𝒙 ≤ 𝒖 } or Tensor-Based Batch Fuzzing with Adaptive Perturbation Scaling for Deep Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Figure 2: The Specification Creator accepts VNNLib prop-erty files or PyTorch dataset/model pairs to produce 𝐵 specifi-cation pairs {( Φ(𝑏 ) , Ψ)} 𝐵 𝑏 =1, which are batched into tensor form to construct 𝑀 wrapped , (i.e., NN 𝑓 wrapped by non-trainable 
+
+InputSpecLayer and OutputSpecLayer ). 
+
+ℓ∞-balls of radius 𝜀 (Eq. (1) ). The output specification Ψ defines the property to be verified, like top-1 classification robustness (Eq. (2) ). As illustrated in Figure 2, the synthesis phase merges all 𝐵 in-stances into a single batched representation by stacking along the batch dimension: seed inputs 𝑿 0 ∈ R𝐵 ×𝐷 , lower bounds 𝒍 ∈ R𝐵 ×𝐷 ,upper bounds 𝒖 ∈ R𝐵 ×𝐷 , and ground-truth labels 𝒚 ∈ { 1, . . . , 𝑛 ′ }𝐵 .The neural network 𝑓 is then encapsulated into a Wrapped Model 
+
+𝑀 wrapped with the following sequential architecture, written in ap-plication order: 
+
+𝑀 wrapped : 𝑿 InputSpecLayer (Φ)
+
+−−−−−−−−−−−−−−−→ 𝑓 (·) OutputSpecLayer (Ψ)
+
+−−−−−−−−−−−−−−−−→ 𝒗 (5) where the arrow notation denotes the order of application: a batch of 
+
+𝐵 candidate inputs 𝑿 ∈ R𝐵 ×𝐷 passes first through InputSpecLayer ,which enforces per-sample feasible region constraints along the batch dimension, then through the shared target model 𝑓 , and then through OutputSpecLayer , which evaluates the output specifica-tion for each of the 𝐵 samples paralleled to produce a batched property verdict 𝒗 ∈ { 0, 1}𝐵 .The InputSpecLayer stores the batched constraints (𝒍 , 𝒖 ) ∈
+
+R𝐵 ×𝐷 as non-trainable parameters. During each forward pass, it enforces the per-sample feasible region by applying the projection 
+
+Π⟦Φ(𝑏 ) ⟧ along the batch dimension, ensuring that every candidate input passed to 𝑓 satisfies its corresponding input specification. The target model 𝑓 is shared across all 𝐵 samples and remains unmodified throughout the fuzzing process. The OutputSpecLayer 
+
+evaluates the output specification Ψ for each sample by computing 
+
+𝑔 (𝑓 (𝒙 )) as defined in Eq. (2) , and returns a per-sample boolean verdict indicating whether the output property holds. Unlike conventional software fuzzing, where each mutated input is executed as an independent sequential trial [ 4 , 28 ], the wrapped architecture makes all 𝐵 specifications first-class tensor dimensions. Both specification layers operate element-wise along the batch di-mension, so input projection, network inference, and output prop-erty evaluation compose into a single data-parallel forward pass over all 𝐵 candidates simultaneously, with no external constraint lookup between steps [ 1, 31 ]. Then, every subsequent phase of the fuzzing loop inherits the batch dimension without any per-sample processing [10, 33]. 
+
+Figure 3: Phase 1: Seed Selection. Algorithm 3 SeedSelect : Energy-Weighted Sampling 
+
+Require: P = {( 𝒙 𝑖 , 𝑒 𝑖 )} | P |  
+
+> 𝑖 =1
+
+⊲ 𝑒 𝑖 ≥ 𝑒 min > 0: energy updated by Alg. 2, Line 11 
+
+Require: Batch size 𝐵 
+
+Ensure: 𝑿 ∈ R𝐵 ×𝐷 ⊲ batch of seeds for mutation; high-energy seeds favoured  
+
+> 1:
+
+𝑍 ← Í| P |  
+
+> 𝑗 =1
+
+𝑒 𝑗 ⊲ normalizing constant  
+
+> 2:
+
+if 𝑍 > 0 then  
+
+> 3:
+
+𝒑 ← 𝒆 /𝑍 ⊲ energy-proportional distribution; Eq. (6)  
+
+> 4:
+
+else  
+
+> 5:
+
+𝒑 ← 1/|P | ⊲ uniform fallback (degenerate case)  
+
+> 6:
+
+end if  
+
+> 7:
+
+I ∼ Multinomial (𝒑 , 𝐵, replace ) ⊲ draw 𝐵 indices; allow high-energy seeds to repeat  
+
+> 8:
+
+𝑿 ← P [I] .𝒙 ⊲ tensor gather: 𝑿 [𝑏 ] = 𝒙 I𝑏  
+
+> 9:
+
+return 𝑿 
+
+## 4.2 Phase 1 - Seed Selection 
+
+Figure 3 shows the seed selection phase prepares specification-aware inputs for our later anisotropic mutation via a three-step pipeline: (1) seed corpus pool management, (2) energy-based re-ordering which samples seeds via energy-weighted multinomial selection w.r.t high coverage contribution or prior violation his-tory, and (3) specification pixel configuration which assigns per-dimension perturbation bounds, producing 𝑿 0 ∈ R𝐵 ×𝐷 with low-er/upper bound tensors. The output is a batched tensor represen-tation in which every sample carries not only its input data but also per-pixel feasible bounds that guide subsequent mutation and projection operations. 
+
+Seed Corpus Pool. The synthesized seeds P = {𝒙 (𝑏 ) 
+
+> 0
+
+}𝐵 𝑏 =1 are loaded into the Seed Corpus Pool , a tensor pool indexed along the batch dimension. Each seed stores an input tensor, an immutable original copy 𝒙 (𝑏 ) 
+
+> 0
+
+, a ground-truth label 𝑦 (𝑏 ) (𝑦 (𝑏 ) = −1 for unla-beled samples), an energy score 𝑒 (𝑏 ) , and lineage metadata (muta-tion depth, parent id). Byte-level tensor hashing prevents duplicate admission. During fuzzing, mutated inputs satisfying the interest-ingness criterion ( 𝒒 (𝑏 ) = 1 or 𝒗 (𝑏 ) = 1, Section 4.4) are re-inserted, progressively enriching the pool with high-coverage or violation-inducing seeds. The batch size 𝐵 equals the number of specification instances from the synthesis phase, guaranteeing equal fuzzing effort per specification and enabling per-sample projection via in-dexed access to 𝒍 (𝑏 ) , 𝒖 (𝑏 ) ∈ R𝐷 .Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Guanqin Zhang and Yulei Sui 
+
+Algorithm 3 summarizes the procedure. Lines 1–4 compute the sampling distribution: normalizing constant 𝑍 = Í𝑗 𝑒 𝑗 converts energies to probabilities, with uniform fallback when 𝑍 = 0 (Eq. (6) ). Line 5 draws 𝐵 indices with replacement (high-energy seeds may repeat); Line 6 gathers the result into the tensor for mutation. 
+
+Energy-Based Seed Reordering. At each iteration, the corpus 
+
+P is sampled via energy-weighted multinomial selection with re-placement: 
+
+𝑃 (select seed 𝑏 ) = 𝑒 𝑏 
+
+. | P | ∑︁ 
+
+> 𝑗 =1
+
+𝑒 𝑗 (6) where 𝑒 𝑏 is the energy of seed 𝑏 . Seeds that contributed to coverage growth or triggered property violations accumulate higher energy (Section 4.4), so that subsequent iterations concentrate effort on the most promising regions of the input space. 
+
+Specification Pixel Configuration. Rather than treating all di-mensions uniformly as in Eq. (1) [ 39 ], the specification assigns each dimension 𝑑 an individual spec radius, giving a per-dimension spec radius vector 𝜺 (𝑏 ) ∈ R𝐷 and feasible region: 
+
+⟦Φ(𝑏 ) 
+
+> px
+
+⟧ = 𝒙 ∈ R𝐷 | | 𝒙 𝑑 − 𝒙 (𝑏 ) 
+
+> 0,𝑑
+
+| ≤ 𝜀 (𝑏 ) 
+
+> 𝑑
+
+, ∀𝑑 (7) 
+
+𝜀 (𝑏 ) 
+
+> 𝑑
+
+is sourced from VNNLib per-dimension bounds (𝒍 (𝑏 ) , 𝒖 (𝑏 ) ),user-defined spatial budgets, or a single uniform 𝜀 (recovering the standard ℓ∞-ball). Seeds are then stacked to form 𝑿 0 ∈ R𝐵 ×𝐷 with bounds 𝒍 , 𝒖 ∈ R𝐵 ×𝐷 :
+
+𝑙 𝑏,𝑑 = 𝒙 (𝑏 ) 
+
+> 0,𝑑
+
+− 𝜀 (𝑏 ) 
+
+> 𝑑
+
+, 𝑢 𝑏,𝑑 = 𝒙 (𝑏 ) 
+
+> 0,𝑑
+
++ 𝜀 (𝑏 ) 
+
+> 𝑑
+
+(8) 
+
+Batched Tensors. These batched bounds are configured into the 
+
+InputSpecLayer of 𝑀 wrapped (Section 4.1), which enforces per-sample, per-dimension projection during every forward inference. When 𝜀 (𝑏 ) 
+
+> 𝑑
+
+= 𝜀 for all 𝑑 , the formulation reduces to the standard uniform ℓ∞-ball, maintaining backwards compatibility with conven-tional robustness specifications. This non-uniform bound structure creates a direct link to the downstream mutation phase (Section 4.3). Each dimension’s feasible range 𝑟 (𝑏 ) 
+
+> 𝑑
+
+= 𝑢 𝑏,𝑑 − 𝑙 𝑏,𝑑 = 2 𝜀 (𝑏 ) 
+
+> 𝑑
+
+varies across dimensions: wider bounds admit larger perturbations while tight bounds enforce finer exploration. The mutation engine can later derive its step size 𝜂 from these per-dimension bounds via a single scale factor 𝑠 ∈ ( 0, 1), automatically calibrating mutation granularity to the specification structure without manual tuning. 
+
+Figure 4: Phase 2: Mutation. Algorithm 4 Mutate : Batch Mutation with Projection 
+
+Require: 𝑿 ∈ R𝐵 ×𝐷 ⊲ current seed batch from SeedSelect 
+
+Require: (𝒍 , 𝒖 ) ∈ R𝐵 ×𝐷 ⊲ per-sample, per-dimension spec bounds 
+
+Require: Step size 𝜂 (Alg. 2, Line 6); strategy weights 𝑊 ; PGD steps 𝑇 ; 𝑀 wrapped (gradient strategies only) 
+
+Ensure: ˜𝑿 ∈ R𝐵 ×𝐷 ⊲ ˜𝑿 [𝑏 ] ∈ ⟦ Φ(𝑏 ) ⟧ for all 𝑏  
+
+> 1:
+
+𝜇 ∼ Categorical  𝑊 /Í𝜈 𝑤 𝜈 
+
+ ⊲ Eq. (9)  
+
+> 2:
+
+if 𝜇 = Gradient then ⊲ 𝑇 =1: fgsm ; 𝑇 >1: pgd  
+
+> 3:
+
+˜𝑿 ← 𝑿 + U [− 𝜂, 𝜂 ] ⊲ random initialization; broadcasts if 
+
+𝜂 ∈ R 
+
+> 4:
+
+for 𝑡 = 0, . . . ,𝑇 −1 do  
+
+> 5:
+
+˜𝑿 ← Π⟦Φ⟧
+
+  ˜𝑿 + 2 
+
+> 𝑇
+
+𝜂 ⊙ sign (∇ ˜𝑿 L( 𝑀 wrapped ( ˜𝑿 )))  ⊲
+
+element-wise step; Eq. (10)  
+
+> 6:
+
+end for  
+
+> 7:
+
+else if 𝜇 = Boundary then  
+
+> 8:
+
+˜𝑿 ← 𝑿 + 12 𝜂 ⊙ sign (𝒓 ), 𝒓 ∼ N ( 0, 𝑰 ) 
+
+> 9:
+
+else if 𝜇 = Random then  
+
+> 10:
+
+˜𝑿 ← 𝑿 + N  0, ( 12 𝜂 )2𝑰  
+
+> 11:
+
+end if  
+
+> 12:
+
+˜𝑿 ← Π⟦Φ⟧ ( ˜𝑿 ) ⊲ Eq. (14)/(15); enforces 𝒍 ≤ ˜𝑿 ≤ 𝒖  
+
+> 13:
+
+return ˜𝑿 
+
+Table 2: Mutation Strategies (selected via Line 1 Algorithm 4) Strategy Type Weight Purpose          
+
+> Gradient Gradient 0.5 Adversarial search [15, 25]
+> Boundary Heuristic 0.2 Push toward specification boundary [9]
+> Random Heuristic 0.3 Isotropic Gaussian exploration [30]
+
+## 4.3 Phase 2 - Mutation 
+
+Figure 4 shows the workflow of our mutation phase, which selects a single operator from a weighted portfolio ( Boundary , Random , or 
+
+Gradient ) and applies it uniformly to the entire batch of 𝐵 inputs, producing a mutation delta tensor. The resulting candidates are then projected back onto the feasible regions via clamp, yielding the mutated batch tensor. Algorithm 4 formalises the batch mutation procedure. Line 1 samples a single strategy 𝜇 from the weighted portfolio (Eq. (9) ). Lines 2–3 implement the gradient operator: 𝛾 is set proportional to 
+
+𝜂 and 𝑇 projected gradient-ascent steps are applied (Eq. (10) ); 𝑇 =1
+
+recovers fgsm (Eq. (11) ). Lines 4 and 5 implement the boundary and random operators. Line 6 applies hard constraint projection (Eq. (14) /(15) ), ensuring every output candidate lies within its feasi-ble region. 
+
+Strategy Portfolio. A single strategy is applied to the entire batch, keeping forward and backward passes fully vectorised: 
+
+𝑃 (select 𝜇 ) = 𝑤 𝜇 
+
+ Í 𝜈 𝑤 𝜈 (9) where 𝑤 𝜇 is the configurable weight of strategy 𝜇 .
+
+Gradient-Driven Operator. We implement pgd [25 ] and its single-step special case fgsm [15 ] ( 𝑇 =1). Starting from a random point in Tensor-Based Batch Fuzzing with Adaptive Perturbation Scaling for Deep Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+[𝒙 (𝑏 ) − 𝜂, 𝒙 (𝑏 ) + 𝜂 ], 𝑇 projected gradient-ascent steps are applied: 
+
+𝒙 𝑡 +1 = Π⟦Φ(𝑏 ) ⟧
+
+ 𝒙 𝑡 + 2 
+
+> 𝑇
+
+𝜂 ⊙ sign  ∇𝒙 L( 𝒙 𝑡 ) , 𝑡 = 0, . . . ,𝑇 − 1
+
+(10) where 𝜂 is a broadcastable perturbation scale: in isotropic mode, 
+
+𝜂 ∈ R is a scalar, while in anisotropic mode, 𝜂 = 𝑆 ∈ R𝐵 ×𝐷 provides element-wise step sizes. Here Π⟦Φ(𝑏 ) ⟧ projects onto the spec-feasible region, and L is the adversarial objective (cross-entropy when a label 𝑦 (𝑏 ) is available, output variance otherwise). When 𝑇 =1,Eq. (10) reduces to fgsm :
+
+˜𝒙 (𝑏 ) = 𝒙 (𝑏 ) + 𝜂 ⊙ sign  ∇𝒙 L( 𝒙 )  
+
+> 𝒙 =𝒙 (𝑏 )
+
+(11) where ⊙ reduces to scalar multiplication in the isotropic case. Both variants operate over all 𝐵 samples in a single backward pass. 
+
+Heuristic Operators. Both operators require no gradient and incur negligible overhead. The Boundary operator pushes seeds toward the extremes of the feasible region: ˜𝑿 = 𝑿 + 12 𝜂 ⊙ sign (𝒓 ),
+
+𝒓 ∼ N ( 0, 𝑰 ). Here ⊙ is element-wise multiplication, broadcasting when 𝜂 ∈ R and applying dimension-wise scaling when 𝜂 = S ∈ 
+
+R𝐵 ×𝐷 . The Random operator applies isotropic Gaussian noise: ˜𝑿 =
+
+𝑿 +N ( 0, ( 12 𝜂 )2𝑰 ). Both use a halved magnitude 12 𝜂 for conservative exploration near the current seed. 
+
+Adaptive Perturbation Sizing. The step size 𝜂 is derived from the specification bounds under two modes. In fixed mode , 𝜂 is a user-specified constant (default 0.01 ), serving as a scale-agnostic baseline. In adaptive mode , 𝜂 is computed from the per-dimension feasible range 𝑟 𝑏,𝑑 = 𝒖 𝑏,𝑑 − 𝒍 𝑏,𝑑 scaled by 𝑠 ∈ ( 0, 1]. The isotropic 
+
+variant yields a single scalar from the mean range: 
+
+𝜂 = 𝑠 · 1
+
+𝐵𝐷 ∑︁ 𝑏,𝑑 
+
+𝑟 𝑏,𝑑 (12) The anisotropic variant assigns a separate step size per dimension: 
+
+S𝑏,𝑑 = 𝑠 · 𝑟 𝑏,𝑑 = 𝑠 · ( 𝒖 𝑏,𝑑 − 𝒍 𝑏,𝑑 ) (13) so dimensions with wider bounds receive proportionally larger steps. The factor 𝑠 has a clean traversal interpretation: 1/𝑠 steps are needed to traverse any dimension’s full feasible range adaptively. The pgd step size 𝛾 = 2 mean (𝜂 )/ 𝑇 is derived from 𝜂 , so both the local search scope and the gradient step size scale automatically with the specification. Adaptive scaling refines search granularity in a specification-aware manner; throughput gains derive primarily from batching, while anisotropic scaling improves exploration on heterogeneous specifications. 
+
+Hard Constraint Projection. After mutation, each candidate is projected onto the feasible region. For box constraints , the pro-jection is an element-wise clamp: 
+
+˜𝒙 𝑏,𝑑 = clamp   ˜𝒙 𝑏,𝑑 , 𝒍 𝑏,𝑑 , 𝒖 𝑏,𝑑 
+
+ (14) For ℓ∞-ball constraints, the perturbation is clamped relative to the original input 𝒙 (𝑏 ) 
+
+> 0
+
+, stored immutably in the corpus: 
+
+˜𝒙 (𝑏 ) = 𝒙 (𝑏 ) 
+
+> 0
+
++ clamp   ˜𝒙 (𝑏 ) − 𝒙 (𝑏 ) 
+
+> 0
+
+, −𝜀, 𝜀  (15) Anchoring to the original input preserves the ℓ∞ invariant across mutation chains of arbitrary depth. Both projections are fully vec-torized over all 𝐵 samples. 
+
+Figure 5: Phase 3: Execution. Algorithm 5 ExecFeedback : Inference & Feedback 
+
+Require: ˜𝑿 ∈ R𝐵 ×𝐷 , 𝑀 wrapped ⊲ mutated batch from Alg. 4 
+
+Require: Coverage {𝒎 𝑘 }𝐾 𝑘 =1; 𝜏 , 𝛼 , 𝛽 , 𝑒 min ⊲ shared with Alg. 2 
+
+Ensure: 𝒒 , 𝒗 ∈ { 0, 1}𝐵 ; 𝒆 ∈ R𝐵 ; C 
+
+> 1:
+
+( ˆ𝒀 , 𝐴 ) ← 𝑓 ( ˜𝑿 ) ⊲ single batched forward pass; 
+
+𝐴 = {𝑘 ↦ → 𝒂 𝑘 ∈ R𝐵 ×𝑑 𝑘 } via hook instrumentations  
+
+> 2:
+
+𝒒 ← 0𝐵  
+
+> 3:
+
+for each hooked layer 𝑘 = 1, . . . , 𝐾 do  
+
+> 4:
+
+𝑭 𝑘 ← |𝒂 (𝑏 ) 
+
+> 𝑘,𝑗
+
+| > 𝜏  
+
+> 𝑏,𝑗
+
+∈ { 0, 1}𝐵 ×𝑑 𝑘 ⊲ per-sample firing matrix; Eq. (16)  
+
+> 5:
+
+𝒏 𝑘 ←  Ô 𝑏 𝑭 𝑘 [𝑏, ·]  ∧ ¬ 𝒎 𝑘 ⊲ newly covered neurons at layer 𝑘  
+
+> 6:
+
+𝒒 ← 𝒒 ∨ [ 𝑭 𝑘 𝒏 𝑘 > 0]; 𝒎 𝑘 ← 𝒎 𝑘 ∨ Ô𝑏 𝑭 𝑘 [𝑏, ·] ⊲
+
+interestingness mask and coverage state (in-place)  
+
+> 7:
+
+end for  
+
+> 8:
+
+𝒗 ← [ Ψ( ˆ𝒀 ) = false ] ⊲ per-sample violation (Alg. 2, Line 9)  
+
+> 9:
+
+𝒆 ← max (𝒒 𝛼 + 𝒗 𝛽, 𝑒 min ) ⊲ energy scores (Alg. 2, Line 11)  
+
+> 10:
+
+C ← { ˜𝑿 [𝑏 ] | 𝑣 𝑏 = 1} ⊲ counterexample inputs  
+
+> 11:
+
+return 𝒒 , 𝒗 , 𝒆 , C
+
+## 4.4 Phases 3 and 4 - Execution & Feedback 
+
+Figure 5 shows that the projected candidate batch is passed through 
+
+𝑀 wrapped in a single batched forward pass. PyTorch forward hooks registered on computational layers (ReLU, Linear, Conv2d) intercept intermediate activations to populate the activation map 𝐴 .Algorithm 5 expands Phases 4–5 of Alg. 2. Line 1 executes a single batched forward pass and captures intermediate activations via hooks. Lines 3–8 iterate over 𝐾 hooked layers: Line 4 com-putes the per-sample firing matrix (Eq. (16) ), Line 5 identifies newly covered neurons, and Line 6 updates the interestingness mask 𝒒 
+
+and coverage state 𝒎 𝑘 in-place. Lines 9–10 evaluate violations and compute energy scores (Alg. 2, Lines 9–11), and Line 10 collects counterexample inputs. 
+
+Batched Inference and Activation Capture. The projected batch is passed through 𝑀 wrapped in a single forward pass, yielding ˆ𝒀 ∈
+
+R𝐵 ×𝐷 ′
+
+and activation map 𝐴 = {𝑘 ↦ → 𝒂 𝑘 ∈ R𝐵 ×𝑑 𝑘 }𝐾 𝑘 =1, where PyTorch forward hooks [ 31 ] intercept intermediate activations. For convolutional layers with activations in R𝐵 ×𝐶 𝑘 ×𝐻 ×𝑊 , spatial dimensions are reduced to per-channel scalars via absolute-value max-pooling; fully connected and ReLU layers require no reduction. 
+
+Neuron Coverage Tracking. Neuron (𝑘, 𝑗 ) is considered fired by sample 𝑏 if its activation exceeds threshold 𝜏 :Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Guanqin Zhang and Yulei Sui 
+
+𝐹 (𝑏 ) 
+
+> 𝑘,𝑗
+
+= |𝒂 (𝑏 ) 
+
+> 𝑘,𝑗
+
+| > 𝜏  (16) Two strategies interpret this signal. The global union strategy (Lines 5– 6) maintains a persistent mask 𝒎 𝑘 per layer, updated monotoni-cally via bitwise OR; a sample is interesting if it fires at least one previously uncovered neuron, analogous to the new-edge crite-rion in coverage-guided fuzzers [ 40 ]. Global coverage is tracked as 
+
+Cov global = Í𝑘 ∥𝒎 𝑘 ∥0/Í𝑘 𝑑 𝑘 (Alg. 2, Line 14). The best-input strat-egy replaces the persistent mask with a running maximum coverage scalar 𝑐 max ; a sample is interesting if its individual coverage ratio exceeds 𝑐 max .
+
+Property Checking. The OutputSpecLayer evaluates Ψ for all 
+
+𝐵 samples during the forward pass (Section 4.1), producing the violation mask 𝒗 (Alg. 2, Line 9) with no additional model evaluation. The batched property-evaluation formulation expresses margin, range, and linear-inequality properties through a single dispatch; in our experiments the evaluated property is top-1 (classification) robustness, flagging 𝑣 𝑏 = 1 when arg max 𝑐 ˆ𝑦 𝑏,𝑐 ≠ 𝑦 (𝑏 ) .
+
+Energy-Based Feedback. Per-sample energies 𝒆 = max (𝒒 𝛼 +
+
+𝒗 𝛽, 𝑒 min ) (Alg. 2, Line 11) weight violations ( 𝛽 = 100 ) an order of magnitude higher than coverage gains ( 𝛼 = 10 ), reflecting the pri-mary objective of counterexample discovery; the minimum clamp 
+
+𝑒 min = 0.1 prevents seed starvation. A candidate is re-inserted when 
+
+𝑞 𝑏 ∨ 𝑣 𝑏 (Alg. 2, Line 12), with a hash preventing redundant entries. 
+
+## 5 Experiments 
+
+Implementation. We have conducted extensive experiments to evaluate the performance of our approach under both isotropic (Batch - Iso ) and anisotropic ( Batch - Ani ) settings. The approach is implemented in Python 3.12. All experiments are conducted on a machine running Ubuntu 24.04.4 LTS, equipped with an NVIDIA RTX PRO 6000 Blackwell Max-Q GPU ( ≈96 GB VRAM), an Intel Core Ultra 7 265K CPU (20 cores, up to 6.5 GHz), and 128 GiB of memory. Our latest implementation is available in the ACT platform at https://github.com/SVF-tools/ACT. Table 3: Benchmark Summarization. 𝐺 is the number of model groups, each pairing a fixed model with its specifi-cation instances. Batch size is the number of (spec, input) pairs per group, i.e., the maximum 𝐵 processed in a batch. Benchmark Model(s) Input Shape #Params 𝐺 Batch Size 𝐵                    
+
+> TrafficSigns 3 QCNNs 3×{ 30 ,48 ,64 }20.9–1.8 M 314–15
+> Cifar100 ResNet-medium 3×32 ×32 2.54 M 299 ResNet-large 3.81 M 100
+> TinyImageNet ResNet 3×64 ×64 3.62 M 1199
+
+Benchmarks. We evaluate on three benchmark categories drawn from VNN-COMP [ 7] and standard PyTorch model suites [ 7 , 8 ] in Table 3. Our fuzzer’s main objective is to generate inputs that serve as concrete counterexamples to the output property Ψ. Since our batch fuzzing is model-centric, all 𝐵 specification instances within a batch must share the same network with identical weights, where 𝐵 
+
+denotes the batch size and each instance corresponds to an input to-gether with its associated input constraints and output property. To accommodate this requirement, we partition each benchmark into 
+
+𝐺 model groups , where each group consists of a fixed model paired with multiple specification instances. Accordingly, the effective batch size 𝐵 is defined per model group as the number of specifi-cation instances associated with that model, rather than the total number of instances across all 𝐺 groups. We list the benchmarks used in our evaluation below. 
+
+• TrafficSigns [ 35 ] provides three quantised CNNs at resolu-tions 30 ×30 , 48 ×48 , and 64 ×64 (≈0.9–1.8 M parameters) for 43-class traffic sign recognition, forming three model groups of 𝐵 =14 or 15 .
+
+• Cifar100 [21 ] uses two ResNet variants on 3×32 ×32 images: ResNet-medium ( ≈2.54 M parameters, 𝐵 =99 ) and ResNet-large ( ≈3.81 M parameters, 𝐵 =100 ). 
+
+• TinyImageNet [22 ] evaluates a single ResNet ( ≈3.62 M pa-rameters) on all 199 robustness specifications over 3×64 ×64 
+
+images, giving the largest batch size 𝐵 =199 .
+
+Evaluation Metrics. The effectiveness is evaluated via below: 
+
+• Violation count records the total number of specification-violating counterexamples discovered, reflecting the primary objective of the fuzzing campaign. 
+
+• Time to first violation (TTFV) captures the wall-clock time elapsed before the first counterexample is found, providing a latency-oriented measure of how quickly a configuration can expose property violations. 
+
+• Throughput (Thpt), defined as the number of candidate in-stances (mutated cases) generated per second, quantifies the raw testing efficiency afforded by batched execution. 
+
+Experimental Settings. We compare against a controlled base-line that captures the canonical one-input-per-iteration fuzzing paradigm underlying DeepHunter [ 40 ], which does not have an official open-source implementation. We implement this baseline within our framework (where 𝐵 =1 with fixed scalar 𝜂 , as in Table 1), enabling a fair comparison that isolates the effects of tensor-level parallelism and adaptive perturbation scaling. All other parameters are held constant across configurations: coverage criterion [ 32 ]with 𝜏 =0.1, energy constants ( 𝛼 =10 , 𝛽 =100 , 𝑒 min =0.1), and per-instance timeout 𝑡 max =60 s. We do not compare directly against TensorFuzz [ 30 ], which also follows the one-input-per-iteration paradigm: although it batches mutated inputs for model evaluation, its mutation is NumPy-based, and coverage feedback iterates per element in Python, rather than operating as tensor-based transfor-mations (e.g., PyTorch tensors). Its implementation [ 16 ] has been unmaintained since 2019, and incompatible input specifications limit its use on our large-scale test suites. We primarily study the following research questions ( RQs ): 
+
+• RQ1 What is speedup and throughput of our batch, fuzzing over the sequential baseline method? Tensor-Based Batch Fuzzing with Adaptive Perturbation Scaling for Deep Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+• RQ2 To what extent does the batched approach, includ-ing both isotropic and anisotropic modes, account for the performance gains over the sequential baseline? 
+
+• RQ3 To what extent does anisotropic perturbation sizing account for the performance gains w.r.t scale factor 𝑠 ?
+
+• RQ4 To what extent does the tensor batch size 𝐵 have a statistically significant effect on violation yield? 
+
+## 5.1 Fuzzing Methods Comparison (RQ1 & RQ2) 
+
+We examine whether tensor-level execution yields measurable throughput gains that achieve higher violation counts within a fixed budget. As illustrated in Figure 1, the wrapped model 𝑀 wrapped 
+
+shares a single network 𝑓 across all 𝐵 specification instances, amor-tizing the forward pass cost over the entire batch. All violation counts are aggregated across all model groups 𝐺 .
+
+Table 4: Fuzzing results across three benchmark categories. Benchmark Method Violations (#) TTFV (sec) Neuron Cov. (%) Thpt. (it/s)                                        
+
+> TrafficSigns Seq-Fixed 19229 60.12 100% 79.6
+> Batch-Iso 73316 0.06 100% 407.3
+> Batch-Ani 75208 0.06 100% 417.9
+> Cifar100 Seq-Fixed 14562 60.14 57.19% 15.2
+> Batch-Iso 60242 0.60 64.06% 516.4
+> Batch-Ani 61527 0.60 64.07% 524.0
+> TinyImageNet Seq-Fixed 16890 60.18 59.04% 10.9
+> Batch-Iso 23125 1.20 70.04% 395.1
+> Batch-Ani 25274 1.09 70.04% 430.7
+
+As shown in Table 4, both Batch -Iso and Batch - Ani configu-rations achieve up to 40 × throughput over Seq - Fixed , with gains of 34–40 × on Cifar100 and TinyImageNet and 5 × on Traffic-Signs , where the lighter network architecture allows Seq - Fixed 
+
+to run faster (79.6 instances/s), leaving less relative room for batch speedup. Notably, batch execution processes specifications in a single 60 s window, whereas Seq - Fixed allocates 60 s per specifica-tion instance sequentially ( #instances × 60 s in total); despite this extended budget, Seq - Fixed accumulates only 14K–19K violations against 60K–75K for batch execution. The TTFV of Seq - Fixed being close to the per-instance time-out suggests a throughput bottleneck rather than an inability to discover violations, as Table 5 shows it continues accumulating violations beyond 60 s. Neuron Coverage (Neuron Cov.) is reported with a fixed threshold 𝜏 = 0.1 across all configurations; As neuron coverage is a coarse structural metric [ 30 ] that does not necessarily correlate with violation discovery, absolute values should be inter-preted accordingly. On TrafficSigns , all methods reach full neuron coverage, yet batch execution still finds 4× more violations, indicat-ing gains are primarily due to higher throughput. On Cifar100 and 
+
+TinyImageNet , batch methods also achieve higher coverage (64% vs. 57% and 70% vs. 59%) within the same 60 s budget, suggesting improved exploration efficiency per unit time.  
+
+> (a) TrafficSigns (b) CIFAR-100
+> (c) TinyImageNet
+
+Figure 6: Cumulative violations over three benchmarks. RQ1: Batch Speedups. Tensor-level parallelism yields throughput gains that scale with batch size: up to 40 × on Cifar100 and Tiny-ImageNet (where 𝐵 ≥ 99 ), and 5 × on TrafficSigns (𝐵 =14 –15 ). In all cases, batch execution completes the full specification campaign in a single 60 s window, exposing the first counterexample within 1.2 s versus the sequential baseline which requires up to 𝐵 × 60 s to process all specifications. 
+
+RQ2: Cumulative Violations. We further examine whether the throughput advantage translates into a sustained violation discov-ery advantage over the full fuzzing runs. Figure 6 plots cumulative violations over wall-clock time, with the left panel showing the first 60s and the right panel extending to the full run of Seq - Fixed on a log scale. It is consistent across 
+
+Cifar100 (Figure 6b) and TrafficSigns (Figure 6a): both Batch - Iso 
+
+and Batch - Ani accumulate violations from the first second and saturate well before the 60 s mark, while Seq - Fixed remains at zero throughout and is still rising slowly beyond 30 minutes. TinyIma-geNet (Figure 6c) follows the same pattern in the short run, though the extended view adds a further detail: Batch - Ani plateaus above 
+
+Batch -Iso , indicating that per-dimension scaling yields a modest but consistent gain under heterogeneous constraints. Seq -Fixed 
+
+eventually catches up on TrafficSigns , suggesting the gap is due to throughput rather than specification limits. The advantage stems from the batch design: sampling 𝑿 ∈ R𝐵 ×𝐷 processes 𝐵 mutation chains in parallel, advancing up to 𝐵 seeds per iteration, versus one in the sequential baseline. Table 5 shows a clear batch advantage across time budgets, al-ready large at 1,min and peaking around 5,min across benchmarks. On Cifar100 , Batch - Iso and Batch -Ani reach ≈+ 43K within 1,min and peak at +60K by 5,min; even after 60,min, the sequential base-line recovers only about 10K, leaving a +50K gap. TrafficSigns 
+
+shows a similar trend, with a +63K lead at 5,min that stabilises near +33K as the baseline catches up slowly. The gap narrows most on TinyImageNet (from +24K at 1,min to +14K at 60,min), but still persists. Across all settings, Batch - Iso and Batch -Ani remain within 5%, indicating the gain mainly comes from batching rather than the perturbation strategy. As Table 5 shows, under equal time Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Guanqin Zhang and Yulei Sui 
+
+Table 5: Violation gain of Batch - Iso and Batch - Ani over 
+
+Seq - Fixed at fixed time budgets ( ΔBatch-Iso / ΔBatch-Ani , where 
+
+Δ★ = Batch ★ − Seq ). Time TrafficSigns Cifar100 TinyImageNet 
+
+1 min +32,274/+33,366 +43,109/+42,382 +22,926/+25,075 5 min +61,664/+63,556 +58,759/+60,044 +21,335/+23,484 30 min +32,846/+34,738 +53,364/+54,649 +17,250/+19,399 60 min +32,694/+34,586 +50,129/+51,414 +13,708/+15,857 
+
+Table 6: RQ3: Sensitivity to perturbation scale factor 𝑠 .Benchmark Method Violations at scale factor 𝑠                                
+
+> 0.01 0.05 0.10.20.30.5
+> Cifar100 Batch-Iso 52111 61195 60578 59476 56990 47887
+> Batch-Ani 56311 59522 59951 56748 47166 46741
+> TinyImageNet Batch-Iso 16066 17354 22728 21907 22553 20232
+> Batch-Ani 20442 23905 23296 21324 18957 19838
+
+budgets Batch - Iso and Batch - Ani consistently find far more vi-olations than the sequential baseline across all benchmarks. The gap appears early and persists even with longer runs, confirming that the throughput gains translate into higher violation discovery. Although the sequential paradigm can discover violations given a budget of 𝐵 ×60 s (in Figure 6, Table 5), its one-input-per-iteration de-sign makes counterexample generation slower in wall-clock terms. 
+
+## 5.2 Ablation Analysis (RQ3) 
+
+RQ3: Sensitivity to Scale Factor 𝑠 . Table 6 reports violation counts across the initial scale factor setting 𝑠 ∈ { 0.01 , 0.05 , 0.1, 0.2, 0.3, 0.5}
+
+for both modes on Cifar100 and TinyImageNet . On Cifar100 , both modes produce comparable counts across the full range, since the 
+
+ℓ∞ specifications impose relatively uniform per-dimension ranges for which the mean-range scalar ¯𝑟 (Eq. (12) ) already approximates the per-dimension structure adequately. On TinyImageNet , the anisotropic advantage is most visible at small scale factors: at 𝑠 =0.01 
+
+and 𝑠 =0.05 , Batch - Ani outperforms Batch -Iso by 27% and 38% respectively, since the per-element tensor S𝑏,𝑑 = 𝑠 · 𝑟 𝑏,𝑑 (Eq. (13) )preserves productive exploration of wide-range dimensions even when 𝑠 is small, whereas the isotropic scalar under-perturbs such dimensions relative to their available range. As 𝑠 exceeds 0.1, the gap narrows, as perturbations become sufficient across all dimensions. 
+
+## 5.3 Batch Size Impact on Violation Yield (RQ4) 
+
+We isolate the effect of tensor batch size on violation yield by fixing all other parameters and varying 𝐵 across {1, 10 , 50 , 99 } on Cifar100 
+
+and {1, 10 , 50 , 100 , 199 } on TinyImageNet . Each configuration is repeated over 5 independent runs to account for randomness and assess the consistency of observed trends. This section provides statistical evidence that the observed gains are not merely due to increased throughput, but reflect a consistent improvement in the ability to discover violations. 
+
+Statistical evaluation. We apply the two-sided Mann-Whitney U test [ 27 ] at 𝛼 =0.05 with 𝑛 =5 runs per configuration. Since the minimum achievable 𝑝 -value ( 2/ 10 5
+
+≈0.008 ) exceeds the Holm-Bonferroni threshold for 𝑚 =28 and 𝑚 =45 pairs, we adopt Benjamini-Hochberg FDR correction [ 3]. Effect sizes use Cohen’s 𝑑 [11 ] with data-driven thresholds: small ( |𝑑 |∈[ 6, 9)), medium ( [9, 13 )), large (≥13 ); |𝑑 |<6 is marked ≡.
+
+Cifar100 . Table 7 (left) presents the 8×8 pairwise matrix. For both anisotropic and isotropic modes, every 𝐵 >1 configuration significantly outperforms 𝐵 =1 with large effects. Among 𝐵 >1, per-instance yield decreases as 𝐵 grows: 𝐵 =10 outperforms 𝐵 =50 (medium) and 𝐵 =50 outperforms 𝐵 =99 (small) in both modes. At each batch size, Ani -𝐵 ≡ Iso -𝐵 , indicating that the perturbation strategy does not influence violation yield at the default scale factor. Across dif-ferent batch sizes, the batch-size advantage dominates the mode choice: Ani-10 significantly outperforms Iso-99 (large), and Iso-10 similarly outperforms Ani-99 (large). 
+
+TinyImageNet . Table 7 (right) shows the 10 ×10 matrix. All 𝐵 >1
+
+configurations dominate 𝐵 =1 with large effects in both modes. Per-instance yield follows the same trend as Cifar100 : 𝐵 =10 >𝐵 =50 and 
+
+𝐵 =50 >𝐵 =100 (medium), 𝐵 =100 >𝐵 =199 (small). At each batch size, the corresponding Ani and Iso configurations show no statistically significant difference, with cross-mode pairs again determined by batch size rather than perturbation mode. Combined with the RQ3 findings, this suggests that anisotropic scaling performs comparably to isotropic at the default 𝑠 while providing measurable gains on heterogeneous specifications when 𝑠 is small. The decreasing per-instance yield as 𝐵 grows reflects a trade-off between throughput and refinement, not a hardware bottleneck. Larger 𝐵 processes more specifications per iteration (Algorithm 2), so within the fixed 60 s budget each receives fewer refinements, raising aggregate violations while lowering per-instance yield. 
+
+## 6 Related Work 
+
+DNN Testing, Fuzzing and Coverage Criteria. DeepXplore [ 32 ]introduced neuron coverage as a test adequacy criterion for DNNs. DeepGauge [ 24 ] extended this to multi-granularity metrics, includ-ing 𝑘 -multisection and achieved strong neuron activation coverage. Sun et al. [ 36 ] proposed MC/DC-inspired structural criteria. Our framework implements the neuron activation threshold criterion of DeepXplore as the GlobalCov and BestInputCov strategies, pro-viding both monotonic and instantaneous coverage signals within the same batch-native loop. DLFuzz [ 17 ] maximizes neuron cover-age via gradient-guided perturbation on individual inputs. Deep-Hunter [ 40 ] combines metamorphic seed mutation with multiple coverage criteria as a classical sequential-based fuzzing. While Ten-sorFuzz [ 30 ] for TensorFlow programs used batched evaluation, its fuzzing loop remains input-centric, with mutation and feedback im-plemented as NumPy/Python operations rather than tensor-based Tensor-Based Batch Fuzzing with Adaptive Perturbation Scaling for Deep Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Table 7: Pairwise batch-size comparison on violations. ✓/✓✓ /✓✓✓ : row better (small/medium/large Cohen’s 𝑑 ); ✗/✗✗ /✗✗✗ : row worse. Wilcoxon rank-sum, Benjamini-Hochberg FDR ( 𝛼 =0.05 ); |𝑑 |∈[ 6, 9) small, [9, 13 ) medium, ≥13 large.                                                                                                                                                                                               
+
+> Cifar100 TinyImageNet
+> Iso-1 Iso-10 Iso-50 Iso-99 Ani-1 Ani-10 Ani-50 Ani-99 Iso-1 Iso-10 Iso-50 Iso-100 Iso-199 Ani-1 Ani-10 Ani-50 Ani-100 Ani-199 Iso-1 —✗✗✗ ✗✗✗ ✗✗✗ ≡✗✗✗ ✗✗✗ ✗✗✗ Iso-1 —✗✗✗ ✗✗✗ ✗✗✗ ✗✗ ≡✗✗✗ ✗✗✗ ✗✗✗ ✗✗✗
+> Iso-10 ✓✓✓ —✓✓ ✓✓✓ ✓✓✓ ≡✓✓ ✓✓✓ Iso-10 ✓✓✓ —✓✓ ✓✓✓ ✓✓✓ ✓✓✓ ≡✓✓ ✓✓✓ ✓✓✓
+> Iso-50 ✓✓✓ ✗✗ —✓✓✓✓ ✗✗ ≡✓Iso-50 ✓✓✓ ✗✗ —✓✓ ✓✓✓ ✓✓✓ ✗✗ ≡✓✓ ✓✓✓
+> Iso-99 ✓✓✓ ✗✗✗ ✗—✓✓✓ ✗✗✗ ✗≡Iso-100 ✓✓✓ ✗✗✗ ✗✗ —✓✓✓✓ ✗✗ ✗✗ ≡✓
+> Ani-1 ≡✗✗✗ ✗✗✗ ✗✗✗ —✗✗✗ ✗✗✗ ✗✗✗ Iso-199 ✓✓ ✗✗✗ ✗✗✗ ✗—✓✓ ✗✗✗ ✗✗✗ ✗≡
+> Ani-10 ✓✓✓ ≡✓✓ ✓✓✓ ✓✓✓ —✓✓ ✓✓✓ Ani-1 ≡✗✗✗ ✗✗✗ ✗✗✗ ✗✗ —✗✗✗ ✗✗✗ ✗✗✗ ✗✗✗
+> Ani-50 ✓✓✓ ✗✗ ≡✓✓✓✓ ✗✗ —✓Ani-10 ✓✓✓ ≡✓✓ ✓✓ ✓✓✓ ✓✓✓ —✓✓ ✓✓ ✓✓✓
+> Ani-99 ✓✓✓ ✗✗✗ ✗≡✓✓✓ ✗✗✗ ✗—Ani-50 ✓✓✓ ✗✗ ≡✓✓ ✓✓✓ ✓✓✓ ✗✗ —✓✓ ✓✓✓
+> Ani-100 ✓✓✓ ✗✗✗ ✗✗ ≡✓✓✓✓ ✗✗ ✗✗ —✓
+> Ani-199 ✓✓✓ ✗✗✗ ✗✗✗ ✗≡✓✓✓ ✗✗✗ ✗✗✗ ✗—
+
+transformations. Our approach treats all 𝐵 specifications as first-class tensor dimensions, composing seed selection, mutation, infer-ence, coverage, and feedback into a single data-parallel iteration with no per-sample branching dispatch. Additionally, the tensor-based anisotropic scaling realizes the idea in a specification-aware manner: per-dimension step sizes are derived directly from the feasible range and generalize the uniform bounding convention to heterogeneous, per-dimension bounds while preserving hard-constraint projection. 
+
+DNN Verification. ERAN [ 34 ] uses abstract interpretation; 𝛼 -
+
+𝛽 -CROWN [ 41 ] combines bound propagation with branch-and-bound; Marabou [ 19 ] uses MILP. These verifiers provide complete correctness certificates, but the scale is limited beyond shallow networks. Our fuzzing-based approach supplies complementary concrete counterexamples quickly but cannot certify safety. The VNNLib format [ 7, 8] bridges both paradigms, and the objective of this work natively supports VNNLib, allowing direct integration with verifier workflows. 
+
+## 7 Discussions and Limitations 
+
+We discuss the main threats to the validity of our study along internal and external dimensions. 
+
+Internal validity. As with many fuzzing approaches, our results may be influenced by parameter choices such as the energy con-stants 𝛼 =10 , 𝛽 =100 , and 𝑒 min =0.1, which are set based on empirical inspection. While different settings may trade off coverage and violation discovery, our evaluation keeps these parameters fixed across all configurations to ensure fair comparison. The mutation strategy weights ( 𝑤 Gradient =0.5, 𝑤 Boundary =0.2, 𝑤 Random =0.3) are also held constant, providing a stable baseline for assessing the effectiveness of our design. Future work could further analyze sen-sitivity to these energy and mutation hyper-parameters, as well as to the coverage threshold 𝜏 . We also note that neuron coverage provides a useful structural signal for guiding exploration, though it may not fully capture violation discovery; more expressive cover-age metrics are beyond the scope of this paper. A growing body of work questions whether neuron coverage is a meaningful adequacy signal [ 13 , 18 , 37 ]. Integrating more expressive adequacy coverage criteria into the same batched processing, such as multi-granularity coverage [ 24 ], surprise adequacy [ 20 ], and structural criteria [ 36 ], could strengthen the feedback signal beyond neuron coverage. Im-portantly, our focus is on introducing a batch fuzzing framework with adaptive perturbation strategies that overcome the inherent limitations of sequential and uniform perturbation approaches, achieving substantially improved throughput and counterexample discovery, rather than from coverage targets alone. 
+
+External validity. The batch size 𝐵 is determined by the number of specification instances in the synthesis phase, reflecting realistic set-tings where specifications are provided upfront. While our current experiments focus on classification robustness, the verification pro-cedure does not depend on the specific property type and operates over an abstract property interface; extending this interface to fair-ness, regression, temporal, and set-based properties is an important direction for future work. Applying the fuzzing loop to transformer architectures is another direction, requiring architecture-specific in-puts and feedback such as token embeddings, attention masks, and attention-head or hidden-state coverage. Finally, our tensor-based batching framework is particularly effective in scenarios where multiple specification instances share a common model, enabling significant efficiency gains, and can be further optimized through memory-aware batch sizing for larger models. 
+
+## 8 Conclusion 
+
+We presented a new tensor-based batch fuzzing framework with adaptive perturbation scaling for efficient testing of DNNs. By treat-ing all 𝐵 specifications as first-class tensor dimensions, the frame-work unifies seed selection, mutation, inference, and feedback in a single data-parallel loop, eliminating per-sample dispatch across all phases. Evaluated on three benchmark categories, the approach achieves significant improvements, with up to 40 × higher through-put than the sequential baseline and around 4 × more violations discovered under the same time budget for the same specifications. 
+
+## Acknowledgments 
+
+We thank the anonymous reviewers for their insightful comments, which helped improve this paper. We acknowledge the use of the generative AI tool ChatGPT for language polishing and grammar checks. All scientific content, evaluation, and claims are the authors’ own. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Guanqin Zhang and Yulei Sui 
+
+## Data Availability Statement 
+
+The experimental data supporting this work are available on Zen-odo [ 42 ]. Our up-to-date implementation is publicly available in the ACT platform at https://github.com/SVF-tools/ACT .
+
+## References 
+
+[1] Martín Abadi, Paul Barham, Jianmin Chen, Zhifeng Chen, Andy Davis, Jeffrey Dean, Matthieu Devin, Sanjay Ghemawat, Geoffrey Irving, Michael Isard, et al .2016. {TensorFlow }: a system for {Large-Scale } machine learning. In OSDI 16 .265–283. [2] Dario Amodei, Chris Olah, Jacob Steinhardt, Paul Christiano, John Schulman, and Dan Mané. 2016. Concrete problems in AI safety. arXiv preprint arXiv:1606.06565 
+
+(2016). [3] Yoav Benjamini and Yosef Hochberg. 1995. Controlling the false discovery rate: a practical and powerful approach to multiple testing. Journal of the Royal statistical society: series B (Methodological) 57, 1 (1995), 289–300. [4] Marcel Böhme, Van-Thuan Pham, and Abhik Roychoudhury. 2016. Coverage-based greybox fuzzing as markov chain. In Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communications Security . 1032–1043. [5] Mariusz Bojarski. 2016. End to end learning for self-driving cars. arXiv preprint arXiv:1604.07316 (2016). doi:10.48550/arXiv.1604.07316 [6] Fateh Boudardara, Abderraouf Boussif, Pierre-Jean Meyer, and Mohamed Ghazel. 2024. A Review of Abstraction Methods Toward Verifying Neural Networks. 
+
+ACM Trans. Embed. Comput. Syst. 23, 4 (2024), 58:1–58:19. doi:10.1145/3617508 [7] Christopher Brix, Stanley Bak, Taylor T. Johnson, and Haoze Wu. 2024. The Fifth International Verification of Neural Networks Competition (VNN-COMP 2024): Summary and Results. CoRR abs/2412.19985 (2024). arXiv:2412.19985 doi:10.48550/arXiv.2412.19985 [8] Christopher Brix, Mark Niklas Müller, Stanley Bak, Taylor T. Johnson, and Changliu Liu. 2023. First three years of the international verification of neural networks competition (VNN-COMP). Int. J. Softw. Tools Technol. Transf. 25, 3 (2023), 329–339. doi:10.1007/s10009-023-00703-4 [9] Nicholas Carlini and David A. Wagner. 2017. Towards Evaluating the Robustness of Neural Networks. In 2017 IEEE Symposium on Security and Privacy, SP 2017, San Jose, CA, USA, May 22-26, 2017 . Ieee, IEEE Computer Society, 39–57. doi:10. 1109/SP.2017.49 [10] Tianqi Chen, Thierry Moreau, Ziheng Jiang, Lianmin Zheng, Eddie Yan, Haichen Shen, Meghan Cowan, Leyuan Wang, Yuwei Hu, Luis Ceze, et al . 2018. {TVM }:An automated {End-to-End } optimizing compiler for deep learning. In OSDI 18 .578–594. [11] Jacob Cohen. 2013. Statistical power analysis for the behavioral sciences . routledge. [12] David Dalrymple, Joar Skalse, Yoshua Bengio, Stuart Russell, Max Tegmark, Sanjit A. Seshia, Steve Omohundro, Christian Szegedy, Ben Goldhaber, Nora Ammann, Alessandro Abate, Joe Halpern, Clark W. Barrett, Ding Zhao, Tan Zhi-Xuan, Jeannette M. Wing, and Joshua B. Tenenbaum. 2024. Towards Guaranteed Safe AI: A Framework for Ensuring Robust and Reliable AI Systems. CoRR 
+
+abs/2405.06624 (2024). arXiv:2405.06624 doi:10.48550/arXiv.2405.06624 [13] Yang Feng, Qingkai Shi, Xinyu Gao, Jun Wan, Chunrong Fang, and Zhenyu Chen. 2020. Deepgini: prioritizing massive tests to enhance the robustness of deep neural networks. In Proceedings of the 29th ACM SIGSOFT international symposium on software testing and analysis . 177–188. [14] Chuqin Geng, Nham Le, Xiaojie Xu, Zhaoyue Wang, Arie Gurfinkel, and Xujie Si. 2023. Towards Reliable Neural Specifications. In International Conference on Machine Learning, ICML 2023, 23-29 July 2023, Honolulu, Hawaii, USA (Proceed-ings of Machine Learning Research, Vol. 202) , Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and Jonathan Scarlett (Eds.). PMLR, PMLR, 11196–11212. https://proceedings.mlr.press/v202/geng23a.html [15] Ian J. Goodfellow, Jonathon Shlens, and Christian Szegedy. 2015. Explaining and Harnessing Adversarial Examples. In 3rd Int. Conf. on Learning Representations (ICLR’15) . Int. Conf. on Learning Representations, ICLR, San Diego, CA, United States, 11 pages. doi:10.48550/arXiv.1412.6572 [16] Google Brain Research. 2023. TensorFuzz: Coverage Guided Fuzzing for Neural Networks. https://github.com/brain-research/tensorfuzz. GitHub repository (archived), accessed: 2026-03-25. [17] Jianmin Guo, Yu Jiang, Yue Zhao, Quan Chen, and Jiaguang Sun. 2018. DLFuzz: differential fuzzing testing of deep learning systems. In Proceedings of the 2018 ACM Joint Meeting on European Software Engineering Conference and Symposium on the Foundations of Software Engineering, ESEC/SIGSOFT FSE 2018, Lake Buena Vista, FL, USA, November 04-09, 2018 , Gary T. Leavens, Alessandro Garcia, and Corina S. Pasareanu (Eds.). ACM, 739–743. doi:10.1145/3236024.3264835 [18] Fabrice Harel-Canada, Lingxiao Wang, Muhammad Ali Gulzar, Quanquan Gu, and Miryung Kim. 2020. Is neuron coverage a meaningful measure for testing deep neural networks?. In FSE’ 20 . 851–862. [19] Guy Katz, Derek A Huang, Duligur Ibeling, Kyle Julian, Christopher Lazarus, Rachel Lim, Parth Shah, Shantanu Thakoor, Haoze Wu, Aleksandar Zeljić, et al .2019. The marabou framework for verification and analysis of deep neural networks. In CAV’ 19 . doi:10.1007/978-3-030-25540-4_26 [20] Jinhan Kim, Robert Feldt, and Shin Yoo. 2019. Guiding deep learning system testing using surprise adequacy. In Proceedings of the 41st International Con-ference on Software Engineering, ICSE 2019, Montreal, QC, Canada, May 25-31, 2019 , Joanne M. Atlee, Tevfik Bultan, and Jon Whittle (Eds.). IEEE, IEEE / ACM, 1039–1049. doi:10.1109/ICSE.2019.00108 [21] Alex Krizhevsky, Geoffrey Hinton, et al . 2009. Learning multiple layers of features from tiny images. (2009). [22] Yann Le and Xuan Yang. 2015. Tiny imagenet visual recognition challenge. CS 231N 7, 7 (2015), 3. [23] Changliu Liu, Tomer Arnon, Christopher Lazarus, Christopher A. Strong, Clark W. Barrett, and Mykel J. Kochenderfer. 2021. Algorithms for Verifying Deep Neural Networks. Found. Trends Optim. 4, 3-4 (2021), 244–404. doi:10.1561/2400000035 [24] Lei Ma, Felix Juefei-Xu, Fuyuan Zhang, Jiyuan Sun, Minhui Xue, Bo Li, Chunyang Chen, Ting Su, Li Li, Yang Liu, et al . 2018. Deepgauge: Multi-granularity testing criteria for deep learning systems. In ASE 18 . 120–131. doi:10.1145/3238147. 3238202 [25] Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. 2018. Towards Deep Learning Models Resistant to Adversarial Attacks. In 6th Int. Conf. on Learning Representations (ICLR’18) . Vancouver, Canada, 27 pages. doi:10.48550/arXiv.1706.06083 [26] Valentin JM Manès, HyungSeok Han, Choongwoo Han, Sang Kil Cha, Manuel Egele, Edward J Schwartz, and Maverick Woo. 2019. The art, science, and engi-neering of fuzzing: A survey. IEEE Transactions on Software Engineering 47, 11 (2019), 2312–2331. [27] Henry B Mann and Donald R Whitney. 1947. On a test of whether one of two random variables is stochastically larger than the other. The annals of mathematical statistics (1947), 50–60. [28] Barton P Miller, Lars Fredriksen, and Bryan So. 1990. An empirical study of the reliability of UNIX utilities. Commun. ACM 33, 12 (1990), 32–44. [29] Sayan Mitra, Corina S. Pasareanu, Pavithra Prabhakar, Sanjit A. Seshia, Ravi Mangal, Yangge Li, Christopher Watson, Divya Gopinath, and Huafeng Yu. 2024. Formal Verification Techniques for Vision-Based Autonomous Systems - A Survey. In Principles of Verification: Cycling the Probabilistic Landscape - Essays Dedicated to Joost-Pieter Katoen on the Occasion of His 60th Birthday, Part III , Vol. 15262. Springer, 89–108. doi:10.1007/978-3-031-75778-5_5 [30] Augustus Odena, Catherine Olsson, David G. Andersen, and Ian J. Goodfellow. 2019. TensorFuzz: Debugging Neural Networks with Coverage-Guided Fuzzing. In ICML 19 , Vol. 97. 4901–4911. http://proceedings.mlr.press/v97/odena19a.html [31] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al . 2019. Pytorch: An imperative style, high-performance deep learning library. Advances in neural information processing systems 32 (2019). [32] Kexin Pei, Yinzhi Cao, Junfeng Yang, and Suman Jana. 2017. DeepXplore: Auto-mated Whitebox Testing of Deep Learning Systems. In Proceedings of the 26th Symposium on Operating Systems Principles, Shanghai, China, October 28-31, 2017 .ACM, 1–18. doi:10.1145/3132747.3132785 [33] Amit Sabne. 2020. Xla: Compiling machine learning for peak performance. (2020). [34] Gagandeep Singh, Timon Gehr, Markus Püschel, and Martin T. Vechev. 2019. An abstract domain for certifying neural networks. Proc. ACM Program. Lang. 3, POPL (2019), 41:1–41:30. doi:10.1145/3290354 [35] Johannes Stallkamp, Marc Schlipsing, Jan Salmen, and Christian Igel. 2012. Man vs. computer: Benchmarking machine learning algorithms for traffic sign recognition. 
+
+Neural networks 32 (2012), 323–332. [36] Youcheng Sun, Xiaowei Huang, Daniel Kroening, James Sharp, Matthew Hill, and Rob Ashmore. 2019. Structural test coverage criteria for deep neural networks. 
+
+TECS 18, 5s (2019), 1–23. [37] Youcheng Sun, Min Wu, Wenjie Ruan, Xiaowei Huang, Marta Kwiatkowska, and Daniel Kroening. 2018. Concolic testing for deep neural networks. In Proceedings of the 33rd ACM/IEEE International Conference on Automated Software Engineering .109–119. [38] Yuchi Tian, Kexin Pei, Suman Jana, and Baishakhi Ray. 2018. DeepTest: automated testing of deep-neural-network-driven autonomous cars. In Proceedings of the 40th International Conference on Software Engineering, ICSE 2018, Gothenburg, Sweden, May 27 - June 03, 2018 . ACM, 303–314. doi:10.1145/3180155.3180220 [39] Naftali Tishby and Noga Zaslavsky. 2015. Deep learning and the information bottleneck principle. In 2015 ieee information theory workshop (itw) . Ieee, 1–5. [40] Xiaofei Xie, Lei Ma, Felix Juefei-Xu, Minhui Xue, Hongxu Chen, Yang Liu, Jianjun Zhao, Bo Li, Jianxiong Yin, and Simon See. 2019. Deephunter: a coverage-guided fuzz testing framework for deep neural networks. In ISSTA’ 19 . 146–157. [41] Kaidi Xu, Huan Zhang, Shiqi Wang, Yihan Wang, Suman Jana, Xue Lin, and Cho-Jui Hsieh. 2020. Fast and Complete: Enabling Complete Neural Network Verifica-tion with Rapid and Massively Parallel Incomplete Verifiers. CoRR abs/2011.13824 (2020). arXiv:2011.13824 doi:10.48550/arXiv.2011.13824 [42] Guanqin Zhang and Yulei Sui. 2026. Artifact for “Tensor-Based Batch Fuzzing with Adaptive Perturbation Scaling for Deep Neural Networks”. doi:10.5281/ zenodo.19340748
