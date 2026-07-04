@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-07-03
-- 运行时间：2026-07-03 21:16:50 UTC
+- 最新运行日期：2026-07-04
+- 运行时间：2026-07-04 20:50:52 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读7篇高分论文，速读12篇聚焦前沿技术  
-2) 高分论文涉及RGB-Event视觉跟踪与高维GAN动态优化，速读内容涵盖LLM安全评估及扩散模型防御机制  
-3) 建议关注视觉目标跟踪算法突破或尝试了解扩散模型对抗攻击防护方法
-- 详情：[/202607/03/README](/202607/03/README)
+今日精读7篇高分论文，速读12篇前沿研究，聚焦轨迹预测与模型评估等领域。  
+高分论文揭示轨迹预测模型的鲁棒性提升路径，并警示扩散模型可能存在的评估偏差问题。  
+建议对AI在交通安全与自然语言处理领域的应用保持关注，并优先阅读精读列表中的核心成果以获取更深入见解。
+- 详情：[/202607/04/README](/202607/04/README)
 
 ### 精读区论文标签
-1. [Active Adversarial Perturbation-driven Associative Memory Retrieval for RGB-Event Visual Object Tracking](/202607/03/2606.26455v1-active-adversarial-perturbation-driven-associative-memory-retrieval-for-rgb-event-visual-object-tracking)  
+1. [TrajRS: Towards Certified Robustness in Pedestrian Trajectory Prediction](/202607/04/2606.28716v1-trajrs-towards-certified-robustness-in-pedestrian-trajectory-prediction)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-2. [Effective Covariance Dynamics in Solvable High-Dimensional GANs](/202607/03/2606.27246v1-effective-covariance-dynamics-in-solvable-high-dimensional-gans)  
+   evidence：轨迹预测模型的鲁棒性提升
+2. [Understanding Evaluation Illusion in Diffusion Large Language Models](/202607/04/2606.29228v1-understanding-evaluation-illusion-in-diffusion-large-language-models)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：研究图像生成质量评估方法
+3. [InstanceControl: Controllable Complex Image Generation without Instance Labeling](/202607/04/2606.31924v1-instancecontrol-controllable-complex-image-generation-without-instance-labeling)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-3. [AI-Generated Image Recognition via Fusion of CNNs and Vision Transformers](/202607/03/2606.27637v1-ai-generated-image-recognition-via-fusion-of-cnns-and-vision-transformers)  
+   evidence：生成式图像对抗扰动方法
+4. [ICDepth: Taming Video Diffusion Models for Video Depth Estimation via In-Context Conditioning](/202607/04/2607.01677v1-icdepth-taming-video-diffusion-models-for-video-depth-estimation-via-in-context-conditioning)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击检测方法
-4. [Detecting Clinical Hallucinations in LVLMs via Counterfactual Visual Grounding Uncertainty](/202607/03/2606.28520v1-detecting-clinical-hallucinations-in-lvlms-via-counterfactual-visual-grounding-uncertainty)  
+   evidence：研究对抗扰动对图像生成模型的影响
+5. [Hierarchical Anti-Aesthetics: Protecting Facial Privacy against Customized Diffusion Models](/202607/04/2607.02038v1-hierarchical-anti-aesthetics-protecting-facial-privacy-against-customized-diffusion-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-5. [Improving Certified Robustness via Adversarial Distillation](/202607/03/2606.31653v1-improving-certified-robustness-via-adversarial-distillation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的防御方法
-6. [Phantom: A Unified Face-Swap Deepfake Protection Framework with Latent and Spatial Constraints](/202607/03/2606.31703v1-phantom-a-unified-face-swap-deepfake-protection-framework-with-latent-and-spatial-constraints)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像保护框架
-7. [Anti-Prompt: Image Protection against Text-Guided Image-to-Video Generation](/202607/03/2607.01499v1-anti-prompt-image-protection-against-text-guided-image-to-video-generation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
+   evidence：利用对抗扰动降低生成模型的图像生成质量
+6. [Realistic Time-Domain Synthesis of Gravitational-Wave Detector Glitches using Class-Conditional Derivative Generative Adversarial Networks](/202607/04/2606.27227v1-realistic-time-domain-synthesis-of-gravitational-wave-detector-glitches-using-class-conditional-derivative-generative-adversarial-networks)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：生成式图像对抗扰动
+7. [Parallel Rollout Approximation for Pixel-Space Autoregressive Image Generation](/202607/04/2606.27978v1-parallel-rollout-approximation-for-pixel-space-autoregressive-image-generation)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：像素空间图像生成优化
 
 ### 速读区论文标签
-1. [Do Encoders Suffice? A Systematic Comparison of Encoder and Decoder Safety Judges for LLM Adversarial Evaluation](/202607/03/2606.25782v1-do-encoders-suffice-a-systematic-comparison-of-encoder-and-decoder-safety-judges-for-llm-adversarial-evaluation)  
+1. [Realistic Time-Domain Synthesis of Gravitational-Wave Detector Glitches using Class-Conditional Derivative Generative Adversarial Networks](/202607/04/2606.27227v2-realistic-time-domain-synthesis-of-gravitational-wave-detector-glitches-using-class-conditional-derivative-generative-adversarial-networks)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-2. [LCG: Long-Context Consistent Image Generation with Sparse Relational Attention](/202607/03/2606.26171v1-lcg-long-context-consistent-image-generation-with-sparse-relational-attention)  
+   evidence：生成对抗网络用于合成图像扰动
+2. [Sculpting NeRF Geometry: Human-Preference Fine-Tuning of a 3D-Aware Face GAN](/202607/04/2606.27305v1-sculpting-nerf-geometry-human-preference-fine-tuning-of-a-3d-aware-face-gan)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：长上下文图像生成中的对抗鲁棒性
-3. [TEMPO-Diffusion: Temporally Exposed Malicious Poisoning of Diffusion Models](/202607/03/2606.26285v1-tempo-diffusion-temporally-exposed-malicious-poisoning-of-diffusion-models)  
+   evidence：生成对抗鲁棒性提升方法
+3. [Don't Settle at the Mode! Mitigating Diversity Collapse in Pretrained Flow Models via Feature Self-Guidance](/202607/04/2606.27371v1-dont-settle-at-the-mode-mitigating-diversity-collapse-in-pretrained-flow-models-via-feature-self-guidance)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御策略
-4. [LearniBridge: Learnable Calibration of Feature Caching for Diffusion Models Acceleration](/202607/03/2606.26778v1-learnibridge-learnable-calibration-of-feature-caching-for-diffusion-models-acceleration)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：利用低秩子空间进行特征校准
-5. [At the Edge of Understanding: Sparse Autoencoders Trace The Limits of Transformer Generalization](/202607/03/2606.26396v1-at-the-edge-of-understanding-sparse-autoencoders-trace-the-limits-of-transformer-generalization)  
+   evidence：对抗攻击下生成模型多样性问题
+4. [SHARD: cell-keyed residual splitting for alignment-resistant private dense retrieval](/202607/04/2606.27976v1-shard-cell-keyed-residual-splitting-for-alignment-resistant-private-dense-retrieval)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+5. [Room for Error: Large-Scale Simulation of Over-the-Air Acoustic Attacks](/202607/04/2606.27701v1-room-for-error-large-scale-simulation-of-over-the-air-acoustic-attacks)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击对模型的影响
-6. [Scaling Multi-Reference Image Generation with Dynamic Reward Optimization](/202607/03/2606.26947v1-scaling-multi-reference-image-generation-with-dynamic-reward-optimization)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：研究多参考图像生成方法
-7. [SatSplatDiff: Geometry-preserving generative refinement for high-fidelity satellite Gaussian Splatting](/202607/03/2606.27223v1-satsplatdiff-geometry-preserving-generative-refinement-for-high-fidelity-satellite-gaussian-splatting)  
+   evidence：研究对抗攻击下的图像模型保护
+6. [CSD: Content-aware Speculative Decoding for Efficient Image Generation](/202607/04/2606.27829v1-csd-content-aware-speculative-decoding-for-efficient-image-generation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：利用生成先验进行图像优化
-8. [Home3D 1.0: A High-Fidelity Image-to-3D Asset Generation System for Interior Design](/202607/03/2606.27923v2-home3d-10-a-high-fidelity-image-to-3d-asset-generation-system-for-interior-design)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：研究图像到3D生成系统
-9. [Qwen-Image-Agent: Bridging the Context Gap in Real-World Image Generation](/202607/03/2606.26907v1-qwen-image-agent-bridging-the-context-gap-in-real-world-image-generation)  
+   evidence：生成式图像对抗扰动
+7. [ExACT: Exemplar-Driven Calibrated Refinement for Training-Free Visual Grounding in Remote Sensing Images](/202607/04/2606.28920v1-exact-exemplar-driven-calibrated-refinement-for-training-free-visual-grounding-in-remote-sensing-images)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：图像对抗攻击与防御
+8. [Few-Step Boltzmann Generators via Scalable Likelihood Flow Maps](/202607/04/2606.29110v1-few-step-boltzmann-generators-via-scalable-likelihood-flow-maps)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：生成式图像对抗鲁棒性
+9. [Low-Agreeableness Persona Conditioning for Safe LLM Fine-Tuning](/202607/04/2606.27709v1-low-agreeableness-persona-conditioning-for-safe-llm-fine-tuning)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-10. [Unison: Benchmarking Unified Multimodal Models via Synergistic Understanding and Generation](/202607/03/2606.26984v1-unison-benchmarking-unified-multimodal-models-via-synergistic-understanding-and-generation)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：多模态模型评估
-11. [DanceOPD: On-Policy Generative Field Distillation](/202607/03/2606.27377v1-danceopd-on-policy-generative-field-distillation)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-12. [MemoBench: Benchmarking World Modeling in Dynamically Changing Environments](/202607/03/2606.27537v1-memobench-benchmarking-world-modeling-in-dynamically-changing-environments)  
+   evidence：对抗扰动对LLM微调安全性的影响
+10. [A Comparison of Fusion Techniques for Multi-Modal Human Activity Recognition on the HARMES Dataset](/202607/04/2606.27886v1-a-comparison-of-fusion-techniques-for-multi-modal-human-activity-recognition-on-the-harmes-dataset)  
    标签：评分：6.0/10、query:image-generation
-   evidence：视频生成模型的评估方法
+   evidence：图像生成技术
+11. [Home3D 1.0: A High-Fidelity Image-to-3D Asset Generation System for Interior Design](/202607/04/2606.27923v1-home3d-10-a-high-fidelity-image-to-3d-asset-generation-system-for-interior-design)  
+   标签：评分：6.0/10、query:image-generation
+   evidence：图像生成质量的评估方法
+12. [Toward Robust In-Context Segmentation via Concept Guidance](/202607/04/2606.28149v1-toward-robust-in-context-segmentation-via-concept-guidance)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗攻击下的图像分割
 
 
 ### ⚡ 这个站点能做什么
