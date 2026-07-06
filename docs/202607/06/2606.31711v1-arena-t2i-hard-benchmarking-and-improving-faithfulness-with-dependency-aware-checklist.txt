@@ -1,0 +1,1340 @@
+Title: Arena-T2I Hard: Benchmarking and Improving Faithfulness with Dependency-Aware Checklist
+
+URL Source: https://arxiv.org/pdf/2606.31711v1
+
+Published Time: Wed, 01 Jul 2026 01:14:46 GMT
+
+Number of Pages: 31
+
+Markdown Content:
+# Arena-T2I Hard: Benchmarking and Improving Faithfulness with Dependency-Aware Checklist 
+
+Yuanhao Ban 1 Tong Xie 2 Sohyun An 2 Yunqi Hong 2
+
+Evan Frick 1 I-Hung Hsu 1 Wei-Lin Chiang 1 Ion Stoica 1 Cho-Jui Hsieh 11Arena Intelligence Inc 2UCLA 
+
+yuanhao@arena.ai, chojui@arena.ai 
+
+Abstract 
+
+Faithfulness—how precisely a generated image aligns with its prompt—is increas-ingly central to the real-world utility of text-to-image (T2I) models. Existing faithfulness benchmarks, however, rely on simple atomic instructions, on which top-tier systems already achieve near-perfect scores. As T2I models enter cre-ative workflows, users issue multi-faceted requests combining intricate spatial relationships, stylistic constraints, and complex text rendering. In this setting, a single binary VLM-judge score no longer captures which specific constraints the model fails to satisfy. We introduce Arena-T2I Hard , a 310 -prompt stress benchmark drawn from real arena T2I logs, with approximately 30 decomposed yes/no constraints per prompt spanning six categories, including text rendering. The strongest closed-source system we evaluate reaches 0.855 with a 33 pp per-formance gap across 11 systems, demonstrating substantial discriminative power. Moreover, high public-arena rankings fail to predict faithfulness, confirming that holistic Bradley-Terry (BT) preference scores prioritize aesthetics over fine-grained prompt adherence. We propose a dependency-aware checklist reward that de-composes each prompt into a DAG of yes/no questions and zeroes descendants of failed parents, turning faithfulness into a per-constraint training signal. Combined with a BT aesthetic reward via group-decoupled normalization (GDPO) , which standardizes each reward within its rollout group so neither collapses, the recipe attains a strictly better faithfulness-aesthetics trade-off on SD3.5-Medium and FLUX.1-dev under MMRB2 pairwise comparisons than every single-reward, naive weighted-sum, or 4-reward BT-ensemble baseline. We release Arena-T2I Hard as a public stress benchmark. 1
+
+1 Introduction 
+
+The rapid rise of high-quality text-to-image (T2I) models has moved generative AI into practical, real-world applications [ 1, 2, 3, 4, 5, 6 , 7 , 8 , 9 , 10 , 11 ]. In these settings, faithfulness—how accurately an image follows a user’s prompt—is a critical requirement. While established benchmarks like DSG [ 12 ], TIFA [ 13 ], and DPG [ 14 ] were created to measure this, they predominantly rely on simple instructions that can be easily verified. Consequently, most state-of-the-art models now achieve near-perfect scores (over 95%) on these existing tests. However, as these models integrate into daily workflows, user requests are becoming increasingly complex and realistic. Current benchmarks struggle to measure faithfulness for these sophisticated, multi-faceted instructions. As shown in Figure 1, modern requests often involve intricate spatial relationships, specific styles, and complex text rendering. In these scenarios, existing benchmarks are no longer sufficient to capture the nuances of where a model succeeds or fails.    
+
+> 1Project page: https://banyuanhao.github.io/Arena-T2I-Hard-Page/ Code and data: https://github. com/banyuanhao/Arena-T2I-Hard
+> Preprint.
+> arXiv:2606.31711v1 [cs.AI] 30 Jun 2026
+
+Existing faithfulness benchmarks vs. Arena-T2I Hard 
+
+Existing benchmarks Arena-T2I Hard (ours)  
+
+> 1
+
+Geneval avg. ~7 words · synthetic templates  
+
+> “a photo of a yellow dining table and a pink dog ”
+> 2
+
+T2I-CompBench avg. ~10 words · compositional templates  
+
+> “The fluffy cat is on the left of the soft pillow. ”
+> 3
+
+DSG avg. ~17 words · curated mix  
+
+> “A rubix cube with ten squares of purple ”
+> 4
+
+TIIF-Bench avg. ~30 words · GPT-paraphrased  
+
+> “a cat dressed as an astronaut, standing on the Moon …”
+> 5
+
+DPG-Bench avg. ~70 words · GPT-4 expanded 
+
+> “An empty space where an invisible man would be …”
+
+Arena-T2I Hard                  
+
+> real arena votes · Jan – Mar 2026
+> avg. ~430 words · ≈ 6 ×longer than DPG · 40 ×longer than
+> DSG
+> Representative real-user prompt
+> Create a hyper-stylized vector comic-book
+> poster with five anthropomorphic monster trucks ;
+> place the text ‘MONSTER ’over 3D ‘TRUCKS ’;
+> add speed lines, mud splatter , and
+> checkered flags; use a vibrant primary-color
+> palette on a green background .
+> Style Subjects Text Effects Palette
+> Existing benchmarks Arena-T2I Hard (ours)
+> Short Synthetic /
+> Templated
+> LLM-Generated /
+> Curated
+> Real-User
+> Prompts
+> Descriptive
+> (Long)
+> Compositional /
+> Multi-Constraint
+> Many
+> Constraints
+> High
+> Coverage
+
+Figure 1: One representative prompt per faithfulness benchmark. Existing T2I faithfulness benchmarks rely on synthetic templates , LLM rewriting of short concepts, or curated short captions ; even the longest-form predecessor, DPG-Bench, averages only ∼70 words per prompt. Our Arena-T2I Hard draws prompts from real T2I-arena user votes and selects for compositional difficulty: prompts average ∼430 words and ∼30 
+
+decomposed yes/no questions. 
+
+# Model Arena-T2I Hard ↑ DPG-Bench ↑ DSG ↑ Arena rank Arena score 
+
+1 gemini-3-pro-image-preview-2k 0.855 0.970 0.946 #3 1244 ± 42 grok-imagine-image-20260306 0.849 0.965 0.934 #8 1170 ± 43 gpt-image-1.5-high-fidelity 0.796 0.970 0.942 #4 1242 ± 44 recraft-v4 0.787 0.956 0.914 #29 1109 ± 55 wan2.6-t2i-v2 0.768 0.954 0.917 #21 1132 ± 46 gemini-2.5-flash-image (nano-banana) 0.768 0.954 0.921 #14 1152 ± 37 gpt-image-1 0.722 0.959 0.938 #27 1115 ± 38 imagen-4.0-ultra-generate-001 0.680 0.961 0.928 #17 1148 ± 49 imagen-4.0-generate-001 0.659 0.947 0.913 #22 1130 ± 310 hunyuan-image-3.0-fal 0.609 0.947 0.837 #15 1151 ± 311 ideogram-v3-quality 0.523 0.894 0.855 #42 1049 ± 4
+
+Table 1: Faithfulness yes-ratio of 11 leading closed-source T2I systems on Arena-T2I Hard, DPG-Bench [14], and DSG [ 12 ], all scored by gemini-3-flash. Sorted by Arena-T2I Hard faithfulness. DPG-Bench and DSG are saturated while Arena-T2I Hard is still able to distinguish the performance between top models. Also, different rankings are observed between faithfulness and arena-leaderboard ranking, showing that the overall ranking may not be a good proxy for fine-grained prompt faithfulness. 
+
+Motivated by this gap, we propose a new faithfulness benchmark: Arena-T2I Hard . This benchmark consists of deliberately compositional prompts sampled from the Arena Text-to-Image votes , capturing realistic user requests ranging from 3D generation to precise text rendering. To evaluate these prompts, we propose a dependency-aware checklist . Instead of using a single binary score, we decompose each prompt into a directed acyclic graph (DAG) of yes/no questions. A VLM judge is then prompted to answer each question, whose responses are then aggregated to determine the final grade. If a parent question fails, its descendants are scored NO without a further VLM call, preventing the inflated scores that flat checklists produce when an attribute question fires on the wrong object. We evaluate 11 state-of-the-art T2I models on Arena-T2I Hard (Table 1), revealing signifi-cant weaknesses even in top-tier models. For instance, even state-of-the-art models such as 
+
+nano-banana-pro [ 15 ] and grok-imagine [16 ] show non-trivial gaps in faithfulness despite their high general popularity. Crucially, our results show that a high public-arena ranking is no guarantee of high faithfulness; models like recraft-v4 [11 ] rank #29 in general preference but achieve good performance on faithfulness. We next study how our dependency-aware reward can be used to improve T2I models via Group Relative Policy Optimization (GRPO) [ 17 ]. We observe a fundamental tension in the standard RL recipe: optimizing for faithfulness alone improves adherence but degrades BT-based aesthetic rewards, while optimizing for aesthetics alone often pushes faithfulness down. To resolve this, we 2propose conducting GRPO with an ensemble of BT rewards and our structured faithfulness score, balanced via Group reward-Decoupled Normalization Policy Optimization [ 18 ]. By training on a subset of Arena-T2I prompts with this combined reward, we demonstrate that it is possible to improve both aesthetics and faithfulness simultaneously. Based on exhaustive experiments, we conclude that combining prompt-specific dependency-aware checklist reward and an aesthetic BT-based reward achieves the best overall performance. This could serve as a recipe for T2I model post-training. 
+
+Contributions. 
+
+• We introduce Arena-T2I Hard , a 310-prompt stress benchmark derived from real-world user requests to measure the faithfulness ceiling of T2I models. • We develop a dependency-aware checklist reward that decomposes complex prompts into a structured graph of constraints, providing a more reliable training and evaluation signal than flat rubrics. • We identify a reward–task mismatch in current T2I RLHF, showing that standard prefer-ence rewards often optimize for aesthetics at the expense of faithfulness. • We demonstrate that combining heterogeneous rewards (faithfulness + aesthetics) improves both aspects and show that the proposed post-training method can significantly improve the performance of two base models (SD3.5-Medium and FLUX.1-dev) on public image generation benchmarks. 
+
+2 Related Work 
+
+Reinforcement learning for text-to-image generation. Diffusion-DPO [ 19 ] adapts direct preference optimization to diffusion, and group-based methods such as FlowGRPO [ 20 ] use K rollouts per prompt to estimate group-relative advantages. T2I-R1 [ 21 ] uses semantic and token-level CoT to boost autoregressive T2I models. Concurrently, group reward-decoupled normalization [ 18 ] proposes to normalize each reward first to avoid reward-scale imbalance across heterogeneous objectives. 
+
+T2I benchmarks. Geneval [ 22 ], TIIF [ 23 ], and T2I-CompBench [ 24 ] use template-based synthetic prompts to probe object presence, attributes, and relations. TIFA [ 13 ] introduces structured yes/no checklists, and DSG [ 12 ] extends them with dependency-graph alignment scoring; DPG-Bench [ 14 ]scales the same idea to long GPT-augmented prompts. These benchmarks all rely on synthetic templates, LLM rewriting, or curated scenarios, and they saturate for top systems. Arena-T2I Hard differs in being drawn from real arena T2I logs at ∼430 words/prompt, ∼6× longer than DPG-Bench. 
+
+Reward design. T2I reward models are typically Bradley-Terry preference scorers trained on pairwise human judgments [ 25 , 26 , 27 ]; they correlate with broad human preference but conflate aesthetics with prompt following. UnifiedReward [ 28 ] distills a VLM judge into a single scalar covering multiple axes; Rubric-RL [ 29 ] adds a free-form flat rubric without separating aesthetics from faithfulness. We instead promote a dependency-aware faithfulness checklist from evaluation artifact to training reward. 
+
+3 Arena-T2I-Hard with Dependency-Aware Checklist Reward 
+
+3.1 Reward design 
+
+Let p be a text prompt, x a generated image, G a frozen text-only LLM decomposer, and V a frozen vision–language judge. Our checklist reward is Rchk (x, p ) = Aggregate  V x, p, G (p), where the question graph G(p) = G(p) is computed once per prompt and cached; only V is queried in the inner loop. 
+
+Question graph. G maps p to a directed acyclic graph G(p) = ( Q(p), E (p)) . Each node q carries a yes/no question, a parent set Pa( q) ⊆ Q(p), and a type tag τ (q) ∈ { faithfulness , aesthetics },with edges encoding logical prerequisites (attribute and relational questions depend on the existence questions). A fixed system prompt enforces this schema (Appendix B.1). In our method, the reward uses only the faithfulness subset Qf (p) = {q : τ (q) = faithfulness }.3Dependency-aware scoring. We answer questions in BFS order over G(p). Roots are queried directly. For a non-root q, if any parent q′ ∈ Pa( q) has yq′ = 0 we set yq = 0 without a VLM call; otherwise yq = 1[V(x, p, q ) = YES ], with IRRELEVANT answers mapped to 0. Skipping descendants of failed parents can prevent inflated scores from attribute questions whose objects are absent and reduce VLM calls. 
+
+Aggregation. The faithfulness reward is the yes-ratio over Qf (p), sf (x, p ) = 
+
+> 1
+> |Qf(p)|
+
+P  
+
+> q∈Qf(p)
+
+yq ∈ [0 , 1] , and analogously for Qa(p). For post-training, we further ex-pose two auxiliary signals: the per-question vector y(x, p ) ∈ { 0, 1}|Qf (p)| (used by the GDPO sub-modes in Section D.3) and the question count n(p) = |Qf (p)|.
+
+3.2 Reward implementation 
+
+By default we use Gemini-3-Pro [ 30 ] as the decomposer G due to its strong capabilities. To verify 
+
+V’s scoring quality, we construct a 100 -prompt benchmark from real user prompts sampled from Arena Text-to-Image votes. We generate one image per prompt with SD3-Medium [ 7], decompose each prompt into yes/no questions ( 1,810 total, ∼18 per prompt), and ask a human annotator to label every (image, question) pair . We compare two design choices: the VLM judge base model and the query mode. Full system prompts and per-judge / per-mode metrics are deferred to Appendix B.1, Appendix B.4, and Appendix B.3. 
+
+VLM judge base model. We compare four candidates under oneshot mode. Gemini-3-flash-preview [31] is the most accurate at 93 .0% , while Qwen3.5-27B [32] is slightly worse at 91 .9% but is easier to serve at training scale. We therefore choose Qwen3.5-27B as our VLM judge V. Please refer to Appendix B.3 and Figure 9 for more details. 
+
+Query mode. Two query modes are supported. Oneshot sends all of Q(p) in a single VLM call returning a JSON array of yes/no answers; individual sends one call per question. The two modes give very similar faithfulness scores. On the 100 -prompt benchmark, their per-image yes-ratios are highly correlated across all judges (Pearson r ≥ 0.89 ), with a 93 .8% average per-question agreement. Oneshot is also slightly more accurate than individual querying for all judge families. We use oneshot by default for its lower API cost without scoring-quality loss. Based on the above analysis, we choose Qwen3.5-27B in oneshot mode as V and Gemini-3-Pro [ 30 ]as G.
+
+3.3 Arena-T2I Hard Benchmark construction Arena Text-to-Image prompt pool. All prompts in this paper are sampled from a public text-to-image arena leaderboard, where users submit prompts and vote on the resulting images, so the underlying distribution reflects the prompts that real users actually issue to T2I systems. We select the user prompts spanning from Jan 2026 to March 2026. We apply NSFW, PII, and invalid-prompt (non-T2I user requests, e.g., image-edit prompts that require an additional input image) filtering to the raw submissions and form the arena prompt pool. We further manually check each prompt to avoid any legal issues. 
+
+Arena-T2I Hard. To stress-test faithfulness specifically and give a benchmark that remains dis-criminative even for the strongest T2I systems, we construct Arena-T2I Hard , a deliberately hard benchmark of 310 prompts drawn from the arena prompt pool and selected for compositional diffi-culty: long, multi-entity, with explicit attributes, spatial relations, counts, and stylistic constraints stacked on top of one another. Each prompt is decomposed by the Gemini-3-Pro pipeline and carries on average ∼30 yes/no faithfulness questions, with dependency-graph depth up to 5 and as many as 10 direct dependencies on a single attribute or relation question. The 310 prompts are roughly balanced across six visual-style categories ( art , 3d_modeling , cartoon , photorealistic , portraits ,
+
+commercial_design ); the per-category breakdown is reported in Appendix A.5. 
+
+RL training and testing datasets. To construct an easier dataset for RL training on weaker open-source models, we sample two disjoint subsets uniformly at random from the arena prompt pool: a 
+
+10k training set used for all RL runs, and a 1k test set used as the held-out evaluation set for all 4evaluation results. Because both subsets are i.i.d. samples from the arena distribution, win rates on the test set serve as an unbiased estimate of the underlying real-world prompt distribution. 
+
+3.4 Leaderboard computing and discussions 
+
+We benchmark 11 leading closed-source T2I systems on Arena-T2I Hard; for comparison we score every system on DPG-Bench [ 14 ] and DSG [ 12 ] under the same judge. Table 1 reports the leaderboard. 
+
+Headroom remains and only Arena-T2I Hard discriminates. The strongest model, 
+
+gemini-3-pro-image-preview-2k , reaches 0.855 —14 pp from ceiling and the top of an 11 -system spread of 33 pp down to 0.523 . The same systems on DPG-Bench and DSG are saturated (0.89 –0.97 and 0.84 –0.95 ). 
+
+Public arena rank is a weak proxy for faithfulness. Several public top-15 systems drop sharply (hunyuan-image-3.0 #15 →10 th at 0.609 ; nano-banana # 14 →6th at 0.768 ), while recraft-v4 
+
+climbs from # 29 to 4th at 0.787 . The pattern indicates that humans sometimes prioritize aesthetics over fine-grained prompt adherence. 
+
+Decomposer robustness. To assess the robustness of the decomposer, we re-decompose all 310 
+
+prompts using a second decomposer (GPT-5.4) and rescore them with the same judge. The resulting per-model mean yes-rate vectors are highly correlated with the original scores, with Pearson corre-lation 0.991 and Spearman correlation 0.982 . Although all systems’ scores decrease uniformly by 
+
+0.05 –0.09 , no system changes by more than one rank. See Appendix A.5 and Table 6 for details. 
+
+4 Post Training by Combining Faithfulness with Aesthetics 
+
+In this section, we study whether the proposed dependency-aware checklist can serve not only as an evaluation tool, but also as a training signal for improving prompt following. To this end, we instantiate the checklist score as a reward in Flow-GRPO [ 20 ] and study how it interacts with standard preference-based rewards. Our analysis reveals a central challenge: optimizing a single reward improves the corresponding metric but often fails to transfer across axes, and may even degrade other aspects of generation quality. This motivates a combined post-training objective that explicitly balances faithfulness and aesthetics. 
+
+4.1 Post-training with single scalar rewards 
+
+We use GRPO [ 17 ], which is a standard practice in T2I RL. For each prompt pi we sample K rollouts 
+
+{xi,j }Kj=1 , compute M scalar rewards rk(i, j ), and form the group-relative advantage of a weighted sum: 
+
+r(i, j ) = 
+
+> M
+
+X
+
+> k=1
+
+wk rk(i, j ), A(i, j ) = r(i, j ) − μi
+
+σi + ε , (1) with μi, σ i the group mean and standard deviation. 
+
+Single reward design. For reward choice, we try two open-source BT rewards trained from human preference data as well as our faithfulness reward. PickScore is a CLIP-H/14-based BT reward trained on ∼500 K Pick-a-Pic pairwise human preferences [ 27 ]. Since these preferences are open-ended and the CLIP dual-tower architecture has limited compositional reasoning, PickScore mainly captures aesthetic appeal rather than fine-grained prompt fidelity. HPSv3 is a stronger Qwen2.5-VL-7B-based BT reward trained on the ∼1M-pair HPDv3 dataset, whose annotations cover both aesthetics and prompt faithfulness [ 33 , 25 ]. Our faithfulness reward use the dependency-aware checklist as described in Sec 3. 
+
+Single-reward training does not transfer across axes. We finetune a SD3.5-M [ 7] on 10k training set for 1,000 training steps with three single rewards separately. We evaluate the ckpts on 1k hold out testing prompts. Figure 2 plots the relative change of three eval rewards over 1,000 training steps. More details can be found in Appendix C.1. HPSv3-only climbs much more sharply ( +33% ) and drives faithfulness down to roughly −14% . Faithfulness-only , conversely, climbs its own reward +8% 
+
+5but does not lift PickScore or HPSv3. This reveals a clear reward–axis mismatch. (1) Optimizing a single reward does not necessarily transfer to other evaluation axes, and gains in aesthetics can come at the cost of faithfulness. (2) Strong Bradley–Terry preference models, despite being trained on large-scale human preference data, may still provide poor RL training signals for improving prompt faithfulness. 0 250 500 750 1000           
+
+> training step
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> from step 0 (%)
+> (a) PickScore reward
+> +6.5
+> +13.1
+> -0.5
+> 0250 500 750 1000
+> training step
+> 20
+> 0
+> 20
+> 40
+> from step 0 (%)
+> (b) HPSv3 reward
+> -0.0
+> +33.3
+> -13.6
+> 0250 500 750 1000
+> training step
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> from step 0 (%)
+> (c) Faithfulness reward
+> +0.1
+> -0.6
+> +7.8
+> PickScore HPSv3 Faithfulness
+
+Figure 2: Eval-reward dynamics for three single-reward fine-tunes on SD3.5-M, truncated at training step 1,000. In each panel the optimized reward is shown in full opacity, eval-only rewards in lighter ink. We observe that BT-style training drives faithfulness flat or below baseline and faithfulness-only training does not lift the BT rewards. 
+
+4.2 Combining the two rewards via GDPO lifts both eval signals Pitfalls in current reward ensembling methods. A direct way is to use the weighted sum of the two rewards. However, when the components of r have very different within-group scales, σi is dominated by the highest-variance term, and it is extremely hard to tune the weighting parameter of the combining reward. In our setting, the BT preference reward has significantly different dynamics from the faithfulness 0/1 checklist reward, so naive Eq. (1) often does not perform well. 
+
+Group-decoupled normalization policy optimization. To resolve this issue, we adopt group-decoupled normalization (GDPO) [ 18 ], which normalizes each reward within its rollout group before 
+
+combining: 
+
+Ak(i, j ) = rk(i, j ) − μk,i 
+
+σk,i + ε , A(i, j ) = 
+
+> M
+
+X
+
+> k=1
+
+wk Ak(i, j ), (2) where μk,i , σ k,i are the per-prompt statistics of the k-th reward across the K rollouts. Each component contributes an advantage of unit scale by construction. It stabilizes training and setting {wk} can always achieve good results. Please refer to Appendix D.3 for more details. We fine-tune FLUX.1-dev [ 6] for 1250 steps on the same 10k-prompt training set. Experimental details are provided in Appendix C.1. Figure 3 reproduces the reward trade-off on FLUX.1-dev and adds a third panel for our combining faithfulness and pickscore under GDPO. The single-reward runs, shown in panels (a) and (b), mirror the SD3 results: PickScore-only reduces faithfulness by 
+
+1.1% , while Faithfulness-only reduces PickScore by 2.5% . In contrast, the combined run in panel (c) improves both evaluation rewards simultaneously, increasing faithfulness by 10 .5% and PickScore by 3.5% . GDPO therefore avoids reward collapse; moreover, its faithfulness gain exceeds that of the dedicated faithfulness-only run ( +6 .8% ) under the same step budget. Additional comparisons between GRPO and GDPO are provided in Appendix D.3, which demonstrates GDPO are more effective than GRPO. 
+
+5 Main Experiments 
+
+The previous section shows that combining aesthetic and faithfulness rewards can mitigate the reward– task mismatch: optimizing preference rewards alone tends to improve aesthetics while sacrificing faithfulness. In this section, we further analyze reward design and investigate which combination strategy best supports joint improvement in post-training. 
+
+Evaluation protocol. Existing T2I RL works typically report progress on the same reward family used for training, or on benchmarks targeting the same dimension as the reward. Such reward-aligned evaluation mainly measures how well the policy fits its training signal, rather than whether it improves along other dimensions. To better simulate real-world scenario, we evaluate all main 60 250 500 750 1000 1250            
+
+> training step
+> 5.0
+> 2.5
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> from step 0 (%)
+> (a) PickScore reward
+> +5.1
+> -1.1
+> 0250 500 750 1000 1250
+> training step
+> 0
+> 5
+> 10
+> from step 0 (%)
+> (b) Faithfulness reward
+> -2.5
+> +6.8
+> 0250 500 750 1000 1250
+> training step
+> 0
+> 5
+> 10
+> from step 0 (%)
+> (c) Faith + Pick
+> +3.5
+> +10.5
+> PickScore Faithfulness
+
+Figure 3: Eval-reward dynamics on FLUX.1-dev for two single-reward fine-tunes and a combined Faith + Pick run trained under GDPO, truncated at step 1,250. In each panel the optimized reward(s) are shown in full opacity. Numbers at the right edge are the final ∆ from step 0 in %. We observe that single-reward training degrades the cross-axis reward (panels a, b) while GDPO lifts both (panel c). 
+
+results on the held-out 1k arena-distribution test set from Section 3.3 using the MMRB2 pairwise protocol [ 34 ]. For each pair of fine-tuned models, we generate one image per prompt from each model and ask an independent Gemini-3-flash judge to compare them under a fixed MMRB2 rubric covering faithfulness, text–image alignment, text rendering, and overall image quality. The judge produces a single preference verdict for each pair, and we aggregate these verdicts into a net win rate across the 1,000 prompts. Each pair is judged twice with the order swapped to reduce position bias. Additional details on the evaluation protocol and the MMRB2 rubric are provided in Appendix B.5. 
+
+Training settings. We follow the GRPO/GDPO training protocol of FlowGRPO [ 20 ] and evaluate on two open text-to-image backbones: Stable Diffusion 3.5-Medium (SD3.5-M) [ 7] and FLUX.1-dev [6]. Full hyperparameters are in Appendix C.1. 
+
+Single-reward baselines. We adopt four publicly available preference rewards, each used alone with weight 1: PickScore [ 27 ], HPSv3 [ 25 ], ImageReward [ 26 ], and UnifiedReward-2.0 [ 28 ]. These rewards differ in backbone and supervision: PickScore is a CLIP-based BT reward trained on Pick-a-Pic preferences, HPSv3 is a Qwen2.5-VL-based BT reward trained on HPDv3, ImageReward uses a BLIP backbone with expert-annotated rankings and is trained in a BT way, and UnifiedReward-2.0 is a VLM-based scalar judge designed to cover both aesthetics and prompt following. Please refer to Appendix C.2 for more details. 
+
+Ensembling rewards. Our Faith + Pick pairs PickScore as the aesthetic signal with our checklist as the faithfulness signal, and trains under GDPO. We use a flat weight of 1 on each reward. We also include a 4-reward ensemble that linearly combines the four single-reward models above at scale-balanced weights. Thus, any improvement of our Faith + Pick recipe over this ensemble reflects the value of the checklist-based faithfulness signal and careful reward design, rather than simply the benefit of combining more rewards. 
+
+Iterative SFT baseline. We also compare against a DreamSync-style iterative SFT baseline [ 35 ], which alternates between generating candidate images, filtering them with reward scores, and fine-tuning on the retained prompt–image pairs. At each iteration, the current policy samples 8 candidates per prompt on the same 10k training set, scores them with PickScore and our checklist reward, and retains one reward-selected target per prompt when available. The retained pairs are used for a 1000-step flow-matching LoRA fine-tune, with each iteration initialized from the previous LoRA checkpoint. We run three iterations on each backbone. Full generation, filtering, and fine-tuning details are provided in Appendix C.4. 
+
+5.1 Is our combined reward better than single or naive reward mixing? Pairwise VLM judge win-rate results. Figure 4 compares all baselines using the MMRB2 pairwise protocol on the 1k test set. Across both SD3.5-M and FLUX.1-dev, our combined Faith + Pick GDPO run achieves the strongest row-mean win rate and beats every single-reward baseline as well as the iterative SFT baseline. The ranking is stable across three random-seed rounds with cross-round standard deviations below 1.2 pp; see Appendix D.2 for the row-mean bar charts. 
+
+Single BT rewards: marginal or detrimental effects. On SD3.5-M, training on PickScore alone yields only a marginal preference improvement over the base backbone ( 52 .2% ), HPSv3 is actively 
+
+worse than base ( 32 .9% ), and ImageReward is well below base ( 32 .8% ). On FLUX.1-dev PickScore 7Base                                     
+
+> PickScore
+> HPSv3
+> ImageReward
+> Ensemble
+> Ours (Faith + Pick)
+> DreamSync
+> opponent (column)
+> Base
+> PickScore
+> HPSv3
+> ImageReward
+> Ensemble
+> Ours (Faith + Pick)
+> DreamSync
+> row wins (%)
+> 47.8 67.2 66.1 61.8 39.1 65.5
+> 52.2 72.9 71.7 65.4 40.2 65.8
+> 32.9 27.2 45.3 40.6 22.7 45.7
+> 33.9 28.3 54.7 43.5 22.5 50.8
+> 38.2 34.6 59.4 56.5 28.3 52.7
+> 60.9 59.8 77.3 77.5 71.7 74.3
+> 34.5 34.2 54.3 49.2 47.3 25.7 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> row's win-rate vs column (%)
+
+(a) SD3.5-M Base                                      
+
+> PickScore
+> HPSv3
+> ImageReward
+> Ensemble
+> Ours (Faith + Pick)
+> DreamSync
+> opponent (column)
+> Base
+> PickScore
+> HPSv3
+> ImageReward
+> Ensemble
+> Ours (Faith + Pick)
+> DreamSync
+> row wins (%)
+> 39.2 49.3 58.6 49.0 29.6 38.8
+> 60.8 61.0 70.0 59.1 38.1 49.0
+> 50.7 39.0 60.7 49.3 29.8 38.7
+> 41.4 30.0 39.3 38.3 22.9 30.3
+> 51.0 40.9 50.7 61.7 31.4 39.6
+> 70.4 61.9 70.2 77.0 68.6 58.8
+> 61.2 51.0 61.3 69.7 60.4 41.2 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> row's win-rate vs column (%)
+
+(b) FLUX.1-dev 
+
+Figure 4: Pairwise net win-rate matrices on the 1k test set, judged by Gemini-3-flash under the MMRB2 rubric. Each cell (i, j ) is row i’s win rate against column j at image_idx =0 , with each prompt judged twice under swapped order. Ours (Faith + Pick GDPO) wins against every single-reward and iterative-SFT baseline on both backbones; cross-seed stability of these rankings is reported in Appendix D.2. 
+
+alone is more competitive ( 60 .8% over base), while HPSv3 is roughly tied with base ( 50 .7% ). This shows that BT preference rewards optimized in isolation range from no-better-than-base to substantially worse on the held-out MMRB2 verdict. 
+
+Linear ensembling of multiple rewards does not help. On SD3.5-M, the 4-reward preference ensemble (PickScore + HPSv3 + ImageReward + UnifiedReward-2.0 at scale-balanced weights) wins only 38 .2% against base. On FLUX, the ensemble is at parity with base ( 51 .0% ). Linearly combining multiple open-source top rewards does not unlock a qualitatively new signal; it amplifies the aesthetic bias shared across the four. 
+
+Faith+Pick is the strongest row on both backbones. Our Faith + Pick run wins every cell of its row against every BT single-reward baseline and against the 4-reward ensemble. Pairing the dependency-aware faithfulness checklist with PickScore through GDPO therefore yields a better faithfulness–aesthetics trade-off than every single-reward, ensemble, or naive weighted-sum baseline on both backbones, indicating successful T2I post-training needs careful reward design, not just more rewards. 
+
+GDPO outperforms linear reward summation. GDPO is more effective than directly summing the faithfulness and BT aesthetic rewards with fixed linear weights, achieving a pairwise win rate of 
+
+51 .3% . See Figure 11 and Appendix D.3 for experimental details. 
+
+Our method substantially improves base-model faithfulness. Table 7 and Appendix A.5 shows that our method achieves the best results on both Arena-T2I Hard and DPG-Bench. On SD3.5-M, it surpasses the second-best method by 5.2% on Arena-T2I Hard and 3.7% on DPG-Bench, demonstrating that our method improves faithfulness and generalizes to other evaluation settings well. 
+
+Human-judge validation. The Matrix 1 SD3.5-M results above are judged by Gemini-3-Flash under the MMRB2 rubric. To check whether this judge is aligned with human preferences, we ran a small human study using Faith + Pick as the anchor against the six other Matrix 1 models. We sampled 300 stratified prompts per cell, with an additional 300 -prompt mini-study for the closest comparison. In total, we collected 1,899 pairwise A/B votes with randomized side assignment and the VLM verdict hidden. Faith + Pick wins 64 .1% overall ( 1,218 /1,899 pairs) and outperforms every individual opponent: ImageReward ( 95 .5% ), Ensemble ( 70 .2% ), DreamSync ( 64 .9% ), HPSv3 (63 .0% ), PickScore ( 56 .2% ), and Base-SD3 ( 55 .9% ). The human votes agree with Gemini-3-Flash on the direction of the Faith + Pick advantage in every cell. Full per-cell counts and side-by-side comparisons with the VLM judge are provided in Appendix D.5, Table 9. 85.2 What Makes Effective Faithfulness Rewards? 
+
+In this section, we ablate different question-generation strategies and study where checklist rewards are most effective. Here are the methods compared in this ablation study: • Default ( Faith + Pick ). PickScore paired with the prompt-specific, dependency-aware faithfulness checklist under GDPO. • Ignore-dep. This variant removes BFS gating at scoring time: all questions are treated as roots, so child attributes, relations, and counts can score YES even when their parent existence question fails. See Appendix C.3 for details. • Generic . This variant pairs PickScore with a fixed 15-question, prompt-agnostic checklist covering general faithfulness criteria, such as overall prompt fidelity and key-object presence. See Appendix C.3 for the full rule list. • Faith + Aesth . This variant replaces PickScore with a second checklist of aesthetic-quality questions from the aesthetic decomposition pass (Appendix B.1). We concatenate the faithfulness and aesthetic subgraphs and use their combined yes-ratio as the only reward. This tests whether checklist-style rewards can cover both axes, or whether aesthetics benefits more from a BT preference signal. • RubricRL . This variant follows RubricRL [ 29 ]: Gemini-3-Pro decomposes each prompt into a flat, prompt-adaptive rubric of roughly 10 yes/no items spanning faithfulness and aesthetics. All items are treated as root questions, and the reward is the unweighted yes-ratio over the rubric. The decomposer prompt is provided in Appendix C.3. Figure 5 ablates the structure of the checklist reward on SD3.5-M at ckpt-1000. All variants share the training-side hyperparameters of Section 5, run under GDPO with a flat weight of 1 on each reward component, and are evaluated on the same 1k held-out test set. Ours (Faith + Pick)                 
+
+> Faith + Generic
+> Faith + Aesth
+> Ignore-dep.
+> RubricRL
+> opponent (column)
+> Ours (Faith + Pick)
+> Faith + Generic
+> Faith + Aesth
+> Ignore-dep.
+> RubricRL
+> row wins (%)
+> 53.4 51.7 54.2 53.0
+> 46.6 49.4 51.2 50.1
+> 48.3 50.6 51.6 54.0
+> 45.8 48.8 48.4 50.0
+> 47.0 49.9 46.0 50.0 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> row's win-rate vs column (%)
+
+Figure 5: Question-style ablation on SD3.5-M. 
+
+The ablation validates three design choices. First, the BFS dependency walk is important : removing it ( Ignore-dep. )causes the largest drop, with only a 45 .8% win rate against our full method, corresponding to a 4.2-point swing. Its benefit also appears within the ablation block: Faith + Aesth , which can be viewed as RubricRL equipped with the same depen-dency walk over the mixed faithfulness-and-aesthetics ques-tion set, beats RubricRL with a 54 .0% win rate. This suggests that the dependency walk is not just a scoring heuristic, but a way to encode which questions should matter most: if an object is missing, its attributes and relations should not be rewarded independently. Second, prompt-specific decompo-sition helps : generic rules reduce performance by 3.4 points because they miss prompt-level compositional structure. Fi-nally, an aesthetic checklist is less effective than a BT aesthetics reward trained from preference data . It gives a 1.7-point drop while requiring substantially more computation, roughly 10 × in our setup. Overall, these results support our design choice: use a prompt-specific, dependency-aware checklist for faithfulness, and pair it with a BT preference reward for aesthetics, so that the two rewards improve complementary axes while reducing the faithfulness–aesthetics trade-off. 
+
+6 Conclusion 
+
+We study how to secure faithfulness in modern text-to-image generative models. We introduce Arena-T2I Hard, a stress-test benchmark for top T2I models, and a dependency-aware checklist score that measures faithfulness through structured, verifiable prompt constraints. We then use this checklist score as an RL reward for post-training. Across extensive experiments, we find that effective T2I RL requires matching the reward structure to the dimension being optimized. Prompt faithfulness is best served by prompt-specific, dependency-aware checklist rewards, whereas aesthetics is better captured by BT preference rewards trained on human comparisons. Combining these two complementary reward structures improves both faithfulness and aesthetics, while reducing the trade-off between them. 9Acknowledgments and Disclosure of Funding References 
+
+[1] Google. Nano Banana 2. https://gemini.google/overview/image-generation/ ,2026. [2] Google. Nano Banana Pro. https://deepmind.google/models/gemini-image/pro/ ,2025. [3] OPEN AI. GPT Image 1 Model. https://developers.openai.com/api/docs/models/ gpt-image-1 , 2025. [4] OPEN AI. GPT Image 2 Model. https://openai.com/index/ introducing-chatgpt-images-2-0/ , 2026. [5] Black Forest Labs. FLUX.2: Frontier Visual Intelligence. https://bfl.ai/blog/flux-2 ,2025. [6] Black Forest Labs. Announcing black forest labs flux.1. https://bfl.ai/blog/ 24-08-01-bfl , 2024. [7] Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas Müller, Harry Saini, Yam Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling rectified flow trans-formers for high-resolution image synthesis. In Forty-first international conference on machine learning , 2024. [8] Siyu Cao, Hangting Chen, Peng Chen, Yiji Cheng, Yutao Cui, Xinchi Deng, Ying Dong, Kipper Gong, Tianpeng Gu, Xiusen Gu, et al. Hunyuanimage 3.0 technical report. arXiv preprint arXiv:2509.23951 , 2025. [9] Chenfei Wu, Jiahao Li, Jingren Zhou, Junyang Lin, Kaiyuan Gao, Kun Yan, Sheng ming Yin, Shuai Bai, Xiao Xu, Yilei Chen, Yuxiang Chen, Zecheng Tang, Zekai Zhang, Zhengyi Wang, An Yang, Bowen Yu, Chen Cheng, Dayiheng Liu, Deqing Li, Hang Zhang, Hao Meng, Hu Wei, Jingyuan Ni, Kai Chen, Kuan Cao, Liang Peng, Lin Qu, Minggang Wu, Peng Wang, Shuting Yu, Tingkun Wen, Wensen Feng, Xiaoxiao Xu, Yi Wang, Yichang Zhang, Yongqiang Zhu, Yujia Wu, Yuxuan Cai, and Zenan Liu. Qwen-image technical report, 2025. [10] Alibaba Group Wan Team. Wan2.6. https://wan.video/introduction/wan2.6 , 2026. [11] Recraft. Recraft V4. https://www.recraft.ai/blog/ introducing-recraft-v4-design-taste-meets-image-generation , 2026. [12] Jaemin Cho, Yushi Hu, Roopal Garg, Peter Anderson, Ranjay Krishna, Jason Baldridge, Mohit Bansal, Jordi Pont-Tuset, and Su Wang. Davidsonian scene graph: Improving reliability in fine-grained evaluation for text-to-image generation. arXiv preprint arXiv:2310.18235 , 2023. [13] Yushi Hu, Benlin Liu, Jungo Kasai, Yizhong Wang, Mari Ostendorf, Ranjay Krishna, and Noah A Smith. Tifa: Accurate and interpretable text-to-image faithfulness evaluation with question answering. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 20406–20417, 2023. [14] Xiwei Hu, Rui Wang, Yixiao Fang, Bin Fu, Pei Cheng, and Gang Yu. Ella: Equip diffusion models with llm for enhanced semantic alignment. arXiv preprint arXiv:2403.05135 , 2024. [15] Google. Nano Banana. https://deepmind.google/models/gemini-image/ , 2026. [16] XAI. grok-imagine-image. https://docs.x.ai/developers/model-capabilities/ images/generation , 2026. [17] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 , 2024. 10 [18] Shih-Yang Liu, Xin Dong, Ximing Lu, Shizhe Diao, Peter Belcak, Mingjie Liu, Min-Hung Chen, Hongxu Yin, Yu-Chiang Frank Wang, Kwang-Ting Cheng, et al. Gdpo: Group reward-decoupled normalization policy optimization for multi-reward rl optimization. arXiv preprint arXiv:2601.05242 , 2026. [19] Bram Wallace, Meihua Dang, Rafael Rafailov, Linqi Zhou, Aaron Lou, Senthil Purushwalkam, Stefano Ermon, Caiming Xiong, Shafiq Joty, and Nikhil Naik. Diffusion model alignment using direct preference optimization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 8228–8238, 2024. [20] Jie Liu, Gongye Liu, Jiajun Liang, Yangguang Li, Jiaheng Liu, Xintao Wang, Pengfei Wan, Di Zhang, and Wanli Ouyang. Flow-grpo: Training flow matching models via online rl. arXiv preprint arXiv:2505.05470 , 2025. [21] Dongzhi Jiang, Ziyu Guo, Renrui Zhang, Zhuofan Zong, Hao Li, Le Zhuo, Shilin Yan, Pheng-Ann Heng, and Hongsheng Li. T2i-r1: Reinforcing image generation with collaborative semantic-level and token-level cot. arXiv preprint arXiv:2505.00703 , 2025. [22] Dhruba Ghosh, Hannaneh Hajishirzi, and Ludwig Schmidt. Geneval: An object-focused framework for evaluating text-to-image alignment. Advances in Neural Information Processing Systems , 36:52132–52152, 2023. [23] Xinyu Wei, Jinrui Zhang, Zeqing Wang, Hongyang Wei, Zhen Guo, and Lei Zhang. Tiif-bench: How does your t2i model follow your instructions? arXiv preprint arXiv:2506.02161 , 2025. [24] Kaiyi Huang, Chengqi Duan, Kaiyue Sun, Enze Xie, Zhenguo Li, and Xihui Liu. T2i-compbench++: An enhanced and comprehensive benchmark for compositional text-to-image generation. IEEE Transactions on Pattern Analysis and Machine Intelligence , 47(5):3563–3579, 2025. [25] Yuhang Ma, Xiaoshi Wu, Keqiang Sun, and Hongsheng Li. Hpsv3: Towards wide-spectrum hu-man preference score. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 15086–15095, 2025. [26] Jiazheng Xu, Xiao Liu, Yuchen Wu, Yuxuan Tong, Qinkai Li, Ming Ding, Jie Tang, and Yuxiao Dong. Imagereward: Learning and evaluating human preferences for text-to-image generation. 
+
+Advances in Neural Information Processing Systems , 36:15903–15935, 2023. [27] Yuval Kirstain, Adam Polyak, Uriel Singer, Shahbuland Matiana, Joe Penna, and Omer Levy. Pick-a-pic: An open dataset of user preferences for text-to-image generation. Advances in neural information processing systems , 36:36652–36663, 2023. [28] Yibin Wang, Yuhang Zang, Hao Li, Cheng Jin, and Jiaqi Wang. Unified reward model for multimodal understanding and generation. arXiv preprint arXiv:2503.05236 , 2025. [29] Xuelu Feng, Yunsheng Li, Ziyu Wan, Zixuan Gao, Junsong Yuan, Dongdong Chen, and Chunming Qiao. Rubricrl: Simple generalizable rewards for text-to-image generation. arXiv preprint arXiv:2511.20651 , 2025. [30] Gemini Team Google. Gemini 3 pro. https://deepmind.google/models/gemini/pro/ ,2026. [31] Gemini Team Google. Gemini 3 flash. https://deepmind.google/models/gemini/ flash/ , 2026. [32] Qwen Team. Qwen3.5: Towards native multimodal agents. https://qwen.ai/blog?id= qwen3.5 , 2026. [33] Qwen Team. Qwen2.5-vl technical report. arXiv preprint arXiv:2502.13923 , 2025. [34] Yushi Hu, Reyhane Askari-Hemmat, Melissa Hall, Emily Dinan, Luke Zettlemoyer, and Marjan Ghazvininejad. Multimodal rewardbench 2: Evaluating omni reward models for interleaved text and image. arXiv preprint arXiv:2512.16899 , 2025. 11 mean median std p95 max                                            
+
+> Faithfulness questions / prompt 18 .517 10 .638 70
+> Aesthetics questions / prompt 10 .610 2.815 32
+> Root (parent-less) faith. Q / prompt 6.964.215 42
+> Faith. DAG max depth 1.720.837
+> Faith. max in-degree / prompt 6.354.515 52
+> Faith. max parents per question 1.820.7312
+> Prompt length (characters) 602 393 852 1750 17467
+> Table 2: Per-prompt statistics for the 9,846 usable prompts in the 10 k training set. In-degree of a question is the number of child questions that depend on it. Max depth is the longest root-to-leaf path in the faithfulness DAG.
+
+[35] Jiao Sun, Deqing Fu, Yushi Hu, Su Wang, Royi Rassin, Da-Cheng Juan, Dana Alon, Charles Herrmann, Sjoerd Van Steenkiste, Ranjay Krishna, et al. Dreamsync: Aligning text-to-image generation with image understanding feedback. In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers) , pages 5920–5945, 2025. [36] Mehdi Cherti, Romain Beaumont, Ross Wightman, Mitchell Wortsman, Gabriel Ilharco, Cade Gordon, Christoph Schuhmann, Ludwig Schmidt, and Jenia Jitsev. Reproducible scaling laws for contrastive language-image learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 2818–2829, 2023. 
+
+A Dataset Construction 
+
+A.1 Source pool and filtering 
+
+All prompts in the paper—training, test, and Arena-T2I Hard—are sampled from a public T2I arena leaderboard where users submit prompts and vote on the resulting images. We apply three filters to the raw user submissions: (i) NSFW filtering to remove unsafe content; (ii) PII filtering to remove prompts containing personally identifying information; and (iii) invalid-prompt filtering to remove submissions that are not genuine T2I user requests (e.g. chat snippets, debug strings, empty prompts). The remaining prompts are deduplicated by exact match and filtered for length and language (English). The three subsets used in this paper are sampled from this filtered pool. 
+
+A.2 Decomposition 
+
+Each prompt is decomposed into faithfulness and aesthetics question sets using the Gemini-3-Pro pipeline of Appendix B.1. Decomposition is cached and reused across all training and evaluation runs. After decomposition, each prompt has on average 18 .5 faithfulness questions and 10 .6 aesthetics questions; the dependency-graph depth on the faithfulness subset has mean 1.7 and maximum 7
+
+across the training set (Appendix A.3). 
+
+A.3 Training set 
+
+We draw 10 ,000 prompts uniformly at random from the filtered source pool of Appendix A.1 as the RL training set. After offline decomposition, the set contains 182 ,230 faithfulness questions and 
+
+104 ,900 aesthetics questions ( 287 ,130 total). 9,837 of the 10 ,000 prompts ( 98 .4% ) are decomposed into both faithfulness and aesthetics questions; 9 prompts have only faithfulness questions; 154 
+
+prompts produced no parseable questions and are dropped from the training set, leaving 9,846 usable prompts. Table 2 summarises per-prompt statistics for the faithfulness subset. Two features of the distribution are worth flagging. First, the question count is heavy-tailed (Figure 6, left): the median prompt has 
+
+17 faithfulness questions, but the 99 th percentile is 47 and the maximum is 70 , which motivates the NaN-padded fixed-width tensor of MAX Q = 128 described in Section 3.1. Second, dependency-graph depth is small on average (median 2, mean 1.7) but reaches up to 7 (Figure 6, right), so the BFS dependency walk has non-trivial work to do on the deeper prompts; the maximum number of 
+
+direct parents of a single question is 12 , and the maximum fan-in (most-cited single question) is 52 .12 0 20 40 60                    
+
+> Faithfulness questions per prompt
+> 0
+> 200
+> 400
+> 600
+> 800
+> 1000
+> Number of prompts  mean = 18.5
+> 01234567
+> Faithfulness DAG max depth
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> Number of prompts Figure 6: Distributions over the 9,846 usable training prompts. Left : faithfulness questions per prompt; long-tailed with median 17 and a small fraction reaching 50 +. Right : maximum DAG depth of the faithfulness subset; most prompts have depth 1or 2, with a tail up to 7.
+
+A.4 Test set 
+
+We additionally sample 1,000 prompts uniformly at random from the same filtered pool, disjoint from the training set, as the held-out test set used for all main MMRB2 win-rate results. Because both subsets are i.i.d. samples from the same distribution, win rates on the test set are an unbiased estimate of the win rate on the underlying real-world prompt distribution. Each test prompt is decomposed by the same Gemini-3-Pro pipeline; per-prompt question counts and DAG-depth statistics match those of the training set within sampling noise (Table 2). 
+
+A.5 Arena-T2I Hard Selection protocol. Arena-T2I Hard is a deliberately hard benchmark of 310 prompts drawn from the same filtered pool used for the training and test sets (Appendix A.1). We manually inspect prompts from this pool and select those with the longest prompt text and the largest number of yes/no questions produced by the Gemini-3-Pro decomposition (Appendix B.1). Concretely, we favour prompts that are simultaneously extremely long (so that the prompt itself stacks many independent visual constraints) and decompose into many faithfulness questions (so that the resulting checklist exercises the dependency walk on a wide DAG). 
+
+Qualitative examples. Figure 7 shows two representative Arena-T2I Hard prompts and the corresponding outputs from the strongest closed-source system we evaluate (gemini-3-pro-image-preview-2k ). Even this top system fails 10 –17 of 67 –74 decom-posed constraints per prompt; the specific failures (the “Polycoria” four-pupil detail in the portrait, the Skyforge ring of stone and the thumb intrusion at the corner of the Whiterun cityscape) are the kind of fine-grained constraints a single binary preference score cannot surface. 
+
+Construction statistics. Table 3 reports the resulting prompt-level distribution. Compared to the training set, Arena-T2I Hard prompts are on average ∼4× longer ( 2,522 chars vs. 617 ) and carry 
+
+∼70% more faithfulness questions ( 30 .8 vs. 18 .2 per prompt on average), with dependency-graph depth up to 5 and as many as 10 direct dependencies on a single attribute or relation question. 
+
+Category coverage. Each of the 310 prompts carries six boolean visual-style category flags ( com-mercial_design , 3d_modeling , cartoon , photorealistic , art , portraits ) from benchmark_hard.json .We additionally derive a seventh text category from question content: a prompt’s text flag is on if at least one of its decomposed yes/no questions explicitly probes text rendering (questions whose surface form mentions text/word/letter/font/inscription/sign/caption/logo and similar); within the primary-category column, a prompt is taken to be text-primary when more than 30% of its questions are text-rendering questions, overriding the default visual-style label. The selection rule (long prompt, many decomposed questions) is structural and does not target any particular style, but the resulting set is reasonably balanced across the seven classes: Table 4 reports both the primary-category distribution (one label per prompt) and the multi-label flag distribution (boolean OR across prompts). Two 13 Prompt (excerpt; category: portraits): A single, centered, full-body portrait of a young woman in her early 20 s with very long waist-length wavy deep burgundy hair, gray/amber eyes featuring razor-sharp Polycoria (two distinct circular pupils per iris, four total), a ‘my body your choice’ script tattoo on her right clavicle, a silver cross earring in her left ear, lip and nose rings, a ribbed black crop top, high-waist distressed denim jeans, white leather sneakers, on a seamless pure-white studio background, 9:16 full-body frame, shot on Canon R5 85 mm. 
+
+74 questions · faithfulness 0.768 (∼ 17 constraints failed)          
+
+> Prompt (excerpt; category: photorealistic): A hyperrealistic candid smartphone photo of Whiterun in central Skyrim, circa 4E 201 , from the Plains District cobblestones looking up at the three-tiered city. Fore-ground: Warmaiden’s smithy with Adrianne at the forge, the Banned Mare inn sign, market stalls, a Whiterun guard in winged helmet. Mid:
+> Jorrvaskr mead hall like an upturned longship, the Skyforge ring of stone, bare-branched Gildergreen. Back: Dragonsreach on the Cloud District summit. Golden-hour light, slight haze, a thumb intruding at the frame corner.
+
+67 questions · faithfulness 0.857 (∼ 10 constraints failed) 
+
+Figure 7: Two representative Arena-T2I Hard prompts and the outputs of 
+
+gemini-3-pro-image-preview-2k . Each prompt stacks dozens of independently checkable constraints— identity details, named landmarks, spatial relationships, lighting, and stylistic register. On the portraits prompt the model misses ∼17 of the 74 constraints (e.g., the “Polycoria” four-pupil detail, the exact tattoo text, the lip ring); on the Skyrim cityscape it misses ∼10 of 67 (e.g., the Skyforge ring of stone, the thumb intrusion in the frame). Images are slightly cropped from 1536 ×2752 and 2816 ×1536 originals to a common 4:5 portrait aspect for display. 
+
+mean median std p25 p75 max 
+
+Prompt length (characters) 
+
+Training set ( 10 k) 617 396 884 211 716 17 ,467 
+
+Arena-T2I Hard ( 310 ) 2,522 1,714 2,997 864 2,788 18 ,411 
+
+Faithfulness questions per prompt 
+
+Training set ( 10 k) 18 .2 17 10 .8 10 25 70 
+
+Arena-T2I Hard ( 310 ) 30 .8 31 12 .4 22 40 88 
+
+Table 3: Per-prompt structural statistics for Arena-T2I Hard versus the 10 k training set, both drawn from the same filtered arena source pool. The selection rule favours long prompts with many decomposed questions, so Arena-T2I Hard sits roughly 4× above the training distribution on prompt length and ∼70% above on question count. 
+
+observations: (i) the seven primary classes range from 21 prompts ( text ) to 59 prompts ( 3d_modeling )of 310 , so per-category faithfulness numbers can be reported with reasonable sample size; and 
+
+(ii) 287 /310 prompts ( 92 .6% ) are multi-labeled across ≥ 2 flags once text is added, with cartoon ,
+
+photorealistic , and text each at ∼50% , reflecting the long, scene-rich character of the selected prompts and the strong overlap between text rendering and the other visual styles. 
+
+Per-category faithfulness. Table 5 reports the per-category faithfulness yes-ratio on Arena-T2I Hard, broken down by the seven-class primary_category partition of Table 4, for the same 11 
+
+14 Primary category (one per prompt) Multi-label flag (boolean OR) Category Count % Flag ON %3d_modeling 59 19 .0% cartoon 156 50 .3% 
+
+art 56 18 .1% photorealistic 152 49 .0% 
+
+cartoon 53 17 .1% text 152 49 .0% 
+
+photorealistic 46 14 .8% 3d_modeling 121 39 .0% 
+
+portraits 45 14 .5% art 100 32 .3% 
+
+commercial_design 30 9.7% commercial_design 87 28 .1% 
+
+text 21 6.8% portraits 84 27 .1% 
+
+total 310 100 % 287 /310 prompts multi-labeled ( 92 .6% )
+
+Table 4: Category coverage of Arena-T2I Hard. Left: primary-category distribution (the dominant category for each prompt; exactly one per prompt; text overrides the visual-style primary_category when more than 
+
+30% of the prompt’s questions are text-rendering questions). Right: multi-label flag distribution (each flag is independently true/false; a prompt may carry multiple). The seven classes range from 21 to 59 prompts under the primary label, and once text is added most prompts ( 92 .6% ) carry at least two flags. 
+
+Model 3D Art Cart. Com. Photo. Port. Text Overall 
+
+gemini-3-pro-image-preview-2k 0.862 0.896 0.816 0.842 0.847 0.835 0.906 0.855 
+
+grok-imagine-image-20260306 0.789 0.889 0.803 0.855 0.875 0.875 0.881 0.849 
+
+gpt-image-1.5-high-fidelity 0.820 0.811 0.767 0.753 0.831 0.797 0.744 0.796 
+
+recraft-v4 0.720 0.766 0.737 0.812 0.820 0.881 0.817 0.787 
+
+wan2.6-t2i-v2 0.733 0.779 0.737 0.715 0.790 0.839 0.800 0.768 
+
+gemini-2.5-flash-image (nano-banana) 0.761 0.781 0.741 0.754 0.782 0.790 0.750 0.767 
+
+gpt-image-1 0.705 0.778 0.686 0.658 0.739 0.742 0.726 0.722 
+
+imagen-4.0-ultra-generate-001 0.661 0.693 0.666 0.577 0.691 0.773 0.659 0.680 
+
+imagen-4.0-generate-001 0.647 0.683 0.649 0.661 0.654 0.687 0.602 0.659 
+
+hunyuan-image-3.0-fal 0.618 0.625 0.566 0.510 0.666 0.700 0.471 0.609 
+
+ideogram-v3-quality 0.526 0.515 0.508 0.450 0.520 0.578 0.570 0.523 
+
+Table 5: Per-category faithfulness yes-ratio on Arena-T2I Hard for the 11 closed-source systems of Ta-ble 1, broken down by the seven-class primary partition of Table 4. Columns: 3D = 3d_modeling , Art =
+
+art , Cart. = cartoon , Com. = commercial_design , Photo. = photorealistic , Port. = portraits ,
+
+Text = prompts where more than 30% of the questions probe text rendering. Per-category sample sizes are 
+
+59 /56 /53 /30 /46 /45 /21 prompts respectively (cf. Table 4). Bold marks the per-column best. 
+
+closed-source systems that appear in Table 1. Three patterns are worth noting. (i) The overall ranking is largely stable across categories: the top three (gemini-3-pro, grok-imagine, gpt-image-1.5) lead in five of the seven categories, and the bottom two ( hunyuan-image-3.0 , ideogram-v3 ) trail in all seven. (ii) Cartoon is the hardest category for nearly every model (e.g., gemini-3-pro drops from 0.855 overall to 0.816 on cartoon; gpt-image-1.5 from 0.796 to 0.767 ), suggesting cartoon-style prompts pose extra compositional challenges (stylised proportions, multiple characters, tightly stacked attributes). (iii) Text is the most discriminating axis: the spread across the eleven systems is 
+
+0.471 –0.906 (43 pp), wider than on any other primary category, with hunyuan-image-3.0 at 0.471 
+
+(∼14 pp below its overall) at the bottom and gemini-3-pro at 0.906 (∼5 pp above its overall) at the top. The leaderboard also shuffles within categories: recraft-v4 is the strongest on portraits 
+
+(0.881 , ahead of gemini-3-pro at 0.835 ), and grok-imagine is the strongest on photorealistic (0.875 ,ahead of gemini-3-pro at 0.847 ). No single closed-source system dominates every category. 
+
+Closed-source leaderboard. The full closed-source leaderboard is reported in Table 1 of the intro-duction. Two points worth pulling out for the appendix reader. First , the ranking on Arena-T2I Hard correlates only loosely with the public arena leaderboard in both directions : several public top-15 sys-tems drop to the bottom half of our ranking ( hunyuan-image-3.0 #15 →10 th, imagen-4.0-ultra 
+
+#17 →8th, imagen-4.0 #22 →9th), while recraft-v4 climbs from # 29 publicly to 4th on faith-fulness and ideogram-v3-quality drops from # 42 to last. Second , our strongest open-source fine-tune (FLUX.1-dev with the Faith + Pick recipe at 0.529 ) is comparable to the bottom of the closed-source ladder, which is why we report the main MMRB2 head-to-head results (Section 5) on the easier 1k test set rather than on Arena-T2I Hard. 15 # Model Gemini-3-Pro G GPT-5.4 G ∆1 gemini-3-pro-image-preview-2k 0.866 0.802 −0.064 2 grok-imagine-image-20260306 0.850 0.803 −0.047 3 gpt-image-1.5-high-fidelity 0.801 0.729 −0.072 4 recraft-v4 0.794 0.723 −0.071 5 wan2.6-t2i-v2 0.770 0.683 −0.087 6 gemini-2.5-flash-image (nano-banana) 0.762 0.714 −0.048 7 gpt-image-1 0.726 0.648 −0.078 8 imagen-4.0-ultra-generate-001 0.681 0.633 −0.048 9 imagen-4.0-generate-001 0.670 0.587 −0.083 10 hunyuan-image-3.0-fal 0.620 0.557 −0.063 11 ideogram-v3-quality 0.518 0.454 −0.064          
+
+> Avg q/prompt ∼10 ∼43 —
+> Cross-decomposer rank corr. Pearson 0.991 ,Spearman 0.982
+
+Table 6: Decomposer-robustness check on Arena-T2I Hard. Each cell is the per-system mean yes-rate, computed over the 243 prompts for which both decomposers’ question graphs scored successfully. Numbers are the headline mean over those 243 prompts; they are slightly different from Table 1 (which uses all 310 prompts under Gemini-3-Pro only) because of this intersection. GPT-5.4 produces ∼4× more questions per prompt than Gemini-3-Pro, which uniformly lowers every system’s yes-rate by 0.05 –0.09 , but the system ranking is essentially preserved (no rank flip greater than one position). 
+
+Decomposer robustness. The Arena-T2I Hard leaderboard depends on the choice of offline de-composer G. To check that the ranking is not an artefact of using Gemini-3-Pro, we re-decompose all 310 prompts with a second decomposer—GPT-5.4—and re-score the same 11 closed-source systems under the same gemini-3-flash judge. The two decomposers produce question graphs of substantially different size: Gemini-3-Pro emits ∼10 questions per prompt on average, GPT-5.4 emits ∼43 (∼4× more), so we expect every system’s yes-ratio to drop uniformly under GPT-5.4 (every system has more questions to satisfy). The headline result is that the ranking is essentially preserved : Pearson 0.991 and Spearman 0.982 on the per-system mean yes-rate vector between the two decomposers (Table 6). The absolute scores all drop by 0.05 –0.09 as expected, but no system flips its rank by more than one position. We therefore attribute the leaderboard signal to the prompts themselves and not to the choice of decomposer. (At the finer per-prompt level the agreement is more moderate—per-prompt 11 -vector correlation has mean Pearson 0.67 / Spearman 0.68 —which is consistent with two decomposers asking different specific questions about the same prompt while the many-questions-per-prompt aggregation washes out the noise.) 
+
+Open-source comparison. Table 7 reports the same faithfulness yes-ratio on every open-source backbone and BT/SFT fine-tune we ran in this paper, on both Arena-T2I Hard ( 310 prompts) and DPG-Bench ( 1,065 prompts). Our combined Faith + Pick recipe is at the top of the ranking on 
+
+both benchmarks and both backbones: SD3.5-M reaches 0.405 on Arena-T2I Hard ( +7 .8 pp over base) and 0.915 on DPG-Bench ( +2 .1 pp), and FLUX.1-dev reaches 0.529 on Arena-T2I Hard (+8 .3 pp) and 0.935 on DPG-Bench ( +3 .3 pp). Two side-observations agree with the MMRB2 main-results matrices in Section 5: on SD3.5-M, HPSv3 ( 0.281 ) and the 4-reward ensemble ( 0.322 )both score below the base backbone ( 0.328 ) on Arena-T2I Hard—and the same below-base ordering reproduces on DPG-Bench (HPSv3 0.875 , ensemble 0.887 , base 0.894 )—echoing the 32 .9% and 
+
+38 .2% MMRB2 win rates against base reported in §5; and DreamSync, a non-RL baseline, sits well below Faith + Pick on both backbones. On DPG-Bench the BT-only spread is much narrower than on Arena-T2I Hard (SD3.5-M: ∼2 pp on DPG vs. ∼7 pp on Arena-T2I Hard; FLUX.1-dev: ∼1 pp on DPG vs. ∼10 pp on Arena-T2I Hard) because DPG is closer to saturation, consistent with the closed-source pattern in Table 1. We do not use Arena-T2I Hard for the main MMRB2 head-to-head results in Section 5; we release it as a stress benchmark for assessing the faithfulness ceiling of stronger T2I systems. 
+
+A.6 Provenance and licensing 
+
+The prompt source license permits redistribution for research purposes; we will release the prompt JSON and the decomposed questions under the same license. 16 # Backbone Method Arena-T2I Hard ↑ DPG-Bench ↑
+
+1 SD3.5-M Faith + Pick (ours) 0.405 0.915 
+
+2 SD3.5-M PickScore 0.353 0.894 3 SD3.5-M DreamSync (iter 1) 0.351 0.891 4 SD3.5-M ImageReward 0.331 0.894 
+
+– SD3.5-M Base SD3.5-M (no fine-tune) 0.328 0.894 5 SD3.5-M 4-reward ensemble 0.322 0.887 6 SD3.5-M HPSv3 0.281 0.875 1 FLUX.1-dev Faith + Pick (ours) 0.529 0.935 
+
+2 FLUX.1-dev DreamSync (iter 2) 0.492 0.918 3 FLUX.1-dev HPSv3 0.468 0.909 4 FLUX.1-dev PickScore 0.463 0.919 5 FLUX.1-dev 4-reward ensemble 0.461 0.906 
+
+– FLUX.1-dev Base FLUX.1-dev (no fine-tune) 0.446 0.902 6 FLUX.1-dev ImageReward 0.425 0.910 
+
+Table 7: Open-source models on Arena-T2I Hard ( 310 prompts) and on DPG-Bench ( 1,065 prompts), grouped by backbone and ranked by Arena-T2I Hard faithfulness yes-ratio (same gemini-3-flash judge on both benchmarks, matching Table 1). Italic rows are the untrained backbones, included as reference points; the # column ranks fine-tuned variants only. On both backbones, Faith + Pick is the top recipe on DPG-Bench as well as on Arena-T2I Hard (SD3.5-M: 0.915 ; FLUX.1-dev: 0.935 , +3 .3 pp over base). The BT-only spread on DPG is much narrower than on Arena-T2I Hard ( ∼2 pp on SD3, ∼1 pp on FLUX, vs. ∼7 pp and ∼10 pp respectively) because DPG is closer to saturation. 
+
+B Implementation Details 
+
+This appendix expands the implementation details that did not fit in Section 3. 
+
+B.1 Decomposition prompts 
+
+We decompose each training prompt offline with two text-only Gemini-3-Pro calls: the first produces faithfulness questions, the second adds an aesthetics layer that references the faithfulness ids. Results are cached on disk and never recomputed at training time. 
+
+Faithfulness decomposition. The first pass enforces (i) one-attribute-per-question, (ii) the depen-dency rules described in Section 3.1, and (iii) a strict JSON output schema. The system prompt is reproduced verbatim below. 
+
+> You are an expert at analyzing text-to-image generation prompts. Your job is to decompose a complex image generation prompt into a list of simple yes/no verification questions WITH dependency information. These questions will later be used to check whether a generated image is faithful to the original prompt. Guidelines: - Each question should check exactly ONE visual attribute (object existence, color, spatial relationship, count, action, style, text content, etc.). - Questions must be answerable by looking at the image alone (given the original prompt for context). - Use clear, unambiguous language. - Cover ALL important details mentioned in the prompt. Do not skip anything. - Order questions from most important (core subject / objects) to least important (minor stylistic details). - Do NOT ask about things not mentioned or implied by the prompt. Dependency rules: - Start with existence questions for each key object (e.g. "Is there a robot?"). - Attribute questions (color, style, pose, action) about an object MUST depend on that object’s existence question. - Relationship questions between two objects depend on BOTH objects’ existence. - A question can depend on multiple parent questions (list all parent ids). - Root questions (no dependency) have "depends_on": []. Output format: Return ONLY a JSON array of objects. Each object has:
+
+17 - "id": integer starting from 0 - "question": the yes/no question string - "depends_on": list of integer ids that this question depends on (empty for root) Example for "A red cat sitting on a blue chair": [{"id": 0, "question": "Is there a cat in the image?", "depends_on": []}, {"id": 1, "question": "Is the cat red?", "depends_on": [0]}, {"id": 2, "question": "Is there a chair in the image?", "depends_on": []}, {"id": 3, "question": "Is the chair blue?", "depends_on": [2]}, {"id": 4, "question": "Is the cat sitting on the chair?", "depends_on": [0, 2]} ]No explanation, no markdown fences. ONLY the JSON array. 
+
+Aesthetics decomposition. The second pass receives the faithfulness questions as context and emits a parallel set of aesthetic-quality questions whose ids continue from where the faithfulness ids left off. Each aesthetic question is framed so that “yes” = aesthetically good. The system prompt is reproduced verbatim below. 
+
+You are an expert at evaluating the aesthetic quality of AI-generated images. You will be given a text-to-image prompt AND a list of faithfulness check questions that identify the key visual components in the image. Your job is to generate a list of yes/no aesthetic quality questions that evaluate how WELL each component is rendered, and how harmoniously they work together. Your questions should cover these aesthetic dimensions for each relevant component: - Rendering quality: Is the component rendered with fine detail, proper proportions, and realistic/stylistically consistent appearance? - Color harmony: Do the colors of this component look natural and harmonious with the rest of the image? - Lighting & shading: Is the lighting on this component consistent and visually appealing? - Composition: Is this component well-placed within the overall image composition? - Overall coherence: Do all components work together to create a visually pleasing and coherent scene? Guidelines: - Each question should check exactly ONE aesthetic aspect of ONE component or the overall image. - Frame ALL questions so that "yes" = aesthetically good, "no" = aesthetically poor. - Questions must be answerable by looking at the image alone. - Use the faithfulness questions to understand what components exist in the image. Reference specific components from the prompt (e.g., "the cat", "the background"). - Include dependencies: aesthetic questions about a component depend on that component’s existence question from the faithfulness list. - Always include global questions (composition, overall harmony) as root questions with no dependencies. - Do NOT repeat the faithfulness questions. Focus ONLY on aesthetic quality. Input format: You will receive: 1. The original prompt. 2. A JSON list of faithfulness questions (with id, question, depends_on). Output format: Return ONLY a JSON array of objects. Each object has: - "id": integer (continue numbering from the last faithfulness question id + 1) - "question": the yes/no aesthetic question string ("yes" = good) - "depends_on": list of integer ids from the faithfulness questions that this question depends on (use the faithfulness question ids for component existence) Example - given faithfulness questions for "A red cat sitting on a blue chair": [{"id": 5, "question": "Is the overall image composition well-balanced 
+
+18 and visually appealing?", "depends_on": []}, {"id": 6, "question": "Is the cat rendered with fine detail, proper anatomy, and realistic fur texture?", "depends_on": [0]}, {"id": 7, "question": "Does the red color of the cat look natural and visually harmonious with the scene?", "depends_on": [0]}, {"id": 8, "question": "Is the chair rendered with clean lines, proper perspective, and convincing material texture?", "depends_on": [2]}, {"id": 9, "question": "Does the blue color of the chair complement the overall color palette of the image?", "depends_on": [2]}, {"id": 10, "question": "Is the lighting across the scene consistent and does it create appealing highlights and shadows?", "depends_on": []}, {"id": 11, "question": "Do the cat and chair look naturally integrated together without awkward boundaries or scale issues?", "depends_on": [0, 2]} ]No explanation, no markdown fences. ONLY the JSON array. 
+
+B.2 VLM judge prompts 
+
+Two system prompts are used at training time, one per query mode. In both modes the judge sees the original T2I prompt, the generated image, and the question(s) at hand. IRRELEVANT answers are mapped to 0 in the default reward; we extract the response with a case-insensitive regex match against the three labels and treat malformed responses as IRRELEVANT .
+
+Per-question ( individual ) mode. 
+
+You are an impartial image quality judge. You will be given: 1. The original text-to-image prompt. 2. A specific yes/no verification question about the image. 3. The generated image. Your task: look at the image and answer the question. Rules: - Answer with exactly one word: "yes", "no", or "irrelevant". - "yes" = the image clearly satisfies the question. - "no" = the image clearly does NOT satisfy the question. - "irrelevant" = the question does not apply to this image or cannot be determined from the image. - Do NOT explain. Output ONLY one of the three words. 
+
+Oneshot mode. 
+
+You are an impartial image quality judge. You will be given: 1. The original text-to-image prompt. 2. A list of yes/no verification questions about the image, each with an integer id. 3. The generated image. Your task: look at the image and answer ALL questions in order. Rules: - For each question, answer "yes", "no", or "irrelevant". - "yes" = the image clearly satisfies the question. - "no" = the image clearly does NOT satisfy the question. - "irrelevant" = the question does not apply or cannot be determined. - Output ONLY a JSON array of objects, each with "id" (int) and "answer" (string). - Do NOT explain. No markdown fences. ONLY the JSON array. Example output: [{"id": 0, "answer": "yes"}, {"id": 1, "answer": "no"}, {"id": 2, "answer": "irrelevant"}] 
+
+B.3 Judge benchmark evaluation 
+
+This appendix expands Section 3.2’s judge selection. The benchmark consists of 100 prompts sampled from real user data, one SD3-Medium base-model image per prompt, decomposed into 1,810 yes/no questions in total ( ∼18 per prompt) and labelled by hand. The final label distribution is 1,268 yes / 505 no / 37 irrelevant. Figure 8 reports two metrics for each judge × query-mode configuration: 19 Gemini-3-Flash   
+
+> Qwen3.5-27B
+> Qwen3-VL-32B
+> 80.0
+> 82.5
+> 85.0
+> 87.5
+> 90.0
+> 92.5
+> 95.0
+> 97.5
+> 100.0
+> Yes/no accuracy vs GT (%)
+> 93.0
+> 91.9
+> 87.2
+> 92.7
+> 90.2
+> 86.6
+> Gemini-3-Flash
+> Qwen3.5-27B
+> Qwen3-VL-32B
+> 2
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> Yes-rate gap (judge  GT, pp)
+> -0.4 -0.2
+> +11.6
+> -1.4
+> +2.0
+> +10.5
+> Oneshot Individual
+
+Figure 8: VLM-judge faithfulness evaluation on the 100 -prompt human-labelled benchmark. Each judge family is shown under both query modes (solid bar = oneshot, faded bar = individual). Left : yes/no accuracy against GT. Right : yes-rate gap (judge − GT, in percentage points). The weaker Qwen3-VL-32B both loses ∼5 pp of accuracy and over-predicts YES by ∼6× more than the other two judges; oneshot vs. individual is within 1.7 pp on accuracy for every family. 
+
+yes/no accuracy against the human ground truth (left), and the gap between the judge’s yes-rate and the GT yes-rate (right). Three observations: (i) the per-judge accuracy ranking is Gemini-3-Flash 
+
+> Qwen3.5-27B > Qwen3-VL-32B; (ii) oneshot and individual produce near-identical accuracy within each family (largest gap 1.7 pp on Qwen3.5-27B); and (iii) stronger judges are well-calibrated to the GT yes-rate ( ±2 pp) while the weaker Qwen3-VL-32B leans toward YES by ∼11 pp—a weaker-models-lean-yes pattern that is also visible in the higher sensitivity ( 0.99 ) but much lower specificity ( 0.49 ) of Qwen3-VL-32B relative to the other two judges (specificity 0.81 –0.85 ). To make the weaker-judges-lean-yes pattern concrete at the per-question level, Figure 9 renders all six judge configurations on a single benchmark prompt (Arena prompt #48, 33 decomposed questions). Each column is one (judge, mode) configuration; each row is one question; cell colour shows the judge’s answer (green = yes, red = no, grey = skipped because a parent question failed). Within a column, oneshot and individual answers are nearly identical—consistent with the per-question agreement reported in Section 3.2. Across columns, all three judges agree on the unambiguous existence and attribute questions, but on fine-grained iconographic items—which arm holds the sword, the conch, the bow—Qwen3-VL-32B’s higher yes-rate appears as extra green cells where the human GT and the stronger judges correctly mark NO .
+
+B.4 vLLM serving and endpoint pool Serving. The vision–language judge V (Qwen3.5-27B-Instruct) is served as multiple independent vLLM instances. We spin up one instance per GPU on each host: a typical configuration is 5 hosts ×
+
+8 GPUs = 40 endpoints, each exposing the OpenAI-compatible chat-completions API on a distinct port. Each endpoint serves the same model checkpoint and uses default vLLM tensor-parallel settings (TP = 1) so a single H200 holds the full 27B model in bf16 . Image inputs are passed as base-64 JPEG data URLs, encoded once per generation and reused across all questions for that image. 
+
+Endpoint registry. A JSON registry on disk ( vllm_server/endpoints.json ) maps named keys (qwen3.5 , aren_3vl , . . . ) to lists of base URLs. The scorer re-reads the registry on every batch via 
+
+mtime detection, so endpoints can be added or drained on a running training job without restarting it; if the file is missing or malformed, the previously cached list is reused and a warning is logged. 
+
+Load balancing. Within a batch, the scorer picks an endpoint by a least-connections rule (always send the next request to the endpoint with the fewest pending requests), which pre-vents slow endpoints from causing head-of-line blocking. A per-endpoint semaphore (de-fault max_concurrent_per_endpoint =1) keeps any single vLLM instance from queueing more than one request at a time; the global thread-pool size auto-adapts to (# endpoints ) ×
+
+max_concurrent_per_endpoint . Failed calls (timeout, dead endpoint, malformed response) 20 trigger up to five retries with exponential backoff and a fresh endpoint pick at each retry; if every retry fails, the question’s score is set to a sentinel and excluded from aggregation for that image. 
+
+B.5 MMRB2 evaluation prompt 
+
+For the pairwise win-rate evaluation in Section 5, we feed the Gemini-3-flash judge the text-to-image rubric below verbatim from the MMRB2 release, together with the original T2I prompt and two candidate images (labeled Response A and Response B ). The judge returns structured JSON containing per-criterion reasoning, an integer score in {1, . . . , 6}, a better_response verdict, and a confidence estimate. We use only the better_response field to compute the net win rate; each pair is judged twice with the order swapped to remove position bias. 
+
+You are an expert in multimodal quality analysis and generative AI evaluation. Your role is to act as an objective judge for comparing two AI-generated responses to the same prompt. You will evaluate which response is better based on a comprehensive rubric. **Important Guidelines:** - Be completely impartial and avoid any position biases - Ensure that the order in which the responses were presented does not influence your decision - Do not allow the length of the responses to influence your evaluation - Do not favor certain model names or types - Be as objective as possible in your assessment - Consider factors such as helpfulness, relevance, accuracy, depth, creativity, and level of detail **Understanding the Content Structure:** - **[ORIGINAL PROMPT TO MODEL:]**: instruction given to both models - **[INPUT IMAGE FROM PROMPT:]**: source image provided (if any) - **[RESPONSE A:]**: first model’s generated response - **[RESPONSE B:]**: second model’s generated response Your evaluation must be based on a fine-grained rubric covering the criteria below. For each criterion, provide detailed step-by-step reasoning comparing both responses, on a 1-6 scoring scale. **Evaluation Criteria:** 1. **faithfulness_to_prompt:** Which response better adheres to the composition, objects, attributes, and spatial relationships described in the text prompt? 2. **text_rendering:** If either response contains rendered text, which has better text quality (spelling, legibility, integration)? Otherwise: "Not Applicable." 3. **input_faithfulness:** If an input image is provided, which response better respects and incorporates the key elements and style of the source? Otherwise: "Not Applicable." 4. **image_consistency:** For multi-image responses, which has better visual consistency (character appearance, scene details)? Otherwise: "Not Applicable." 5. **text_image_alignment:** Which response has better alignment between text descriptions and visual content? 6. **text_quality:** If text was generated, which response has better linguistic quality (correctness, coherence, grammar, tone)? 7. **overall_quality:** Which response has better general technical and aesthetic quality, realism, coherence, and fewer visual artifacts or distortions? **Scoring Rubric:** - 6: Response A significantly better across most criteria - 5: Response A marginally better across several criteria - 4: Unsure / A negligibly better - 3: Unsure / B negligibly better - 2: Response B marginally better - 1: Response B significantly better **Confidence Assessment** (0.0 - 1.0). Be conservative: default to 0.3-0.5 for most comparisons; reserve 0.6-0.7 for clearly differentiated cases; use 0.8+ ONLY when one response is dramatically better across ALL criteria with zero ambiguity (less than 10% of cases). **Output format** (single JSON object): {"reasoning": { 
+
+21 Table 8: Training hyperparameters. K is the number of rollouts per prompt used to compute the group-relative advantage. Effective prompt batch is the number of unique prompts processed per outer iteration. KL β is the coefficient on the KL-to-reference penalty. 
+
+SD3.5-M FLUX.1-dev 
+
+Backbone SD3.5-Medium FLUX.1-dev Mixed precision fp16 bf16 Resolution 512 × 512 512 × 512 
+
+LoRA target / rank / α attention Q/K/V/out, r=32 , α=64 attention Q/K/V/out, r=32 , α=64 
+
+Optimizer AdamW AdamW Learning rate 3×10 −4 3×10 −4
+
+Train timesteps Ttrain 10 6Eval timesteps Teval 40 28 CFG scale 4.5 3.5 Rollouts per prompt K 24 24 Effective prompt batch 48 48 Train batch size (per GPU) 9 3Test batch size 16 16 Gradient accumulation steps N/ 2 (auto) N/ 2 (auto) Inner epochs 1 1Timestep fraction (PPO mask) 0.99 0.99 KL β 0.01 0EMA on policy weights yes yes Hardware 1 node × 8 H200 2 nodes × 8 H200 Reported steps 1000–1500 2000–2700 Save frequency every 50 steps every 50 steps Eval frequency every 50 steps every 50 steps            
+
+> "faithfulness_to_prompt": "...", "text_rendering": "...", "input_faithfulness": "...", "image_consistency": "...", "text_image_alignment": "...", "text_quality": "...", "overall_quality": "...", "comparison_summary": "..." }, "score": <int 1-6>, "better_response": "A" | "B", "confidence": <float 0.0-1.0>, "confidence_rationale": "..." }
+
+C Training Setup 
+
+C.1 Hyperparameters 
+
+Table 8 reports the full training recipe used for our SD3 and FLUX runs. All RL runs are LoRA fine-tunes of the pretrained backbone; the base weights remain frozen. Hyperparameters not listed below are inherited from the base config in the released codebase ( config/base.py and 
+
+config/grpo_faithfulness.py ). 
+
+DreamSync baseline. DreamSync iterations are pure supervised LoRA fine-tunes on filtered self-generated data: for each iteration we generate 8 candidates per prompt, score them with the faithful-ness reward and PickScore, keep the best per prompt, and fine-tune for 1000 supervised steps with effective batch 256 (SD3: 8 × 8 × 4; FLUX: 4 × 8 × 8), AdamW, learning rate 3×10 −4, and EMA. Iteration N initializes from the LoRA of iteration N − 1. We report 3 iterations on each backbone. 
+
+Reward weight conventions. All single-reward runs use weight 1.0 on the lone reward. All combined runs use weight 1.0 on each of PickScore and faithfulness unless otherwise stated. Under GDPO each weight multiplies the post-normalization advantage; under GRPO it multiplies the raw reward. 22 C.2 Reward models 
+
+PickScore [27] is a Bradley–Terry (BT) preference reward built on the CLIP-H/14 backbone (Open-CLIP) [ 36 ] and fine-tuned on the Pick-a-Pic corpus of ∼500 K crowd pairwise annotations of T2I generations collected from a public web playground. Because annotators were asked for an open-ended verdict and the dual-tower CLIP backbone has limited compositional reasoning, the resulting scalar in practice tracks aesthetic appeal far more than fine-grained prompt fidelity. HPSv3 (Human Preference Score v3) [ 25 ] is a more recent BT preference model fine-tuned on top of a Qwen2.5-VL-7B backbone [ 33 ] using the HPDv3 dataset, a curated corpus of ∼1M human pairwise preferences sourced from a wider distribution of base models with finer-grained annotation guidelines that explic-itly cover both aesthetic quality and prompt-faithfulness sub-criteria. The larger VLM backbone and broader annotation rubric make HPSv3 a stronger holistic preference signal. ImageReward [26 ] is a BT preference model based on a BLIP backbone and trained on ∼137 K expert-annotated rankings over generations sampled from DiffusionDB; annotators score each image along prompt alignment, fidelity, and harmlessness, so the resulting scalar emphasizes text–image alignment more than the CLIP-tower PickScore. UnifiedReward-2.0 [28 ] is a VLM-based judge; we use the Qwen3.5-27B variant of the v2.0 release. It is distilled into a single scalar from a mix of pairwise and pointwise human-preference data spanning T2I, image-to-image, and image-to-video tasks. It is designed as a “one-reward-for-all” proxy and is the only baseline that explicitly tries to cover prompt-following and aesthetics jointly. 
+
+C.3 Question-style ablation details 
+
+This subsection details the four question-style ablations introduced in Section 5.2. All four variants share the training hyperparameters of Section 5, the GDPO summary training objective with flat weight 1 on each reward component, and the same Qwen3.5-27B oneshot judge of Appendix B.2. Only the construction of the faithfulness signal differs across variants. 
+
+Ignore-dep. details. This variant uses the same per-prompt question DAG produced by the default Gemini-3-Pro decomposer (Appendix B.1); only the scoring rule changes. At scoring time the BFS-with-gating routine of Section 3.1 is replaced by a flat scan: every question is queried indepen-dently, parents do not zero out descendants, and the faithfulness reward is the unweighted yes-ratio  
+
+> 1
+> |Qf(p)|
+
+P 
+
+> q
+
+yq over the entire faithfulness subgraph. The VLM call count therefore goes up by exactly the number of questions that the default would have skipped via gating; this is a pure scoring-rule ablation, not a question-set ablation. 
+
+Generic details. The Generic variant replaces the prompt-specific decomposition with a fixed list of 
+
+15 prompt-agnostic faithfulness rules that every prompt shares. The judge is queried with the same oneshot system prompt of Appendix B.2; only the question list changes. The rules are reproduced verbatim below (CSV column rules , source flow_grpo/rules_general_faithfulness.csv ). 
+
+> 1. Does the image show the main subject or scene described in the prompt? 2. Is the image overall relevant to the prompt? 3. Are the key objects or entities mentioned in the prompt present? 4. Are no important requested elements missing? 5. Do the visible attributes of the main subjects match the prompt? 6. Are important prompt-specific details correctly shown? 7. Does the number of key objects or subjects match the prompt? 8. Are the subjects performing the actions described in the prompt? 9. Are the relationships between subjects consistent with the prompt? 10. Is the spatial arrangement consistent with the prompt? 11. Does the background or environment match the prompt? 12. Is the location or setting consistent with the prompt? 13. Does the time, weather, or season match the prompt, if specified? 14. Does the visual style match the prompt, if specified? 15. Is the image faithful to the prompt overall?
+
+These rules are framed at a uniformly generic level—they reference “the prompt”, “the main subjects”, “key objects” rather than specific entities or relations. Because they cannot encode any prompt-specific structure, the checklist reward in this variant collapses to a coarse “is the image roughly faithful” scalar. 23 Faith + Aesth details. The Faith + Aesth variant uses both decomposition passes of Appendix B.1. For each prompt the offline pipeline emits the faithfulness DAG and the parallel aesthetics DAG (rendering quality, color harmony, lighting, composition, overall coherence); their union Qf (p) ∪
+
+Qa(p) is the complete question set. The dependency walk and parent-gating rule are unchanged from the default, but the per-image reward is the yes-ratio over the full union, not just the faithfulness subgraph. PickScore is dropped from the reward mixture, so the checklist is the only signal driving the policy. This isolates whether checklist-style supervision can absorb the role normally played by a BT aesthetic reward. 
+
+RubricRL details. The RubricRL variant uses a different offline decomposer prompt that emits a flat, dependency-free rubric mixing faithfulness and rendering-quality items. Every item is a root question ( depends_on : [] ), and the per-image reward is the unweighted yes-ratio over the rubric, queried once per image in the same oneshot mode. The decomposer system prompt is reproduced verbatim below. 
+
+You are a rubric generation model for text-to-image evaluation. Task: Given one text-to-image prompt, extract the evaluation questions that a careful human judge would use to determine whether a generated image truly satisfies the prompt AND is aesthetically pleasing. Goal: Produce a question list that is: - prompt-adaptive - decomposable - atomic - visually checkable - suitable for binary scoring (yes/no, pass/fail) Instructions: 1. Read the prompt carefully and identify visually verifiable requirements. 2. Convert them into short, independent evaluation questions. 3. Cover the most important dimensions when relevant: - object count - object identity - attribute accuracy (color, material, texture, size) - action / pose - spatial relations / placement - OCR / visible text fidelity - scene coherence / composition - style consistency - aesthetic / image quality (rendering quality, lighting, color harmony) - special constraints such as monochrome, color palette, lighting, era, material, etc. 4. Do not include duplicate or overlapping questions. Output format: Return ONLY a valid JSON array of objects. Each object has: - "id": integer starting from 0 - "question": one atomic yes/no question about the image No explanation, no markdown fences. ONLY the JSON array. Example for "A red cat sitting on a blue chair": [{"id": 0, "question": "Is there a cat in the image?"}, {"id": 1, "question": "Is the cat red?"}, {"id": 2, "question": "Is there a chair in the image?"}, {"id": 3, "question": "Is the chair blue?"}, {"id": 4, "question": "Is the cat sitting on the chair?"}, {"id": 5, "question": "Is the cat rendered with proper anatomy and realistic fur texture?"}, {"id": 6, "question": "Does the chair have clean lines and convincing material texture?"}, {"id": 7, "question": "Is the overall image composition well-balanced?"}, {"id": 8, "question": "Is the lighting across the scene consistent and visually appealing?"}, {"id": 9, "question": "Do the colors in the image look harmonious and natural?"} ]
+
+24 Note that the output schema requested above only carries id and question fields—no depends_on 
+
+field is emitted by the decomposer—so the resulting rubric is flat by construction; in our post-processing we materialise this as a depends_on: [] entry on every item, and we verified empiri-cally across the full 10 ,000 -prompt rubric training set that 0/155 ,434 items carry a non-empty parent list. Items per prompt are also higher than the example suggests in practice: mean 15 .5, median 15 ,range [0 , 68] across the 10 ,000 -prompt training set. The rubric mixes faithfulness questions (object existence, attributes, spatial relations) with rendering-quality questions (anatomy, composition, light-ing, color harmony) in a single flat list. Compared to our default, RubricRL therefore differs in two coupled ways: it removes the dependency structure (similar to Ignore-dep. ) and pushes aesthetic items into the same checklist (similar to Faith + Aesth ). It approximates the rubric style used in prior rubric-based RLHF work for T2I and serves as a unified-checklist baseline against our structured faithfulness signal plus a separate BT aesthetic reward. 
+
+C.4 DreamSync Iterative SFT Baseline 
+
+DreamSync is the iterative-SFT baseline referenced in Section 5. It alternates an outer generate-and-filter step, which constructs a reward-selected supervised set under the current policy, with a LoRA fine-tune step on that set. Iteration 0 starts from the base model with a fresh LoRA. For iteration 
+
+N > 0, we initialize from iteration N −1’s LoRA checkpoint, so the policy improves cumulatively. We run three iterations on each backbone. 
+
+Generate-and-filter. At the start of each iteration, the current policy generates K=8 candidate images for every prompt in the same 10k training set from Section 3.3, yielding 80 ,000 candidates per iteration. Sampling uses the same flow-matching scheduler and backbone-specific settings as the RL runs: T =40 denoising steps and CFG = 4 .5 at 1024 ×1024 for SD3.5-M, and T =50 denoising steps and CFG = 3 .5 at 1024 ×1024 for FLUX.1-dev. Each candidate is scored independently by PickScore, used as the aesthetic signal, and by our Qwen3.5-27B checklist reward in oneshot mode, used as the faithfulness signal. We then apply a median prefilter: a candidate is retained only if its PickScore is at or above the iteration-level median PickScore and its faithfulness yes-ratio is at or above the iteration-level median yes-ratio. Among the surviving candidates for each prompt, we select a single supervised target using the lexicographic key 
+
+(faithfulness , PickScore ),
+
+breaking ties by PickScore. Prompts for which all candidates are filtered out are omitted from that iteration’s supervised set. 
+
+LoRA fine-tune. The retained (prompt , image ) pairs are used as ground truth for a flow-matching SFT objective: 
+
+LSFT = E
+
+h
+
+∥vθ (xt, t, p ) − (ϵ − x0)∥22
+
+i
+
+,
+
+where x0 is the latent of the retained image, ϵ is the noise sample, and ϵ − x0 is the standard flow-matching velocity target. Optimization mirrors the RL setting. We use AdamW with learning rate 3×10 −4, (β1, β 2) = (0 .9, 0.999) , weight decay 10 −4, and train for 1000 supervised steps per iteration. We maintain an EMA of the LoRA weights with decay 0.9, updated every 8 steps. SD3.5-M uses LoRA rank r=32 ,
+
+α=64 , applied to the 8 attention Q/K/V/output projections, with effective batch size 256 (8 GPUs ×
+
+batch 8 × 4 gradient accumulation) in fp16 . FLUX.1-dev uses rank r=64 , α=128 , applied to 12 
+
+attention and feedforward modules, with effective batch size 256 (8 GPUs × batch 4 × 8 gradient accumulation) in bf16 . The training resolution is 512 ×512 , matching the RL runs. 
+
+Iteration loop. Iteration 0 starts from the base model with a fresh LoRA. For iteration N > 0, we load the LoRA from iteration N −1’s checkpoint-1000 as the initialization of a new LoRA with the same shape. LoRAs are not merged into the base weights, so all iterations train the same number of parameters. Each iteration re-runs generate-and-filter with the updated policy, allowing the supervised set to track the model’s own evolving generation distribution. This iterative refresh is the key distinction from a single-pass best-of-K SFT baseline. 25 D Additional Results 
+
+This appendix collects results that did not fit in the main paper. 
+
+D.1 Training curves 
+
+Figure 2 (single-reward fine-tunes on SD3.5-M) and Figure 3 (FLUX.1-dev with the combined Faith + Pick run) plot the relative change of three held-out eval rewards against training step. Two qualitative patterns are visible: BT-only fine-tunes plateau early on the checklist reward (sometimes regressing below the base level) while continuing to climb on PickScore; combined GDPO runs continue to gain on the checklist reward without dropping PickScore. 
+
+D.2 Cross-seed stability of matrix 1 win rates 
+
+To quantify sampling noise on the matrix 1 head-to-head numbers in Section 5, we regenerate the entire matrix with two extra random seeds ( image_idx 1, 2 in addition to image_idx =0 ) and compute each model’s row-mean win rate against the rest of the matrix in every round. Figure 10 reports the mean and standard deviation of these row-mean win rates across the three rounds. The maximum cross-round standard deviation is 0.91 pp on SD3.5-M (ImageReward) and 1.17 pp on FLUX.1-dev (Base), an order of magnitude smaller than the gaps between models. The matrix 1 ranking is therefore stable across seeds, and the headline result that Faith + Pick is the top row on both backbones is not driven by a favourable single-seed draw. 
+
+D.3 GDPO sub-mode ablation 
+
+The dependency-aware faithfulness reward of Section 3 exposes both a summary score sf (i, j ) ∈
+
+[0 , 1] and a per-question vector y(i, j ) ∈ { 0, 1}ni , where ni = |Qf (pi)| is the number of faithfulness questions for prompt i. Given the GRPO/GDPO formulation in Section 4, three ways of plugging this signal into the policy gradient are natural; we ablate all three on SD3.5-M. 
+
+Vanilla. The naive GRPO baseline: take the simple weighted sum r(i, j ) = wBT · rBT (i, j ) + wfaith ·
+
+sf (i, j ) and apply Eq. (1) with no per-reward normalization. This is the source of the signal collapse described in Section 4. 
+
+Summary. A GDPO sub-mode that treats the faithfulness reward as a single signal rfaith (i, j ) = sf (i, j )
+
+and applies Eq. (2) unchanged. Faithfulness contributes one normalized advantage per rollout, on equal footing with each other reward. 
+
+GRPO-vanilla. A GDPO sub-mode that treats each question as its own reward. For prompt i and rollout j, define Agrpo-vanilla faith (i, j ) = Pni
+
+> q=1
+
+(yq (i, j ) − μq,i )/(σq,i + ε). Each per-question score is normalized within the rollout group, then summed. Because the sum has ni terms, this mode scales the effective faithfulness weight with the number of questions per prompt. The weight wfaith in Eq. (2) is multiplied on top. The combined-reward main result (Faith + Pick) reported in Section 5 is trained under Summary .To isolate the contribution of the combination strategy, we run all three sub-modes under identical conditions on SD3.5-M—same backbone, same PickScore + checklist mixture at flat weight 1, same 1000 training steps—and compare them pairwise on a separate 1,000 -prompt held-out evaluation set drawn from the same arena source pool. On the holistic MMRB2 verdict, the three strategies order cleanly: Summary > Vanilla >
+
+GRPO-vanilla . Summary beats the Vanilla weighted-sum baseline 51 .3% to 48 .7% and beats GRPO-vanilla 52 .8% to 47 .2% , while Vanilla in turn beats GRPO-vanilla 53 .9% to 46 .1% . The per-axis breakdown in Appendix D.4 is more nuanced: on the aesthetics axis the holistic ordering holds (Summary 51 .4% vs Vanilla, 52 .7% vs GRPO-vanilla), while on the faithfulness axis Vanilla actually beats Summary 57 .2% to 42 .8% and beats GRPO-vanilla 52 .6% to 47 .4% . Summary’s holistic win is therefore driven by aesthetics, not faithfulness. We use Summary as the default GDPO sub-mode for every combined result elsewhere in the paper because the holistic verdict is what the main MMRB2 evaluation tracks; the broadcast variant ( GRPO-vanilla ) under-performs both axes at this scale. 26 D.4 Per-axis breakdown of MMRB2 win-rates 
+
+The MMRB2 judge writes free-text reasoning for each evaluation criterion and emits a single overall 
+
+better_response verdict. The matrices in Section 5 report this overall verdict. For finer-grained analysis we extract two axes from the same pairwise JSONs: aesthetics , taken directly from the integer score (the criterion explicitly described in the rubric as “general technical and aesthetic quality, realism, coherence”); and faithfulness , inferred per-pair from the per-criterion reasoning prose for faithfulness_to_prompt via regex/keyword heuristics. The heuristic parser leaves 
+
+∼ 30 −40% of judgements unparsed; the per-cell denominator in each figure shows how many pairs voted decisively, so the reader can spot small samples. 
+
+Baseline matrices: Faith + Pick wins more on the faithfulness axis than on aesthetics for every BT baseline. On both backbones, our combined Faith + Pick run’s faithfulness win-rate matches or exceeds its aesthetics win-rate against every BT preference baseline. On SD3.5-M: 72 .4% vs. 59 .7% 
+
+against PickScore, 86 .2% vs. 77 .2% against HPSv3, 81 .1% vs. 77 .5% against ImageReward, 80 .5% 
+
+vs. 71 .9% against the ensemble. On FLUX.1-dev: 72 .6% vs. 61 .9% against PickScore, 74 .3% vs. 
+
+70 .2% against HPSv3, and 74 .4% vs. 68 .6% against the ensemble. The DreamSync direction is the exception: DreamSync filters its supervised set partly on the same checklist signal, so it is competitive on faithfulness ( 63 .7% on SD3, 57 .4% on FLUX) and Faith + Pick’s edge over it is mostly aesthetic (74 .2% on SD3, 58 .9% on FLUX). 
+
+GDPO sub-mode ablation: Summary’s win is aesthetics-only. Decomposing Figure 11 by axis flips the ordering on faithfulness. Summary keeps its narrow win on aesthetics ( 51 .4% vs Vanilla, 
+
+52 .7% vs GRPO-vanilla), but on faithfulness it is the worst of the three: Vanilla beats Summary 57 .2% 
+
+to 42 .8% , and GRPO-vanilla also beats Summary 57 .2% to 42 .8% . Vanilla edges GRPO-vanilla 
+
+on both axes ( 53 .9% aesthetics, 52 .6% faithfulness). The holistic ranking Summary > Vanilla >
+
+GRPO-vanilla is therefore driven entirely by the aesthetics axis; on faithfulness, the ranking inverts to Vanilla > GRPO-vanilla > Summary .
+
+Rules ablation: Faith + Pick trades faithfulness for aesthetics. The headline rules-ablation matrix (Figure 5) shows Faith + Pick winning every cell of the top row. Decomposing by axis paints a more nuanced picture: on aesthetics Faith + Pick wins everywhere ( 54 .2% over Ignore-dep., 53 .4% over Faith + Generic, 51 .7% over Faith + Aesth, 53 .0% over RubricRL), but on faithfulness alone the ablations that invest more checklist budget in faithfulness questions beat Faith + Pick: Faith + Aesth wins 60 .3% to 39 .7% , RubricRL wins 54 .8% to 45 .2% . Faith + Pick still beats Faith + Generic on faithfulness ( 62 .1% , the prompt-specific decomposition matters) and slightly beats Ignore-dep. (52 .5% , the dependency walk matters). The honest reading is that Faith + Pick is a sweet-spot trade-off, not a strict faithfulness maximizer : Faith + Aesth and RubricRL push faithfulness higher at the cost of aesthetics, and lose the holistic verdict; Faith + Pick gives up some faithfulness in exchange for a BT aesthetic signal that pulls the holistic verdict back ahead. 
+
+D.5 Human study: validating the matrix 1 judge 
+
+The matrix 1 head-to-head numbers in Section 5 are produced by a Gemini-3-flash judge under the MMRB2 rubric. To verify that this judge tracks human preference rather than its own biases, we ran a parallel human-vote study using the same matrix 1 SD3.5-M pairings. 
+
+Protocol. We anchor on our combined Faith + Pick run (the rubricfaith_sd3 checkpoint at step 1000 ) and pair it against each of the six other models in matrix 1: Base , PickScore , HPSv3 ,
+
+ImageReward , DreamSync , and the 4-reward ensemble . For every (anchor, opponent) pair we draw 
+
+300 prompts from the 1,000 -prompt MMRB2 evaluation set, stratified 100 /100 /100 across the 
+
+easy /medium /hard difficulty bands, yielding 1,800 voting rows split into three self-contained HTML pages. Pre-rendered 512 ×512 images are embedded as base-64 JPEGs; each row shows the two images side by side with random A/B assignment, and the voter is forced to pick A or B (no ties; the VLM-judge verdict is never shown). Voter onboarding goes through a modal that hashes the voter’s name (FNV-1a → mulberry32) and shuffles the row order with a per-voter Fisher–Yates pass, so different voters see a different first-50 batch and the workload spreads naturally across the full set without coordination. Per-voter JSON files record (prompt_id, difficulty, anchor, opponent, anchor_side, vote, winner) . After the headline run, the Base-SD3 cell was the closest peer to chance, so we ran a focused follow-up mini-study—a single-pair HTML with a fresh 27 Faith + Pick vs. Anchor wins Opponent wins N Human win-rate Gemini-3-flash win-rate                                    
+
+> ImageReward 213 10 223 95 .5%77 .5% 4-reward ensemble 170 72 242 70 .2% 71 .7%
+> DreamSync 137 74 211 64 .9% 74 .2%
+> HPSv3 119 70 189 63 .0% 77 .3%
+> PickScore 154 120 274 56 .2% 59 .8%
+> Base-SD3 †425 335 760 55 .9% 60 .9%
+> Overall 1218 681 1899 64 .1%—
+
+Table 9: Human-vote validation of the matrix 1 SD3.5-M Gemini-3-flash judge. Anchor is Faith + Pick (rubricfaith_sd3 ckpt-1000 ); the six rows enumerate the other matrix 1 models. Human votes are aggregated across all voters who completed at least the first-50 shuffled batch. † The Base-SD3 cell combines the original 
+
+264 headline votes with 496 additional votes from a focused follow-up mini-study at seed 142 (see protocol). The Gemini-3-flash column is the corresponding cell of Figure 4. Across all six cells the human and VLM-judge orderings agree on the sign of the Faith + Pick advantage; Faith + Pick wins every cell under both judges. 
+
+300 -prompt stratified-random draw at seed 142 (vs. 42 in the headline run)—to thicken that cell with 
+
+∼3× the per-pair sample size of the original. 
+
+Results. Table 9 reports the aggregated human votes for all six opponent cells, including the follow-up Base-SD3 votes ( n=760 total for that cell after combining the original 264 votes with the 496 
+
+follow-up votes). Faith + Pick wins 1218 of 1899 pairs ( 64 .1% overall) against the six opponents combined, and beats every individual opponent. The ImageReward cell is the most decisive ( 95 .5% 
+
+for Faith + Pick), consistent with ImageReward being the weakest BT preference fine-tune in matrix 1; the Base-SD3 cell is the closest ( 55 .9% after the follow-up), again consistent with the VLM-judge assessment that the SD3 base model is itself a strong starting point on the easy 1k test set. 
+
+Comparison to the VLM judge. On every one of the six cells, both the human voters and the Gemini-3-flash judge place Faith + Pick above the opponent (every cell is > 50% in both columns). The two columns rank-correlate at Spearman ρ = 0 .66 across the six cells; the absolute gap between them ranges from 0.4 pp (PickScore) to 18 .0 pp (ImageReward), with humans pushing the ImageReward cell higher (possibly because ImageReward generations have visible CLIP-style artefacts that humans down-weight more aggressively than the VLM judge). The bottom-line conclusion is the same under either judge: on the six matrix 1 SD3.5-M opponents, Faith + Pick is the top row. 
+
+D.6 Limitations 
+
+The faithfulness reward depends on frozen VLM/VLM components (the offline Gemini-3-Pro decom-poser, the Qwen3.5-27B reward judge inside the training loop, and the gemini-3-flash judge used for the closed-source leaderboard); the decomposer-robustness check in Appendix A.5 (Table 6) shows the leaderboard ranking is stable under a second decomposer (GPT-5.4), but we do not measure sensitivity to swapping the in-loop judge during RL training itself. We also do not test the reward on other image-RL methods beyond Flow-GRPO/GDPO. 28 Generated image (SD3.5-M, base model) 
+
+Prompt 
+
+Create a majestic full-body portrait of Hindu god Vishnu in Ashtabhuja 
+
+form with eight arms four extending from each shoulder standing 
+
+gracefully sitting on the throne under a sacred peepal tree with green 
+
+leaves and soft dappled sunlight filtering through. His skin is golden 
+
+whilte, wearing traditional yellow dhoti, golden jewelry, and jeweled 
+
+crown; serene expression with compassionate eyes. lakshmi sitting on his 
+
+left lap with varada mudra. 
+
+Left side arms (from uppermost to lowermost): 1st holds glowing chakra 
+
+discus, 2nd wields a sharp sword, 3rd grasps a feathered arrow, 4th 
+
+displays open protective palm (abhaya mudra). Right side arms (from 
+
+uppermost to lowermost): 1st holds white shankha conch, 2nd carries a 
+
+round golden shield, 3rd holds a curved bow, 4th shows varada mudra 
+
+boon-granting palm. 
+
+Photorealistic style with divine golden aura, intricate details on 
+
+weapons and tree bark, warm ethereal lighting, high detail, 8k 
+
+resolution. 
+
+# Question Gemini-3-Flash 
+
+individual 
+
+Gemini-3-Flash 
+
+oneshot 
+
+Qwen3-VL-32B 
+
+individual 
+
+Qwen3-VL-32B 
+
+oneshot 
+
+Qwen3.5-27B* 
+
+individual 
+
+Qwen3.5-27B* 
+
+oneshot 
+
+0 Is there a depiction of the Hindu god Vishnu in the image? Y Y Y Y Y Y
+
+1 Is there a throne in the image? Y Y Y Y Y Y
+
+2 Is Vishnu sitting on the throne? Y Y Y Y Y Y
+
+3 Is there a peepal tree in the background? Y N Y Y Y Y
+
+4 Does the tree have green leaves? Y S Y Y Y Y
+
+5 Is there a depiction of the goddess Lakshmi in the image? N N N N N N
+
+6 Is Lakshmi sitting on Vishnu's left lap? S S S S S S
+
+7 Is Lakshmi displaying the varada mudra? S S S S S S
+
+8 Is Vishnu depicted in a full-body portrait? Y Y Y Y Y Y
+
+9 Does Vishnu have exactly eight arms (Ashtabhuja form)? N N Y Y Y Y
+
+10 Are there four arms extending from Vishnu's left shoulder? Y N Y Y Y Y
+
+11 Are there four arms extending from Vishnu's right shoulder? Y N Y Y Y Y
+
+12 Is Vishnu's skin colored golden white? Y Y Y Y Y Y
+
+13 Is Vishnu wearing a traditional yellow dhoti? Y Y Y Y Y Y
+
+14 Is Vishnu wearing golden jewelry? Y Y Y Y Y Y
+
+15 Is Vishnu wearing a jeweled crown? Y Y Y Y Y Y
+
+16 Does Vishnu have a serene expression with compassionate eyes? Y Y Y Y Y Y
+
+17 Does Vishnu's uppermost left hand hold a glowing chakra (discus)? N S N N N N
+
+18 Does Vishnu's second left hand from the top hold a sharp sword? N S Y Y Y N
+
+19 Does Vishnu's third left hand from the top grasp a feathered arrow? N S Y N N N
+
+20 Does Vishnu's lowermost left hand display an open protective palm (abhaya mudra N S Y Y N N
+
+21 Does Vishnu's uppermost right hand hold a white shankha (conch)? N S Y N N N
+
+22 Does Vishnu's second right hand from the top carry a round golden shield? N S N N N N
+
+23 Does Vishnu's third right hand from the top hold a curved bow? Y S Y Y N N
+
+24 Does Vishnu's lowermost right hand show the varada mudra (boon-granting palm)? N S Y Y N N
+
+25 Is there a divine golden aura around Vishnu? Y Y Y Y Y Y
+
+26 Is there soft dappled sunlight filtering through the tree? Y S Y Y Y Y
+
+27 Are there intricate details visible on the tree bark? N S Y Y Y Y
+
+28 Are there weapons visible in the image? Y Y Y Y Y Y
+
+29 Are there intricate details visible on the weapons? Y Y Y Y Y Y
+
+30 Is the lighting in the image warm and ethereal? Y Y Y Y Y Y
+
+31 Is the image rendered in a photorealistic style? N Y Y Y Y Y
+
+32 Does the image have high detail and high resolution? Y Y Y Y Y Y
+
+Yes No Skipped (parent failed) Figure 9: Per-question yes/no/skip answers from six judge configurations on a single benchmark prompt (Arena prompt #48, SD3.5-M base-model image, 33 decomposed faithfulness questions). Green = yes, red =
+
+no, grey = skipped because a parent question failed. Six columns are three judge families (Gemini-3-Flash, Qwen3-VL-32B, Qwen3.5-27B) crossed with two query modes (individual, oneshot). Qwen3-VL-32B’s higher yes-rate is visible as extra green cells on the fine-grained iconographic rows. 
+
+29 30 40 50 60 70 
+
+> Row-mean win-rate (%) across 3 rounds
+> Ours (Faith + Pick)
+> PickScore
+> Base
+> Ensemble
+> DreamSync
+> ImageReward
+> HPSv3
+> 68.3 ± 0.62
+> 59.0 ± 0.79
+> 55.5 ± 0.54
+> 43.5 ± 0.42
+> 39.4 ± 0.19
+> 37.0 ± 0.91
+> 34.3 ± 0.17
+
+SD3.5-M · matrix 1 (cross-seed mean ± std) (a) SD3.5-M row-mean ± std (3 rounds) 30 40 50 60 70 
+
+> Row-mean win-rate (%) across 3 rounds
+> Ours (Faith + Pick)
+> DreamSync
+> PickScore
+> Ensemble
+> HPSv3
+> Base
+> ImageReward
+> 65.6 ± 0.39
+> 54.7 ± 0.34
+> 53.1 ± 0.79
+> 44.2 ± 0.88
+> 42.8 ± 0.58
+> 42.5 ± 1.17
+> 31.6 ± 0.66
+
+FLUX.1-dev · matrix 1 (cross-seed mean ± std) (b) FLUX.1-dev row-mean ± std (3 rounds) 
+
+Figure 10: Cross-seed row-mean win rates for matrix 1 (Figure 4). Each model’s bar is its row-mean win rate against the rest of the matrix, averaged over 3 random-seed rounds ( image_idx 0/1/2); error bars show the across-round standard deviation. The 50% reference line marks the no-effect threshold. Faith + Pick (highlighted) is the top row on both backbones, and the ranking is stable across rounds. Summary 
+
+> Vanilla
+> GRPO-vanilla
+
+opponent (column) 
+
+Summary 
+
+Vanilla 
+
+GRPO-vanilla 
+
+> row wins (%)
+
+51.3 52.8 
+
+48.7 53.9 
+
+47.2 46.1 
+
+20 
+
+40 
+
+60 
+
+80 
+
+> row's win-rate vs column (%)
+
+Figure 11: GDPO sub-mode ablation on a separate 1,000 -prompt held-out evaluation set (SD3.5-M, ckpt-1000). All three runs use PickScore + our checklist reward at flat weight 1 each; only the combination strategy varies. 
+
+30 Base 
+
+> PickScore
+> HPSv3
+> ImageReward
+> Ensemble
+> Ours (Faith + Pick)
+> DreamSync
+
+opponent (column) 
+
+Base 
+
+PickScore 
+
+HPSv3 
+
+ImageReward 
+
+Ensemble 
+
+Ours (Faith + Pick) 
+
+DreamSync 
+
+> row wins (%)
+
+57.5 76.4 67.2 69.1 38.9 55.6 
+
+42.5 78.2 67.2 66.0 27.6 46.8 
+
+23.6 21.8 29.7 33.0 13.8 28.0 
+
+32.8 32.8 70.3 51.1 18.9 34.0 
+
+30.9 34.0 67.0 48.9 19.5 35.1 
+
+61.1 72.4 86.2 81.1 80.5 63.7 
+
+44.4 53.2 72.0 66.0 64.9 36.3 20 
+
+30 
+
+40 
+
+50 
+
+60 
+
+70 
+
+80 
+
+> row's win-rate vs column (%)
+
+(a) SD3.5-M, faithfulness axis Base 
+
+> PickScore
+> HPSv3
+> ImageReward
+> Ensemble
+> Ours (Faith + Pick)
+> DreamSync
+
+opponent (column) 
+
+Base 
+
+PickScore 
+
+HPSv3 
+
+ImageReward 
+
+Ensemble 
+
+Ours (Faith + Pick) 
+
+DreamSync 
+
+> row wins (%)
+
+47.6 67.2 66.0 61.8 39.2 65.5 
+
+52.4 72.7 71.7 65.4 40.3 65.8 
+
+32.8 27.3 45.4 40.7 22.8 45.8 
+
+34.0 28.3 54.6 43.5 22.5 50.8 
+
+38.2 34.6 59.3 56.5 28.1 52.7 
+
+60.8 59.7 77.2 77.5 71.9 74.2 
+
+34.5 34.2 54.2 49.2 47.3 25.8 20 
+
+30 
+
+40 
+
+50 
+
+60 
+
+70 
+
+80  
+
+> row's win-rate vs column (%)
+
+(b) SD3.5-M, aesthetics axis Base 
+
+> PickScore
+> HPSv3
+> ImageReward
+> Ensemble
+> Ours (Faith + Pick)
+> DreamSync
+
+opponent (column) 
+
+Base 
+
+PickScore 
+
+HPSv3 
+
+ImageReward 
+
+Ensemble 
+
+Ours (Faith + Pick) 
+
+DreamSync 
+
+> row wins (%)
+
+41.3 45.1 54.2 49.3 25.5 27.7 
+
+58.7 55.0 64.5 57.3 27.4 39.3 
+
+54.9 45.0 55.9 51.0 25.7 34.1 
+
+45.8 35.5 44.1 42.1 21.3 30.8 
+
+50.7 42.7 49.0 57.9 25.6 32.6 
+
+74.5 72.6 74.3 78.7 74.4 57.4 
+
+72.3 60.7 65.9 69.2 67.4 42.6 20 
+
+30 
+
+40 
+
+50 
+
+60 
+
+70 
+
+80 
+
+> row's win-rate vs column (%)
+
+(c) FLUX.1-dev, faithfulness axis Base 
+
+> PickScore
+> HPSv3
+> ImageReward
+> Ensemble
+> Ours (Faith + Pick)
+> DreamSync
+
+opponent (column) 
+
+Base 
+
+PickScore 
+
+HPSv3 
+
+ImageReward 
+
+Ensemble 
+
+Ours (Faith + Pick) 
+
+DreamSync 
+
+> row wins (%)
+
+39.2 49.2 58.6 49.1 29.7 38.8 
+
+60.8 61.0 69.9 59.3 38.1 49.1 
+
+50.8 39.0 60.7 49.4 29.8 38.7 
+
+41.4 30.1 39.3 38.4 22.9 30.3 
+
+50.9 40.7 50.6 61.6 31.4 39.4 
+
+70.3 61.9 70.2 77.2 68.6 58.9 
+
+61.2 50.9 61.3 69.7 60.6 41.1 20 
+
+30 
+
+40 
+
+50 
+
+60 
+
+70 
+
+80  
+
+> row's win-rate vs column (%)
+
+(d) FLUX.1-dev, aesthetics axis 
+
+Figure 12: Per-axis baseline matrices on the 1k test set. Each cell is the row’s win-rate against the column on a single criterion; the faithfulness axis is parsed heuristically from the judge’s per-criterion reasoning, the aesthetics axis is the integer score (4–6 → A wins). The Faith + Pick row’s faithfulness margins exceed its aesthetics margins for every BT preference baseline. 
+
+31

@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-07-05
-- 运行时间：2026-07-05 20:59:45 UTC
+- 最新运行日期：2026-07-06
+- 运行时间：2026-07-06 21:22:12 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读7篇、速读12篇，共推荐19篇论文聚焦AI图像生成与网络鲁棒性研究。  
-高分论文揭示神经网络抗噪能力提升与图像生成约束优化的关键技术突破。  
-建议关注抗噪模型与生成约束方法的结合应用，可优先阅读高分论文了解核心进展。
-- 详情：[/202607/05/README](/202607/05/README)
+1) 今日精读7篇高分论文，速读12篇前沿AI生成内容研究  
+2) 精读聚焦对抗攻击分析与图像生成技术突破，速读涉及AI素养培训、VLM检测ASCII艺术及安全采样方法  
+3) 建议关注生成AI素养培训以提升对AI生成图像的辨识能力，并留意扩散模型在高分辨率图像合成中的安全应用进展
+- 详情：[/202607/06/README](/202607/06/README)
 
 ### 精读区论文标签
-1. [Robustness of neural networks to random noise perturbations of their inputs](/202607/05/2606.31581v1-robustness-of-neural-networks-to-random-noise-perturbations-of-their-inputs)  
+1. [Rethinking Forgery Attacks on Semantic Watermarks in Black-Box Settings: A Geometric Distortion Perspective](/202607/06/2606.29807v1-rethinking-forgery-attacks-on-semantic-watermarks-in-black-box-settings-a-geometric-distortion-perspective)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究图像对抗扰动对生成模型的影响
-2. [Histogram-constrained Image Generation](/202607/05/2606.31683v1-histogram-constrained-image-generation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：图像生成约束与对抗扰动相关
-3. [The Illusion of High Utility in Safety Alignment of Text-to-Image Diffusion Models](/202607/05/2607.00402v1-the-illusion-of-high-utility-in-safety-alignment-of-text-to-image-diffusion-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-4. [Detecting Adversarial Evasion Attacks Against Autoencoder-Based Network Intrusion Detection Systems](/202607/05/2607.01194v1-detecting-adversarial-evasion-attacks-against-autoencoder-based-network-intrusion-detection-systems)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-5. [DisciplineGen-1M: A Large-Scale Dataset for Multidisciplinary Visual Generation and Editing](/202607/05/2607.02290v1-disciplinegen-1m-a-large-scale-dataset-for-multidisciplinary-visual-generation-and-editing)  
+   evidence：对抗攻击防御技术
+2. [Nemotron-Labs-Diffusion-Image: Advancing Masked Discrete Diffusion for High-Resolution Image Synthesis](/202607/06/2606.29814v1-nemotron-labs-diffusion-image-advancing-masked-discrete-diffusion-for-high-resolution-image-synthesis)  
    标签：评分：9.0/10、query:image-generation
-   evidence：图像生成数据集
-6. [Towards Robustness against Typographic Attack with Training-free Concept Localization](/202607/05/2607.02494v1-towards-robustness-against-typographic-attack-with-training-free-concept-localization)  
+   evidence：扩散模型图像生成技术
+3. [Same Concept, Different Directions: Cross-Modal Feature Heterogeneity in Sparse Autoencoders](/202607/06/2606.29888v1-same-concept-different-directions-cross-modal-feature-heterogeneity-in-sparse-autoencoders)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-7. [Mitigating Batch Effects in Histopathology via Language-Mediated Robust Embedding Generation](/202607/05/2606.28697v1-mitigating-batch-effects-in-histopathology-via-language-mediated-robust-embedding-generation)  
+   evidence：跨模态特征异构性研究
+4. [Off the Rails: Hijacking the Scoring Head in Generative End-to-End Driving Planners with Safety-Violating Adversarial Perturbations](/202607/06/2606.30807v1-off-the-rails-hijacking-the-scoring-head-in-generative-end-to-end-driving-planners-with-safety-violating-adversarial-perturbations)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动对生成模型的影响
+5. [Arena-T2I Hard: Benchmarking and Improving Faithfulness with Dependency-Aware Checklist](/202607/06/2606.31711v1-arena-t2i-hard-benchmarking-and-improving-faithfulness-with-dependency-aware-checklist)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：图像生成质量评估
+6. [GADA: Geometry-Aware Deformable Aggregation for Image-Based Gaussian Splatting](/202607/06/2607.00595v2-gada-geometry-aware-deformable-aggregation-for-image-based-gaussian-splatting)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：提升生成图像的鲁棒性
+7. [Proteus: Automated Adversarial Robustness Testing for Audio Deepfake Detectors](/202607/06/2606.29544v1-proteus-automated-adversarial-robustness-testing-for-audio-deepfake-detectors)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
+   evidence：音频对抗攻击测试框架
 
 ### 速读区论文标签
-1. [Data Provenance for Image Auto-Regressive Generation](/202607/05/2606.28386v1-data-provenance-for-image-auto-regressive-generation)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：图像生成技术的最新进展
-2. [Semantic-Aware Generative Image Transmission for Resource-Constrained Visual IoT Systems](/202607/05/2606.28398v1-semantic-aware-generative-image-transmission-for-resource-constrained-visual-iot-systems)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-3. [DiffRGD: An Inference-Time Diffusion Guidance Through Riemannian Gradient Descent](/202607/05/2606.28417v1-diffrgd-an-inference-time-diffusion-guidance-through-riemannian-gradient-descent)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：研究扩散模型的生成指导方法
-4. [DiffRGD: An Inference-Time Diffusion Guidance Through Riemannian Gradient Descent](/202607/05/2606.28417v2-diffrgd-an-inference-time-diffusion-guidance-through-riemannian-gradient-descent)  
+1. [Generative AI Literacy Training Improves Intelligence Analysts' Discrimination of Real and AI-Generated Images](/202607/06/2606.28510v1-generative-ai-literacy-training-improves-intelligence-analysts-discrimination-of-real-and-ai-generated-images)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：扩散模型的推理时间指导方法
-5. [FlipGuard: Defending Large Language Models Against Quantization-Conditioned Backdoor Attacks](/202607/05/2606.28962v1-flipguard-defending-large-language-models-against-quantization-conditioned-backdoor-attacks)  
+   evidence：涉及对抗扰动对生成模型的影响
+2. [Resolution Thresholds in VLM Detection of Harmful ASCII Art Across Construction Modes and Languages](/202607/06/2606.29649v1-resolution-thresholds-in-vlm-detection-of-harmful-ascii-art-across-construction-modes-and-languages)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：研究图像对抗攻击与防御
+3. [Concept Removal Guidance: Evidence-Calibrated Negative Guidance for Safe Diffusion Sampling](/202607/06/2606.29801v1-concept-removal-guidance-evidence-calibrated-negative-guidance-for-safe-diffusion-sampling)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动下的图像生成安全
+4. [IBRSteG: Learning a Generalizable Steganography Framework for 3D Gaussian Splatting](/202607/06/2606.30024v1-ibrsteg-learning-a-generalizable-steganography-framework-for-3d-gaussian-splatting)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：生成式图像对抗扰动
+5. [IREU: Identity-Related Encoder-Only Unlearning for Customized Portrait Generation](/202607/06/2606.29880v1-ireu-identity-related-encoder-only-unlearning-for-customized-portrait-generation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击防御方法
-6. [Mural: Transferring LLM knowledge to image generation via Mixture-of-Transformers](/202607/05/2606.29013v1-mural-transferring-llm-knowledge-to-image-generation-via-mixture-of-transformers)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：LLM知识迁移图像生成
-7. [HomeDiffusion: Zero-Shot Object Customization with Multi-View Representation Learning for Indoor Scenes](/202607/05/2606.29828v1-homediffusion-zero-shot-object-customization-with-multi-view-representation-learning-for-indoor-scenes)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：图像生成方法
-8. [Intermediate Text Representation Guided Text-to-Image Generation for Enhancing One-and-Only Alignment](/202607/05/2606.30262v1-intermediate-text-representation-guided-text-to-image-generation-for-enhancing-one-and-only-alignment)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-9. [Clustering Unsupervised Representations as Defense against Poisoning Attacks on Speech Commands Classification System](/202607/05/2606.28953v1-clustering-unsupervised-representations-as-defense-against-poisoning-attacks-on-speech-commands-classification-system)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-10. [Self-Evolving Agentic Image Restoration via Deliberate Planning and Intuitive Execution](/202607/05/2606.28971v1-self-evolving-agentic-image-restoration-via-deliberate-planning-and-intuitive-execution)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：基于代理的图像修复方法
-11. [DTI: Dynamic Trajectory Initialization for Generative Face Video Super-Resolution](/202607/05/2606.29198v1-dti-dynamic-trajectory-initialization-for-generative-face-video-super-resolution)  
-   标签：评分：6.0/10、query:image-adversarial
    evidence：对抗扰动下的图像模型保护
-12. [Reliability-Prioritized Fine-Grained Generation in Multimodal Large](/202607/05/2606.29573v1-reliability-prioritized-fine-grained-generation-in-multimodal-large)  
+6. [Semantic Leakage and Privacy Preservation in Relay-Assisted Semantic Communications](/202607/06/2606.31973v1-semantic-leakage-and-privacy-preservation-in-relay-assisted-semantic-communications)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+7. [Amplifying Membership Signal Through Chained Regeneration](/202607/06/2606.31991v1-amplifying-membership-signal-through-chained-regeneration)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：生成模型隐私信号增强方法
+8. [MEPA: Multi-Scale Representation Alignment for Visual Autoregressive Modeling with Mixture of Experts](/202607/06/2607.00371v1-mepa-multi-scale-representation-alignment-for-visual-autoregressive-modeling-with-mixture-of-experts)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：多尺度表示对齐方法
+9. [Theory of Continual Learning Against Data Poisoning Attacks](/202607/06/2606.29841v1-theory-of-continual-learning-against-data-poisoning-attacks)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像生成可靠性
+   evidence：对抗攻击防御技术
+10. [RoAd-RL: A Unified Library and Benchmark for Robust Adversarial Reinforcement Learning](/202607/06/2606.29867v1-road-rl-a-unified-library-and-benchmark-for-robust-adversarial-reinforcement-learning)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗扰动对生成模型的影响
+11. [Knowledge-Driven Dimension Estimation from a Single Image -3D Asset Generation Technology for Digital Twin Construction](/202607/06/2606.30896v1-knowledge-driven-dimension-estimation-from-a-single-image--3d-asset-generation-technology-for-digital-twin-construction)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：图像对抗扰动安全防护相关
+12. [AnyMatch: Supercharging Universal Multi-Modal Image Matching with Large-Scale Single-View Images](/202607/06/2606.31077v2-anymatch-supercharging-universal-multi-modal-image-matching-with-large-scale-single-view-images)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：图像对抗扰动生成技术相关
 
 
 ### ⚡ 这个站点能做什么

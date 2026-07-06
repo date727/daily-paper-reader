@@ -1,0 +1,117 @@
+Title: Proteus: Automated Adversarial Robustness Testing for Audio Deepfake Detectors
+
+URL Source: https://arxiv.org/pdf/2606.29544v1
+
+Published Time: Tue, 30 Jun 2026 01:23:39 GMT
+
+Number of Pages: 5
+
+Markdown Content:
+> International Symposium on Synthetic Media Attribu-tion and Detection (ISSMAD) 2026
+
+# Proteus: Automated Adversarial Robustness Testing for Audio Deepfake Detectors 
+
+Nicolas M. Müller , Aditya Tirumala Bukkapatnam , Zohaib Ahmed 
+
+Resemble AI, Mountain View, CA, USA 
+
+{nicolas,aditya,zohaib}@resemble.ai 
+
+Abstract 
+
+We present Proteus, a framework developed at Resemble AI for automated robustness testing of our audio deepfake detection system. Given a detector, Proteus systemat-ically searches over sequences of everyday audio transformations (codec transcoding, additive noise, reverberation, dynamic-range compression, and VoIP simulation) to find combinations that fool the detector while preserving speech quality. We propose two complementary search strategies: (1) a breadth-first search that exhaustively maps aug-mentation effectiveness across the parameter space, and (2) a Q-learning agent designed to efficiently discover deeper attack chains by exploiting structural patterns in the BFS data. We report findings from continuous deployment of Proteus against our production detector, showing that specific augmentation chains can reliably flip detection verdicts while preserving speech intelligibility and speaker identity. We discuss how these find-ings are used to harden the detector through targeted retraining. 
+
+# 1 Introduction 
+
+Audio deepfake detectors are increasingly deployed to protect voice authentication, media verification, and call-center fraud prevention. Yet these systems are almost exclusively evaluated on clean, in-distribution test sets that do not reflect the signal-processing transformations audio undergoes in production: lossy codecs, VoIP channels, background noise, dynamic-range compression, and combinations thereof. Recent work has begun to quantify this gap. Li et al. [ 1] show that codec-based corruptions cause the largest performance drops across multiple detector architectures. Wu et al. [ 2] demonstrate that even simple manipulations (volume changes, fading, resampling) can bypass detectors without affecting human perception. Shi et al. [ 3]report 12–18% EER increases under realistic communication conditions. ASVspoof 5 [ 4]was the first challenge to incorporate adversarial conditions at scale. However, these evaluations are passive : they measure degradation under a fixed set of conditions. None systematically search for the augmentation chains that maximally exploit a detector’s weaknesses. In prior work [ 5 ], we showed that simple signal-processing attacks (time stretching, echo addition, noise injection) reliably fool both production detectors and academic models. DeePen established the threat, but the process was manual: a human analyst selects attacks, observes results, and iterates. This does not scale to the combinatorial space of multi-step augmentation chains with varying parameters. We present Proteus , a framework developed at Resemble AI that automates this search. Proteus composes augmentation chains from a library of 35 augmentations 
+
+1 
+
+> arXiv:2606.29544v1 [cs.SD] 28 Jun 2026 Proteus: Robustness Testing for Audio Deepfake Detectors ISSMAD 2026
+
+spanning 11 categories (codecs, noise, reverb, VoIP, filtering, dynamics, distortion, envi-ronmental effects, music overlay, silence injection, and temporal manipulation), yielding approximately 110 distinct augmentation variants when accounting for hyperparameter settings. It evaluates them against a target detector via black-box API queries; chains that degrade speech intelligibility or speaker identity beyond configurable thresholds are pruned. Since the combinatorial complexity is immense even for shallow chains (110 3 ≈ 1.3 × 10 6 candidates at depth 3 alone), efficient search is essential. We present two complementary search strategies: (1) a breadth-first search (BFS) that exhaustively maps single- and multi-step augmentation effectiveness, and (2) a Q-learning agent, described in Section 2.3, designed to scale the search to deeper chains by learning which augmentation transitions are most effective. In this paper, we describe the framework, both search strategies, and report findings from continuous deployment against Resemble AI’s production detector, 1 identifying specific multi-step chains that evade detection while preserving perceptual quality. 
+
+# 2 Method 
+
+Proteus operates as a black-box testing framework: it applies augmentation chains to audio samples, queries a target detector via API, and records the resulting detection scores. The framework consists of three components: (1) a composable augmentation library, (2) a quality gate that enforces perceptual constraints, and (3) search strategies that navigate the augmentation space. 
+
+2.1 Augmentation Library and Quality Gate 
+
+The augmentation library comprises 35 augmentation types organized into 11 categories: codecs (MP3, AAC, Opus, GSM, AMR), additive noise (white, pink, babble), rever-beration, filtering (low-pass, high-pass, band-pass), dynamics (compression, limiting), distortion, temporal manipulation (time-stretch, pitch-shift), environmental effects, music overlay, silence injection, and VoIP simulation. Each augmentation type defines a set of discrete hyperparameter configurations ( variants ); for example, MP3 transcoding offers variants at bitrates 32, 64, 96, 128, and 192 kbps. The full library yields approximately 110 distinct variants. An augmentation chain c = ( a1, a 2, . . . , a d) of depth d transforms input audio x
+
+into ˆx = ad ◦ · · · ◦ a1(x). Because arbitrary compositions can produce unintelligible or unrecognizable audio, every chain must pass a quality gate before the detector is queried. The gate enforces two constraints: word error rate (WER) between the original and augmented transcripts (via Whisper [ 6]) must remain below a threshold τwer , ensuring intelligibility is preserved; and speaker similarity (cosine similarity between speaker em-beddings) must exceed τspk , ensuring the target speaker remains recognizable. Together, these constraints scope the search to augmentations that constitute realistic attacks: an adversary may want to disguise a deepfake as genuine audio (impersonation, misinfor-mation) or discredit authentic evidence as synthetic, the so-called liar’s dividend [7]. In either direction, the attack is only useful if the content and speaker identity survive the manipulation. Chains that fail the gate are discarded without querying the detector. 
+
+2.2 Breadth-First Search 
+
+The BFS strategy performs a level-wise exhaustive search. At level 1, every augmentation variant is applied independently to each sample. Results are ranked by absolute score shift 
+
+|∆s| from the unaugmented baseline, and the top-K chains are retained. At level ℓ > 1, 
+
+> 1https://www.resemble.ai/detect/
+> 2Proteus: Robustness Testing for Audio Deepfake Detectors ISSMAD 2026
+
+each surviving chain from level ℓ−1 is extended with every compatible variant (excluding immediate self-repetition), yielding up to K × V candidates per sample, where V is the total number of variants. Early stopping terminates the search when score improvements plateau across consecutive levels. BFS provides a comprehensive map of augmentation effectiveness that reveals which individual augmentations and pairwise transitions cause the largest detector degradation. However, its complexity grows as O(V d) with chain depth d: at depth 3 with 110 variants, BFS must evaluate ∼1.3 × 10 6 candidates per sample. 
+
+2.3 Scaling to Deeper Chains: Q-Learning Agent 
+
+To efficiently explore deeper chains, we formulate augmentation sequencing as a Markov decision process (MDP) [ 8]. The key insight is that an augmentation’s effectiveness often depends on the preceding augmentation: for instance, adding noise before a low-bitrate codec forces the encoder to spend bits on the noise, compounding distortion of the speech signal, whereas reversing the order simply layers noise on already-compressed audio. We exploit this sequential structure with a Q-learning agent [9]. 
+
+MDP formulation. States correspond to augmentation types (abstracting over hy-perparameters): S = {s0} ∪ { s1, . . . , s K }, where s0 is the initial (unaugmented) state and each sk represents the last applied augmentation type ( K= 35 ). The action space 
+
+A = {a1, . . . , a K } selects the next augmentation type. This yields a Q-table of size 
+
+36 × 35 = 1 ,260 entries, small enough to learn from limited evaluation data. Each step involves two levels of decision: (1) the Q-learner selects an augmentation 
+
+type via upper confidence bound (UCB) action selection: 
+
+a∗ = arg max 
+
+> a
+> [
+
+Q(s, a ) + c
+
+> √
+
+ln N (s)
+
+N (s, a )
+
+> ]
+
+, (1) where N (s) and N (s, a ) are visit counts and c controls exploration; and (2) a per-augmentation categorical bandit samples a specific hyperparameter variant, with proba-bilities updated based on quality outcomes and detector feedback. The reward r is the marginal detector score shift from adding the current step. We use undiscounted ( γ=1) Q-learning updates, since the quality gate already limits chain depth: 
+
+Q(s, a ) ← Q(s, a ) + α[r + max  
+
+> a′
+
+Q(s′, a ′) − Q(s, a )]. (2) On quality failure, a small negative reward is applied via the standard update rule (2) ,gradually depressing Q-values for augmentations that consistently fail the gate while preserving recovery if the type later succeeds at less aggressive settings. The variant bandit additionally decreases the chosen setting’s probability. 
+
+Warmstart from BFS. The Q-table is initialized from available BFS results: for each observed (s, a ) transition, the Q-value is set to the mean score shift. Unseen state-action pairs receive an optimistic default, ensuring the agent preferentially explores untested transitions. This lets the Q-learner exploit BFS findings without merely replaying them. We present this formulation as a natural extension motivated by the BFS results in Section 3: the strong dependence of augmentation effectiveness on preceding steps suggests that an RL agent can learn transition structure that BFS enumerates but cannot generalize from. Experimental evaluation of the Q-learning agent is ongoing.                                                                   
+
+> 3Proteus: Robustness Testing for Audio Deepfake Detectors ISSMAD 2026
+> Table 1. Selected high-shift augmentation chains on bonafide audio, chosen for diversity. Each row is one chain: Steps 1–3 list the augmentations applied in sequence (hyperparameter values withheld and denoted θ), dis chain depth, and ∆ithe marginal detector score shift at step i;Σ∆ is the cumulative shift. For example, the first row applies room simulation, shifting the score by
+> +0 .39 ; MP3 transcoding adds +0 .33 ; spectral gating then adds +0 .24 , yielding a cumulative shift of +0 .96 , nearly flipping the bonafide verdict to spoof. All chains pass quality gates (WER <0.15 ,speaker similarity >0.80 ). Step 1 Step 2 Step 3 dΣ∆ ∆1∆2∆3
+> room_sim ( θ)mp3 ( θ)spec_gate ( θ)30.96 0.39 0.33 0.24 room_sim ( θ)auto gain ( θ)mp3 ( θ)30.79 0.16 0.13 0.51 synth_reverb ( θ)opus ( θ)—20.99 0.78 0.21 —static_bg ( θ)pink_noise ( θ)—20.99 0.71 0.28 —echo ( θ)pkt_loss ( θ)—20.93 0.77 0.15 —music_real ( θ)synth_reverb ( θ)—20.90 0.64 0.26 —
+
+# 3 Results 
+
+We report findings from a BFS run of Proteus against Resemble AI’s production deepfake detector. It outputs a score in [0 , 1] where values near 0 indicate bonafide and near 1 indicate spoof. The search evaluates augmentation chains of depth 2 and 3 over eight baseline audio samples (four bonafide utterances from M-AILABS [ 10 ] and four spoofed utterances from MLAAD [ 11 ]), yielding 17,405 candidate chains in total. The quality gate ( τwer = 0 .15 , τspk = 0 .80 ) rejects 12,558 candidates (72 %), leaving 4,847 chains that preserve intelligibility and speaker identity. Table 1 presents selected chains. Depth-3 chains reveal interaction effects invisible to single-step evaluations: in the second row, automatic gain control contributes only +0 .13 at step 2, yet conditions the signal such that MP3 at step 3 produces its largest observed marginal shift ( +0 .51 ). 
+
+False-positive vulnerability. The most striking finding is a strong asymmetry: all 
+
+of the top-100 chains (ranked by absolute score shift) target bonafide samples. Genuine speech is far easier to push toward the spoof boundary than synthetic speech is to push away from it. The best depth-2 chain, synthetic_reverb → opus_codec , shifts a bonafide score by +0 .99 , flipping the verdict. This confirms that the detector’s primary attack surface is false-positive induction, directly enabling the liar’s dividend [7 ]: an adversary can discredit authentic recordings with modest signal processing that makes them appear synthetic. We conjecture a distributional overlap: our augmentations’ acoustic by-products may be perceptually similar to the glitches of early-generation TTS, causing the detector to mistake degradation for synthesis. However, why certain combinations are disproportionately effective remains an open question. 
+
+Model hardening. The chains identified by Proteus feed directly into detector re-training. High-shift chains are added to the training augmentation pipeline: bonafide and spoofed samples are transformed with the discovered chains and included as additional training data, teaching the detector to remain invariant to these perturbations. After retraining, Proteus is re-run against the updated model to verify that the targeted vulnerabilities are resolved and to surface any new weaknesses. This creates a continuous adversarial testing loop in which each Proteus run both validates prior fixes and drives the next round of hardening.  
+
+> 4Proteus: Robustness Testing for Audio Deepfake Detectors ISSMAD 2026
+
+# 4 Conclusion 
+
+We presented Proteus, a framework for automated adversarial robustness testing of audio deepfake detectors. By searching over quality-constrained augmentation chains, Proteus systematically identifies signal-processing conditions that degrade detector performance. BFS mapping provides a comprehensive robustness profile, and the proposed Q-learning extension aims to scale this search to deeper chains by learning augmentation transition structure. Our deployment experience shows that adversarial robustness testing can be embedded as a continuous practice in the model development lifecycle: findings from Proteus directly inform augmentation strategies for detector retraining, creating a closed loop between attack discovery and defense hardening. 
+
+# References 
+
+[1] Xiang Li, Pin-Yu Chen, and Wenqi Wei. Measuring the robustness of audio deepfake detectors. arXiv preprint arXiv:2503.17577 , 2025. [2] Haolin Wu, Jing Chen, Ruiying Du, Cong Wu, Kun He, Xingcan Shang, Hao Ren, and Guowen Xu. CLAD: Robust audio deepfake detection against manipulation attacks with contrastive learning. arXiv preprint arXiv:2404.15854 , 2024. [3] Haohan Shi, Xiyu Shi, Safak Dogan, Saif Alzubi, Tianjin Huang, and Yunxiao Zhang. Benchmarking audio deepfake detection robustness in real-world communication scenarios. arXiv preprint arXiv:2504.12423 , 2025. [4] Xin Wang, Héctor Delgado, Hemlata Tak, Jee-weon Jung, Hye-jin Shim, Massim-iliano Todisco, Ivan Kukanov, Xuechen Liu, Md Sahidullah, Tomi H. Kinnunen, Nicholas Evans, Kong Aik Lee, and Junichi Yamagishi. ASVspoof 5: Crowdsourced speech data, deepfakes, and adversarial attacks at scale. In Proc. ASVspoof Workshop ,2024. [5] Nicolas M. Müller, Piotr Kawa, Adriana Stan, Thien-Phuc Doan, Souhwan Jung, Wei Herng Choong, Philip Sperl, and Konstantin Böttinger. DeePen: Penetration testing for audio deepfake detection. arXiv preprint arXiv:2502.20427 , 2025. [6] Alec Radford, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, and Ilya Sutskever. Robust speech recognition via large-scale weak supervision. In 
+
+Proceedings of the 40th International Conference on Machine Learning , 2023. [7] Robert Chesney and Danielle Keats Citron. Deep fakes: A looming challenge for privacy, democracy, and national security. California Law Review , 107:1753–1819, 2019. [8] Martin L. Puterman. Markov Decision Processes: Discrete Stochastic Dynamic Programming . Wiley, 1994. [9] Richard S. Sutton and Andrew G. Barto. Reinforcement Learning: An Introduction .MIT Press, 2nd edition, 2018. [10] Imdat Solak. The M-AILABS speech dataset. 2019. URL https://www.caito.de/ 2019/01/03/the-m-ailabs-speech-dataset/ .[11] Nicolas M. Müller, Piotr Kawa, Wei Herng Choong, Edresson Casanova, Eren Gölge, Thorsten Müller, Piotr Syga, Philip Sperl, and Konstantin Böttinger. MLAAD: The multi-language audio anti-spoofing dataset. In International Joint Conference on Neural Networks (IJCNN) , 2024.
