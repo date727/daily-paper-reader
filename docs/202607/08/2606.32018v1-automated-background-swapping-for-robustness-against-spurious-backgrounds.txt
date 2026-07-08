@@ -1,0 +1,496 @@
+Title: Automated Background Swapping for Robustness against Spurious Backgrounds
+
+URL Source: https://arxiv.org/pdf/2606.32018v1
+
+Published Time: Wed, 01 Jul 2026 01:34:30 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# Automated Background Swapping for Robustness against Spurious Backgrounds 
+
+Cesar Roder 
+
+Johannes Kepler University Linz, Austria 
+
+cesar_roder@outlook.at 
+
+Kajetan Schweighofer 
+
+Cognizant AI Lab, USA ∗
+
+kai.schweighofer@gmx.at 
+
+## Abstract 
+
+Classifiers based on Deep Neural Networks exhibit strong performance across do-mains, yet can fail catastrophically if they rely on spurious correlations, i.e., fea-tures that are predictive of the target label in the training data but are not causally linked and thus fail to generalize. For the vision domain, many such spurious cor-relations manifest themselves within the background of the image, where only the foreground is predictive of the class label. In this paper, we introduce Automated Background Swapping ( AutoBackSwap ) to reduce the reliance of classifiers on such spurious backgrounds. AutoBackSwap uses a secondary network to disen-tangle the foreground and background, followed by infilling to synthesize com-plete backgrounds, and finally combines different foregrounds and inpainted back-grounds to augment the training data. We find that patch-wise labeling of just a few hundred samples suffices to train the secondary network and automatically aug-ment the full training dataset on challenging image classification tasks. In contrast to many previous methods, AutoBackSwap proves very effective even if there is not a single sample in the training data breaking the spurious correlation. Across a range of image classification tasks with spurious backgrounds, AutoBackSwap 
+
+consistently outperforms prior methods. 
+
+## 1 Introduction 
+
+Deep neural networks achieve state-of-the-art performance on image classification benchmarks, yet they often succeed by exploiting spurious correlations: visual cues that correlate with labels but are not causally related. When such correlations break at inference time, performance can degrade severely, with serious consequences in real-world applications [Buolamwini and Gebru, 2018, Oakden-Rayner et al., 2020]. Spurious correlations often manifest themselves within the background of the image [Sagawa et al., 2020, Xiao et al., 2021, Moayeri et al., 2022], as backgrounds tend to have simple features and often dominate the overall image. For example, classifiers distinguishing cows from camels may rely on grass vs. sand in the background scene rather than animal morphology, if background cues are easier to learn than semantic object features [Scimeca et al., 2022]. A broad range of prior work has been proposed to mitigate spurious correlations, including worst-group risk optimization [Sagawa et al., 2020], invariant representation learning [Arjovsky et al., 2019], and penalties that reduce sensitivity to spurious attributes [Sun and Saenko, 2016, Ganin et al., 2016]. Other approaches rely on retraining using auxiliary data, either based on the original network [Liu et al., 2021, Zhang et al., 2022, Qiu et al., 2023] or from held-out reweighting datasets [Kirichenko et al., 2023]. Despite their differences, many of these methods implicitly assume access to samples in which the correlation between the target label and the spurious background is broken during training. In practice, collecting such samples can be prohibitively expensive or infeasible, especially when certain combinations of target and spurious attributes are rare or physically difficult to obtain. 
+
+> ∗Work partly done while at Johannes Kepler University Linz, Austria Preprint.
+> arXiv:2606.32018v1 [cs.CV] 30 Jun 2026
+
+Figure 1: Three main steps of AutoBackSwap . In this example, Y = {• , ▲} and A = {■, ■}. The detector disentangles foreground and background by predicting a binary mask. Then, the generator inpaints the missing parts of the background to form a full background image. Finally, foreground and background are recombined stochastically to train a classifier that is invariant to the background. In this work, we propose Automated Background Swapping ( AutoBackSwap ), a data-augmentation-based approach that removes the need for observing broken correlations during training. 
+
+AutoBackSwap consists of three main steps: (1) disentangling foreground and background, (2) gener-ating complete background images via infilling, and (3) stochastically recomposing foregrounds and backgrounds to train a classifier that is invariant to background cues (see Fig. 1). The key insight is that very few samples are sufficient to train an auxiliary model to predict foreground vs. background with sufficient quality on the training data. In our experiments, a few hundred per dataset suffice, e.g. 287 for Waterbirds [Sagawa et al., 2020]; about 5% of the training data. Moreover, we show that off-the-shelf generative models are more than adequate for infilling of background images, and even simplistic strategies such as pixel scrambling or constant infilling can be reasonable alternatives with minimal impact on the effectiveness of AutoBackSwap .Our main contributions in this work are • We propose AutoBackSwap , a scalable data augmentation approach that reduces the dependence of classifiers on spurious background features. • We conduct a comprehensive empirical evaluation on multiple benchmark datasets, spanning diverse training and test settings that vary in the availability of groups (pair of target and spurious attribute) and how the spurious correlation breaks at test time. • We analyze the effect of key design choices and components on the effectiveness of AutoBackSwap .
+
+## 2 Related Work 
+
+Spurious correlations. The reliance of neural network predictors on spurious features is a widely known phenomenon [Baker et al., 2018, Zech et al., 2018, Buolamwini and Gebru, 2018, Geirhos et al., 2019, Brendel and Bethge, 2019, Oakden-Rayner et al., 2020] which may lead to detrimental consequences when applied in real world settings. Sagawa et al. [2020], Xiao et al. [2021], Moayeri et al. [2022] emphasize the susceptibility of image classifiers to spurious backgrounds. One reason for this is the simplicity bias of neural networks [Shah et al., 2020, Scimeca et al., 2022], where simple but possibly irrelevant features (also referred to as shortcuts) tend to dominate the prediction. Comprehensive surveys are given by Geirhos et al. [2020], Yang et al. [2023]. 
+
+Mitigating reliance on spurious correlations. Distributionally robust optimization [Sagawa et al., 2020, Levy et al., 2020, Sohoni et al., 2020, 2022] aims to learn models that perform well under worst-case conditions, minimizing the maximum risk over all possible groups. Invariant risk minimization [Arjovsky et al., 2019, Ahuja et al., 2021, Lin et al., 2022] aims to obtain feature representations that are invariant to particular attributes, such that a classifier based on those representations is more robust to shifts in those attributes. Similarly, correlation alignment [Sun et al., 2016, Sun and Saenko, 2016] encourages invariance by aligning second-order statistics of feature representations across environments, reducing distributional discrepancies caused by spurious attributes. Domain adversarial neural networks [Ganin et al., 2016] learn invariant representations by adding an auxiliary head that predicts the spurious attribute, with its gradient reversed to discourage the shared backbone from encoding it. Furthermore, there are multiple two-stage approaches, where in the first stage, standard empirical risk minimization (ERM) training is used to obtain a base model. In the second stage, a new network is trained, upweighting misclassified samples of the base model [Liu et al., 2021], or using contrastive learning to make representations for the same class more similar [Zhang et al., 2022]. Kirichenko et al. [2023] and Qiu et al. [2023] only retrain the last layer, using an additional group-balanced dataset or weighting according to the loss of the base model respectively. Nam et al. 2[2020] also trains two models, one where a spurious bias is amplified which is used by the second one to mitigate the bias. Lee et al. [2023], Pagliardini et al. [2023] learn an ensemble of models with diversity constraints between members, showing that the ensemble becomes more robust to spurious correlations. Yao et al. [2022] introduce selective augmentation based on mixup [Zhang et al., 2018], with interpolation between either the same labels with different spurious attributes or vice versa. 
+
+Background augmentation. Most related to our work are two concurrent methods both termed BackMix: Bransby et al. [2024] randomly sample backgrounds for each foreground under known masks in a semi-supervised echocardiography setting, while Wang et al. [2025] estimate foreground regions via class activation maps and paste background patches onto target images in an open-set recognition setting. The work most closely related to ours is Chang et al. [2021]. They assume access to foreground segmentation masks (or bounding boxes) for data augmentation, constructing factual samples by infilling around a foreground, and counterfactual samples by infilling the background. Training combines standard cross-entropy on original data with two additional losses that increase the true-class probability on factual samples and decrease it on counterfactual ones. For more details, see Apx. H. 
+
+## 3 Method 
+
+In this section, we introduce AutoBackSwap , a data augmentation approach that reduces classifier reliance on spurious backgrounds. We formalize the setting, present a general training algorithm for background-invariant classifiers, and describe our implementation and design choices. 
+
+3.1 Problem Setting 
+
+We consider the classification setting with input images x ∈ X = RC×H×W and targets y ∈ Y ,where Y is the set of K possible target classes. Furthermore, we assume that there is another attribute 
+
+a ∈ A associated with each input image. Each possible tuple of y and a forms a group g. In particular, we assume that the foreground xfg causally determines the target y, while the background xbg causally determines the attribute a. The foreground is defined as xfg = x ⊙ m, where m ∈ M = {0, 1}H×W
+
+is a binary mask, and the background is defined as xbg = x ⊙ (1 − m). In this setting, spurious correlations arise when background information xbg , defined by attribute a, is correlated with target 
+
+y in the training data despite not being causally related to y, often leading to failures when this correlation does not hold at test time. 
+
+3.2 Background Invariance 
+
+We seek to reduce the dependence of a learned classifier c(·) : X → Y on the background xbg for a new input x. A direct approach would be to extract and predict using the foreground xfg only. However, this requires a robust way of extracting the foreground, both during training and inference, and adds additional inference costs on top of the classifier. Therefore, we opt for the alternative, training a classifier that is invariant to the background, by means of data augmentation. The general algorithm is provided in Alg. 1 and a visualization of the main steps in Fig. 1. It assumes access to a dataset D = {(xi, y i, a i)}Ni=1 , a detector d(·) : X → M and a generator g(·) : X → X . The detector predicts the binary mask m that defines the foreground and background, given an input image. The generator performs infilling, producing a full background image given the background image after masking the foreground. Finally, for creating a new augmented sample for training, a foreground is pasted onto a new infilled background. The background is randomly selected from the set of backgrounds that exhibit the spurious attribute, where the spurious attribute is randomly selected each time as well, breaking the correlation between target and spurious attribute in the input images. 
+
+3.3 Implementing AutoBackSwap 
+
+The general algorithm in Alg. 1 took the detector d(·) and the generator g(·) as given. In the following, we provide details on how we implement them. Furthermore, the algorithm assumed access to the attribute a for each sample. Although optimal if available, we do not consider them as given in our experiments and discuss viable approximations, making AutoBackSwap applicable in a more broad range of settings. 3Algorithm 1 Generalized AutoBackSwap                                                     
+
+> Input: Dataset D, detector d(·), generator g(·)
+> # Generate disentangled fore- and background datasets
+> F ← ∅ ,B ← ∅
+> for all (x, y, a )∈ D do
+> m←d(x)# detect foreground
+> xfg ←x⊙m# apply mask for foreground
+> xbg ←x⊙(1−m)# apply mask for background
+> xbg ←g(xbg )# inpaint background
+> F ← F ∪ { (xfg , y )}B ← B ∪ { (xbg , a )}
+> end for
+> # Train classifier on augmented samples Initialize classifier c(·)
+> while not converged do
+> (xfg , y )∼Unif (F)# sample foreground and target
+> a∼Unif (A)# sample spurious attribute
+> Ba← { xbg |(xbg , a )∈ B }
+> xbg ∼Unif (Ba)# sample background acc. to attribute
+> ˜x←Paste (xfg ,xbg )# paste fore- on background Update c(·)by ERM step on (a minibatch of) ( ˜ x, y )
+> end while Return: classifier c(·).
+
+Detector. We consider a secondary model, typically of a similar structure as the clas-sifier, on the binary classification task fore-ground vs. background on a patchwise level. For this, we assume that an auxiliary dataset Daux = {(xi, zi)}Mi=1 with patch-wise labels z ∈ {0, 1}R,R is available. The resolution R is an important parame-ter. Too fine-grained and the task becomes hard to learn, requiring more instances M
+
+and thus more effort to create the auxiliary dataset. Too coarse and the separation of foreground and background becomes too imprecise to be useful. This tradeoff is in-vestigated in more detail in Sec. 5.1. We find that very few examples are often suffi-cient to train a detector with high accuracy on the classifier training data D. More de-tails on the implementation of the detector in our experiments are provided in Apx. B. Zero-shot segmentation models such as SAM3 [Carion et al., 2025] can be a pow-erful alternative to training a dedicated model on additional data. However, zero-shot performance could be rather suboptimal on, e.g. industrial or scientific tasks that are very dissimilar to the models training distribution. Furthermore, general-purpose models such as SAM3 are generally much larger than specialised models (about 30 times in our experimental setup), incurring higher inference costs for the entire pipeline. 
+
+Generator. For background infilling, we use the AOT-GAN model [Zeng et al., 2023] as it provides a favorable tradeoff between runtime and infilling quality. In our experiments in Sec. 5.3, we find that infilling is often not the dominant factor for performance, and even simple pixel scrambling or no infilling at all can yield strong results. We therefore choose AOT-GAN as an efficient default option with competitive inpainting quality. While diffusion-based inpainting models are also possible and often provide slightly better visual quality than GAN-based approaches, they are substantially more computationally demanding, since they require dozens of iterative denoising steps for each image. 
+
+Recomposing xfg and xbg . A foreground image xfg is pasted onto a sampled inpainted background image xbg . We find that additional augmentation of the foreground further boosts the performance of 
+
+AutoBackSwap . In particular, we consider resizing, translation and rotation as foreground augmenta-tions before pasting onto the background. 
+
+Access to spurious attributes. It may often be an inconvenient requirement to have access to information about the spurious attribute in the training data. Throughout our experiments, we drop this requirement and instead sample according to the target class y ∼ Unif (Y) instead of the spurious attribute and then sampling the background from the subset By = {xbg | (xbg , y ) ∈ B} . This is a good approximation to Alg. 1 assuming that the target class is strongly correlated with the spurious attribute in the training data, which is why we worry about it in the first place. 
+
+## 4 Experiments 
+
+In this section, we investigate the performance of AutoBackSwap on different benchmarks. First, the widely considered Waterbirds dataset [Sagawa et al., 2020], which features both binary targets 
+
+Y and spurious attributes A, artificially constructed by combining a target-indicative foreground with a potentially spurious background. We consider two settings: one in which minority groups are available during training and one in which they are not, see Fig. 6. Second, the Spawrious dataset [Lynch et al., 2023] features four targets and six backgrounds, created using a text-to-image diffusion model, and supports one-to-one (o2o) and many-to-many (m2m) experimental settings, see Fig. 9. Third, we propose the Spurious Vehicles dataset, featuring four vehicle classes in four contextual environments, evaluated under the m2m setting, see Fig. 11. 44.1 Experimental Setup Baseline methods. We consider the following methods as baselines: (1) Standard ERM (2) ERM with heavy augmentation (mixup [Zhang et al., 2018], CutMix [Yun et al., 2019], and ColorJitter) 
+
+(3) DFR [Kirichenko et al., 2023] (4) AFR [Qiu et al., 2023] (5) GroupDRO [Sagawa et al., 2020] (6) 
+
+CORAL [Sun et al., 2016, Sun and Saenko, 2016] (7) the method by Chang et al. [2021]. Furthermore, we consider the following three foundation models, which can be used as classifiers in a zero-shot manner: (8) SAM 3 [Carion et al., 2025] (9) CLIP [Radford et al., 2021] (10) QWEN3-VL-Thinking [Bai et al., 2025]. We include these baselines, to assess whether large-scale foundation models are also biased towards background information for performing zero-shot predictions. Addi-tional details on all baseline methods are provided in Apx. C. 
+
+Models. Following previous works [Sagawa et al., 2020, Kirichenko et al., 2023, Qiu et al., 2023, Arefin et al., 2024] the results provided in the main paper are based on pretrained ResNet50 models [He et al., 2016]. We investigate the reliability of the obtained results under a change to pretrained ViT models [Dosovitskiy et al., 2021] in Apx. F. 
+
+Metrics. We use the standard accuracy Acc on the full dataset and the worst group accuracy 
+
+WGA = min g Acc g as evaluation metrics. We depart from the common practice of Sagawa et al. [2020], which reports group-weighted accuracy with weights proportional to group prevalence in the training data. Although such weighting can be appropriate when the same groups appear in both training and test sets, it is not suited to our experiments where groups differ. 
+
+Information about spurious attribute. We use the standard accuracy on the validation dataset for early stopping for all considered methods to avoid using information about the spurious attribute during training. Early stopping is used by all methods (except AFR, see Apx. C for details) for model selection. Noteworthy, the baseline methods Group DRO and CORAL need group information for loss calculations; DFR also implicitly as a group-balanced reweighting dataset is used in the second stage. The method by Chang et al. [2021] assumes access to ground-truth foreground segmentations for the full training dataset. For the Waterbirds dataset, they are provided; for the different Spawrious tasks we use SAM3 to obtain them, see Apx. C for details. QWEN3-VL-Thinking is prompted to ignore the background. AutoBackSwap learns the detector model based on a few hundred auxiliary samples. 
+
+4.2 Waterbirds Setup. The Waterbirds dataset [Sagawa et al., 2020] consists of images of waterbirds and, pasted onto background images showing either water or land. Thus the class labels are Y = {waterbird, landbird} and the spurious attribute is A = {water background, land background}, leading to four different groups, see Fig. 6. Groups g1 and g4 (landbirds on land, waterbirds on water) dominate the training set and are referred to as majority groups, while g2 and g3 (landbirds on water, waterbirds on land) are the minority groups. We consider two settings in our experiments: (i) training on the full dataset, and (ii) training only on majority groups. In the training set, groups have different prevalence, containing 3498, 184, 56 and 1057 samples respectively. Table 1: Results for Waterbirds experi-ments, training either with or without mi-nority groups. Best result bold , second best underlined . Statistics computed over five independent runs.                                                  
+
+> Method w minority w/o minority
+> WGA Acc WGA Acc
+> ERM 74 .9(3 .3) 93 .6(0 .4) 33 .4(4 .4) 68 .4(1 .9)
+> + Heavy Aug. 74 .3(2 .3) 87 .4(1 .0) 15 .9(2 .7) 61 .5(1 .2)
+> DFR 90 .7(0 .8) 94 .3(0 .1) 15 .1(1 .9) 60 .1(0 .8)
+> AFR 78 .6(3 .7) 88 .5(0 .9) 22 .2(3 .3) 64 .2(0 .8)
+> Group DRO 82 .2(1 .6) 94 .8(0 .2) 27 .6(3 .8) 65 .3(0 .6)
+> CORAL 78 .4(4 .2) 93 .6(0 .3) 22 .0(5 .5) 65 .0(2 .3)
+> Chang et al. 85 .7(2 .3) 95 .7(0 .3) 79 .1(3 .2) 91 .4(1 .8)
+> Ours 93 .0(0 .9) 95 .0(0 .5) 92 .2(0 .4) 95 .1(0 .3)
+> SAM3 38 .064 .138 .064 .1
+> CLIP 31 .560 .031 .560 .0
+> QWEN3-VL 70 .686 .570 .686 .5
+
+Results. The results for both settings are provided in Tab. 1. For the first setting (i) with minority groups, we find that many of the considered baseline meth-ods significantly outperform the naive ERM baseline. 
+
+AutoBackSwap has the highest WGA in this setting by more than 2%, and is second best in Acc, trailing by 0.7%. DFR has the second best WGA, while Chang et al. [2021] has the highest Acc. For the second, more challenging setting (ii) without minority groups, the performance of all baselines except Chang et al. [2021] drops drastically. This is expected, as their assumptions are broken when no minority samples that break the correlation between Y and A are available. 
+
+AutoBackSwap strongly outperforms all baselines in this setting, improving 13.1% in WGA and 3.7% in Acc, compared to the next-best baseline. 5Table 2: Results for Spawrious one-to-one and many-to-many tasks. We report WGA and Acc in the respective test groups. Best result bold , second best underlined ; zero-shot baselines are excluded from comparison and marked with ∗ if best. Statistics computed over five runs. 
+
+Method o2o-easy o2o-medium o2o-hard m2m-easy m2m-medium m2m-hard 
+
+WGA Acc WGA Acc WGA Acc WGA Acc WGA Acc WGA Acc 
+
+ERM 89 .1(1 .1) 93 .3(0 .5) 34 .5(2 .5) 80 .8(0 .9) 71 .7(2 .2) 87 .9(0 .5) 81 .1(1 .4) 93 .0(0 .4) 50 .7(5 .0) 80 .4(1 .7) 51 .3(3 .9) 74 .9(1 .1) 
+
++ Heavy Aug. 31 .6(6 .7) 45 .8(4 .3) 11 .3(2 .4) 67 .5(1 .3) 25 .9(3 .2) 52 .3(4 .8) 50 .9(9 .5) 79 .2(3 .7) 28 .5(5 .9) 58 .4(4 .7) 19 .6(10 .8) 45 .2(14 .7) 
+
+DFR 89 .6(1 .4) 94 .1(0 .4) 45 .2(2 .6) 83 .8(0 .7) 64 .5(10 .4) 86 .5(2 .9) 75 .8(1 .0) 91 .0(0 .4) 49 .8(1 .3) 80 .7(0 .6) 39 .1(4 .1) 67 .7(4 .6) 
+
+AFR 83 .8(1 .2) 89 .8(0 .5) 31 .7(1 .7) 78 .1(0 .4) 54 .7(3 .0) 79 .6(0 .8) 71 .4(1 .3) 90 .3(0 .5) 40 .4(3 .0) 73 .9(0 .8) 41 .3(1 .2) 68 .5(1 .2) 
+
+Group DRO 91 .9(0 .3) 95 .1(0 .2) 54 .9(1 .9) 86 .9(0 .4) 80 .1(1 .5) 90 .5(0 .2) 77 .6(2 .4) 92 .2(0 .7) 47 .3(4 .0) 79 .0(1 .2) 47 .1(5 .7) 71 .5(2 .9) 
+
+CORAL 91 .3(1 .7) 94 .7(0 .5) 43 .0(5 .4) 83 .1(1 .2) 71 .0(3 .9) 88 .6(1 .0) 81 .4(1 .2) 93 .2(0 .2) 54 .0(2 .3) 81 .7(0 .8) 49 .8(5 .0) 74 .0(2 .0) 
+
+Chang et al. 93 .3(0 .6) 96 .9(0 .1) 70 .4(3 .1) 91 .2(0 .7) 74 .9(2 .3) 90 .9(0 .4) 89 .5(1 .5) 96 .4(0 .3) 77 .8(1 .9) 90 .8(0 .3) 66 .7(1 .7) 85 .7(0 .2) 
+
+Ours 88 .9(1 .7) 95 .8(0 .3) 72 .5(4 .0) 91 .5(1 .0) 81 .4(2 .2) 92 .7(0 .6) 92 .6(0 .5) 97 .0(0 .1) 78 .0(1 .5) 91 .2(0 .2) 64 .3(6 .6) 85 .7(0 .8) 
+
+SAM3 59 .9 79 .6 51 .4 77 .2 59 .9 79 .3 59 .7 80 .6 51 .2 77 .6 64 .0 81 .6
+
+CLIP 79 .6 93 .4 90 .3∗ 95 .5∗ 79 .6 91 .9 92 .4 97 .0∗ 87 .2∗ 94 .0∗ 79 .9∗ 92 .8∗
+
+QWEN3-VL 72 .8 87 .5 85 .7∗ 90 .3 73 .4 86 .8 85 .7 93 .0 81 .8∗ 89 .5 73 .8∗ 88 .9∗
+
+As expected, the strongest baseline across both settings is Chang et al. [2021]. Their method uses ground-truth foreground / background segmentations on a pixel level to generate additional factual and counterfactual data. AutoBackSwap is learning a foreground / background detector based on 287 auxiliary samples with much coarser patch-level information to generate augmented data. Contrary to our expectations, ERM with heavy augmentation underperforms ERM with the standard augmentations we used across all methods (horizontal flipping and random resized crop), across both settings for both WGA and Acc. The validation accuracy of ERM with and without heavy augmentation is comparable, ruling out underfitting as an explanation. We hypothesize that the considered heavy augmentations reinforce the classifiers’ bias towards background information. Studying this effect in more detail would be an interesting direction for future work. Among the zero-shot foundation models, SAM3 and CLIP underperform even the naive ERM baseline. QWEN3-VL-Thinking is more competitive, benefiting from its ability to incorporate knowledge that the background is spuriously correlated into its prediction through prompting. Without such prompting, its performance drops significantly. 
+
+4.3 Spawrious Setup. The Spawrious dataset [Lynch et al., 2023] consists of images of four dog breeds placed on six different background settings. The target classes are Y = {bulldog, dachshund, labrador, corgi}, and the spurious background attributes are A = {desert, jungle, dirt, snow, beach, mountain}, yielding 24 possible target–background group combinations. The benchmark defines two experimental settings, 
+
+one-to-one and many-to-many , each further divided into three difficulty levels, easy , medium and 
+
+hard , which differ in the specific groups included in the training and test sets. Fig. 9 in the appendix provides the exact group configurations for each setting and difficulty level. In the one-to-one setting, each target class y is associated with a dominant spurious background attribute a and a single shared background across all classes. The training data follow a 9:1 imbalance, with the minority samples drawn from the shared background to partially break the correlation between y and a. At test time, the spurious attribute assigned to each target is shifted, yielding target–background combinations unseen during training. In the many-to-many setting, each target class is associated with two background attributes in equal proportion, with two target classes sharing the same backgrounds. For testing, the target–background assignments are swapped, so that the same targets still share backgrounds, but with reversed associa-tions compared to training. 
+
+Results. The results for both settings and all difficulty levels are reported in Tab. 2. AutoBackSwap 
+
+achieves the best performance in nine out of twelve experimental conditions (e.g., WGA in o2o-hard) and ranks second in two additional cases. Among the competing approaches, only Chang et al. [2021] attains comparable performance, ranking first in four and second in seven conditions. Of the remaining baselines, GroupDRO is the only method to place among the top performers, achieving second-best results in two conditions. 6In the one-to-one setting, all methods perform similarly due to the shared background, which partially breaks the correlation between the target y and the spurious attribute a. This partial decorrelation satisfies a key implicit assumption of DFR, AFR, GroupDRO, and CORAL, enabling these methods to perform well. In contrast, in the many-to-many setting, the correlation remains largely intact, resulting in substantially degraded performance for these approaches. Only Chang et al. [2021] and 
+
+AutoBackSwap are explicitly designed to handle this regime by leveraging additional supervision to disentangle y and a. Specifically, Chang et al. [2021] relies on ground-truth foreground segmentation masks, while AutoBackSwap employs 400 auxiliary patch-level labels to train the detector. Finally, heavy data augmentation consistently degrades performance, even more than for Waterbirds. Finally, several foundation models perform competitively with task-specific methods. CLIP achieves the strongest overall results, followed by QWEN3-VL-Thinking. The experimental conditions where they outperform the best task-specific model are marked with a star in Tab. 2. We attribute the good performance of foundation models to the prevalence of dog images in large-scale pretraining data, making the Spawrious tasks rather in-distribution, and to the absence of strong background–target correlations in these tasks, in contrast to Waterbirds. 
+
+4.4 Spurious Vehicles Setup. The Spurious Vehicles dataset is a synthetic benchmark proposed in this work to study spurious correlations in a vehicle recognition setting. It consists of images of four vehicle classes placed in four contextual environments. The target classes are Y = {sedan , minivan , SUV , pickup truck } and the spurious context attributes are A = {urban , highway , rural , off-road }, yielding 16 possible target-context group combinations. Example images and the exact train/test group assignments are provided in the appendix. We use the m2m setting, analogous to Spawrious. Table 3: Results for the Spurious Ve-hicles experiments. Best result bold ,second best underlined . Statistics com-puted over three independent runs.                     
+
+> Method WGA Acc
+> ERM 9.5(11 .1) 37 .9(5 .6)
+> + Heavy Aug. 2.1(2 .9) 11 .8(4 .1)
+> DFR 9.2(4 .9) 54 .9(5 .6)
+> AFR 0.1(0 .2) 17 .9(5 .0)
+> Group DRO 4.8(4 .1) 36 .9(9 .2)
+> CORAL 4.7(6 .8) 27 .8(3 .9)
+> Chang et al. 87 .5(2 .7) 95 .3(0 .6)
+> Ours (GT Seg.) 90 .1(2 .5) 96 .3(0 .6)
+> Ours (Learned Det.) 87 .2(1 .9) 95 .3(0 .7)
+
+Results. The results for the Spurious Vehicles benchmark are reported in Tab. 3. We observe that most standard baselines fail almost completely in this setting, indicating that it poses a particularly challenging spurious correla-tion scenario where conventional robustness methods strug-gle to generalize. Among the baselines, only Chang et al. [2021], which assumes access to ground-truth segmentation, achieves strong performance. Our method with the learned lightweight detector reaches a highly competitive worst-group accuracy while matching the best baseline in overall accuracy. This demonstrates that effective mitigation is pos-sible without requiring ground-truth segmentations during training. When replacing the learned detector with ground-truth seg-mentations (GT Seg.), performance further improves and achieves the best overall results. This suggests that the remaining gap is primarily due to fore-ground/background separation quality rather than limitations of the proposed augmentation pipeline itself. Overall, the results show that AutoBackSwap remains highly effective even with a lightweight learned detector, while improved segmentations can yield additional gains. 
+
+## 5 Ablations on Key Design Choices 
+
+In this section, we provide an in-depth analysis of design choices on key aspects of the three main steps of AutoBackSwap , foreground detection, background infilling and sample recomposition. 
+
+5.1 Quality of Auxiliary Dataset 
+
+AutoBackSwap uses an auxiliary dataset with patch-wise foreground mask labels to train the detector. Each mask z ∈ { 0, 1}R,R is provided at a fixed patch resolution R, where higher resolution means more patches (see Fig. 12 for example images). Choosing an appropriate resolution involves a tradeoff: coarse masks provide little utility for disentangling foreground and background with the detector, while fine-grained masks are harder to predict and require more labeled data, increasing annotation cost. Therefore, we study how patch resolution and dataset size jointly affect performance. 750 100 200 400 800 
+
+Dataset Size                         
+
+> 4816 28 56 112
+> Patch Resolution  53.2 (21.8) 64.4 (24.2) 59.2 (14.7) 82.6 (2.2) 84.1 (2.7)
+> 81.2 (4.0) 86.1 (1.9) 88.1 (1.6) 88.8 (1.2) 88.7 (2.0)
+> 88.4 (2.3) 90.1 (1.3) 92.4 (0.7) 92.1 (0.8) 92.3 (1.0)
+> 88.4 (1.2) 90.9 (1.1) 91.4 (1.3) 92.3 (1.5) 92.6 (0.5)
+> 85.9 (1.9) 91.0 (1.0) 91.7 (1.4) 92.3 (0.9) 92.9 (1.1)
+> 84.3 (2.5) 89.1 (0.9) 91.6 (1.1) 92.6 (0.5) 92.7 (1.3)
+
+Worst Group Accuracy (%)     
+
+> 80
+> 82
+> 84
+> 86
+> 88
+> 90
+> 92 50 100 200 400 800
+
+Dataset Size                         
+
+> 4816 28 56 112
+> Patch Resolution  81.5 (6.7) 85.6 (7.9) 85.0 (6.1) 93.2 (0.7) 94.2 (0.8)
+> 94.1 (0.5) 94.3 (0.6) 95.1 (0.3) 95.1 (0.5) 95.1 (0.4)
+> 94.9 (0.4) 95.1 (0.4) 95.0 (0.5) 94.8 (0.4) 94.7 (0.8)
+> 94.7 (0.7) 95.3 (0.4) 94.3 (0.8) 94.6 (0.7) 94.9 (0.6)
+> 94.5 (0.5) 95.1 (0.2) 94.3 (0.8) 94.6 (0.5) 95.1 (0.6)
+> 94.2 (1.0) 95.5 (0.3) 94.0 (0.7) 94.8 (0.4) 94.9 (0.6)
+
+Accuracy (%) 
+
+> 82
+> 84
+> 86
+> 88
+> 90
+> 92
+> 94
+> 96
+
+Figure 2: Dependency of AutoBackSwap ’s performance on dataset size and patch resolution for Waterbirds (w/o minority). Both higher patch resolution and larger dataset size imply higher costs due to increased labeling effort. The black border denotes the setting closest to our main experiments (patch size 16, dataset size 287), striking a favorable tradeoff between performance and costs. Undersampled Mixed (Us/Op) Optimal Mixed (Op/Os) Oversampled 
+
+> 70
+> 75
+> 80
+> 85
+> 90
+> 95
+> 73.9 (8.9)
+> 82.9 (2.6)
+> 85.2 (3.4)
+> 93.9 (0.9)
+> 92.5 (0.7)
+> 94.9 (0.3)
+> 90.8 (1.3)
+> 94.8 (0.2)
+> 90.9 (1.3)
+> 94.8 (0.1)
+> Worst Group Accuracy
+> Accuracy
+
+Figure 3: Effect of biased patch-wise foreground-mask labels on AutoBackSwap ’s performance. We compare 
+
+undersampling , optimal , oversampling , and mixed label settings. Performance is robust to oversampling but degrades sharply under undersampling. 86 88 90 92     
+
+> Worst Group Accuracy (%)
+> Noise
+> Constant
+> Average
+> Pixel-Scramble
+> Patch-Scramble
+> AOT-GAN
+> 88.9 (2.0)
+> 88.8 (1.8)
+> 90.2 (1.0)
+> 90.4 (0.9)
+> 90.0 (1.6)
+> 92.2 (0.4)
+> 91 92 93 94 95
+> Accuracy (%)
+> 93.1 (0.9)
+> 93.0 (0.7)
+> 93.7 (0.4)
+> 93.8 (0.5)
+> 93.6 (0.6)
+> 95.1 (0.3)
+
+Figure 4: Ablation on different infilling variants. Using AOT-GAN as in our main experiments results in the best performance, yet also more simple infilling methods lead to competitive results with only modest drops in WGA and Acc. Results in Fig. 2, obtained on Waterbirds w/o minority (Sec. 4.2), show that resolu-tions of 8 and 4 lead to substantial WGA drops across all dataset sizes. Increasing the patch resolution above 16 yield mod-est gains in WGA, if the dataset size is large enough. Accuracy remains largely stable, except for very small resolutions and dataset sizes. Overall, the configura-tion considered in the main experiments (highlighted by black border) strikes a fa-vorable tradeoff between performance and labeling costs. 
+
+5.2 Biased Auxiliary Mask Labels 
+
+Next, we investigate the effect of biased and noisy auxiliary mask labels on the per-formance of AutoBackSwap . Using the Waterbirds ground-truth segmentations, we construct auxiliary datasets of size 287 at patch resolution 16. We evaluate three la-beling strategies: undersampling , where only patches fully containing the bird are labeled foreground; oversampling , where a single foreground pixel suffices; and opti-mal sampling, which labels patches as fore-ground if at least 25% of pixels belong to the bird, chosen to closely match our man-ual annotations (Sec. 4.2). We also test stochastic mixtures of the masks obtained through undersampling and optimal, and through optimal and oversampling, selecting from either of them with equal probability, see Fig. 14 in the appendix for examples. Results in Fig. 3 show that AutoBackSwap is robust to oversampling, with only a slight drop in WGA compared to optimal sampling. In contrast, undersampling causes substantial degradation in both WGA and Acc, with a more pronounced impact on WGA. 
+
+5.3 Background Infilling Strategy 
+
+The second step in AutoBackSwap is background infilling, implemented using the AOT-GAN model [Zeng et al., 2023] in the main experiments. However, suitable pre-trained models may not be available for all background types. We therefore evaluate the performance of AutoBackSwap under simpler infilling strategies based on image statistics and noise. Specifically, we consider infilling by patch scrambling, pixel scrambling, the per-image average pixel value, a constant value across images, and Gaussian noise (see Fig. 13 for examples). 8The results in Fig. 4 show that AOT-GAN achieves the best performance, but only by a modest margin of approximately 2% in WGA and 1% in Acc. Infilling methods based on image statistics, i.e. patch-scrambling, pixel-scrambling and the average pixel value, perform comparably to each other, close to that of AOT-GAN. In contrast, using a constant value or Gaussian noise yields the weakest results. Overall, these findings indicate that background infilling has a limited impact, and even simple methods such as the average pixel value can yield competitive performance. 
+
+5.4 Sampling Strategy for Recomposition 
+
+Table 4: Ablation for sampling strategy on Waterbirds dataset. The second strategy (grey) is used throughout all other experiments.                           
+
+> Sampling w minority w/o minority Strategy WGA Acc WGA Acc
+> a∼Unif (A)
+> xbg ∼Unif (Ba) 93 .8(0 .4) 95 .5(0 .2) 92 .2(0 .9) 95 .1(0 .4)
+> y∼Unif (Y)
+> xbg ∼Unif (By) 93 .0(0 .9) 95 .0(0 .5) 92 .2(0 .4) 95 .1(0 .3)
+> xbg ∼Unif (B) 93 .1(0 .6) 95 .6(0 .5) 91 .7(0 .8) 95 .1(0 .3)
+
+Finally, we study the role of the sampling strategy in breaking the correlation between the target y and the spurious attribute a. Given a foreground xfg ex-hibiting some target y, the spurious attribute should be sampled uniformly, i.e. a ∼ Unif (A), based on which the set of backgrounds exhibiting this attribute 
+
+Ba is selected and a background xbg ∼ Unif (Ba)
+
+sampled. However, as discussed in Sec. 3.3, requir-ing access to spurious attributes during training is undesirable. Therefore, we also consider sampling based on the target label y ∼ Unif (Y), selecting backgrounds By , and drawing xbg ∼ Unif (By ). Finally, we evaluate a fully agnostic strategy that samples a background uniformly from all possible backgrounds, xbg ∼ Unif (B).We assess these strategies on the Waterbirds dataset, with results reported in Tab. 4. In the setting with minority samples, sampling conditioned on the spurious attribute yields the highest WGA, while target-conditioned sampling results in slightly lower Acc. In the setting without minority samples, uniformly sampling from all backgrounds leads to reduced WGA. Overall, performance differences across strategies are modest, though sampling conditioned on the spurious attribute provides a small but consistent advantage when available. 
+
+## 6 Conclusion 
+
+In this work, we introduced Automated Background Swapping ( AutoBackSwap ), a scalable data aug-mentation framework designed to reduce classifier reliance on spurious background correlations. By disentangling foreground and background using a lightweight detector, infilling missing background regions, and recomposing novel training samples, AutoBackSwap enables the training of background-invariant classifiers without requiring access to training samples that explicitly break the spurious correlation. Extensive experiments across multiple benchmarks demonstrate that AutoBackSwap 
+
+consistently improves worst-group accuracy and overall robustness, outperforming prior methods especially in challenging settings where minority or counterfactual groups are absent during training. Despite these strong results, we acknowledge several limitations of our approach. First, 
+
+AutoBackSwap requires an auxiliary dataset with patch-level foreground masks to train the detector, incurring additional labeling cost, although we show that only a few hundred samples are sufficient. Second, the recomposition process does not explicitly account for semantic or geometric consistency between foreground and background, which may lead to unrealistic placements in some cases. This could be alleviated in future work by synthesizing an image from a given foreground and background by means of generative models. Third, while Sec. 5.3 demonstrates that simple infilling strategies already yield competitive performance, the availability of a suitable generator model for background infilling in highly specialized domains may still pose challenges. Overall, AutoBackSwap provides an effective and practical solution for mitigating spurious back-ground reliance in visual recognition systems, offering a promising direction for improving robust-ness and generalization in systems deployed in real-world settings. 
+
+## Acknowledgements 
+
+We thank Wei Lin and Sepp Hochreiter for valuable feedback in early stages of this project. 9References 
+
+Kartik Ahuja, Ethan Caballero, Dinghuai Zhang, Jean-Christophe Gagnon-Audet, Yoshua Bengio, Ioannis Mitliagkas, and Irina Rish. Invariance principle meets information bottleneck for out-of-distribution generalization. In Advances in Neural Information Processing Systems , 2021. Md Rifat Arefin, Yan Zhang, Aristide Baratin, Francesco Locatello, Irina Rish, Dianbo Liu, and Kenji Kawaguchi. Unsupervised concept discovery mitigates spurious correlations. In Proceedings of the 41st International Conference on Machine Learning , 2024. Martin Arjovsky, Léon Bottou, Ishaan Gulrajani, and David Lopez-Paz. Invariant risk minimization. 
+
+arXiv , 1907.02893, 2019. Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, Wenbin Ge, Zhifang Guo, Qidong Huang, Jie Huang, Fei Huang, Binyuan Hui, Shutong Jiang, Zhaohai Li, Mingsheng Li, Mei Li, Kaixin Li, Zicheng Lin, Junyang Lin, Xuejing Liu, Jiawei Liu, Chenglong Liu, Yang Liu, Dayiheng Liu, Shixuan Liu, Dunjie Lu, Ruilin Luo, Chenxu Lv, Rui Men, Lingchen Meng, Xuancheng Ren, Xingzhang Ren, Sibo Song, Yuchong Sun, Jun Tang, Jianhong Tu, Jianqiang Wan, Peng Wang, Pengfei Wang, Qiuyue Wang, Yuxuan Wang, Tianbao Xie, Yiheng Xu, Haiyang Xu, Jin Xu, Zhibo Yang, Mingkun Yang, Jianxin Yang, An Yang, Bowen Yu, Fei Zhang, Hang Zhang, Xi Zhang, Bo Zheng, Humen Zhong, Jingren Zhou, Fan Zhou, Jing Zhou, Yuanzhi Zhu, and Ke Zhu. Qwen3-vl technical report. 
+
+arXiv , 2511.21631, 2025. Nicholas Baker, Hongjing Lu, Gennady Erlikhman, and Philip J. Kellman. Deep convolutional networks do not classify based on global object shape. PLOS Computational Biology , 2018. Kit M. Bransby, Arian Beqiri, Woo-Jin Cho Kim, Jorge Oliveira, Agisilaos Chartsias, and Alberto Gomez. BackMix: Mitigating Shortcut Learning in Echocardiography with Minimal Supervision . In proceedings of Medical Image Computing and Computer Assisted Intervention – MICCAI 2024 ,2024. Wieland Brendel and Matthias Bethge. Approximating cnns with bag-of-local-features models works surprisingly well on imagenet. International Conference on Learning Representations , 2019. Joy Buolamwini and Timnit Gebru. Gender shades: Intersectional accuracy disparities in commercial gender classification. In Proceedings of the 1st Conference on Fairness, Accountability and Transparency , 2018. Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoubhik Debnath, Ronghang Hu, Didac Suris, Chaitanya Ryali, Kalyan Vasudev Alwala, Haitham Khedr, Andrew Huang, Jie Lei, Tengyu Ma, Baishan Guo, Arpit Kalla, Markus Marks, Joseph Greer, Meng Wang, Peize Sun, Roman Rädle, Triantafyllos Afouras, Effrosyni Mavroudi, Katherine Xu, Tsung-Han Wu, Yu Zhou, Liliane Momeni, Rishi Hazra, Shuangrui Ding, Sagar Vaze, Francois Porcher, Feng Li, Siyuan Li, Aishwarya Kamath, Ho Kei Cheng, Piotr Dollár, Nikhila Ravi, Kate Saenko, Pengchuan Zhang, and Christoph Feichtenhofer. Sam 3: Segment anything with concepts. arXiv , 2511.16719, 2025. Chun-Hao Chang, George Alexandru Adam, and Anna Goldenberg. Towards robust classification model by counterfactual and invariant data generation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2021. Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Representations , 2021. Yaroslav Ganin, Evgeniya Ustinova, Hana Ajakan, Pascal Germain, Hugo Larochelle, François Laviolette, Mario March, and Victor Lempitsky. Domain-adversarial training of neural networks. 
+
+Journal of Machine Learning Research , 2016. Robert Geirhos, Patricia Rubisch, Claudio Michaelis, Matthias Bethge, Felix A. Wichmann, and Wieland Brendel. Imagenet-trained CNNs are biased towards texture; increasing shape bias improves accuracy and robustness. In International Conference on Learning Representations , 2019. 10 Robert Geirhos, Jörn-Henrik Jacobsen, Claudio Michaelis, Richard Zemel, Wieland Brendel, Matthias Bethge, and Felix A. Wichmann. Shortcut learning in deep neural networks. Nature Machine Intelligence , 2020. Charles R. Harris, K. Jarrod Millman, Stéfan J. van der Walt, Ralf Gommers, Pauli Virtanen, David Cournapeau, Eric Wieser, Julian Taylor, Sebastian Berg, Nathaniel J. Smith, Robert Kern, Matti Picus, Stephan Hoyer, Marten H. van Kerkwijk, Matthew Brett, Allan Haldane, Jaime Fernández del Río, Mark Wiebe, Pearu Peterson, Pierre Gérard-Marchant, Kevin Sheppard, Tyler Reddy, Warren Weckesser, Hameer Abbasi, Christoph Gohlke, and Travis E. Oliphant. Array programming with NumPy. Nature , 2020. Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In 2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2016. Gabriel Ilharco, Mitchell Wortsman, Ross Wightman, Cade Gordon, Nicholas Carlini, Rohan Taori, Achal Dave, Vaishaal Shankar, Hongseok Namkoong, John Miller, Hannaneh Hajishirzi, Ali Farhadi, and Ludwig Schmidt. Openclip, 2021. Polina Kirichenko, Pavel Izmailov, and Andrew Gordon Wilson. Last layer re-training is sufficient for robustness to spurious correlations. In The Eleventh International Conference on Learning Representations , 2023. Black Forest Labs, Stephen Batifol, Andreas Blattmann, Frederic Boesel, Saksham Consul, Cyril Diagne, Tim Dockhorn, Jack English, Zion English, Patrick Esser, Sumith Kulal, Kyle Lacey, Yam Levi, Cheng Li, Dominik Lorenz, Jonas Müller, Dustin Podell, Robin Rombach, Harry Saini, Axel Sauer, and Luke Smith. Flux.1 kontext: Flow matching for in-context image generation and editing in latent space. arXiv , 2506.15742, 2025. Yoonho Lee, Huaxiu Yao, and Chelsea Finn. Diversify and disambiguate: Out-of-distribution robust-ness via disagreement. In The Eleventh International Conference on Learning Representations ,2023. Daniel Levy, Yair Carmon, John C Duchi, and Aaron Sidford. Large-scale methods for distributionally robust optimization. In Advances in Neural Information Processing Systems , 2020. Yong Lin, Hanze Dong, Hao Wang, and Tong Zhang. Bayesian invariant risk minimization. In 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. Evan Z Liu, Behzad Haghgoo, Annie S Chen, Aditi Raghunathan, Pang Wei Koh, Shiori Sagawa, Percy Liang, and Chelsea Finn. Just train twice: Improving group robustness without training group information. In Proceedings of the 38th International Conference on Machine Learning , 2021. Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In International Confer-ence on Learning Representations , 2019. Aengus Lynch, Gbètondji J-S Dovonon, Jean Kaddour, and Ricardo Silva. Spawrious: A benchmark for fine control of spurious correlation biases. arXiv , 2303.05470, 2023. Mazda Moayeri, Phillip Pope, Yogesh Balaji, and Soheil Feizi. A comprehensive study of image classification model sensitivity to foregrounds, backgrounds, and visual attributes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. Junhyun Nam, Hyuntak Cha, Sungsoo Ahn, Jaeho Lee, and Jinwoo Shin. Learning from failure: De-biasing classifier from biased classifier. In Advances in Neural Information Processing Systems ,2020. Luke Oakden-Rayner, Jared Dunnmon, Gustavo Carneiro, and Christopher Ré. Hidden stratification causes clinically meaningful failures in machine learning for medical imaging. Proc ACM Conf Health Inference Learn (2020) , 2020. Matteo Pagliardini, Martin Jaggi, François Fleuret, and Sai Praneeth Karimireddy. Agree to disagree: Diversity through disagreement for better transferability. In The Eleventh International Conference on Learning Representations , 2023. 11 Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas Kopf, Edward Yang, Zachary DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala. Pytorch: An imperative style, high-performance deep learning library. In Advances in Neural Information Processing Systems , 2019. F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel, P. Pretten-hofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher, M. Perrot, and E. Duchesnay. Scikit-learn: Machine learning in Python. Journal of Machine Learning Research ,12, 2011. Shikai Qiu, Andres Potapczynski, Pavel Izmailov, and Andrew Gordon Wilson. Simple and Fast Group Robustness by Automatic Feature Reweighting. In International Conference on Machine Learning (ICML) , 2023. Alec Radford, Jong Wook Kim, Chris Hallacy, A. Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning transferable visual models from natural language supervision. In International Conference on Machine Learning (ICML) , 2021. Shiori Sagawa, Pang Wei Koh, Tatsunori B. Hashimoto, and Percy Liang. Distributionally robust neural networks. In International Conference on Learning Representations , 2020. Christoph Schuhmann, Romain Beaumont, Richard Vencu, Cade W Gordon, Ross Wightman, Mehdi Cherti, Theo Coombes, Aarush Katta, Clayton Mullis, Mitchell Wortsman, Patrick Schramowski, Srivatsa R Kundurthy, Katherine Crowson, Ludwig Schmidt, Robert Kaczmarczyk, and Jenia Jitsev. LAION-5b: An open large-scale dataset for training next generation image-text models. In Thirty-sixth Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2022. Luca Scimeca, Seong Joon Oh, Sanghyuk Chun, Michael Poli, and Sangdoo Yun. Which shortcut cues will DNNs choose? a study from the parameter-space perspective. In International Conference on Learning Representations , 2022. Harshay Shah, Kaustav Tamuly, Aditi Raghunathan, Prateek Jain, and Praneeth Netrapalli. The pitfalls of simplicity bias in neural networks. In Advances in Neural Information Processing Systems , 2020. Nimit Sohoni, Jared Dunnmon, Geoffrey Angus, Albert Gu, and Christopher Ré. No subclass left behind: Fine-grained robustness in coarse-grained classification problems. In Advances in Neural Information Processing Systems , 2020. Nimit Sharad Sohoni, Maziar Sanjabi, Nicolas Ballas, Aditya Grover, Shaoliang Nie, Hamed Firooz, and Christopher Re. BARACK: Partially supervised group robustness with guarantees. In ICML 2022: Workshop on Spurious Correlations, Invariance and Stability , 2022. Baochen Sun and Kate Saenko. Deep coral: Correlation alignment for deep domain adaptation. In 
+
+ECCV 2016 Workshops , 2016. Baochen Sun, Jiashi Feng, and Kate Saenko. Return of frustratingly easy domain adaptation. In 
+
+AAAI , 2016. Yu Wang, Junxian Mu, Hongzhi Huang, Qilong Wang, Pengfei Zhu, and Qinghua Hu. BackMix: Regularizing Open Set Recognition by Removing Underlying Fore-Background Priors. IEEE Transactions on Pattern Analysis & Machine Intelligence , 2025. Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Clement Delangue, Anthony Moi, Pierric Cistac, Tim Rault, Rémi Louf, Morgan Funtowicz, Joe Davison, Sam Shleifer, Patrick von Platen, Clara Ma, Yacine Jernite, Julien Plu, Canwen Xu, Teven Le Scao, Sylvain Gugger, Mariama Drame, Quentin Lhoest, and Alexander M. Rush. Huggingface’s transformers: State-of-the-art natural language processing. arXiv , 1910.03771, 2020. Kai Yuanqing Xiao, Logan Engstrom, Andrew Ilyas, and Aleksander Madry. Noise or signal: The role of image backgrounds in object recognition. In International Conference on Learning Representations , 2021. 12 Yuzhe Yang, Haoran Zhang, Dina Katabi, and Marzyeh Ghassemi. Change is hard: A closer look at subpopulation shift. In Proceedings of the 40th International Conference on Machine Learning ,2023. Huaxiu Yao, Yu Wang, Sai Li, Linjun Zhang, Weixin Liang, James Zou, and Chelsea Finn. Improving out-of-distribution robustness via selective augmentation. In Proceedings of the 39th International Conference on Machine Learning , 2022. Jiahui Yu, Zhe Lin, Jimei Yang, Xiaohui Shen, Xin Lu, and Thomas S. Huang. Generative image inpainting with contextual attention. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2018. Sangdoo Yun, Dongyoon Han, Seong Joon Oh, Sanghyuk Chun, Junsuk Choe, and Youngjoon Yoo. Cutmix: Regularization strategy to train strong classifiers with localizable features. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2019. John R. Zech, Marcus A. Badgeley, Manway Liu, Anthony B. Costa, Joseph J. Titano, and Eric Karl Oermann. Variable generalization performance of a deep learning model to detect pneumonia in chest radiographs: A cross-sectional study. PLOS Medicine , 2018. Yanhong Zeng, Jianlong Fu, Hongyang Chao, and Baining Guo. Aggregated contextual transforma-tions for high-resolution image inpainting. IEEE Transactions on Visualization and Computer Graphics , 2023. Hongyi Zhang, Moustapha Cisse, Yann N. Dauphin, and David Lopez-Paz. mixup: Beyond empirical risk minimization. In International Conference on Learning Representations , 2018. Michael Zhang, Nimit S Sohoni, Hongyang R Zhang, Chelsea Finn, and Christopher Re. Correct-n-contrast: a contrastive approach for improving robustness to spurious correlations. In Proceedings of the 39th International Conference on Machine Learning , 2022. 
+
+## A Broader Impact 
+
+This work addresses the problem of spurious correlations in image classifiers, with direct relevance to high-stakes deployment contexts. We discuss both potential positive and negative societal implications below. 
+
+Positive impacts. Deep neural networks deployed in consequential domains, medical imaging, autonomous driving, and facial recognition, among others, are known to exploit spurious background cues rather than causally relevant features, with documented harms to underrepresented groups [Buolamwini and Gebru, 2018, Oakden-Rayner et al., 2020]. AutoBackSwap can potentially reduce the risk that classifiers fail precisely on the subpopulations that are already underrepresented in training data. Crucially, our method requires only a small auxiliary annotation effort (a few hundred samples) and does not assume access to group labels at training time, lowering barriers to adoption in settings where collecting balanced datasets is expensive or infeasible. Improved robustness to background shifts could therefore contribute meaningfully to safer, fairer deployed systems. 
+
+Negative impacts. AutoBackSwap specifically targets spurious correlations that manifest in the background of images. It does not address spurious features that are entangled with the foreground itself, nor does it guard against other failure modes such as texture bias or dataset collection artifacts unrelated to background. Practitioners should therefore not treat our method as a general solution to distribution shift or as a substitute for careful dataset curation and ongoing monitoring of deployed systems, but as a specialized tool the particular problem of spurious backgrounds. Additionally, the recomposition step can produce training images in which foreground objects appear in semantically implausible contexts. While our experiments suggest this does not harm average accuracy, it is conceivable that, in safety-critical domains, training on unrealistic composites could introduce unexpected failure modes not captured by our benchmarks. We encourage practitioners to validate augmented data quality before deployment. 13 Finally, as with any method that improves classifier robustness, there is a risk of inducing overconfi-dence in its predictions: a model that is more robust to background variation may be incorrectly as-sumed to be robust along other axes of variation as well. We caution against generalizing robustness claims beyond the specific spurious background correlations AutoBackSwap is designed to address. 
+
+## B Details on AutoBackSwap 
+
+In this section, we give more implementational details of AutoBackSwap , discussing the training of the detector network, how to obtain masks for the foreground and background, and how to recompose images. A visual overview of applying AutoBackSwap to a dataset consisting of four images is shown in Fig. 5. 
+
+Detector training. In all experiments, we use an EfficientNet-B0 backbone and replace the final layer such that the model predicts the foreground likelihood for each output patch. Training is performed using binary cross-entropy on foreground/background masks. We optimize using SGD with momentum, where learning rate, weight decay, and momentum are selected via cross-validation using an 80:20 train/validation split of Daux . To improve robustness, we additionally apply data augmentations (horizontal flipping, rotations, translations) and target smoothing with factor 0.1.
+
+Annotation of auxiliary labels. For Waterbirds, the auxiliary dataset is created manually by annotating all patches (patch resolution 16 × 16 ) that contain foreground information, as determined by the class label, resulting in 287 labeled images. For Spawrious, Spurious Vehicles, and for the ablation studies, we use the more scalable alternative of obtaining down-scaled masks from SAM3. Concretely SAM3 is prompted with the respective foreground object class to generate pixel-level segmentation masks for training images. These masks are not used directly during training of our method, but instead serve as proxy annotations for constructing the auxiliary dataset used to train the detector. We then select 400 samples and convert the pixel-level masks into coarse 16 × 16 patch-level labels by pooling mask values within each patch. These patch-wise annotations are later used to train the lightweight detector, analogous to the manually labeled Waterbirds setup. 
+
+Thresholds for foreground and background masks. Naively, one would predict a single mask separating foreground and background with the detector model. However, we found that using two distinct masks yields better performance of the overall method in practice. That is, because for the extracted foreground, we want as little background leakage as possible, such that the correlation between y and a can be broken through recomposition. For the remaining background, we would like to certainly not contain any remaining foreground patches, lest the generator infills with foreground information again instead of generating a full background. In our experiments, we manually tuned the thresholds used for those two masks through manually inspecting the resulting foregrounds and backgrounds on random samples from the training set. However, this procedure can also be automated by selecting thresholds according to desired precision and recall targets for patch-level predictions on the validation split of the auxiliary dataset. In particular, we evaluated a simple strategy on Waterbirds that fixes target positive and negative rates on the validation set, yielding thresholds close to those obtained via manual inspection and leading to virtually identical downstream performance. 
+
+Recomposition. Finally, the obtained foregrounds and backgrounds are recomposed stochastically to form new augmented samples. Here we apply transformations on the foreground image, rotation, rescaling and translation. 
+
+## C Details on Baseline Methods 
+
+C.1 Trained Baselines ERM. Empirical Risk Minimization corresponds to standard supervised training of a classifier using cross-entropy loss on the original training data, without any explicit consideration of spurious attributes or group structure. 
+
+ERM + Heavy Aug. In addition to standard data augmentation (random resized crop and horizontal flipping), we apply mixup [Zhang et al., 2018], CutMix [Yun et al., 2019], and ColorJitter. This baseline evaluates whether stronger generic augmentation alone can mitigate spurious correlations. 14 Chang et al. We implement the method of Chang et al. [2021], which generates factual and counterfactual samples using ground-truth or estimated foreground masks and jointly optimizes three losses: standard classification loss, a loss encouraging the correct class prediction on factual samples, and a loss penalizing the correct class prediction on counterfactual samples. For Waterbirds, we use the provided ground-truth segmentations. For Spawrious, segmentation masks are obtained using SAM3, prompting it to segment “dog”. The original implementation uses the rather dated CAGAN model [Yu et al., 2018] for infilling of the counterfactuals. We switch to the AOT-GAN model used in 
+
+AutoBackSwap , to rule out differences in the infilling quality as reason for performance differences. Furthermore, AOT-GAN was developed as an improved successor model to CAGAN, leading to improved infilling quality in their experiments (see their Table 1). 
+
+DFR. Deep Feature Reweighting first trains a backbone model using ERM. In a second stage, only the final classification layer is retrained using a group-balanced reweighting dataset, which requires access to group labels. 
+
+AFR. Automatic Feature Reweighting also follows a two-stage training scheme. After ERM training, the final layer is retrained with samples weighted according to the prediction errors of the base model, without requiring explicit group labels. As an approximation to DFR with reduced assumptions, it is expected to at best perform as good as DFR. Importantly, the first stage should be “trained until convergence” (see their Algorithm 1). The authors further note that in their experiments, the first stage achieves near-zero training loss and might overfit and not predict well at all on minority samples. When experimenting with AFR, we also found that long training in the first stage was critical and in the end refrained from using early stopping as for all other methods to fairly evaluate the performance of this method. 
+
+Group DRO. Group Distributionally Robust Optimization minimizes the worst-case loss across predefined groups. This method requires access to spurious attribute labels during training and explicitly optimizes for worst-group performance. In particular, we implement the online optimization algorithm (Algorithm 1 in Sagawa et al. [2020]). 
+
+CORAL. Correlation Alignment aligns second-order statistics of feature representations across domains defined by spurious attributes through an additional regularization term, encouraging background-invariant representations. Originally developed for domain generalization, it can be readily applied to mitigate spurious correlations, but spurious attribute labels are required during training. 
+
+C.2 Zero-Shot Baselines SAM3. We prompt SAM3 with the target class names and obtain segmentation masks. Predictions are derived by selecting the class whose predicted segmentation mask covers the largest area. Detector   
+
+> Generator
+> Transform
+> Paste
+> Input Images Output Images
+> FG / BG Detection FG / BG Recomposition
+> BG Infilling
+> FG Transformation
+
+Figure 5: Illustration of applying AutoBackSwap to a dataset of four images, given an already trained detector and generator model. First, foreground and background are separated using the masks predicted by the detector. Note that two sets of masks are used, one for foreground, one for background. We would like to have little background leakage for the foreground images and little to no foreground in the background images, which is why masks are generated for two thresholds. Then, rotation, scale and translation transformations are applied on the foreground image, the background is infilled using the generator model. Finally, foreground and background are stochastically matched and recomposed to form new images, used to train the classifier. 15 Figure 6: The Waterbirds dataset has four groups that split up into minority (landbirds on water, waterbirds on land) and majority (landbirds on land, waterbirds on water) groups. 
+
+CLIP. We compute cosine similarities between the image embedding and text embeddings of class names, and predict the class with the highest similarity. In particular, we use the Open-CLIP ViT-bigG-14 model [Ilharco et al., 2021], trained on the LAION-2B [Schuhmann et al., 2022] s39b b160k. 
+
+QWEN3-VL-Thinking. We prompt the model to explicitly ignore background cues and reason about the object of interest before producing a class prediction. We found this prompting strategy crucial for achieving competitive performance. The full prompts for Waterbirds and Spawrious are as follows: QWEN3-VL-Thinking Prompt (Waterbirds) Does this picture show a landbird or a waterbird species? Ignore the background for your answer. Provide as answer a single word from this list: landbird, waterbird. Answer: QWEN3-VL-Thinking Prompt (Spawrious) What type of dog breed is shown in this picture? Ignore the background for your answer. Provide as answer a single word from this list: bulldog, corgi, dachshund, labrador. Answer: 
+
+## D Details on Datasets 
+
+In this section, we provide additional details on the datasets used in our experiments, including additional details on experimental conditions. 
+
+D.1 Waterbirds Original AOT-GAN Patch-Scramble Pixel-Scramble Original AOT-GAN Patch-Scramble 
+
+Figure 7: Waterbirds exam-ple images. The Waterbirds dataset [Sagawa et al., 2020] (Licenced under MIT) is a synthetic benchmark designed to study spurious correlations between foreground objects and background scenes. It consists of bird images pasted onto background images depicting either water or land, see Fig. 7 for examples. The class labels are Y = {waterbird, landbird} and the spurious attribute is A = {water background, land background}, leading to four different groups. The dataset features ground-truth segmentation maps (on the pixel level) for the birds. Those are used for the method by Chang et al. [2021] in the main experiments and to construct certain conditions for ablations on AutoBackSwap . AutoBackSwap does not use the ground-truth segmentation maps in the main experiments, but only relies on 287 hand-labeled patch-wise masks to train the detector for foreground / background disentanglement on the full training dataset. Hand-labeling was done by a single annotator through a dedicated software tool written for this work, in order to optimize the workflow and save time. Overall, it took the annotator a bit more than four hours to label all 287 images. 16 (a) o2o-easy  (b) o2o-medium  (c) o2o-hard   
+
+> (d) m2m-easy (e) m2m-medium (f) m2m-hard
+
+Figure 9: Detailed configurations of Spawrious datasets. One-to-One: Train set uses a dominant and a shared background (9:1), while test set shifts the target–background associations. Many-to-Many: 
+
+Train set assigns two backgrounds per class at equal ratio, and test set swaps these associations. There is a disagreement between the naming convention of the many-to-many difficulty levels in the paper and the official implementation. We chose to follow the implementation. 
+
+D.2 Spawrious 
+
+Figure 8: Spawrious exam-ple images. The Spawrious dataset [Lynch et al., 2023] (Licenced under CC0 1.0 Universal) is a large-scale synthetic benchmark created using a text-to-image diffusion model. The aim is to classify differnet dog breeds, thus the target classes are Y = {bulldog, dachshund, labrador, corgi}. They are generated in different environments, thus the spurious back-ground attributes are A = {desert, jungle, dirt, snow, beach, mountain}, yielding 24 possible target–background group combinations. The benchmark defines two experimental settings: one-to-one (o2o) and many-to-many (m2m), each with three difficulty levels (easy, medium, hard), which vary in how the target–background associations differ between training and testing. The individual configurations are shown in Fig. 9. Note that for the many-to-many settings, there is a discrepancy between the description in the paper and the official implementation by Lynch et al. [2023], regarding which groups belong to which difficulty level. We chose to follow the official implementation. Segmentation masks required for the Chang et al. [2021] baseline are obtained using SAM3, prompt-ing it with “dog”. For very few images (less than 0.1% of the dataset), it fails to segment a dog. We find this is generally if the dog is shown very tiny in the background and hard to make out as dog definitively when not knowing that the image should contain a dog. We excluded those images from the training set, due to their very limited number. For AutoBackSwap , we obtained patch annotations with a resolution of 16 on 400 samples. We chose more samples, as the Spawrious dataset is more complex than the Waterbirds dataset. Moreover, the training set contains different groups in each of the six experimental conditions (o2o-easy, o2o-medium, ...). Therefore, we automatically generated the patch-level annotations based on the pixel-level segmentation masks obtained by SAM3. To be clear, if segmentation masks are already available for the whole training dataset, there is no point to train a detector in practice, one can simply use the segmentation masks. We do this to emulate not having access to segmentation masks and obtaining the patch-level masks through manual annotation. 17 a
+
+y
+
+Ur  Hi  Ru  Of 
+
+SED 
+
+MIN 
+
+SUV 
+
+PKP Figure 11: Detailed configuration of the Spurious Vehicles dataset (many-to-many setting). The training set assigns two background contexts to each class in equal proportion, while the test set swaps these associations. 
+
+D.3 Spurious Vehicles 
+
+Figure 10: Spurious Vehi-cles example images. The Spurious Vehicles dataset is a synthetic benchmark introduced in this work, generated using the FLUX.1-schnell model by Labs et al. [2025] (Licensed under Apache-2.0). The aim is to classify different vehicle types, thus the target classes are Y = { sedan , minivan ,SUV , pickup truck }. Images are generated in different environments, yielding the spurious context attributes A = { urban , highway , rural ,off-road }, for a total of 16 possible target–context group combinations. We consider the many-to-many setting, analogous to Spawrious [Lynch et al., 2023]. Each target class is associated with two contexts during training, where pairs of classes share the same contexts. At test time, these assignments are swapped while preserving the shared structure. The exact configuration is shown in Fig. 11. We generate 256 images per group, resulting in 4096 images overall, with half belonging to the training/validation split and half to the test split. Images are generated at a resolution of 512 × 512 using a quantized FLUX.1-schnell checkpoint (Q8_0 format) for efficient inference. We use guidance scale 0.0, four denoising steps, and a maximum sequence length of 256. Prompts specify both the vehicle class and the desired context while enforcing consistent framing and viewing perspectives. This controlled generation process allows us to vary contextual cues while preserving the semantic target label. 
+
+## E Hyperparameter Tuning 
+
+We manually tuned AutoBackSwap and baselines using both WGA and Acc on the validation dataset. On the Waterbirds benchmark, we tuned in the with minority setting and used the same hyperparameters for the setting without minority groups. On the Spawrious benchmark, we used the o2o-easy setting and used the same hyperparameters for all other settings. Particularly, we tuned learning rate, batch size and weight decay for each method, in addition to important method specific parameters (e.g. regularization weight for CORAL or group-weight step size for GroupDRO). Many other hyperparameters, such as the optimizer (SGD), its momentum (0.9), the early stopping strategy, or the strength of target smoothing are derived from prior work [e.g. Sagawa et al., 2020, Kirichenko et al., 2023, Qiu et al., 2023] and shared across all methods. We investigated how well they are tuned on the ERM baseline and found no significantly better configuration. Where available, we started from the hyperparameters originally proposed, or from hyperparameters used for the particular method on the particular dataset in prior work. Given the similar dataset structure, we follow a comparable hyperparameter configuration for the Spurious Vehicles benchmark as for Spawrious. All methods have been tuned on the same seed, with a comparable number of configurations 18 Table 5: Extended results for Waterbirds experiments featuring both results with ResNet50 (same as Tab. 1) and ViT as base models. We report the WGA and the Acc over the four groups. Best result 
+
+bold , second best underlined. Statistics computed over five independent runs. 
+
+Method ResNet50 ViT w minority w/o minority w minority w/o minority 
+
+WGA Acc WGA Acc WGA Acc WGA Acc 
+
+ERM 74 .9(3 .3) 93 .6(0 .4) 33 .4(4 .4) 68 .4(1 .9) 63 .1(10 .4) 90 .1(0 .6) 21 .4(1 .3) 62 .5(1 .8) 
+
++ Heavy Aug. 74 .3(2 .3) 87 .4(1 .0) 15 .9(2 .7) 61 .5(1 .2) 66 .0(5 .8) 90 .8(0 .7) 19 .4(3 .4) 60 .2(1 .5) 
+
+DFR 90 .7(0 .8) 94 .3(0 .1) 15 .1(1 .9) 60 .1(0 .8) 87 .7(1 .1) 92 .1(0 .6) 20 .9(4 .9) 61 .6(1 .9) 
+
+AFR 78 .6(3 .7) 88 .5(0 .9) 22 .2(3 .3) 64 .2(0 .8) 59 .9(3 .1) 79 .3(1 .5) 19 .9(2 .3) 60 .0(1 .3) 
+
+Group DRO 82 .2(1 .6) 94 .8(0 .2) 27 .6(3 .8) 65 .3(0 .6) 80 .7(5 .2) 93 .3(0 .7) 20 .4(4 .8) 61 .4(2 .0) 
+
+CORAL 78 .4(4 .2) 93 .6(0 .3) 22 .0(5 .5) 65 .0(2 .3) 64 .1(8 .0) 90 .7(0 .5) 20 .8(2 .8) 60 .7(1 .5) 
+
+Chang et al. 85 .7(2 .3) 95 .7(0 .3) 79 .1(3 .2) 91 .4(1 .8) 78 .5(3 .6) 93 .7(0 .5) 45 .5(8 .0) 76 .4(4 .3) 
+
+Ours 93 .0(0 .9) 95 .0(0 .5) 92 .2(0 .4) 95 .1(0 .3) 90 .8(0 .5) 96 .6(0 .3) 89 .8(1 .1) 95 .6(0 .4) 
+
+## F Effect of Model Architecture 
+
+In addition to the ResNet50 architecture [He et al., 2016] used for the results in the main paper, we further consider the vision transformer (ViT) architecture [Dosovitskiy et al., 2021] to assess the robustness of our results to changing architectures. In particular, we consider the same experimental setup as in Sec. 4.2. We did not re-tune hyperparameters compared to the Waterbirds experiments in the main paper, but used a general recipe following standard practice to port the configurations of all methods from ResNet-50 to ViT. In particular, we changed the optimizer from SGD to AdamW [Loshchilov and Hutter, 2019], decreasing the learning rate by 1e-2 and increasing weight decay by 1e1. Furthermore, we add a learning rate scheduler of 5 epochs of linear warmup (from 10% of start learning rate), followed by cosine decay to 1% of the start learning rate. Note that for AutoBackSwap only the classifier is changed to a ViT, the auxiliary detector model is still a ResNet-50, as we care about the performance of the classifier when trained on the augmented samples, not how to optimally train a foreground / background detector with ViTs which may require different training strategies. 
+
+Results. AutoBackSwap attains slightly higher Acc with ViT than with ResNet, but slightly lower WGA. All baseline methods substantially decrease in performance when changing to ViTs, further increasing the advantage of AutoBackSwap over the baseline methods. AutoBackSwap improves 
+
+44.3% in WGA and 19.2% in Acc over the second best method in the setting without minority samples. 
+
+## G Ablations 
+
+G.1 Quality of Auxiliary Dataset 
+
+The quality of the auxiliary dataset is determined by its patch resolution and size. Generally, the auxiliary dataset is randomly sampled from the full training dataset, followed by manual labeling in the main experiments. Within this ablation, we use the provided ground-truth segmentation masks for Waterbirds to analyze the influence of the auxiliary datasets quality on the overall performance. In Fig. 12, we show examples of how masks look like for a certain patch resolution. Note that a threshold of 25% was used to assign the patches, i.e. at least 25% of pixels must be segmented as bird. 
+
+G.2 Background Infilling Strategy 
+
+We use the AOT-GAN model for background infilling for our main experiments. Within this ablation, we investigate more simple infilling strategies that do not need a pretrained generator model: • Patch-scramble: extract patches of the patch resolution from the remaining background and randomly insert into the empty foreground region for infilling. 19 Input 4x4 8x8 16x16 28x28 56x56 112x112 Figure 12: Visualization of mask annotations across patch resolutions. The first column shows the input image without any mask, followed by the corresponding mask overlays at different patch resolutions. The figure illustrates how decreasing the patch resolution results in coarser and more spatially aggregated masks, while increasing the patch resolution results in more spatial detail. • Pixel-scramble: randomly insert pixels from the remaining background into the empty foreground region for infilling. • Average: fill the empty foreground region with the average pixel value of the remaining background. • Constant: fill the empty foreground region with a constant value (we use 128 in uint8 pixel space, which is grey). • Noise: following Chang et al. [2021], we first sample uniform per color channel and add Gaussian noise on the pixel level on top of the uniform noise. In Fig. 13 we show examples for the considered infilling methods. 
+
+G.3 Biased Auxiliary Mask Labels 
+
+In this ablation, we consider the effect of biased auxiliary mask labels. Depending on instructions and personal biases, the patch-level mask labels could be oversampled (containing much background) or undersampled (not contain parts of the foreground). Based on the ground-truth segmentation masks provided for the waterbirds dataset, we do the following patch assignments: For oversampling, a patch is assigned as foreground if a single pixel is a foreground according to the segmentation mask. For undersampling, a patch is assigned as foreground if every pixel is a foreground according to the segmentation mask. Furthermore, we emulate our manual sampling outcome, by setting a threshold of 25% of pixels containing foreground according to the segmentation mask, which we call optimal. In addition to this basic settings, we also consider mixtures between oversampling and optimal, as well as undersampling and optimal. For these mixtures, we randomly select each patch from either of the two base masks with equal probability. We show examples of all settings in Fig. 14. 
+
+## H Detailed Comparison to Prior Work 
+
+H.1 Chang et al. (2021) 
+
+Chang et al. [2021] propose counterfactual and factual/invariant data augmentation based on ground-truth bounding boxes or segmentation masks. Their method generates augmented factual and counter-factual samples and optimizes two additional auxiliary losses on those. In contrast, AutoBackSwap 
+
+requires only a small auxiliary dataset with coarse patch-level labels and uses it to automatically gen-erate large-scale augmented data. Our approach is more straightforward, avoids additional loss terms that may be hard to balance in practice, and removes the need for dense foreground annotations on the full dataset. 20 H.2 Wang et al. (2025) 
+
+Wang et al. [2025] introduce a background-mixing strategy called BackMix based on class activation maps, where foreground regions are masked and background patches are extracted and pasted onto target images. This is opposite to our approach, where the foreground region is extracted and pasted onto infilled backgrounds. Their approach focuses on open-set recognition and relies on heuristic foreground estimation. AutoBackSwap instead learns an explicit foreground–background disentanglement model and performs systematic recomposition, aiming for improved robustness against spurious backgrounds in closed-set classification. 
+
+H.3 Bransby et al. (2024) 
+
+Bransby et al. [2024] propose a background-mixing strategy also called BackMix for echocardiog-raphy, assuming access to foreground masks in a semi-supervised medical imaging setting. Their method samples random backgrounds for each foreground, where infilling of the remaining back-ground can be trivially done by inserting zeros due to the data structure and applying additional weighting to those augmented samples in the cross-entropy loss. AutoBackSwap generalizes this idea by learning foreground masks from limited patch-level labels, enabling scalable application across diverse natural-image benchmarks without dense supervision. It augments all training samples and does not alter the training loss. 
+
+## I Software and Hardware 
+
+The code to reproduce all our experiments are available at https://github.com/cesro7/ spur-corr .We use NumPy 1.26 [Harris et al., 2020], scikit-learn 1.5 [Pedregosa et al., 2011], PyTorch 2.4 [Paszke et al., 2019] and HF transformers 5.0 [Wolf et al., 2020]. The majority of experiments and hyperparameter tuning (partly) have been performed on A40 (48GB) GPUs. Early experimentation and hyperparameter tuning (partly) been performed on RTX 4060 GPUs. For the main experiments, including all baselines, we estimate a computational demand of around 300 GPU-hours. Another 100 GPU-hours have been used for early experimentation and hyperparameter tuning. 21 Original AOT-GAN Patch-Scramble Pixel-Scramble Average Gray Noise Figure 13: Qualitative comparison of background infilling strategies. The first column shows the original image, and the remaining columns correspond to different background infilling methods (AOT-GAN, Patch-Scramble, Pixel-Scramble, Average, Gray and Noise), while each row shows a different example image. Input undersample undersample_optimal optimal oversample_optimal oversample 
+
+Figure 14: Visualization of labeling strategies for auxiliary mask labels. In undersampling, only patches fully containing the bird are labeled foreground. In oversampling, a single foreground pixel suffices to label the patch as foreground. In optimal sampling, patches are labeled as foreground if at least 25% of pixels belong to the bird. Mixtures stochastically interpolate (with p=0.5) patches between undersampling and optimal, as well as oversampling and optimal. 22
