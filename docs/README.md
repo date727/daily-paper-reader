@@ -6,82 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-07-09
-- 运行时间：2026-07-09 21:31:27 UTC
+- 最新运行日期：2026-07-10
+- 运行时间：2026-07-10 21:14:56 UTC
 - 运行状态：成功
-- 本次总论文数：20
-- 精读区：8
+- 本次总论文数：19
+- 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日完成20篇论文阅读，涵盖图像生成、模型优化及安全防护等前沿方向。  
-2) 精读高分论文聚焦图像保护与鲁棒分类技术，速读内容多涉及扩散模型剪枝与自回归生成方法。  
-3) 建议关注精读列表中图像抗提示攻击与不确定性建模的研究，并尝试速读扩散模型优化相关论文。
-- 详情：[/202607/09/README](/202607/09/README)
+今日精读7篇、速读12篇论文，聚焦AI生成与安全防护前沿成果  
+高分论文（9.0分）揭示多物体生成优化与自动驾驶涂鸦检测技术突破  
+建议普通读者优先速读隐私保护及模型鲁棒性相关研究，了解实用技术方向
+- 详情：[/202607/10/README](/202607/10/README)
 
 ### 精读区论文标签
-1. [Anti-Prompt: Image Protection against Text-Guided Image-to-Video Generation](/202607/09/2607.01499v2-anti-prompt-image-protection-against-text-guided-image-to-video-generation)  
+1. [Learning to Generate Multiple Objects from Dense and Occluded Layouts](/202607/10/2607.03488v1-learning-to-generate-multiple-objects-from-dense-and-occluded-layouts)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
-2. [Robustness Meets Uncertainty: Evidential Adversarial Training for Robust Selective Classification](/202607/09/2607.03075v1-robustness-meets-uncertainty-evidential-adversarial-training-for-robust-selective-classification)  
+   evidence：生成式方法解决密集场景物体生成问题
+2. [REVIVE: A Multi-Modal Framework for Vandalism Detection and Recovery in Autonomous Vehicles](/202607/10/2607.05649v1-revive-a-multi-modal-framework-for-vandalism-detection-and-recovery-in-autonomous-vehicles)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：图像防御策略
+3. [Breaking Spurious Correlations via Generative Randomization and Cross-Variant Self-Supervised Learning](/202607/10/2607.05850v1-breaking-spurious-correlations-via-generative-randomization-and-cross-variant-self-supervised-learning)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：生成对抗扰动用于消除虚假相关性
+4. [Unlearnable Faces: Privacy Protection Surviving Extraction Pipeline](/202607/10/2607.05996v1-unlearnable-faces-privacy-protection-surviving-extraction-pipeline)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-3. [EmCom-Diffusion: Probing Visual Reflection in Emergent Languages via Image Generation](/202607/09/2607.03752v1-emcom-diffusion-probing-visual-reflection-in-emergent-languages-via-image-generation)  
+5. [Generalized Synthetic Image Detection with Enhanced RGB-Noise Representation Learning](/202607/10/2607.06354v1-generalized-synthetic-image-detection-with-enhanced-rgb-noise-representation-learning)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-4. [Ghosts Beneath Textures: Texture-Relation Cues for Cross-Paradigm AI-Generated Image Detection](/202607/09/2607.03862v1-ghosts-beneath-textures-texture-relation-cues-for-cross-paradigm-ai-generated-image-detection)  
+   evidence：生成式图像对抗鲁棒性
+6. [Adversarial Decoys: Misdirecting Attention-Based Defenses in ViT](/202607/10/2607.07922v1-adversarial-decoys-misdirecting-attention-based-defenses-in-vit)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动下的图像模型保护
-5. [Code-Level Cost Function Generation for Spatial Image Steganography Using RAG-Enhanced Large Language Models](/202607/09/2607.05868v1-code-level-cost-function-generation-for-spatial-image-steganography-using-rag-enhanced-large-language-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-6. [RoME: Robust Mixture of Low-Rank Experts against Multiple Adversarial Perturbations](/202607/09/2607.06109v1-rome-robust-mixture-of-low-rank-experts-against-multiple-adversarial-perturbations)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下模型鲁棒性提升
-7. [VendorBench-100: A Unified Cross-Paradigm Benchmark for Deepfake Image Detection](/202607/09/2607.06254v1-vendorbench-100-a-unified-cross-paradigm-benchmark-for-deepfake-image-detection)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像检测基准
-8. [Stage-Aware Adaptation and Distribution Calibration for Subject-Driven Personalized Text-to-Image Generation](/202607/09/2607.07173v1-stage-aware-adaptation-and-distribution-calibration-for-subject-driven-personalized-text-to-image-generation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
+   evidence：对抗攻击的图像防御策略
+7. [From Forgeries to Foundation Models: A Systematic Survey of Identity Document Attack and Detection](/202607/10/2607.01442v1-from-forgeries-to-foundation-models-a-systematic-survey-of-identity-document-attack-and-detection)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：图像对抗扰动生成方法
 
 ### 速读区论文标签
-1. [GEAR: Guided End-to-End AutoRegression for Image Synthesis](/202607/09/2606.32039v1-gear-guided-end-to-end-autoregression-for-image-synthesis)  
+1. [Domain Generalization via Text-Anchored Information Bottleneck](/202607/10/2607.01657v1-domain-generalization-via-text-anchored-information-bottleneck)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像生成鲁棒性
-2. [Post-Training Pruning for Diffusion Transformers](/202607/09/2607.00927v1-post-training-pruning-for-diffusion-transformers)  
+   evidence：领域泛化与对抗鲁棒性
+2. [Hierarchical Anti-Aesthetics: Protecting Facial Privacy against Customized Diffusion Models](/202607/10/2607.02038v2-hierarchical-anti-aesthetics-protecting-facial-privacy-against-customized-diffusion-models)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：扩散模型的剪枝方法
-3. [Post-Training Pruning for Diffusion Transformers](/202607/09/2607.00927v2-post-training-pruning-for-diffusion-transformers)  
+   evidence：对抗扰动下的图像模型保护
+3. [kNNGuard: Turning LLM Hidden Activations into a Training-Free Configurable Guardrail](/202607/10/2607.02072v1-knnguard-turning-llm-hidden-activations-into-a-training-free-configurable-guardrail)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-4. [CPG-PAD: Concept-Informed Prompts Guided Presentation Attack Detection](/202607/09/2607.01303v1-cpg-pad-concept-informed-prompts-guided-presentation-attack-detection)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-5. [Improving Sparse-View 3DGS Generalization via Flat Minima Optimization](/202607/09/2607.00885v1-improving-sparse-view-3dgs-generalization-via-flat-minima-optimization)  
+   evidence：LLM对抗攻击防护方法
+4. [X-Splat: Gaussian Splatting for 3D CBCT Generation from Single Panoramic Radiograph](/202607/10/2607.02099v1-x-splat-gaussian-splatting-for-3d-cbct-generation-from-single-panoramic-radiograph)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+5. [AGVBench: A Reliability-Oriented Benchmark of Data Augmentation for Vein Recognition](/202607/10/2607.02271v1-agvbench-a-reliability-oriented-benchmark-of-data-augmentation-for-vein-recognition)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动与生成模型泛化
-6. [TRCGL-Net: A Long-Tailed Multi-Label Chest X-Ray Classification Framework with Generative Data Augmentation and Label Co-Occurrence Modeling](/202607/09/2607.00975v1-trcgl-net-a-long-tailed-multi-label-chest-x-ray-classification-framework-with-generative-data-augmentation-and-label-co-occurrence-modeling)  
+   evidence：对抗扰动影响图像识别性能
+6. [Combating Textual Noise and Redundancy: Entropy-Aware Dense Visual Token Pruning](/202607/10/2607.02484v1-combating-textual-noise-and-redundancy-entropy-aware-dense-visual-token-pruning)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-7. [EquiSteer: Cross-Attention Steering Towards a Fairer Text-Guided Image Generation](/202607/09/2607.01147v1-equisteer-cross-attention-steering-towards-a-fairer-text-guided-image-generation)  
+   evidence：视觉标记剪枝与文本噪声处理
+7. [From SRA to Self-Flow: Data Augmentation or Self-Supervision?](/202607/10/2607.02508v1-from-sra-to-self-flow-data-augmentation-or-self-supervision)  
    标签：评分：7.0/10、query:image-adversarial
    evidence：生成式图像对抗鲁棒性
-8. [Decision-Aware Training for Sample-Based Generative Models](/202607/09/2607.01171v1-decision-aware-training-for-sample-based-generative-models)  
+8. [Statistically Meaningful Geometry (SMG) Beyond the Euclidean Paradigm, with Application to Generative AI](/202607/10/2607.03329v1-statistically-meaningful-geometry-smg-beyond-the-euclidean-paradigm-with-application-to-generative-ai)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-9. [Does Your ViT Still Need U-Net for Segmentation?](/202607/09/2607.00223v1-does-your-vit-still-need-u-net-for-segmentation)  
+   evidence：生成式对抗几何框架
+9. [COMFYCLAW: Self-Evolving Skill Harnesses for Image Generation Workflows](/202607/10/2607.01709v1-comfyclaw-self-evolving-skill-harnesses-for-image-generation-workflows)  
    标签：评分：6.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-10. [Vitality-Aware Compression for Efficient Image-to-Shape Diffusion Transformers](/202607/09/2607.00382v1-vitality-aware-compression-for-efficient-image-to-shape-diffusion-transformers)  
+10. [Cloak and Detonate: Scanner Evasion and Dynamic Detection of Agent Skill Malware](/202607/10/2607.02357v2-cloak-and-detonate-scanner-evasion-and-dynamic-detection-of-agent-skill-malware)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗攻击防御技术相关
-11. [Right in the Right Way: LM Training with Verifiable Rewards and Human Demonstrations](/202607/09/2607.01181v1-right-in-the-right-way-lm-training-with-verifiable-rewards-and-human-demonstrations)  
+   evidence：对抗攻击的防御策略
+11. [Show Me Examples: Inferring Visual Concepts from Image Sets](/202607/10/2607.02402v2-show-me-examples-inferring-visual-concepts-from-image-sets)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-12. [Beyond Gradient-Based Attacks: Adversarial Robustness and Explainability Stability in Cybersecurity Classifiers](/202607/09/2607.01679v1-beyond-gradient-based-attacks-adversarial-robustness-and-explainability-stability-in-cybersecurity-classifiers)  
+   evidence：视觉概念推理与图像生成
+12. [Object-centric LeJEPA](/202607/10/2607.02404v1-object-centric-lejepa)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略相关
+   evidence：生成式图像对抗扰动
 
 
 ### ⚡ 这个站点能做什么
