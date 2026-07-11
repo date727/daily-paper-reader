@@ -1,0 +1,501 @@
+Title: LipSSD: Lipschitz-Constrained Single-Shot Detection for Adversarially Robust Object Detection
+
+URL Source: https://arxiv.org/pdf/2607.06592v1
+
+Published Time: Thu, 09 Jul 2026 00:02:58 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# LipSSD: Lipschitz-Constrained Single-Shot Detection for Adversarially Robust Object Detection 
+
+## Vincent L´ eb´ e1,2 Yannick Prudent 1 Corentin Friedrich 1
+
+## Thomas Massena 3,4 Ronan Sicre 4 Franck Mamalet 1
+
+> 1
+
+IRT Saint-Exup´ ery 2Alstom 3SNCF, DTIPG 4IRIT    
+
+> vincent.lebe@alstomgroup.com thomas.massena@sncf.fr ronan.sicre@irit.fr {yannick.prudent,corentin.friedrich,franck.mamalet }@irt-saintexupery.com
+
+## Abstract 
+
+Object detectors have many applications in safety-critical systems, but they are known to be sensitive to worst-case perturbations such as adversarial attacks, which limits their applicability in real-world scenarios. Compared with clas-sification, adversarial robustness for object detection has received less attention, and existing methods are often tied to adversarial training, whose performance may not trans-fer across attacks, perturbation budgets, or architectures. In this work, we introduce Lipschitz-constrained variants of object detection architectures as robust-by-design alter-natives to standard detectors. We validate this approach with LipSSD, a Lipschitz-constrained Single Shot MultiBox Detector (SSD), and provide a comprehensive study of its adversarial robustness using multiple white-box adversar-ial attacks and datasets. We first analyze the accuracy-robustness trade-off induced by Lipschitz constraints and show that it can be controlled through a single train-ing hyperparameter. We then demonstrate that Lipschitz-constrained detectors are complementary to adversarial training: under the same training setup on the Pascal VOC dataset, adversarially trained LipSSD improves mAP@50 on unseen attacks by up to 15 points over classical ad-versarially trained SSD. Finally, we use more specific safety-critical datasets such as LARD and KITTI, and show that Lipschitz-constrained detectors can improve robustness while largely preserving clean performance. These results suggest that architectural Lipschitz control is a practical and attack-agnostic direction for improving the robustness of object detectors. 
+
+## 1. Introduction 
+
+Object detection is a core component of perception systems, with applications in an increasing number of fields such as autonomous driving, railways, aeronautics, healthcare, and robotics. In these settings, instability of the detection sys-
+
+Clean Vanishing attack 
+
+> Vanilla SSD LipSSD (ours)
+
+Figure 1. Robust object detection by design. We constrain the Lipschitz constant of an SSD detector, to improve its robust-ness to input perturbations. Each column shows the same image clean (left) and under a TOG-Vanishing adversarial attack (right, 
+
+ℓ2 budget ε = 2 ). The rows compare a vanilla SSD (top) with our LipSSD (bottom). Without ever training on adversarial exam-ples, LipSSD keeps detecting objects that the attack erases for the vanilla model. 
+
+tem may lead to catastrophic consequences. Therefore, it is crucial to design object detection solutions that are not only accurate on clean data, but also stable under input perturba-tions. One way to study this stability is to evaluate robust-ness under adversarial attacks, which are worst-case pertur-bations added to the input to cause the model to fail [26, 45]. Such attacks provide a useful stress test for the sensitivity of detection systems to harmful input variations. The adversarial robustness of neural networks has been 1arXiv:2607.06592v1 [cs.CV] 6 Jul 2026 extensively studied in the context of image classification, first through the design of adversarial attacks that expose their vulnerability to small input perturbations [12, 26, 36], and then through defense mechanisms such as adversarial training [36, 51, 53, 62] and certified defenses [20, 50, 57, 61], including Lipschitz-constrained networks [8, 27, 43]. Several surveys exist in this domain, such as [39, 52, 63]. The literature on adversarial robustness for object detection is more recent and still very active, with several attack meth-ods [32, 39, 54, 56, 58]. The object detection task is indeed more complex than classification, as it adds a localization objective to the classification one, involves multi-scale fea-ture maps, variable-size output sets with multiple anchors per location, and non-trivial post-processing steps such as non-maximum suppression (NMS) to produce the final de-tections. Existing work on adversarial defenses for object de-tection is largely dominated by adversarial training ap-proaches [14, 15, 22, 60], which all rely on providing adver-sarial examples during training. Other defenses introduce specialized mechanisms, such as adversarially aware con-volutions [22] or adversarial patch detection and removal modules [33]. However, these defenses augment the infer-ence pipeline with dedicated defense components, and their reliance on specific attacks or objectives can limit transfer to new attacks and architectures. In contrast, Lipschitz-constrained architectures aim to improve robustness (Figure 1) by design. They are not tied to a specific attack model, as they control the sensitivity of the model to input perturbations by constraining the Lips-chitz constant of the network. Several works have explored Lipschitz-constrained architectures and their properties in image classification [2, 6, 27, 30, 43], and recent works have started to extend them to other tasks such as semantic seg-mentation [37]. However, to the best of our knowledge, [4] remains the only work to investigate Lipschitz-constrained architectures for object detection, on a single use-case. In this work, we explore the design of Lipschitz-constrained detectors and evaluate their robustness against adversarial attacks. We focus mainly on the Single Shot MultiBox Detector (SSD) architecture [34], which is a pop-ular one-stage detection model. We propose a Lipschitz-SSD model (LipSSD) which is a Lipschitz-constrained vari-ant of the original SSD and show that such architectural Lip-schitz control improves adversarial robustness. Our contributions are as follows: • We introduce a robust-by-design Lipschitz-constrained detection architecture which is attack-agnostic and does not rely on adversarial training. • We study the accuracy-robustness trade-off induced by Lipschitz constraints, and show that it can be controlled through a single training hyperparameter. • We perform empirical evaluations under multiple white-box adversarial attacks on the standard Pascal VOC dataset, as well as on more specific safety-critical datasets such as LARD [9] and KITTI [25] on which robustness is improved without sacrificing clean performance. • We show that Lipschitz-constrained detectors can be combined with adversarial training, leading to better ad-versarial robustness against unseen attacks than the stan-dard adversarially trained SSD. Code to train and evaluate our Lipschitz-constrained de-tectors will be made publicly available. 
+
+## 2. Background and related works 
+
+In this section, we introduce some background on adver-sarial attacks for object detection and the main categories of defenses proposed in the literature. We then focus on Lipschitz-constrained networks, which provide the founda-tion of our approach. 
+
+2.1. Adversarial attacks for object detection 
+
+Deep neural networks are known to be vulnerable to well-crafted small perturbations of the input, commonly referred to as adversarial attacks [45]. The literature on adversar-ial attacks first focused on classification tasks [12, 26, 36], and was later extended to other computer vision tasks such as semantic segmentation [56] and object detection [13, 19, 35, 56]. Given an image x ∈ [0 , 1] C×H×W and a detec-tor Dθ , an adversarial example xadv = x + δ⋆ is obtained by searching for a perturbation δ⋆ that maximizes an attack objective Latk over a set of admissible perturbations ∆p(ε):
+
+δ⋆ ∈ arg max  
+
+> δ∈∆p(ε)
+
+Latk 
+
+ Dθ (x + δ), y , (1) where ∆p(ε) = { δ : ∥δ∥p ≤ ε, x + δ ∈ [0 , 1] C×H×W }.Here, Latk can be designed to target different components of the detection pipeline, including classification, localiza-tion, objectness, or even post-processing steps such as non-maximum suppression. Attacks on object detectors may take different forms, in-cluding norm-bounded perturbations, adversarial patches, universal perturbations, and input-specific perturbations, in either targeted or untargeted settings. Nguyen et al. [39] provide a recent review of adversarial attacks for object de-tection. The adversarial examples crafted by these attacks can fool detectors in multiple ways, for instance by sup-pressing correct bounding boxes, creating false detections, modifying predicted labels, or increasing inference time. Chow et al. [19] provide a taxonomy of these attacks in a specific framework called TOG, naming the three first as vanishing, fabrication and mislabelling attacks. 
+
+2.2. Adversarial defenses 
+
+Since adversarial attacks expose the sensitivity of object de-tectors, many works evaluate robustness by measuring the 2ability of models to withstand such attacks, in addition to their standard performance on clean data. Defenses are commonly divided into empirical defenses and certified de-fenses. We focus here on empirical defenses, as certified defenses for object detection are still at an early stage and lie outside the scope of this work. 
+
+Empirical defenses: Empirical defenses aim to make the model more robust without providing formal guarantees, and cover several directions in object detection. The most common one is adversarial training, which uses adversarial examples during training to improve robustness [14, 18, 60]. Closely related approaches, such as RobustDet [22], intro-duce adversarially aware architectural components to re-duce the conflict between clean and adversarial features dur-ing robust training. Similarly, Liu et al. [33] perform adver-sarial patch removal using a segmentation module trained with adversarial examples. Other approaches explore dif-ferent mechanisms such as ensemble methods [55] or Ga-bor filters [1]. The recent work of Thunuguntla et al. [47] presents a review of defenses for object detection. 
+
+Adversarial training: Since adversarial training is stud-ied in our experiments, we describe it in more detail. It trains the model on adversarial examples generated during optimization and, in its standard form, can be written as the following min-max optimization problem: 
+
+min  
+
+> θ
+
+E(x,y )∼D 
+
+Ldet 
+
+ Dθ (x + δ⋆), y  , (2) where Ldet denotes the detection loss and δ⋆ is the solu-tion to the inner maximization problem described in Equa-tion (1). Several variants of adversarial training have been proposed [14, 15], for example to reduce the training over-head [44]. In object detection, adversarial training methods usually depend on a specific attack objective, perturbation budget, and detection loss, which may limit their transfer to unseen attacks or architectures. 
+
+2.3. Lipschitz-constrained neural networks 
+
+Lipschitz-constrained networks aim to control the worst-case sensitivity of the model to input perturbations by constraining its Lipschitz constant. More precisely, a L-Lipschitz network gθ in the ℓ2 norm satisfies 
+
+∥gθ (x + δ) − gθ (x)∥2 ≤ L∥δ∥2, (3) which provides a direct way to control the worst-case vari-ation of the network output under bounded input perturba-tions. Computing the exact Lipschitz constant of a deep net-work is intractable [49]. A common strategy is to control it by construction using the sub-multiplicative property under composition: for a network gθ = fn ◦ · · · ◦ f1 whose layers 
+
+fi are each li-Lipschitz, 
+
+Lip( gθ ) = Lip( fn ◦ · · · ◦ f1) ≤
+
+> n
+
+Y
+
+> i=1
+
+Lip( fi) = 
+
+> n
+
+Y
+
+> i=1
+
+li, (4) so constraining every layer to be 1-Lipschitz yields a glob-ally 1-Lipschitz network. For a linear or convolutional layer x 7 → W x + b, the ℓ2 Lipschitz constant is equal to the spectral norm ∥W ∥2, i.e., the largest singular value of 
+
+W . Bounding the spectral norm through spectral normal-ization [38], together with 1-Lipschitz activation functions, therefore provides a simple way to build 1-Lipschitz net-works. Anil et al. [2] observed, however, that only bounding the spectral norm of each layer leads to gradient-norm attenu-ation, which limits the expressivity of the Lipschitz mod-els. They introduced gradient-norm-preserving (GNP) lay-ers and replaced norm-bounded weight matrices with semi-orthogonal ones, satisfying W ⊤W = I or W W ⊤ = I
+
+with I the identity matrix. These constraints can be en-forced using orthogonal parametrizations such as Bj¨ orck orthonormalization [7]. Both spectral normalization and these orthogonal parametrizations enforce the constraint by 
+
+reparametrization : the trainable weights are deterministi-cally mapped to a constraint-satisfying matrix at every for-ward pass, so the Lipschitz bound holds by construction, rather than through a regularization penalty or Rieman-nian optimization on the constraint manifold. The remain-ing components can also be replaced by norm-preserving counterparts: activation functions such as GroupSort [2] instead of ReLU, and ℓ2-norm pooling instead of max-pooling [10, 43]. Lipschitz-constrained networks are mostly studied for image classification [6, 27, 43], often motivated by certified robustness. Indeed, Lipschitz constraints can provide for-mal guarantees on the robustness of classifiers. The work of Massena et al. [37] recently extended Lipschitz-constrained architectures to provide certificates for the semantic seg-mentation task. 
+
+Lipschitz networks in object detection Such guarantees are difficult to obtain in object detection due to IoU match-ing, NMS, and bounding-box regression. To the best of our knowledge, Becktor et al. [4] are the only ones to study Lipschitz-constrained architectures for object detec-tion. They propose to perform object detection using Lips-chitz layers without providing any certificates. To build Lip-schitz layers, they apply spectral normalization and Group-Sort [2] activation functions. However, they only consider a simplified two-class setup on a custom maritime dataset, and evaluate robustness against common corruptions (Gaus-sian noise and blur) rather than adversarial attacks. 3Our work follows this direction and studies a Lips-chitz detector built with orthonormalized layers, evaluated against adversarial perturbations rather than common cor-ruptions, as a means of improving the empirical robustness of object detectors in a way that is complementary to adver-sarial training. 
+
+## 3. Method 
+
+3.1. Detector architecture selection 
+
+Object detection is an important problem in the field of computer vision that received a lot of attention. After the image classification task, numerous researchers studied this more complex task, proposed methods, datasets and chal-lenges. In the last decade, multiple deep architectures have been proposed including two-stage detectors such as Faster-RCNN [42] and one-stage detectors such as SSD [34], YOLO [41, 46], or FCOS [48]. More recently transformer-based architectures are addressing object detection, with ar-chitectures such as DETR [11]. We studied the details of multiple detection architecture with the objectives to constrain the Lipschitz constant of each operation (Equation (3)). Thus, we do not consider transformer-based detectors, as constraining the Lipschitz constant of the self-attention modules is still an open prob-lem. The functions of a convolutional-based classification architecture can however be constrained and are the back-bones of most convolutional detectors. Unfortunately, the orthogonality constraints on backbones prevent us from ini-tializing models with pretrained weights, which may hurt clean performance. Moreover, proposal and ROI-pooling of two-stage detectors [42] or the CSP/C2f modules of YOLO models [46] are harder to control. We thus select the Sin-gle Shot MultiBox Detector (SSD) [34], which is com-monly used to evaluate adversarial robustness in object de-tection [14, 16, 22, 60]. The SSD model consists of a backbone convolutional network and a set of extra layers, which produce multi-scale feature maps. These feature maps are then fed into two shared heads, one for classification and one for bound-ing box regression. The predictions of both heads are then aggregated, thresholded based on confidence scores, and fil-tered using Non-Maximum Suppression (NMS). Additional works on the FCOS model are presented in Appendix A. 
+
+3.2. LipSSD architecture 
+
+To build our Lipschitz-constrained SSD (LipSSD), we re-place every convolutional block by an orthonormalized 1-Lipschitz block, as recalled in Sec. 2.3. Bounding only the largest singular value [38] already keeps the layer 1-Lipschitz, but lets the smaller singular values attenuate gra-dients. We instead keep the whole singular-value spectrum close to 1, which limits this gradient attenuation [2]. Then we apply this orthonormalized 1-Lipschitz block, depicted in Figure 2, at every feature map of the network. 
+
+3.2.1. Orthogonal convolutions 
+
+For a convolution kernel Φ ∈ Rcout ×cin ×k×k, enforcing 
+
+W ⊤ 
+
+> Φ
+
+WΦ = I is not straightforward: WΦ is a very large structured, composed of doubly block-Toeplitz, operator, so constraining this directly is computationally intractable [8]. We instead parameterize the kernel so that the induced op-erator is orthogonal. For every standard convolution we use reshaped kernel orthogonalization (RKO) [43]: This re-shapes the kernel into M ∈ Rcout ×k2cin , rescales it by its spectral norm through power iteration, and orthonormalizes 
+
+M with Bj¨ orck iterations [7], 
+
+Mt+1 = 32 Mt − 12 MtM ⊤ 
+
+> t
+
+Mt, (5) after which a coercive factor makes the layer 1-Lipschitz. RKO does not, however, support the dilated convolu-tion we need for the fc6 layer (Figure 2). There we rely on adaptive orthogonal convolution (AOC) [8], which com-poses an RKO factor with an exactly orthogonal BCOP fac-tor [30] through the operator block convolution ⊛,
+
+ΦAOC = Φ RKO ⊛ ΦBCOP , (6) pairing a (k+1 −s) × (k+1 −s) stride-1 BCOP factor with an s×s stride-s RKO factor. The BCOP factor builds a k×k
+
+orthogonal kernel from Bj¨ orck-orthonormal projectors and is itself limited to unit stride. The composition lifts that limitation, so AOC natively supports dilated, grouped, and transposed convolutions [8]. 
+
+3.2.2. Activation and pooling 
+
+Beyond convolutions, the remaining layers must also be made 1-Lipschitz. Although ReLU is 1-Lipschitz, Anil et al. [2] showed that using gradient-norm-preserving ac-tivations such as GroupSort can improve expressiveness, accuracy, and robustness. Accordingly, we replace ReLU with GroupSort. For pooling layers we also use the ℓ2-norm pooling [10], defined on a window Rj as pool( x)j =qP 
+
+> i∈Rj
+
+x2 
+
+> i
+
+. This pooling preserves gradient norms only when its windows do not overlap, i.e. when the stride equals the kernel size. We therefore leave the single overlapping MaxPool of the VGG backbone (kernel size 3, stride 1, be-tween conv5 3 and fc6 ) unchanged, both for fidelity to the original SSD and because ℓ2-norm pooling does not ap-ply there. This layer is √9 = 3 -Lipschitz [3], since, for an overlapping 3 × 3 stride-1 max-pool, each input feeds at most 9 output windows. Thus, this only rescales the global Lipschitz bound of the LipSSD network. 
+
+3.2.3. Assembling LipSSD 
+
+We deploy these building blocks with two complementary libraries. For standard convolutions, GroupSort activation, 4ortho conv GroupSort ℓ2-pool 
+
+> input
+
+## Early layers  
+
+> conv4 3
+> fc6/fc7
+> conv8 2
+> 9 2
+> 10 2
+> 11 2
+> orthonormalized 1-Lipschitz block
+> Backbone extra layers
+
+cls head (Lip.) 
+
+box reg. (std) 
+
+## SSD post-proc.     
+
+> thr. + NMS
+> detections
+> Figure 2. LipSSD. Backbone and SSD extra layers, rebuilt from 1-Lipschitz operators (spectral and orthogonal convolutions, GroupSort,
+> ℓ2pooling), produce six multi-scale maps ( conv4 3 –conv11 2 ). The shared classification head is Lipschitz while the box-regression head stays unconstrained. SSD score thresholding and NMS are also unchanged. Brown: Lipschitz-constrained, blue: unconstrained box head and standard SSD.
+
+and ℓ2-norm pooling, we use the implementations provided by the open-source TorchLip library [43], while the dilated 
+
+fc6 layer uses the AOC implementation from Orthogo-nium [8], which provides native support for dilation. These orthonormalized convolutions set LipSSD apart from prior Lipschitz detectors that rely on plain spectral normaliza-tion [4]. Finally, the expressivity of Lipschitz networks for re-gression remains an open question. We therefore keep the classification head Lipschitz but leave the box-regression head of LipSSD unconstrained. Figure 2 gives an overview of the resulting architecture. 
+
+3.2.4. SLipSSD: The RMS scaled version 
+
+As the Pascal VOC dataset is particularly challenging, we study an alternative scaled version of our LipSSD, which we call SLipSSD . This version uses the 
+
+q f an −out f an −in scaling fac-tor proposed first by Yang et al. [59], and then by Massena et al. [37] on convolutions for Lipschitz networks. This fac-tor is directly multiplied to the output of the convolutional layers, which allows us to reach better performance at the cost of increasing the Lipschitz constant of the network. 
+
+3.3. Temperature-scaled classification loss 
+
+For classification tasks, B´ ethune et al. [6] showed that with Lipschitz neural networks, the accuracy-robustness trade-off can be controlled through an extra scaling parameter of the loss function. For example, the cross-entropy (CE) loss can be used with a temperature parameter τ > 0, as follows: 
+
+Lτ
+
+> CE
+
+(f (x), y ) = 1
+
+τ CE( τ f (x), y ) . (7) The parameter τ directly controls the classification mar-gins and the sharpness of the decision boundary. Increasing 
+
+τ improves accuracy at the cost of robustness, while smaller values yield less accurate but more robust networks. The original SSD loss is composed of a classification term using cross-entropy and a box-regression term us-ing smooth-ℓ1 loss. We apply the temperature scaling only to the classification CE, while leaving the regres-sion part unchanged. This still allows us to control the accuracy-robustness trade-off of the detector as we will show in Sec. 4.2.1. 
+
+## 4. Experiments 
+
+4.1. Robustness evaluation setup 
+
+To evaluate the robustness of our models we use various white-box adversarial attacks: PGD [60] on the classifica-tion and localization losses, referenced as Acls and Areg re-spectively, as in [14], and DAG [56]. We also evaluate our models under the targeted attack setup introduced by Chow et al. [19], which includes three attack types: Fabrication (TOG-F), Vanishing (TOG-V), and Mislabeling (TOG-M). We use a strong attack setting with 40 iterations for PGD, 100 iterations for DAG and 50 iterations for TOG. The number of iterations is chosen to ensure that the budget of the attack is reached for all models. We use the standard mAP@50 on clean images and under attack as the evalua-tion metric. As our Lipschitz constraint is designed on the 
+
+ℓ2-norm, we evaluate the robustness of our models in this setup, with different budgets ε for each dataset. 
+
+4.2. Benchmark evaluation: Pascal VOC 
+
+We use the Pascal VOC [24] dataset as a classic benchmark for robustness in object detection, allowing us to evaluate our approach in a well-established setting [14, 16, 22, 60]. We adopt the standard “07+12” protocol for training [14, 5Model Clean Acls Areg DAG TOG-F TOG-V TOG-M SSD 78.7 1.8 2.6 0.0 1.9 2.2 1.2 SLipSSD 65.1 7.4 16.4 7.0 24.1 19.5 40.0 LipSSD 56.6 16.6 33.2 25.7 41.4 37.4 52.0       
+
+> Table 1. mAP@50 for different models under several attacks on the Pascal VOC test set with attack budget ε= 3 .0.Acls and Areg
+> denote PGD targeting the classification and localization losses, respectively. TOG-F, TOG-V, and TOG-M denote the TOG-Fabrication, TOG-Vanishing, and TOG-Mislabeling attacks, respectively.
+
+22, 60], containing ∼16k images of 20 categories. For test-ing, the PASCAL VOC 2007 test set with 4,952 test images is used. 
+
+Training details: We first train a standard SSD with a VGG16 backbone, referred to as SSD in the follow-ing, in which the batch normalization layers are removed, as in [5, 22]. Training is achieved using the Adam opti-mizer [29] with a learning rate of 10 −4, and a weight decay of 5 · 10 −4. We train the two Lipschitz variants, denoted LipSSD and SLipSSD (Sec. 3.2.4), with a learning rate of 
+
+2 · 10 −4 and no weight decay. We use the standard SSD300 data augmentation [34] pipeline, and resize the images to 
+
+300 × 300 .
+
+Results: We evaluate the models with a budget of 
+
+ε = 3 .0, see Tab. 1. The SLipSSD is able to reach bet-ter clean performance than the LipSSD, while still improv-ing robustness compared to the standard SSD. The LipSSD version achieves the best robustness results, at the cost of a larger drop in clean performance. Figure 3 shows the evalu-ation of the mAP@50 under the Areg attack with increas-ing budget. Even though the Lipschitz versions degrade clean performance, they show better performance under at-tack even for small budgets. Figure 6 shows visual results of the standard SSD and our SLipSSD under the six attacks reported in the tables. The SLipSSD is able to mostly pre-serve the detections under attack, whereas the standard SSD is easily disrupted. 
+
+4.2.1. Accuracy-robustness trade-off 
+
+The robustness of neural networks is usually obtained at the cost of a drop in clean performance (Tab. 1), highlight-ing the trade-off between accuracy and robustness. In our case, the Lipschitz constant of the network is a hyperpa-rameter that we can manipulate to target different points of the Pareto front. Following the approach of B´ ethune et al. [6] on the image classification task, we train several ver-sions of the SLipSSD with different temperature parameters on the Cross-Entropy loss for the classification component of the global SSD loss. Changing the temperature allows simple control over the Lipschitz constant of the network and therefore we can reach different points of the accuracy-robustness trade-off. We report the results in Figure 4 for the TOG-Vanishing attack. Note that even if the tempera-          
+
+> 00.20.5123
+> 0
+> 20
+> 40
+> 60
+> 80
+> Attack budget ε
+> mAP@50 (%)
+> SSD
+> SLipSSD
+> LipSSD
+> Figure 3. mAP@50 on the Pascal VOC test set as the budget εof the Areg attack increases. Both Lipschitz variants are substantially more resilient than the standard SSD: despite their lower clean mAP@50, LipSSD and SLipSSD preserve considerably higher performance under attack, even at small perturbation budgets.
+
+ture is only applied on the classification loss, this impacts the whole detector robustness, see Appendix B.1.          
+
+> 10 20 30
+> 50
+> 55
+> 60
+> 65
+> 70
+> mAP@50 under attack (%)
+> Clean mAP@50 (%)
+> 0.1
+> 0.5
+> 1
+> 5
+> Temperature  τ
+> Figure 4. Accuracy-robustness trade-off on Pascal VOC for the SLipSSD models trained with different temperatures τ. Each point reports clean mAP@50 on full test set, vertical axis, against robust mAP@50 under the TOG-Vanishing attack at ε= 3 , horizontal axis. Lowering τtightens the effective Lipschitz constraint, trad-ing clean accuracy for robustness.
+
+6Model Clean Acls Areg DAG TOG-F TOG-V TOG-M SSD 78.7 0.8 1.7 0.0 0.7 0.9 0.5 MTD-SSD-BN 46.6 7.5 24.9 11.1 22.5 21.9 30.3 MTD-SSD 64.1 16.8 33.3 15.1 32.6 33.1 38.4 SLipSSD 65.1 2.7 7.2 0.7 8.3 7.3 13.6 SLipSSD-MTD 61.2 13.2 31.9 20.3 36.2 34.7 53.7   
+
+> Table 2. Adversarially trained models results on the Pascal VOC test set with attack budget ε= 5 .0.
+
+4.2.2. Complementarity with adversarial training 
+
+To study the complementarity of our method with adver-sarial training, we implement the work of Zhang and Wang [60] on both the standard SSD and the proposed SLipSSD. The original work was conducted under a ℓ∞ setup on a SSD with VGG16 backbone using batch normalization on the Pascal VOC dataset. Out of fidelity to the original work we train a MTD-SSD-BN following the algorithm proposed and training procedure, where the adversarial examples are generated using Acls and Areg in the ℓ2 setup. Using ε = 1 
+
+we reach 46 .6 clean mAP@50. To have a fair comparison between the SSD and our SLipSSD, we use the Adam opti-mizer instead of SGD for both models, and provide also re-sults on a variant without batch normalization in the MTD-SSD . We then train our SLipSSD with the MTD adversar-ial training, to evaluate the complementarity of the two ap-proaches. The results are reported in Tab. 2. As those mod-els are more robust than their standard counterparts, we use a higher attack budget of ε = 5 .0. First, we observe that the version without batch normalization, MTD-SSD , achieves better results than the original MTD-SSD-BN in terms of both robustness and clean performance. Interestingly, the combination of the MTD algorithm with our SLipSSD pro-duces moderately worse results than MTD-SSD on the Acls 
+
+and Areg attacks, which are targeted during training, and achieves better robustness on all the other attacks. This sug-gests that the MTD algorithm is complementary to our ap-proach, increasing model robustness while providing better generalization to unseen attacks. 
+
+4.3. Safety-critical case studies: LARD and KITTI 
+
+We now evaluate our approach with two datasets related to safety-critical tasks where robustness and stability are sig-nificant. The first one is the LARD [9] dataset with ∼57k images for train and ∼52k images in test. The goal is to detect runways in images taken from different flight simu-lators, with usually one very small object, or a few ones, per image. The second one is the KITTI [25] dataset related to the autonomous driving scenario, using ∼5k train and ∼2k test images. This dataset is more challenging than LARD, as it contains three classes (car, cyclist and pedestrian) with multiple objects of variable sizes, in realistic scenarios. 
+
+Training details: We use the the same setup as the Pas-cal VOC dataset, except for learning rates and image size. We use a learning rate of 2 · 10 −4 for both models and re-size input to a 1024 × 1024 resolution to cope with small objects. 
+
+Results: This bigger image resolution increases the computational cost of the attack, making a full evaluation on the 52k test images on LARD impractical. We therefore use 1000 samples randomly selected in the test set for the robustness evaluation of LARD, but clean performance is reported on the full test set. We report results of our exper-iments, both on KITTI and LARD, see Tab. 3. Our mod-els improve the robustness of the standard SSD model on both datasets while largely preserving clean performance. On KITTI, SLipSSD still achieves higher mAP@50 than LipSSD under TOG-V and TOG-M attacks, mainly due to its stronger clean performance. Under larger attack bud-gets, however, LipSSD consistently outperforms SLipSSD across all attacks, as shown in Appendix B.1. Figure 5 highlights this gap as a function of the attack budget on KITTI: under Areg attack, LipSSD retains 70 .4% mAP@50 at ε = 1 and still 48 .9% at ε = 3 , whereas the standard SSD drops to 27 .5% and 7.0% .         
+
+> 00.20.5123
+> 0
+> 20
+> 40
+> 60
+> 80
+> Attack budget ε
+> mAP@50 (%)
+> SSD
+> SLipSSD
+> LipSSD
+> Figure 5. mAP@50 on the KITTI test set as the budget εof the
+> Areg attack increases. LipSSD and SLipSSD maintain higher ro-bustness than the standard SSD over the full budget range.
+
+7Dataset Model Clean Acls Areg DAG TOG-F TOG-V TOG-M KITTI SSD 79.8 22.9 27.5 20.9 21.1 32.7 34.8 SLipSSD 80.0 53.8 63.8 67.2 66.5 76.3 76.3 
+
+LipSSD 76.8 65.3 70.4 73.6 74.0 75.9 76.4 LARD SSD 95.1 2.6 1.6 N/A 4.3 16.0 N/A SLipSSD 95.4 17.2 15.4 N/A 34.8 24.4 N/A LipSSD 94.8 22.4 20.3 N/A 45.8 47.7 N/A 
+
+Table 3. mAP@50 for SSD and LipSSD under several attacks on the LARD and KITTI test sets with attack budget ε = 1 .0.      
+
+> Clean Acls Areg DAG TOG-F TOG-V TOG-M
+> Vanilla SSD SLipSSD (ours) Vanilla SSD SLipSSD (ours)
+
+Figure 6. SLipSSD preserves detection under attack. Qualitative comparison on two Pascal VOC test images. For the vanilla SSD and our SLipSSD, we show the detections on the clean image and under the six adversarial attacks used for evaluation. SLipSSD is more robust. 
+
+## 5. Conclusion and perspectives 
+
+In this work, we present LipSSD, a single-shot object de-tector with Lipschitz-constrained operations to improve the models adversarial robustness. We show that LipSSD also allows simple control of the accuracy-robustness trade-off and can be combined with adversarial training for additional benefits. 
+
+Limitations and future work. The main limitation of our approach is that training Lipschitz-constrained models is more computationally expensive than training standard models. In our experiments, training a LipSSD model takes approximately 2× longer than a standard SSD. However, there is no inference overhead, as the learned weights can be used in regular convolutional layers. Additionally, even though LipSSD maintains a competitive performance on the KITTI and LARD datasets, our model is not yet able to reach the clean performance of SSD on Pascal VOC. We hypothesize that the robustness task is more difficult on datasets like Pascal VOC. More complex models, or 1-Lipschitz pretrained backbones on ImageNet could there-fore be required to reach competitive clean performance. Building such networks could lead future research on certified detectors. Indeed, certifying Lipschitz networks has been explored for classification and segmentation tasks, but not yet for object detection. We believe that such con-straints are a promising direction to certify object detectors. 86. Acknowledgements 
+
+Our work has benefited from the AI Cluster ANITI and the research program DEEL 1. ANITI is funded by the France 2030 program under the Grant agreement n°ANR-23-IACL-0002. DEEL is an integrative program of the AI Cluster ANITI, designed and operated jointly with IRT Saint Exup´ ery, with the financial support from its industrial and academic partners and the France 2030 program under the Grant agreement n°ANR-10-AIRT-01. The authors would like to thank Cl´ ement Lefebvre for his valuable feedbacks on the manuscript, as well as Quentin Possama¨ ı, Arnaud Jaoul, Kenza Saiah and Nenad Mijatovic for their continuous support during the project. 
+
+## References 
+
+[1] Abdollah Amirkhani and Mohammad Parsa Karimi. Adver-sarial defenses for object detectors based on gabor convolu-tional layers. The visual computer , 38(6):1929–1944, 2022. 3[2] Cem Anil, James Lucas, and Roger Grosse. Sorting out Lips-chitz function approximation. In Proceedings of the 36th In-ternational Conference on Machine Learning . PMLR, 2019. 2, 3, 4 [3] Trevor Avant and Kristi A Morgansen. Analytical bounds on the local lipschitz constants of relu networks. IEEE Trans-actions on Neural Networks and Learning Systems , 35(10): 13902–13913, 2023. 4 [4] Jonathan Becktor, Frederik Sch¨ oller, Evangelos Boukas, Mogens Blanke, and Lazaros Nalpantidis. Lipschitz Con-strained Neural Networks for Robust Object Detection at Sea. IOP Conference Series: Materials Science and Engi-neering , 929(1), 2020. 2, 3, 5 [5] Philipp Benz, Chaoning Zhang, and In So Kweon. Batch nor-malization increases adversarial vulnerability and decreases adversarial transferability: A non-robust feature perspective. In ICCV , pages 7818–7827, 2021. 6 [6] Louis B´ ethune, Thibaut Boissin, Mathieu Serrurier, Franck Mamalet, Corentin Friedrich, and Alberto Gonzalez Sanz. Pay attention to your loss : understanding misconceptions about Lipschitz neural networks. In NeurIPS , 2022. 2, 3, 5, 6[7] ˚Ake Bj¨ orck and C. Bowie. An iterative algorithm for com-puting the best estimate of an orthogonal matrix. SIAM Jour-nal on Numerical Analysis , 8(2):358–364, 1971. 3, 4 [8] Thibaut Boissin, Franck Mamalet, Thomas Fel, Agustin Martin Picard, Thomas Massena, and Mathieu Serrurier. An adaptive orthogonal convolution scheme for efficient and flexible CNN architectures. In ICML , 2025. 2, 4, 5 [9] Yassine Bougacha, Geoffrey Delhomme, M´ elanie Ducoffe, Augustin Fuchs, Jean-Brice Ginestet, Jacques Girard, Sofi-ane Kraiem, Franck Mamalet, Vincent Mussot, Claire Pagetti, and Thierry Sammour. Lard 2.0: Enhanced datasets 
+
+> 1https://www.deel.ai/
+
+and benchmarking for autonomous landing systems. In 
+
+ERTS , 2026. 2, 7 [10] Y-Lan Boureau, Jean Ponce, and Yann LeCun. A theoretical analysis of feature pooling in visual recognition. In ICML ,2010. 3, 4 [11] Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey Zagoruyko. End-to-end object detection with transformers. In ECCV , pages 213–229. Springer, 2020. 4 [12] Nicholas Carlini and David Wagner. Towards evaluating the robustness of neural networks. In 2017 ieee symposium on security and privacy (sp) , pages 39–57. Ieee, 2017. 2 [13] Erh-Chung Chen, Pin-Yu Chen, I Chung, Che-Rung Lee, et al. Overload: Latency attacks on object detection for edge devices. In CVPR , 2024. 2 [14] Pin-Chun Chen, Bo-Han Kung, and Jun-Cheng Chen. Class-Aware Robust Adversarial Training for Object Detection. In 
+
+CVPR , 2021. 2, 3, 4, 5 [15] Xiangning Chen, Cihang Xie, Mingxing Tan, Li Zhang, Cho-Jui Hsieh, and Boqing Gong. Robust and accurate object detection via adversarial learning. In CVPR , 2021. 2, 3 [16] Jikang Cheng, Baojin Huang, Yan Fang, Zhen Han, and Zhongyuan Wang. Adversarial intensity awareness for ro-bust object detection. Computer Vision and Image Under-standing , 251:104252, 2025. 4, 5 [17] Ping-yeh Chiang, Michael Curry, Ahmed Abdelkader, Aounon Kumar, John Dickerson, and Tom Goldstein. Detec-tion as Regression: Certified Object Detection with Median Smoothing. In NeurIPS . Curran Associates, Inc., 2020. 17 [18] Jung Im Choi and Qing Tian. Adversarial Attack and De-fense of YOLO Detectors in Autonomous Driving Scenarios. In 2022 IEEE Intelligent Vehicles Symposium (IV) , 2022. 3 [19] Ka-Ho Chow, Ling Liu, Margaret Loper, Juhyun Bae, Mehmet Emre Gursoy, Stacey Truex, Wenqi Wei, and Yanzhao Wu. Adversarial objectness gradient attacks in real-time object detection systems. In 2020 Second IEEE Inter-national Conference on Trust, Privacy and Security in Intel-ligent Systems and Applications (TPS-ISA) , pages 263–272, 2020. 2, 5 [20] Jeremy Cohen, Elan Rosenfeld, and Zico Kolter. Certi-fied Adversarial Robustness via Randomized Smoothing. In 
+
+ICML , 2019. 2 [21] No´ emie Cohen, M´ elanie Ducoffe, Ryma Boumazouza, Christophe Gabreau, Claire Pagetti, Xavier Pucel, and Au-drey Galametz. VerifIoU: Robustness of object detection to perturbations. In 44th Digital Avionics Systems Conference (DASC) , pages 1–10, Montreal, Canada, 2025. IEEE. 17 [22] Ziyi Dong, Pengxu Wei, and Liang Lin. Adversarially-Aware Robust Object Detector. In ECCV , 2022. 2, 3, 4, 5, 6 [23] M´ elanie Ducoffe, Maxime Carrere, L´ eo F´ eliers, Adrien Gauffriau, Vincent Mussot, Claire Pagetti, and Thierry Sam-mour. Lard–landing approach runway detection–dataset for vision based landing. arXiv preprint arXiv:2304.09938 ,2023. 17 [24] Mark Everingham, SM Ali Eslami, Luc Van Gool, Christo-pher KI Williams, John Winn, and Andrew Zisserman. The Pascal Visual Object Classes Challenge: A retrospective. 
+
+IJCV , 111(1):98–136, 2015. 5 
+
+9[25] Andreas Geiger, Philip Lenz, Christoph Stiller, and Raquel Urtasun. Vision meets robotics: The kitti dataset. The in-ternational journal of robotics research , 32(11):1231–1237, 2013. 2, 7 [26] Ian J. Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial examples. CoRR ,abs/1412.6572, 2014. 1, 2 [27] Kai Hu, Haoqi Hu, and Matt Fredrikson. LipNeXt: Scal-ing up Lipschitz-based Certified Robustness to Billion-parameter Models. In ICLR , 2025. 2, 3 [28] Andrew Ilyas, Shibani Santurkar, Dimitris Tsipras, Logan Engstrom, Brandon Tran, and Aleksander Madry. Adversar-ial examples are not bugs, they are features. Advances in neural information processing systems , 32, 2019. 14 [29] Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 ,2014. 6 [30] Qiyang Li, Saminul Haque, Cem Anil, James Lucas, Roger Grosse, and J¨ orn-Henrik Jacobsen. Preventing gradient at-tenuation in lipschitz constrained convolutional networks. In 
+
+NeurIPS , 2019. 2, 4 [31] Xiao Li, Hang Chen, and Xiaolin Hu. On the importance of backbone to the adversarial robustness of object detectors. 
+
+IEEE Transactions on Information Forensics and Security ,2025. 14 [32] Yuezun Li, Daniel Tian, Ming-Ching Chang, Xiao Bian, and Siwei Lyu. Robust adversarial perturbation on deep proposal-based models. In BMVC , 2018. 2 [33] Jiang Liu, Alexander Levine, Chun Pong Lau, Rama Chel-lappa, and Soheil Feizi. Segment and complete: Defending object detectors against adversarial patch attacks with robust patch detection. In CVPR , pages 14973–14982, 2022. 2, 3 [34] Wei Liu, Dragomir Anguelov, Dumitru Erhan, Christian Szegedy, Scott Reed, Cheng-Yang Fu, and Alexander C. Berg. SSD: Single Shot MultiBox Detector. In ECCV , 2016. 2, 4, 6 [35] Xin Liu, Huanrui Yang, Ziwei Liu, Linghao Song, Hai Li, and Yiran Chen. Dpatch: An adversarial patch attack on object detectors. arXiv preprint arXiv:1806.02299 , 2018. 2 [36] Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards Deep Learning Models Resistant to Adversarial Attacks. In ICLR , 2018. 2 [37] Thomas Massena, Corentin Friedrich, Franck Mamalet, and Mathieu Serrurier. Fast and flexible robustness certificates for semantic segmentation. arXiv preprint arXiv:2512.06010 , 2025. 2, 3, 5 [38] Takeru Miyato, Toshiki Kataoka, Masanori Koyama, and Yuichi Yoshida. Spectral Normalization for Generative Ad-versarial Networks. In ICLR , 2018. 3, 4 [39] Khoi Nguyen Tiet Nguyen, Wenyu Zhang, Kangkang Lu, Yu-Huan Wu, Xingjian Zheng, Hui Li Tan, and Liangli Zhen. A Survey and Evaluation of Adversarial Attacks in Object Detection. IEEE Transactions on Neural Networks and Learning Systems , 36(9):15706–15722, 2025. 2 [40] Ashutosh Kumar Nirala and Soumalya Sarkar. Towards Cer-tified Object Detectors: Certified Runway Detection Using Yolo. In ICIP , 2025. 17 [41] Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi. You only look once: Unified, real-time object de-tection. In CVPR , pages 779–788, 2016. 4 [42] Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster r-cnn: Towards real-time object detection with region proposal networks. In NeurIPS , 2015. 4 [43] Mathieu Serrurier, Franck Mamalet, Alberto Gonzalez-Sanz, Thibaut Boissin, Jean-Michel Loubes, and Eustasio Del Bar-rio. Achieving robustness in classification using optimal transport with hinge regularization. In CVPR , 2021. 2, 3, 4, 5 [44] Ali Shafahi, Mahyar Najibi, Mohammad Amin Ghiasi, Zheng Xu, John Dickerson, Christoph Studer, Larry S Davis, Gavin Taylor, and Tom Goldstein. Adversarial training for free! In NeurIPS , 2019. 3 [45] Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan, Ian Goodfellow, and Rob Fergus. In-triguing properties of Neural Networks. In ICLR , 2014. 1, 2[46] Juan Terven, Diana-Margarita C´ ordova-Esparza, and Julio-Alejandro Romero-Gonz´ alez. A comprehensive review of YOLO architectures in computer vision: From YOLOv1 to YOLOv8 and YOLO-NAS. Machine learning and knowl-edge extraction , 5(4):1680–1716, 2023. 4 [47] Anant Thunuguntla, Prasad Tadepalli, Giuseppe Raffa, Anant Thunuguntla, Prasad Tadepalli, and Giuseppe Raffa. Defenses Against Adversarial Attacks on Object Detection: Methods and Future Directions. Information , 16(11), 2025. 3[48] Zhi Tian, Chunhua Shen, Hao Chen, and Tong He. FCOS: Fully Convolutional One-Stage Object Detection. In ICCV ,2019. 4, 12 [49] Aladin Virmaux and Kevin Scaman. Lipschitz regularity of deep neural networks: analysis and efficient estimation. In 
+
+NeurIPS , 2018. 3 [50] Shiqi Wang, Huan Zhang, Kaidi Xu, Xue Lin, Suman Jana, Cho-Jui Hsieh, and J. Zico Kolter. Beta-CROWN: Effi-cient Bound Propagation with Per-neuron Split Constraints for Neural Network Robustness Verification. In NeurIPS ,2021. 2 [51] Yisen Wang, Difan Zou, Jinfeng Yi, James Bailey, Xingjun Ma, and Quanquan Gu. Improving Adversarial Robustness Requires Revisiting Misclassified Examples. In ICLR , 2019. 2[52] Yulong Wang, Tong Sun, Shenghong Li, Xin Yuan, Wei Ni, Ekram Hossain, and H Vincent Poor. Adversarial attacks and defenses in machine learning-empowered communication systems and networks: A contemporary survey. IEEE Com-munications Surveys & Tutorials , 25(4):2245–2298, 2023. 2 [53] Zeyu Wang, Xianhang Li, Hongru Zhu, and Cihang Xie. Re-visiting Adversarial Training at Scale. In CVPR , 2024. 2 [54] Xingxing Wei, Siyuan Liang, Ning Chen, and Xiaochun Cao. Transferable adversarial attacks for image and video object detection. arXiv preprint arXiv:1811.12641 , 2018. 2 [55] Yanzhao Wu, Ka-Ho Chow, Wenqi Wei, and Ling Liu. Ex-ploring Model Learning Heterogeneity for Boosting Ensem-ble Robustness. In 2023 IEEE International Conference on Data Mining (ICDM) , 2023. 3 
+
+10 [56] Cihang Xie, Jianyu Wang, Zhishuai Zhang, Yuyin Zhou, Lingxi Xie, and Alan Yuille. Adversarial Examples for Se-mantic Segmentation and Object Detection. In ICCV , 2017. 2, 5 [57] Kaidi Xu, Zhouxing Shi, Huan Zhang, Yihan Wang, Kai-Wei Chang, Minlie Huang, Bhavya Kailkhura, Xue Lin, and Cho-Jui Hsieh. Automatic Perturbation Analysis for Scal-able Certified Robustness and Beyond. In NeurIPS , 2020. 2[58] Zachary Yahn, Selim Furkan Tekin, Fatih Ilhan, Sihao Hu, Tiansheng Huang, Yichang Xu, Margaret Loper, and Ling Liu. Adversarial attention perturbations for large object de-tection transformers. In ICCV , 2025. 2 [59] Greg Yang, James B Simon, and Jeremy Bernstein. Aspectral condition for feature learning. arXiv preprint arXiv:2310.17813 , 2023. 5 [60] Haichao Zhang and Jianyu Wang. Towards adversarially ro-bust object detection. In ICCV , 2019. 2, 3, 4, 5, 6, 7 [61] Huan Zhang, Tsui-Wei Weng, Pin-Yu Chen, Cho-Jui Hsieh, and Luca Daniel. Efficient Neural Network Robustness Cer-tification with General Activation Functions. In NeurIPS ,2018. 2 [62] Hongyang Zhang, Yaodong Yu, Jiantao Jiao, Eric P. Xing, Laurent El Ghaoui, and Michael I. Jordan. Theoretically principled trade-off between robustness and accuracy. In 
+
+ICML , 2019. 2 [63] Zhengyu Zhao, Hanwei Zhang, Renjue Li, Ronan Sicre, Lau-rent Amsaleg, Michael Backes, Qi Li, Qian Wang, and Chao Shen. Revisiting transferable adversarial images: System-ization, evaluation, and new insights. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. 2 
+
+11 A. LipFCOS 
+
+This section studies the generalization of the proposed Lipschitz-constrained design to another one-stage detector, FCOS [48]. FCOS is an anchor-free detector, using different mechanisms than SSD such as Feature Pyramid Networks (FPN) and a new centerness branch. We therefore use this as a test of whether the results observed with LipSSD can be generalized to other architectures. 
+
+A.1. FCOS 
+
+Instead of relying on predefined anchors, FCOS predicts objects directly from feature-map locations. In addition to classifi-cation and box regression, Tian et al. [48] introduced a centerness branch, which estimates whether a location lies near the center of a ground-truth object. FCOS performs detection over a Feature Pyramid Network (FPN), producing feature maps ( P3, P4, P5, P6, P7) with respective strides (8 , 16 , 32 , 64 , 128) . Lower-stride levels such as P3 and P4 are used for small objects, while higher-stride levels such as P6 and P7 target larger objects. Each pyramid level is processed by two shared towers, one for classification and one for regression. The classification tower outputs class logits, while the regression tower predicts box coordinates and centerness scores. 
+
+A.2. LipFCOS architecture 
+
+LipFCOS follows the same principle as LipSSD, but applies it to the FCOS backbone, FPN, and prediction towers. The backbone, FPN, classification tower, regression tower, and class-logit predictor are replaced with Lipschitz-constrained counterparts. The final convolutions of the box-regression and centerness branches remain unconstrained, following the same reasoning as in Sec. 3. A representation of the resulting architecture with our modifications is shown in Figure 7. We adapt the original FCOS architecture to KITTI and LARD. For both datasets, we use a VGG backbone. Since LARD contains only small objects, we remove the P6 and P7 pyramid levels to stabilize training, and only predict on P3, P4, and 
+
+P5. For KITTI, the FPN and detection heads are kept unchanged.     
+
+> Ortho 1-Lip block standard FCOS layer KITTI-only level
+> input
+> Lipschitz backbone
+> C3
+> C4
+> C5
+> P3
+> stride 8
+> P4
+> stride 16
+> P5
+> stride 32
+> P6
+> stride 64
+> P7
+> stride 128
+> up+add
+> Lip FPN: lateral/output convs, nearest-neighbor top-down fusion
+> 256ch features; one point/anchor per cell
+> shared cls tower
+> 4×Lip 3 ×3 conv
+> shared reg tower
+> 4×Lip 3 ×3 conv
+> class logits
+> bbox reg
+> centerness
+> final head conv
+> final head conv
+> FCOS head, weights shared across selected levels
+> FCOS post-process
+> pσ(cls )σ(ctr )
+> top-k, clip, NMS
+> detections
+
+Figure 7. LipFCOS architecture. VGG backbone, returned layers C3-C5, Lipschitz FPN, and shared FCOS heads. Brown blocks are Lipschitz-constrained; blue blocks are standard FCOS layers. The final box-regression and centerness convolutions remain unconstrained. 
+
+A.3. Experiments 
+
+We train LipFCOS on KITTI and LARD using the original FCOS losses and the same protocol as in the main experiments. The goal is not to provide an exhaustive FCOS benchmark, but to test whether the proposed LipFCOS design also improves robustness. Table 4 summarizes the results. LipFCOS comes with a clean-performance cost, but improves robustness under all re-ported attacks on both datasets. On KITTI, the clean mAP@50 decreases from 78 .7 to 74 .7, while attacked performance improves by a large margin across all attack types. On LARD, the clean drop is larger than with LipSSD, but the robustness gain is also more important. To complement this fixed-budget comparison, Figure 8 reports mAP@50 on LARD and KITTI as the budget of the Acls 
+
+attack increases. This curve shows the degradation trend that is not visible from a single value at ε = 1 .0. FCOS loses performance faster than the LipFCOS as the budget increases, following the expected pattern. 12 Dataset Model Clean Acls Areg DAG TOG-F TOG-V TOG-M KITTI FCOS 78.7 35.1 36.9 37.3 44.1 57.5 66.7 LipFCOS 74.7 69.0 70.7 72.8 73.5 74.0 74.7 
+
+LARD FCOS 96.5 16.0 2.2 N/A 7.5 5.2 N/A LipFCOS 88.8 67.1 37.4 N/A 87.7 82.4 N/A                 
+
+> Table 4. mAP@50 for FCOS and LipFCOS on KITTI and LARD under attacks with ε= 1 .0.
+> 00.20.5123
+> 0
+> 20
+> 40
+> 60
+> 80
+> Attack budget ε
+> mAP@50 (%) Classic FCOS LipFCOS
+> 00.20.51
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Attack budget ε
+> mAP@50 (%) Classic FCOS LipFCOS Figure 8. mAP@50 under Acls as the attack budget εincreases for KITTI (left) and LARD (right). Note that, for the LARD dataset, the reported mAP@50 is evaluated on only 1,000 samples, resulting in a clean mAP@50 that differs from the value reported in Tab. 4.
+
+## B. LipSSD additional results 
+
+This section complements the main LipSSD experiments with additional quantitative and qualitative analyses. First, we report degradation curves and larger-budget results to show how robustness evolves beyond the single-budget comparisons presented in the main paper. Second, we examine whether the accuracy-robustness trade-off induced by temperature scaling also appears under a regression-targeted attack. Finally, we visualize perturbations produced by fabrication attacks, where the objective is to create false positives rather than suppress existing detections. 
+
+B.1. Performance degradation for varying attacks and budgets 
+
+Figure 9 reports the Areg attack on LARD over a budget ε range from 0 to 1. This experiment extends results in Table 3 where only ε = 1 .0 is shown. The curve in Figure 9 shows how quickly each model degrades as the perturbation size increases. The standard SSD loses most of its detection performance at small budgets. LipSSD and SLipSSD also degrade, but the decrease is more gradual, and they remain above the vanilla model over the tested range. Thus, the robustness gain is not restricted to one operating point: it is reflected in the slope of the degradation curve. Table 5 reports KITTI results for several attacks under a larger budget ε = 3 .0. This setting is useful because it reduces the ambiguity between clean performance and robustness. At low budgets, SLipSSD remains competitive on some attacks: even if the drop in performance is higher for SLipSSD, the mAP@50 under attack is still better because it starts from a higher clean mAP@50. At ε = 3 .0 (see Table 5), this clean-performance advantage is no longer sufficient, and LipSSD obtains the best mAP@50 under every attack. Dataset Model Clean Acls Areg DAG TOG-F TOG-V TOG-M KITTI SSD 79.8 7.6 7.0 4.8 5.7 1.6 13.4 SLipSSD 80.0 25.5 34.4 30.3 25.0 43.2 47.8 LipSSD 76.8 36.4 48.9 55.1 46.3 64.9 72.8   
+
+> Table 5. mAP@50 for SSD, SLipSSD, and LipSSD on KITTI under attacks with ε= 3 .0.
+
+This comparison clarifies the respective roles of the two variants. SLipSSD is the higher-accuracy variant and provides a 13 0 0.2 0.5 1 
+
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Attack budget ε
+> mAP@50 (%)
+> SSD
+> SLipSSD
+> LipSSD
+
+Figure 9. mAP@50 on LARD under Areg for attack budgets up to ε = 1 . Note that, the reported mAP@50 is evaluated on only 1,000 samples, resulting in a clean mAP@50 that differs from the value reported in Tab. 3 
+
+favorable compromise when preserving clean performance is important. LipSSD is the more robust variant, and the difference becomes clearer as the attack budget increases (see Figure 5). 
+
+B.2. Robustness to regression-targeted attack 
+
+Additionally, we investigate whether temperature scaling only improves robustness to attacks targeting the classification loss (e.g. Acls ), or whether it improves the robustness on other attacks. To this end, we complement the study presented in Sec. 4.2.1 with the same analysis under the Areg attack, since the TOG vanishing attack targets the global SSD loss and may focus on the classification part. Figure 10 shows the Pareto front for clean mAP@50 vs. mAP@50 under Areg 
+
+attack. Interestingly, the accuracy-robustness trade-off remains visible under this attack indicating that the scaling parameter also impacts the detector robustness beyond the classification objective alone. This observation is consistent with prior work suggesting that adversarial robustness is closely tied to the features learned by the model, namely robust and non-robust features [28]. This is also aligned with the recent work of Li et al. [31], showing the backbone’s importance in the adversarial robustness of object detectors. In this view, the effect of temperature scaling on the Areg attack suggest that it may influence detector-level robustness through changes in the learned representation by the backbone rather than only through the classification objective.                    
+
+> 6810 12 14 16 18 20 22 24 26 28 30 32 34
+> 48
+> 50
+> 52
+> 54
+> 56
+> 58
+> 60
+> 62
+> 64
+> 66
+> 68
+> 70
+> mAP@50 under Areg at ε= 3 (%)
+> Clean mAP@50 (%)
+> 0.1
+> 0.5
+> 1
+> 5
+> Temperature  τ
+
+Figure 10. Accuracy-robustness trade-off on Pascal VOC for the SLipSSD models trained with different temperatures τ . Each point reports clean mAP@50 on full test set, vertical axis, against robust mAP@50 under the Areg attack at ε = 3 , horizontal axis. The persistence of the trade-off under a regression-targeted attack suggests that temperature scaling affects detector-level robustness, not only classification robustness. 
+
+14 B.3. Visualization of fabrication attack perturbations 
+
+Figures 11 and 12 provide qualitative examples under a fabrication objective. Instead of showing whether detections are preserved under attack, we focus on the perturbation patterns leading to false positives. For the vanilla SSD, the fabrication objective can create false detections using mostly unstructured perturbations. Against LipSSD, the successful perturbations are visually more organized and tend to align with image structures associated with the target object. On KITTI, the perturbation is concentrated around car-like structures. On LARD, the perturbation more often follows runway-like structures. This does not constitute a formal statement about all possible perturbations, but it illustrates a qualitative change in the attack solutions found against the Lipschitz-constrained detector.  
+
+> Vanilla SSD LipSSD
+> Clean detections
+> Adversarial detections
+> Perturbation
+
+Figure 11. Qualitative comparison under a fabrication objective on KITTI. 
+
+15 Clean detections Adversarial detections Perturbation 
+
+> Vanilla SSD LipSSD (ours) Vanilla SSD LipSSD (ours)
+
+Figure 12. Qualitative comparison under a fabrication objective on LARD. 
+
+16 C. Related work on certification of object detectors 
+
+The main paper focuses on empirical robustness under white-box attacks. We discuss here the related, but distinct, line of work on certified robustness for object detection. Certified defenses aim to provide formal guarantees, usually called certificates, that a prediction or performance criterion remains stable within a specified perturbation set. Such guarantees can be obtained through formal verification, randomized smoothing, or Lipschitz-based certificates. Extending certification from classification to detection is difficult because the output is not a single class label. Detectors produce a variable number of boxes, class scores, and regression outputs, followed by confidence thresholding and non-maximum suppression. A certificate must therefore account not only for class stability, but also for localization, matching, and post-processing effects. 
+
+Certified object detection: Recent work has started to address certification for object detection. For example, Cohen et al. [21] proposed to formally verify the localization robustness of single-object detectors by bounding the worst-case IoU over a perturbation set. More recently, Nirala and Sarkar [40] trained and certified a modified YOLOv2-based runway detector with IBP on 128 ×128 LARD [23] crops under ℓ∞ perturbations. These formal verification works remain limited in scope and are not yet applicable to large detection models and datasets. In a different line of work, Chiang et al. [17] proposed Median Smoothing , a variant of randomized smoothing for object detection that provides guarantees on both box coordinates and object classes under an ℓ2-norm bounded budget. This approach is attractive because it directly targets the structured output of object detectors, rather than reducing detection to a classification problem. However, it is computationally expensive at inference time: the smoothed detector requires many forward passes, with the authors using 2000 inferences to perform one smoothed detection. This makes such methods difficult to deploy in settings where detection latency is critical. Our work does not provide a certified detector in this sense. Instead, it studies whether Lipschitz-constrained components can improve empirical robustness while keeping the standard detection pipeline largely unchanged. This makes the approach closer to a practical robust-design strategy than to a complete certification method, but it remains connected to certification through the explicit control of Lipschitz constants. 17
