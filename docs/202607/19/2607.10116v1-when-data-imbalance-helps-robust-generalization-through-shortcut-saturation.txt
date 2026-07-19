@@ -1,0 +1,420 @@
+Title: When Data Imbalance Helps: Robust Generalization Through Shortcut Saturation
+
+URL Source: https://arxiv.org/pdf/2607.10116v1
+
+Published Time: Tue, 14 Jul 2026 00:23:53 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# When Data Imbalance Helps: Robust Generalization Through Shortcut Saturation 
+
+Cheng-Ting Chou ∗
+
+University of California, Los Angeles 
+
+ctchou3@cs.ucla.edu 
+
+Duc Binh Hoang ∗
+
+Purdue University 
+
+hoang112@purdue.edu 
+
+# Abstract 
+
+We study robust generalization under spurious correlations: tasks where a short-cut feature is correlated with the true label in training but anti-correlated in an adversarial held-out split. Varying the spurious ratio r (the fraction of training ex-amples where shortcut = true label) and model capacity, we find a counterintuitive result: data imbalance promotes generalization in sufficiently capable models. On a synthetic task where the true label is sum parity of an integer sequence and the shortcut is the parity of the maximum-valued element, a 2-layer, 2-head transformer generalized (reached 100% adversarial accuracy) in 0% of seeds at r=0 .50 but 77% of seeds at r=0 .90 . The effect is absent in 1-layer models, where imbalance instead traps the model on the shortcut. Through mechanistic analysis—gradient conflict dynamics, circuit evolution, and QK/OV circuit ablations—we characterize a mechanistic pathway consistent with imbalance promoting generalization. 
+
+# 1 Introduction 
+
+Spurious correlations are one of the central failure modes of learned models [Geirhos et al., 2020, Shah et al., 2020]. When a feature is highly predictive in training but unreliable at test time, models learn to exploit it as a shortcut, and the standard prescription is to correct for this by balancing the dataset—equalizing shortcut-consistent and anti-shortcut examples so neither dominates gradient descent [Sagawa et al., 2020]. We challenge this prescription. In a controlled synthetic setting where models must predict sum parity of an integer sequence but can exploit the parity of the maximum-valued element as a shortcut (the Max-Parity-Sum-Parity task, defined in 3), we find that increasing the spurious ratio r—the fraction of training examples where shortcut equals true label—from 0.50 to 0.90 substantially increases the probability of robust generalization, but only in models with sufficient capacity. Two-layer, two-head transformers generalize in 0% of seeds at r=0 .50 and 77% of seeds at r=0 .90 ; single-layer models show the opposite trend, with higher imbalance trapping them on the shortcut. We hypothesize that the mechanism underlying this reversal involves shortcut saturation —the regime in which shortcut-consistent examples achieve near-zero loss, causing their gradients to vanish. When imbalance is high, the shortcut circuit rapidly achieves near-perfect accuracy on the majority of training examples, bringing them into this saturated regime. The anti-shortcut minority, consistently misclassified, continues to produce large gradients—amplified by a factor of roughly r/ (1 −r),reaching 9:1 at r=0 .90 [You et al., 2025]. In capable models, this amplified adversarial gradient appears to support a structural reorganization of the attention circuit. At balanced ratios, no such saturation appears to occur: the two gradient sources remain persistently opposed and neither side gains sufficient gradient momentum. These results suggest that shortcut saturation may function as a precondition for generalization rather than an obstacle to it. 
+
+> ∗Equal contribution. Preprint. arXiv:2607.10116v1 [cs.LG] 11 Jul 2026
+
+Our contributions are: 1. Imbalance × capacity interaction. Increasing the spurious ratio from 0.5 to 0.9 raises generalization rate from 0% to 77% in two-layer transformers while reducing it in one-layer models, establishing a capacity threshold between one and two transformer layers. 2. Mechanistic pathway. Gradient conflict analysis, circuit evolution tracking, and QK/OV ablations characterize a pathway consistent with shortcut saturation amplifying adversarial gradients and supporting structural circuit reorganization in capable models. 3. Unifying principle. Across four tasks (two shortcut types × two label bases), the effect depends on deviation of r from the random-chance baseline: both shortcut-biased and anti-shortcut-biased ratios are associated with generalization while the null ratio suppresses it. 
+
+# 2 Background and Related Work 
+
+Grokking and Delayed Generalization. The phenomenon of grokking—a sharp phase transition in test accuracy long after training loss has plateaued—was identified by Power et al. [2022] on modular arithmetic tasks; subsequent mechanistic analyses have characterized the circuit formation processes underlying these transitions [Nanda et al., 2023, Barak et al., 2022]. Our setting is related but distinct: we observe a continuum of outcomes (some runs generalize quickly, some slowly, some not at all) without assuming or requiring a sharp phase transition. 
+
+Shortcut Learning and Simplicity Bias. Deep neural networks are known to exhibit a simplicity bias , a tendency to rely on the simplest available features that decrease training error [Shah et al., 2020, Teney et al., 2025]. This bias leads to shortcut learning in the presence of spurious correlations— where models exploit easy-to-represent but non-causal patterns [Geirhos et al., 2020]. Recent theoretical work using Neural Tangent Kernels (NTK) suggests that this bias is an inevitable byproduct of non-linear architectures, which trade off the predictivity of a feature for its availability in the training distribution [Hermann et al., 2024]. 
+
+The Paradox of Data Imbalance. Standard prescriptions for mitigating shortcuts center on dataset balancing to prevent any single feature from dominating the gradient signal [Sagawa et al., 2020, Sinha et al., 2020, Mansilla et al., 2021]. However, our work identifies a regime where imbalance appears to act as a catalyst rather than a hindrance. This aligns with recent findings on spurious memorization ,where models only begin to learn complex, robust rules once simpler, majority-supported shortcuts are saturated [You et al., 2025]. In this saturated state, the training signal from shortcut-consistent examples diminishes, effectively amplifying the relative gradient contribution of the anti-shortcut minority. Our results are consistent with this gradient amplification supplying enough adversarial signal to overcome the simplicity bias in capable models. 
+
+Mechanistic Interpretability of Circuits. Our approach builds on mechanistic interpretability techniques designed to identify internal circuits within Transformers [Nanda et al., 2023]. While prior studies have focused on prefix-matching induction heads [Olsson et al., 2022] or modular arithmetic clock circuits [Nanda et al., 2023], we focus on the transition between magnitude-sorting and parity-encoding circuits. 
+
+# 3 Setup 
+
+3.1 Tasks 
+
+We study four tasks formed by the cross-product of two true labels and two shortcut features, all using sequences of 5 integers drawn i.i.d. from [0 , 20) . The true labels are sum parity (sum mod 2) and sum mod 3 ; the shortcut features are the first element or the max-valued element , each taken modulo the same base as the label. An example is shortcut-consistent when the shortcut equals the true label, and anti-shortcut otherwise. The spurious ratio r is the fraction of shortcut-consistent training examples. Because the random-chance baseline differs by label type— 1/2 for binary (mod 2) tasks and 1/3 for ternary (mod 3) tasks—we use task-appropriate ratio sweeps: r ∈ { 0.5, 0.7, 0.9}
+
+2for parity tasks and r ∈ { 0.15 , 0.33 , 0.5} for mod 3 tasks. Attending to either the max or the first element is mechanistically cheaper than aggregating all elements, creating a capacity asymmetry that is exploitable by label imbalance. 
+
+3.2 Dataset Splits 
+
+Each experiment uses three fixed splits: a train set of 16,384 examples at spurious ratio r; a val set at ratio 1.00 (all shortcut-consistent), measuring shortcut learning; and an adv (adversarial) set at ratio 0.00 (all anti-shortcut), measuring true-rule generalization. 
+
+Generalization definition. A run generalizes if it achieves 100% adversarial accuracy at any point during training. The generalization epoch is the first such epoch. The generalization rate per configuration is the fraction of seeds where the generalization epoch is finite. No assumption is made about whether the improvement is sudden or gradual. 
+
+3.3 Models and Training Architecture variants are single-layer and two-layer transformers with nheads ∈ { 1, 2}, dmodel =64 ,and dff =128 . Training runs for 15,000 epochs with AdamW ( lr =10 −3, weight decay ∈ { 0.1, 0.4},batch size 4,096). Each configuration is run with 30 seeds for the two primary binary-label tasks (MPSP and FESP) and the two mod 3 tasks (FE-Mod3 and MM-Mod3), and 10 seeds for the remaining ablation variants (n11). Shortcut-consistent and adversarial accuracy are logged every 100 epochs; checkpoints are saved at every 10% absolute change in adversarial accuracy. 
+
+# 4 Behavioral Results: Imbalance and Capacity Interaction 
+
+This section covers the two binary-label tasks (max-element and first-element shortcuts); ternary mod 3 tasks are summarized at the end of Section 4.4 and detailed in Appendix D. 
+
+4.1 Generalization Rate Increases With Ratio for 2-Layer Models 
+
+Table 1 reveals the key interaction: the 2L, 2H model’s generalization rate rises from 0% to 43% to 77% as r increases from 0.5 to 0.7 to 0.9. For 1-layer models, the pattern inverts: the 1L, 1H model generalizes in 33% of seeds at balanced training, but this collapses to 7% and then 0% as the ratio increases—higher imbalance actively traps training on the shortcut. This is consistent with a capacity threshold below which imbalance is harmful and above which it is beneficial. For this task, the threshold lies between one and two transformer layers. 
+
+4.2 Weight Decay Causes Transient Generalization 
+
+Increasing weight decay from 0.1 to 0.4 leaves the overall generalization rate largely intact—the 2L, 2H model still has 21/30 seeds reach 100% adversarial accuracy at some point during training at r=0 .9—but per-seed inspection reveals that 15 of those 21 seeds hit it only transiently before Table 1: Generalization rate by configuration (weight decay = 0.1). Bold rows highlight the 2-layer models where the imbalance × capacity interaction is most pronounced. 1-layer models 2-layer models Config Gen. Rate Config Gen. Rate 1H, r=0 .5 10/30 (33%) 1H, r=0 .5 3/30 (10%) 
+
+1H, r=0 .7 2/30 (7%) 1H, r=0 .7 8/30 (27%) 
+
+1H, r=0 .9 0/30 (0%) 1H, r=0 .9 16/30 (53%) 
+
+2H, r=0 .5 3/30 (10%) 2H, r=0 .5 0/30 (0%) 
+
+2H, r=0 .7 3/30 (10%) 2H, r=0 .7 13/30 (43%) 
+
+2H, r=0 .9 1/30 (3%) 2H, r=0 .9 23/30 (77%) 
+
+3regressing to near-shortcut performance; only 6 consolidated into stable generalizing solutions. Higher weight decay thus enables models to discover the generalizing basin but prevents them from staying in it. 
+
+4.3 Shortcut-Trapping in 1-Layer Models 
+
+One-layer models at r ≥ 0.7 present a clear picture of shortcut reliance: they reach near-perfect accuracy on shortcut-consistent examples (0.90–1.00) while adversarial accuracy remains at essen-tially random levels throughout the entire 15,000-epoch training run. This is not a transient state or a convergence artifact—it is a stable configuration from which training does not recover within 15,000 epochs. 
+
+4.4 Cross-Shortcut Generalization: Position vs. Magnitude 
+
+The behavioral effect replicates across a structurally distinct shortcut type. In the 
+
+first_equal_sum_parity (FESP) task, the shortcut is purely positional: the parity of the first sequence element is correlated with sum parity in training. Where the magnitude shortcut requires the model to rank tokens by magnitude, the position shortcut requires only reading the value at a fixed position. Table 2: Generalization rates for 2-layer models (wd=0.1): MPSP (magnitude shortcut) vs. FESP (position shortcut). Full results including 1-layer models are in Appendix B.                      
+
+> Config rMPSP (mag. shortcut) FESP (pos. shortcut) 2L, 1H 0.5 3/30 (10%) 0/30 (0%) 2L, 1H 0.7 8/30 (27%) 16/30 (53%) 2L, 1H 0.9 16/30 (53%) 20/30 (67%) 2L, 2H 0.5 0/30 (0%) 0/30 (0%) 2L, 2H 0.7 13/30 (43%) 20/30 (67%)
+> 2L, 2H 0.9 23/30 (77%) 23/30 (77%)
+
+The qualitative pattern is preserved across both shortcut types (Table 2): 2-layer models benefit from increasing imbalance, with generalization rising as r increases. The two shortcut types reach comparable peak generalization—the best position-shortcut configuration reaches 77% at r=0 .9,matching the 77% of the magnitude-shortcut task at the same setting. At intermediate ratios the position shortcut generalizes somewhat more readily (e.g., 2L, 1H at r=0 .7: 53% FESP vs. 27% MPSP). This indicates that a purely positional shortcut is no more resistant to displacement than a magnitude-based one: both are dislodged by the amplified adversarial gradient once the shortcut saturates and the model has sufficient capacity. 
+
+Ternary label replication. The pattern extends to ternary labels. In the first_equal_sum_mod3 
+
+(FE-Mod3) task, the true label is sum mod 3 (three classes) and the shortcut is the first element mod 3. The random-chance shortcut correlation for a ternary problem is 1/3, not 1/2, so the ratio sweep is 
+
+r ∈ { 0.15 , 0.33 , 0.50 }—with r=0 .33 as the null point (no shortcut information) and r=0 .15 and 
+
+r=0 .50 as imbalanced ratios in opposite directions. The 2L, 2H model achieves 93% generalization at r=0 .15 and 90% at r=0 .50 , but 0% at the null ratio ( r=0 .33 ), with 1-layer models showing substantially lower rates throughout. These results suggest that the relevant quantity is not the absolute value of r but its deviation from the random-chance baseline: any imbalance—whether the shortcut is over- or under-represented—appears to create a gradient asymmetry associated with the effect, while shortcut neutrality (random chance) eliminates it entirely. Full mod 3 results are in Appendix D. 
+
+# 5 Mechanistic Analysis 
+
+The mechanistic analyses in this section are conducted on the magnitude-shortcut task (max-element parity as shortcut, defined in Section 3). The behavioral results establish that imbalance and capacity interact to produce different general-ization outcomes. The analyses that follow characterize a mechanistic pathway consistent with the 40 2000 4000 6000 8000 10000 12000 14000  
+
+> Training epoch
+> 1.25
+> 1.00
+> 0.75
+> 0.50
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> Gradient cosine sim (val · adv)
+> Max-Parity
+> mean ± std
+> baseline_l1 r=0.50
+> baseline_l1 r=0.70
+> baseline_l1 r=0.90
+> baseline_l2 r=0.50
+> baseline_l2 r=0.70
+> baseline_l2 r=0.90
+> Gradient conflict dynamics by ratio (dotted = median adv grok epoch)
+
+Figure 1: Gradient cosine similarity between shortcut-consistent and anti-shortcut gradient vectors over training epochs, one curve per spurious ratio (mean ± std across seeds). Values near −1 indicate the two subsets are pulling parameters in opposite directions; values near 0 indicate alignment. Dotted vertical lines mark the median generalization epoch. In 2-layer models at high ratio, gradient conflict is eventually resolved (cosine similarity approaches 0), coinciding with the onset of robust generalization; in 1-layer models and at balanced ratios, conflict persists throughout training. behavioral findings: imbalance is associated with amplified adversarial gradient signal (Section 5.1), which in capable models appears to support a structural reorganization of the first attention head from a shortcut circuit to a robust one (Section 5.2), a transition characterized by the circuit’s query-key geometry and output-value encoding (Section 5.3). We note that these analyses establish correlations and are consistent with the proposed pathway; direct causal interventions remain future work. 
+
+5.1 Gradient Conflict Dynamics 
+
+To understand how the two subsets interact during training, we compute the cosine similarity between the gradient obtained from shortcut-consistent examples and the gradient from anti-shortcut examples. When this quantity is strongly negative, the two subsets are pulling the model’s parameters in opposite directions; when it approaches zero, their gradient signals have become aligned. We also track the ratio of anti-shortcut to shortcut gradient norms, which measures the relative magnitude of the two subsets’ training signals. Gradient conflict is a universal early phenomenon, appearing in every configuration regardless of whether the model eventually generalizes. What separates outcomes is not whether conflict occurs but whether it is resolved. The 2L, 2H model at r=0 .9 ends training with mean cosine similarity near zero ( −0.077 ± 0.697 , Table 3), indicating that in generalizing runs the two gradient directions have re-aligned. Shortcut-trapped one-layer models at r ≥ 0.7, by contrast, maintain gradient cosine similarity near −0.95 throughout training—the conflict never resolves (Figure 1). The gradient norm ratio completes the picture. At r=0 .9, anti-shortcut examples produce roughly 9–17 × more gradient signal than shortcut-consistent ones (Table 3). This amplification arises because the shortcut circuit, once it saturates, classifies shortcut-consistent examples correctly with high confidence—their losses collapse toward zero and their gradients vanish. The anti-shortcut minority, which the shortcut circuit misclassifies, continues to produce large gradients. The result is a sustained, high-magnitude signal from the minority that, in capable models, is associated with eventual circuit reorganization. 5Table 3: Gradient conflict dynamics by configuration (weight decay = 0.1). “Gradient ratio” is the anti-shortcut to shortcut gradient norm ratio at end of training. Entries without a standard deviation have zero variance across seeds at the reported precision.                                                                               
+
+> Config Peak conflict epoch Min cosine sim Final cosine sim Gradient ratio 1L, 1H, r=0 .51070 ±3149 −0.998 ±0.002 −0.458 ±0.422 0.996 ±0.522
+> 1L, 1H, r=0 .7287 ±168 −0.999 −0.953 ±0.137 2.366 ±0.429
+> 1L, 1H, r=0 .9400 ±236 −0.999 ±0.001 −0.978 ±0.009 8.843 ±0.691
+> 2L, 2H, r=0 .5100 −0.978 ±0.022 0.122 ±0.128 0.987 ±0.202
+> 2L, 2H, r=0 .71257 ±2305 −0.991 ±0.023 −0.498 ±0.587 2.568 ±1.326
+> 2L, 2H, r=0 .91917 ±3987 −0.993 ±0.006 −0.077 ±0.697 16 .824 ±12 .664
+
+5.2 Circuit Evolution 
+
+We identify a head as having developed a robust circuit at checkpoint t via activation ablation and cross-split patching. A head is labeled robust ( shared ) when: ablating it reduces accuracy on both the shortcut-consistent and adversarial splits (positive contribution to both), cross-split activation patching transfers performance in both directions, the head is not strongly split-selective, and the mean cross-split patching score exceeds 0.5. Full criteria are given in Appendix F. This gives us a per-head, per-checkpoint label that tracks when each head transitions from shortcut-implementing to true-rule-implementing circuitry; we report the earliest epoch at which any head across all layers meets this criterion. One-layer models at r ≥ 0.7 almost never satisfy the robust circuit criterion—they overwhelmingly remain in the magnitude-sorting regime for the entire duration of training, and the rare seeds that do form a robust head reach it only very late (Table 4). Two-layer models at r=0 .9, by contrast, undergo a structural transition whose speed depends critically on head count. In the 2L, 1H model, the robust circuit forms across both layers, with the first robust head appearing at epoch 3226 ± 3605 on average. In the 2L, 2H model, one head becomes associated with the shortcut early; this division of labor appears to concentrate the adversarial gradient—which grows as shortcut saturation progresses— disproportionately on the second head, which develops the robust circuit far sooner (epoch 960 ±1331 ,roughly 3× faster). Crucially, at the generalization epoch itself, 96–100% of all attention heads satisfy the robust circuit criterion—regardless of when that epoch falls—suggesting a threshold effect: generalization occurs once sufficient circuit reorganization has accumulated, not at a fixed epoch. Post-generalization, some seeds regress: final-checkpoint robust fractions (0.63–0.67) are substantially lower than at-generalization fractions (0.97–1.00), consistent with the same mechanism underlying the transient generalization under higher weight decay (Section 4.2). Table 4: Epoch of first robust head formation across all wd=0.1 configurations (mean ± std across seeds). One-layer, one-head models form a robust head only rarely and very late ( 12850 ± 919 epochs at r=0 .7) or never at all ( r=0 .9); one-layer, two-head models form one at high ratio but only after a long delay ( 7567 ± 4893 epochs at r=0 .9). Among two-layer models, the effect of head count depends on ratio: at r=0 .9, doubling from 1H to 2H accelerates first robust head formation by ∼3×
+
+(3226 → 960 epochs); at r=0 .5 the advantage disappears and 2H models are no faster than 1H. One interpretation of the r=0 .9 speedup is that shortcut specialization on one head concentrates the growing adversarial gradient on the other.                                                         
+
+> 1-layer models 2-layer models Config First robust head Config First robust head 1H, r=0 .54990 ±4060 1H, r=0 .54100 ±4068
+> 1H, r=0 .712850 ±919 1H, r=0 .72988 ±3969
+> 1H, r=0 .9— (never) 1H, r=0 .93226 ±3605
+> 2H, r=0 .54775 ±6186 2H, r=0 .54291 ±4154
+> 2H, r=0 .7567 ±321 2H, r=0 .71464 ±3384
+> 2H, r=0 .97567 ±4893 2H, r=0 .9960 ±1331
+
+65.3 QK/OV Circuit Fingerprint of Shortcut vs. Robust Models 
+
+The circuit evolution analysis identifies when the transition happens; the QK/OV fingerprint charac-terizes what structurally changes. In a shortcut-implementing head, the query-key circuit is consistent with magnitude ordering: higher-valued elements receive higher attention weights, and the head appears to preferentially select the maximum-valued token. In a robust head, the output-value (OV) circuit is instead consistent with parity encoding, projecting attended representations onto a parity direction rather than a magnitude direction. Table 5: QK/OV circuit fingerprint across training. QK Spearman ρ (peak) is the maximum across all checkpoints and heads; QK Spearman ρ (final) is the value at the last checkpoint. OV parity Spearman (at QK peak) is measured at the epoch when QK Spearman is highest. OV parity Spearman (at generalization) is measured at the first epoch at which adversarial accuracy reaches 100% for generalizing models; for shortcut-trapped models that never generalize, the final checkpoint value is reported instead. Because the parity target is binary (10 even and 10 odd token values), tied ranks cap the maximum attainable OV parity Spearman at 0.867 ; values near 0.86 are therefore at ceiling.                                                           
+
+> Shortcut circuit (QK ρ)Robust indicator (OV parity Spearman) Config Peak Final At QK peak At gen. 1L, 1H, r=0 .5
+> (mixed) 0.213 ±0.104 0.111 ±0.101 0.033 ±0.361 −0.062 ±0.568
+> 1L, 1H, r=0 .9
+> (shortcut-trapped) 0.987 ±0.005 0.971 ±0.014 0.741 ±0.151 0.628 ±0.232
+> 2L, 2H, r=0 .5
+> (balanced-trapped) 0.295 ±0.090 0.217 ±0.090 0.290 ±0.116 0.284 ±0.116
+> 2L, 2H, r=0 .9, wd=0.1 (generalized) 0.979 ±0.011 0.682 ±0.225 0.800 ±0.072 0.864 ±0.010
+
+All models with r ≥ 0.7 develop a strong shortcut circuit early (Table 5): QK Spearman ρ peaks near 0.97–0.99 during training regardless of whether the model ultimately generalizes. The critical divergence occurs afterward. In the shortcut-trapped 1L, 1H model at r=0 .9, QK ρ stagnates near its peak at the final checkpoint ( 0.971 ), and OV parity Spearman at the final checkpoint remains below its at-peak value ( 0.628 vs. 0.741 at peak)—consistent with continued reliance on the shortcut representation while parity-aligned structure diminishes. In the generalizing 2L, 2H model, QK ρ
+
+drops sharply from its peak of 0.979 to 0.682 at the final checkpoint, while OV parity Spearman rises from 0.800 at the QK peak to 0.864 ± 0.010 at the generalization epoch—effectively at the 
+
+0.867 ceiling. The shortcut circuit forms at similar strength in all high-r models; what distinguishes generalizing models is that it is subsequently displaced as the robust parity circuit matures. The 2L, 2H model at r=0 .5 exposes a qualitatively different failure mode: QK Spearman peaks at only 0.295 ± 0.090 —far below the ∼0.98 reached at r=0 .9 for the same architecture—indicating that no strong shortcut circuit forms at balanced ratio. Without shortcut saturation, gradient amplification does not appear to begin, and the capable model fails for a similar reason as the incapable one: the conditions that support circuit reorganization do not arise. One-layer models present a complementary insight: they place essentially no attention on the maximum-valued token, yet demonstrably rely on max-element magnitude for their predictions. The uniformly high QK Spearman ρ (> 0.95 ) even in these models suggests that magnitude rank may be encoded in the token embeddings themselves and propagate to the classification head without requiring attention concentration. This distributed, embedding-based implementation is consistent with 1-layer shortcut circuits being harder to displace—there is no single attention score to redirect, only a global representational geometry to shift. The position-shortcut task (first-element parity) exposes the same distinction through a complementary lens. Because the shortcut is positional rather than magnitude-based, QK Spearman ρ is not the appropriate fingerprint: the shortcut circuit need not rank tokens by magnitude, only concentrate attention on position 0. We therefore use position-0 attention weight (p0) as the shortcut indicator; Table 6 reports the results. The 2L, 2H model at r=0 .9 shows the same displacement signature as the magnitude-shortcut task: p0 peaks at 0.671 during training and falls to 0.307 by the generalization epoch while OV parity Spearman reaches 0.813. One-layer models show a qualitatively different pattern—for the 1L, 1H model p0 never peaks substantially (max 0.100 at r=0 .9)—consistent with 7Table 6: FESP positional shortcut fingerprint across training. p0 (peak) is the maximum position-0 attention weight across all checkpoints. p0 (at generalization) is measured at the first epoch at which adversarial accuracy reaches 100% for generalizing models (final checkpoint for models that never generalize). OV parity Spearman is reported at the final checkpoint (the at-generalization value is undefined for this positional-shortcut task). Entries without a standard deviation derive from a single generalizing seed.                                                
+
+> Config p0(peak) p0(at gen.) OV parity (final) 1L, 1H, r=0 .5(balanced) 0.015 ±0.025 0.025 −0.055 ±0.259
+> 1L, 1H, r=0 .9(shortcut-trapped) 0.100 ±0.161 0.098 ±0.015 0.597 ±0.618
+> 2L, 2H, r=0 .5(balanced-trapped) 0.152 ±0.163 0.008 ±0.040 0.131 ±0.142
+> 2L, 2H, r=0 .9(generalized) 0.671 ±0.267 0.307 ±0.353 0.813 ±0.317
+
+the positional shortcut being implemented via embeddings rather than attention concentration, the same distributed mechanism as the 1-layer magnitude shortcut. The ablation direction is consistent with this interpretation: zeroing attention in the shortcut-trapped 1L, 1H, r=0 .9 model increases 
+
+adversarial accuracy by 0.42 ± 0.16 (suggesting attention implements a harmful shortcut), while the same ablation in the generalizing 2L, 2H model decreases it by 0.28 ± 0.30 (suggesting attention now contributes to the robust solution). 
+
+5.4 Subset Trajectory: Two-Phase Accuracy Dynamics 
+
+Figure 2 plots accuracy separately on the shortcut-consistent (SC, val split at r=1 ) and anti-shortcut (adv split at r=0 ) subsets for all 30 seeds at r=0 .9, one panel per architecture. In both 1-layer models (panels a–b), SC accuracy rises to near-perfect within the first logged epoch while anti-shortcut accuracy stays near chance throughout—training remains in Phase 1 for the full 15,000 epochs in all but one seed. In 2-layer models (panels c–d), the same Phase 1 pattern appears initially: SC accuracy reaches near-perfect while anti-shortcut accuracy collapses toward zero. Phase 2 then begins at a seed-dependent epoch, ranging from a few hundred to over 10,000 epochs: anti-shortcut accuracy rises toward 1.0 while SC accuracy remains near-perfect. This trajectory is consistent with generalization being additive—shortcut-consistent performance is retained as adversarial robustness is acquired. The Phase 2 onset is abrupt for some seeds and gradual for others, consistent with the wide seed-to-seed variance in generalization epochs. Head count modulates the fraction of seeds that enter Phase 2: 16/30 for 2L 1H (panel c) and 23/30 for 2L 2H (panel d). 
+
+# 6 Discussion 
+
+Gradient amplification. Once the shortcut circuit saturates, shortcut-consistent losses collapse toward zero and their gradients vanish, while the consistently misclassified anti-shortcut examples continue producing large signals. The gradient norm ratio scales as r/ (1 − r)—9:1 at r=0 .9,consistent with the measured 8.8–16.8 × (Table 3). 
+
+Why capacity matters. The shortcut circuit occupies representational capacity. In a one-layer model, the shortcut and true-rule circuits appear to compete for the same parameters; the shortcut, reinforced by 90% of training examples, has a far stronger attractor. In a two-layer model, the second layer provides parameters that may encode the true rule while the first retains the shortcut; the amplified adversarial gradient appears to route through the second layer without fully displacing the shortcut in the first. 
+
+Why balanced data appears insufficient. At r=0 .5, the shortcut achieves only 50% training accuracy and provides no consistent signal: gradients from the two subsets are roughly equal in magnitude and persistently opposed in direction, and neither circuit consolidates. 
+
+Implications for training practice. Our findings are limited to small synthetic transformers, and we caution against direct extrapolation; still, they suggest that the relationship between dataset balance, model capacity, and generalization may be more complex than standard prescriptions assume. 80 2000 4000 6000 8000 10000 12000 14000                                        
+
+> Epoch
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> Accuracy
+> 1L 1H r= 0.90 (n=30)
+> 02000 4000 6000 8000 10000 12000 14000
+> Epoch
+> 1L 2H r= 0.90 (n=30)
+> 02000 4000 6000 8000 10000 12000 14000
+> Epoch
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> Accuracy
+> 2L 1H r= 0.90 (n=30)
+> 02000 4000 6000 8000 10000 12000 14000
+> Epoch
+> 2L 2H r= 0.90 (n=30)
+> Max-Parity SC vs. anti-SC accuracy by architecture
+> SC accuracy (val, r= 1) Anti-SC accuracy (adv, r= 0)
+
+Figure 2: Per-epoch SC accuracy (blue, val split r=1 ) and anti-SC accuracy (red, adv split r=0 ) for all 30 seeds at r=0 .9. (a) 1-layer, 1-head: all seeds permanently trapped in Phase 1. (b) 1-layer, 2-head: similarly trapped, with one seed entering Phase 2. (c) 2-layer, 1-head: 16/30 seeds exhibit Phase 2 recovery. (d) 2-layer, 2-head: 23/30 seeds exhibit Phase 2 recovery, with seed-dependent onset. 
+
+Limitations. 
+
+• Despite 30 seeds per configuration for the four primary tasks (10 for the ablation variants), variance remains high for some settings (e.g., a generalization-epoch standard deviation of 
+
+∼3,700 for the 2L, 2H model at r=0 .9, weight decay 0.4). • Effect size varies across tasks: peak generalization reaches 93% for the ternary position-shortcut task (FE-Mod3) and 77% for the binary magnitude-shortcut task, but only 27% for the ternary magnitude-shortcut task (MM-Mod3), suggesting that the difficulty of the true computation relative to the shortcut modulates the imbalance effect. How this scales to real-world tasks remains an open question. • The mechanistic timeline statistics (circuit formation epoch, gradient re-alignment epoch) have high within-configuration variance, making seed-conditional analyses more informative than per-configuration averages; larger seed counts would sharpen these estimates. 
+
+# 7 Conclusion 
+
+We demonstrate that data imbalance—conventionally viewed as a problem to correct—can promote robust generalization in capable models trained under spurious correlations in our controlled setting. The observed dynamics are consistent with a gradient amplification account: as the shortcut saturates, the anti-shortcut minority becomes the dominant gradient source, supporting structural reorganization of the attention circuit in sufficiently capable models. Below the capacity threshold, imbalance instead actively hurts generalization. The ternary-label experiments refine this picture: what matters is the deviation of r from the random-chance baseline ( 1/2 binary, 1/3 ternary)—at the null ratio generalization drops to zero in capable models, while ratios biased in either direction restore it. 9References 
+
+Boaz Barak, Benjamin L Edelman, Surbhi Goel, Sham M Kakade, Eran Malach, and Cyril Zhang. Hidden progress in deep learning: SGD learns parities near the computational limit. In Advances in Neural Information Processing Systems , volume 35, 2022. Robert Geirhos, Jörn-Henrik Jacobsen, Claudio Michaelis, Richard Zemel, Wieland Brendel, Matthias Bethge, and Felix A Wichmann. Shortcut learning in deep neural networks. Nature Machine Intelligence , 2(11):665–673, 2020. Katherine L. Hermann, Hossein Mobahi, Thomas Fel, and Michael C. Mozer. On the foundations of shortcut learning. In The Twelfth International Conference on Learning Representations , 2024. Lucas Mansilla, Rodrigo Echeveste, Diego H Milone, and Enzo Ferrante. Domain generalization via gradient surgery. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 6610–6618, 2021. Neel Nanda, Lawrence Chan, Tom Lieberum, Jess Smith, and Jacob Steinhardt. Progress measures for grokking via mechanistic interpretability. In International Conference on Learning Representations ,2023. Catherine Olsson, Nelson Elhage, Neel Nanda, Nicholas Joseph, Nova DasSarma, Tom Henighan, Ben Mann, Amanda Askell, Yuntao Bai, Anna Chen, Tom Conerly, Dawn Drain, Deep Ganguli, Zac Hatfield-Dodds, Danny Hernandez, Scott Johnston, Andy Jones, Jackson Kernion, Liane Lovitt, Kamal Ndousse, Dario Amodei, Tom Brown, Jack Clark, Jared Kaplan, Sam McCandlish, and Chris Olah. In-context learning and induction heads. arXiv preprint arXiv:2209.11895 , 2022. Alethea Power, Yuri Burda, Harri Edwards, Igor Babuschkin, and Vedant Misra. Grokking: Gen-eralization beyond overfitting on small algorithmic datasets. arXiv preprint arXiv:2201.02177 ,2022. Shiori Sagawa, Pang Wei Koh, Tatsunori B Hashimoto, and Percy Liang. Distributionally robust neural networks for group shifts: On the importance of regularization for worst-case generalization. In International Conference on Learning Representations , 2020. Harshay Shah, Kaustav Tamuly, Aditi Raghunathan, Prateek Jain, and Praneeth Netrapalli. The pitfalls of simplicity bias in neural networks. In Advances in Neural Information Processing Systems , volume 33, 2020. Saptarshi Sinha, Hiroki Ohashi, and Katsuyuki Nakamura. Class-wise difficulty-balanced loss for solving class-imbalance. In Asian Conference on Computer Vision , pages 529–546. Springer, 2020. Damien Teney, Liangze Jiang, Florin Gogianu, and Ehsan Abbasnejad. Do we always need the simplicity bias? looking for optimal inductive biases in the wild. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2025. Chenyu You, Haocheng Dai, Yifei Min, Jasjeet S. Sekhon, Sarang Joshi, and James S. Duncan. Uncovering memorization effect in the presence of spurious correlations. Nature Communications ,July 2025. doi: 10.1038/s41467-025-61531-5. 
+
+# A Extended Results: Weight Decay = 0.4 
+
+Table 1 reports weight decay 0.1. Table 7 reports the corresponding results for weight decay 0.4. The main imbalance × capacity interaction persists: 2-layer models improve with ratio while 1-layer models do not. The 2L, 2H model at r=0 .9 retains a 70% generalization rate under higher weight decay. As described in Section 4.2, 15 of those 21 seeds hit the threshold only transiently before regressing to near-shortcut performance; only 6 consolidated into stable generalizing solutions. 10 Table 7: Generalization rate by configuration (weight decay = 0.4). 1-layer models 2-layer models Config Gen. Rate Config Gen. Rate 1H, r=0 .5 0/30 (0%) 1H, r=0 .5 2/30 (7%) 
+
+1H, r=0 .7 0/30 (0%) 1H, r=0 .7 7/30 (23%) 
+
+1H, r=0 .9 0/30 (0%) 1H, r=0 .9 15/30 (50%) 
+
+2H, r=0 .5 4/30 (13%) 2H, r=0 .5 1/30 (3%) 
+
+2H, r=0 .7 2/30 (7%) 2H, r=0 .7 17/30 (57%) 
+
+2H, r=0 .9 3/30 (10%) 2H, r=0 .9 21/30 (70%) 
+
+# B First Equal Sum Parity 
+
+Section 4.4 summarizes the behavioral comparison between the magnitude-shortcut and position-shortcut binary tasks for 2-layer models; this appendix reports the full per-configuration results for all 12 configurations and provides additional mechanistic discussion. While the max_parity_sum_parity (MPSP) task focuses on a magnitude-based shortcut, the 
+
+first_equal_sum_parity (FESP) task employs a purely position-based shortcut. In the position-shortcut task, the parity of the first element in the sequence ( seq [0] ) is correlated with the total sum parity in shortcut-consistent examples. 
+
+B.1 Contrast in Task Difficulty 
+
+Table 8: Generalization rate by configuration for the FESP task (weight decay = 0.1). Bold rows highlight 2-layer models. With 30 seeds, 2-layer models clearly dominate and generalization rises with ratio (2L, 2H reaches 77% at r=0 .9), while 1-layer models remain low—the same imbalance ×
+
+capacity interaction seen in the magnitude-shortcut task. 1-layer models 2-layer models Config Gen. Rate Config Gen. Rate 1H, r=0 .5 1/30 (3%) 1H, r=0 .5 0/30 (0%) 
+
+1H, r=0 .7 7/30 (23%) 1H, r=0 .7 16/30 (53%) 
+
+1H, r=0 .9 2/30 (7%) 1H, r=0 .9 20/30 (67%) 
+
+2H, r=0 .5 1/30 (3%) 2H, r=0 .5 0/30 (0%) 
+
+2H, r=0 .7 10/30 (33%) 2H, r=0 .7 20/30 (67%) 
+
+2H, r=0 .9 1/30 (3%) 2H, r=0 .9 23/30 (77%) 
+
+Table 9: Generalization rate by configuration (weight decay = 0.4). Bold rows highlight the 2-layer models. 1-layer models 2-layer models Config Gen. Rate Config Gen. Rate 1H, r=0 .5 0/30 (0%) 1H, r=0 .5 2/30 (7%) 
+
+1H, r=0 .7 0/30 (0%) 1H, r=0 .7 15/30 (50%) 
+
+1H, r=0 .9 0/30 (0%) 1H, r=0 .9 16/30 (53%) 
+
+2H, r=0 .5 0/30 (0%) 2H, r=0 .5 0/30 (0%) 
+
+2H, r=0 .7 2/30 (7%) 2H, r=0 .7 22/30 (73%) 
+
+2H, r=0 .9 0/30 (0%) 2H, r=0 .9 20/30 (67%) 
+
+As shown in Tables 8 and 9, the position-shortcut task generalizes comparably to the magnitude-shortcut task once enough seeds are sampled. At high capacity and high imbalance ( r = 0 .9, 2L, 2H ), the generalization rate reaches 77%, matching the 77% of the magnitude-shortcut task at the same setting. The two shortcut types are therefore dislodged with similar ease: a fixed positional pointer is no more resistant to the amplified adversarial gradient than a magnitude-based attention bias. 11 The two shortcuts are nonetheless processed differently by the Transformer, even though displacement ultimately proceeds at a comparable rate: • Magnitude shortcut (MPSP): Magnitude is often encoded in token embedding norms, so an attention head can implement this shortcut cheaply, and it saturates quickly at high r.• Position shortcut (FESP): The positional shortcut requires absolute positional awareness. Moving beyond it requires both acquiring parity-sum representations and displacing the attention weight at pos = 0 . Despite this structural difference, the saturated positional circuit is displaced at a rate comparable to the magnitude circuit. 
+
+B.2 The 1-Layer Capacity Threshold and Shortcut-Trapping 
+
+A critical finding in our experiments is that the beneficial effect of data imbalance is conditioned on model capacity. For the position-shortcut task, 1-layer models exhibit a reverse trend compared to their 2-layer counterparts: generalization peaks at the intermediate ratio r=0 .7 and collapses to near-zero at r=0 .9, the opposite of the 2-layer trend where generalization rises with ratio. 
+
+Pattern in 1-Layer Models. In 1-layer models, the pattern inverts. One interpretation is that the architecture lacks the capacity to maintain competing circuits. At a balanced ratio ( r = 0 .5), the shortcut provides no consistent signal, and parameters are not strongly drawn toward either feature. At r = 0 .9, the shortcut is so statistically dominant and computationally cheap—requiring only a simple positional pointer to pos = 0 —that the limited parameters appear to be entirely consumed by the shortcut circuit. 
+
+Adversarial Accuracy as a Measure of Capture. The near-zero adversarial accuracy observed in 1-layer, high-ratio models (e.g., 0.044 for 1L, 2H at r = 0 .9) is the clearest evidence of this “shortcut-trapping”. Because the adversarial set is constructed so that the shortcut contradicts the true label, a model that has perfectly learned the shortcut will consistently predict the wrong parity, resulting in near-0% accuracy. This is consistent with the following interpretation. • There is a capacity threshold—in this case, between one and two transformer layers—below which imbalance is harmful because training converges onto the easiest feature. • Above this threshold, the additional parameters appear to allow the amplified adversar-ial gradient signal to reorganize representations without fully displacing initial shortcut performance. 
+
+# C n11 Variant Replication 
+
+The max_parity_sum_parity_n11 variant uses integers drawn from [0 , 11) instead of [0 , 20) ,producing a lower-variance max-element distribution. This makes the sum parity task structurally easier (fewer distinct values, shorter effective range). Tables 10 and 11 report generalization rates for weight decay 0.1 and 0.4 respectively; all per-seed counts are out of 10 seeds. Table 10: n11 variant: generalization rate (weight decay = 0.1). 1-layer models 2-layer models Config Gen. Rate Config Gen. Rate 1H, r=0 .5 5/10 (50%) 1H, r=0 .5 7/10 (70%) 
+
+1H, r=0 .7 8/10 (80%) 1H, r=0 .7 9/10 (90%) 
+
+1H, r=0 .9 1/10 (10%) 1H, r=0 .9 10/10 (100%) 
+
+2H, r=0 .5 7/10 (70%) 2H, r=0 .5 10/10 (100%) 
+
+2H, r=0 .7 7/10 (70%) 2H, r=0 .7 10/10 (100%) 
+
+2H, r=0 .9 4/10 (40%) 2H, r=0 .9 10/10 (100%) 
+
+Two findings replicate in the n11 variant. First, the capacity threshold effect persists: the 1L, 1H model is trapped by high imbalance ( r=0 .9, 10% generalization rate) despite strong generalization at r=0 .7 (80%), mirroring the base task’s 1-layer shortcut trap. Second, 2-layer models generalize 12 Table 11: n11 variant: generalization rate (weight decay = 0.4). 1-layer models 2-layer models Config Gen. Rate Config Gen. Rate 1H, r=0 .5 0/10 (0%) 1H, r=0 .5 8/10 (80%) 
+
+1H, r=0 .7 0/10 (0%) 1H, r=0 .7 6/10 (60%) 
+
+1H, r=0 .9 0/10 (0%) 1H, r=0 .9 8/10 (80%) 
+
+2H, r=0 .5 5/10 (50%) 2H, r=0 .5 10/10 (100%) 
+
+2H, r=0 .7 6/10 (60%) 2H, r=0 .7 8/10 (80%) 
+
+2H, r=0 .9 0/10 (0%) 2H, r=0 .9 8/10 (80%) 
+
+robustly at all ratios, confirming the imbalance × capacity interaction is not an artifact of the base task’s specific integer range. The n11 task sits at a lower overall difficulty: the 2L, 2H model achieves 100% generalization even at balanced ratios ( r=0 .5), which does not occur in the base task. This suggests the capacity threshold for n11 falls below the 2L, 2H architecture. The location of the threshold thus appears to depend on the difficulty of the true rule relative to the shortcut—consistent with the interpretation in Section 6. 
+
+# D Mod 3 Label Tasks 
+
+The two mod 3 tasks use ternary labels (3 classes) instead of binary, so the random-chance shortcut correlation is 1/3 rather than 1/2. The ratio sweep is r ∈ { 0.15 , 0.33 , 0.50 }, where r=0 .33 ≈ 1/3 is the null point and r=0 .15 and r=0 .50 are imbalanced in opposite directions. 
+
+D.1 First-Equal-Sum-Mod3 (FE-Mod3): Positional Shortcut, Ternary Label 
+
+Table 12: Generalization rates for the FE-Mod3 task (weight decay = 0.1). At the null ratio r=0 .33 
+
+(random-chance shortcut correlation), no 2-layer model generalizes . Both r=0 .15 (anti-biased) and r=0 .50 (biased) achieve 80–93% generalization in 2-layer models, confirming that the relevant quantity is deviation from the random-chance baseline, not the direction of the imbalance. 1-layer models 2-layer models Config Gen. Rate Config Gen. Rate 1H, r=0 .15 7/30 (23%) 1H, r=0 .15 25/30 (83%) 
+
+1H, r=0 .33 11/30 (37%) 1H, r=0 .33 0/30 (0%) 
+
+1H, r=0 .50 11/30 (37%) 1H, r=0 .50 24/30 (80%) 
+
+2H, r=0 .15 9/30 (30%) 2H, r=0 .15 28/30 (93%) 
+
+2H, r=0 .33 0/30 (0%) 2H, r=0 .33 0/30 (0%) 
+
+2H, r=0 .50 2/30 (7%) 2H, r=0 .50 27/30 (90%) 
+
+Table 13: Generalization rates for the FE-Mod3 task (weight decay = 0.4). The U-shaped pattern in 2-layer models persists under higher weight decay, though peak generalization rates are attenuated. 1-layer models 2-layer models Config Gen. Rate Config Gen. Rate 1H, r=0 .15 1/30 (3%) 1H, r=0 .15 11/30 (37%) 
+
+1H, r=0 .33 3/30 (10%) 1H, r=0 .33 0/30 (0%) 
+
+1H, r=0 .50 9/30 (30%) 1H, r=0 .50 12/30 (40%) 
+
+2H, r=0 .15 3/30 (10%) 2H, r=0 .15 17/30 (57%) 
+
+2H, r=0 .33 0/30 (0%) 2H, r=0 .33 0/30 (0%) 
+
+2H, r=0 .50 5/30 (17%) 2H, r=0 .50 18/30 (60%) 
+
+13 Table 12 reveals a pronounced U-shaped dependence in 2-layer models. At r=0 .33 (the ternary random-chance baseline), the shortcut is statistically uninformative: gradient signals from all three label classes are roughly balanced, and 0% of 2-layer seeds generalize. At both r=0 .15 (where 85% of training examples are anti-shortcut) and r=0 .50 (where 50% are shortcut-consistent), the imbalance is associated with a gradient asymmetry and 80–93% generalization. One-layer models show no such U-shape: the 1L, 1H configuration generalizes at similar rates across all three ratios, including the null (23–37%), consistent with the capacity requirement of Section 6. This holds regardless of the direction of imbalance—shortcut-biased or anti-shortcut-biased—consistent with the hypothesis that the relevant mechanism is shortcut saturation (or anti-shortcut saturation), not simply the direction of the imbalance. The result suggests a unifying principle across all four tasks: what matters appears to be the distance of r from the random-chance baseline ( 1/2 for binary tasks, 1/3 for ternary tasks), not the absolute value of r. At the baseline, gradient conflict persists; away from it in either direction, one side appears to eventually saturate and its gradient collapses, amplifying the other. 
+
+D.2 Max-Mod3-Sum-Mod3 (MM-Mod3): Magnitude Shortcut, Ternary Label 
+
+Table 14: Generalization rates for the MM-Mod3 task (weight decay = 0.1). The effect is present but weaker than the ternary position-shortcut and binary magnitude-shortcut tasks. 1-layer models 2-layer models Config Gen. Rate Config Gen. Rate 1H, r=0 .15 8/30 (27%) 1H, r=0 .15 3/30 (10%) 
+
+1H, r=0 .33 2/30 (7%) 1H, r=0 .33 0/30 (0%) 
+
+1H, r=0 .50 15/30 (50%) 1H, r=0 .50 0/30 (0%) 
+
+2H, r=0 .15 0/30 (0%) 2H, r=0 .15 8/30 (27%) 
+
+2H, r=0 .33 0/30 (0%) 2H, r=0 .33 1/30 (3%) 
+
+2H, r=0 .50 2/30 (7%) 2H, r=0 .50 5/30 (17%) 
+
+Table 15: Generalization rates for the MM-Mod3 task (weight decay = 0.4). The effect remains weak; the r=0 .33 null continues to suppress generalization. 1-layer models 2-layer models Config Gen. Rate Config Gen. Rate 1H, r=0 .15 0/30 (0%) 1H, r=0 .15 0/30 (0%) 
+
+1H, r=0 .33 1/30 (3%) 1H, r=0 .33 0/30 (0%) 
+
+1H, r=0 .50 11/30 (37%) 1H, r=0 .50 0/30 (0%) 
+
+2H, r=0 .15 0/30 (0%) 2H, r=0 .15 0/30 (0%) 
+
+2H, r=0 .33 0/30 (0%) 2H, r=0 .33 0/30 (0%) 
+
+2H, r=0 .50 1/30 (3%) 2H, r=0 .50 1/30 (3%) 
+
+The magnitude-shortcut ternary task (MM-Mod3) shows a qualitatively similar but substantially weaker pattern (Tables 14 and 15). The r=0 .33 null continues to suppress generalization in 2-layer models. However, the imbalanced ratios yield only 17–27% generalization for 2L, 2H—far below the 90–93% reached in the ternary position-shortcut task and the 77% of the binary magnitude-shortcut task. Two factors likely contribute. First, computing sum mod 3 requires distinguishing three residue classes across five elements, a harder aggregation than sum parity. Second, the magnitude shortcut for a ternary label (max element mod 3) does not rank tokens as unambiguously as the binary case, producing a noisier shortcut circuit that saturates less cleanly. 
+
+# E Loss Landscape Sharpness 
+
+Runs that generalize tend to transition from a relatively flat loss basin near the generalization epoch (sharpness ≈ 2–8) to a much sharper basin by training end (sharpness ≈ 25 –95 ) (Table 16). However, sharpness is not a reliable predictor of generalization: the 2L, 2H model at r=0 .5—which achieves 14 Table 16: Loss landscape sharpness at generalization onset and at training end. Generalizing runs transition from flat to sharp basins, but high final sharpness is not exclusive to generalizing models: the 2L, 2H model at r=0 .5 (0% generalization rate) reaches the highest final sharpness of any configuration shown. Config Sharpness at gen. onset Sharpness (final) 1L, 2H, r=0 .5 (generalized) 1.78 ± 1.90 25 .28 ± 10 .08 
+
+2L, 1H, r=0 .5 3.92 ± 2.84 94 .48 ± 34 .19 
+
+2L, 1H, r=0 .9 4.16 ± 3.87 41 .97 ± 49 .44 
+
+2L, 2H, r=0 .5 (balanced-trapped) — 95 .25 ± 14 .01 
+
+2L, 2H, r=0 .9 8.05 ± 13 .47 38 .90 ± 45 .20 
+
+0% generalization rate—reaches a final sharpness of 95 .25 ± 14 .01 , comparable to or higher than genuinely generalizing configurations. We therefore treat the sharpness transition as a characterization of the generalized solution rather than a mechanistic cause. 
+
+# F Analysis Methodology 
+
+Circuit identification. Let sval and sadv be the change in accuracy on the shortcut-consistent and adversarial splits when a head’s output is zeroed (positive = head helps that split), and let gfwd , grev be the activation-patching generalization scores in the val →adv and adv →val directions respectively. A head is classified as robust (shared ) at checkpoint t if all four of the following hold: (1) sval > 0 and 
+
+sadv > 0 (contributes to both splits), (2) gfwd > 0 and grev > 0 (cross-split patching transfers in both directions), (3) split selectivity |sval − sadv | / (|sval | + |sadv |) < 0.2 (not strongly split-specialized), and (4) mean patching score ¯g = ( gfwd + grev )/2 > 0.5. The epoch of first robust head is the earliest checkpoint where any attention head across all layers satisfies these conditions. The robust circuit fraction at generalization is the share of all attention heads that are robust at the first checkpoint where adversarial accuracy reaches 100% (snapping to the nearest available checkpoint). The final robust circuit fraction is the corresponding share at the last training checkpoint; it is lower than the at-generalization fraction in runs that undergo post-generalization slingshot regression. 
+
+Attention convergence. The attention divergence at epoch t is ∆t = |Hval (t) − Hadv (t)|, where H
+
+is mean attention entropy over the split. The attention convergence epoch is the last epoch at which 
+
+∆t > 0.15 —i.e., the epoch after which shortcut-consistent and adversarial attention distributions remain within 0.15 nats of each other for the remainder of training. 
+
+Gradient attribution. At each logged checkpoint, gradients are computed separately on the shortcut-consistent and adversarial splits using the same cross-entropy loss. Gradient cosine similarity is the cosine of the angle between the two flattened gradient vectors. The gradient ratio is the adversarial gradient norm divided by the shortcut-consistent gradient norm. The gradient re-alignment epoch is the first epoch at which cosine similarity exceeds −0.1.
+
+QK/OV circuit analysis. For each attention head, the QK circuit is characterized by computing Spearman ρ between query-key dot products and the magnitude rank of elements at each position. A value near 1 indicates the head preferentially attends to higher-valued tokens (magnitude-sorting shortcut circuit). The OV parity Spearman is computed by projecting the output-value matrix onto a parity probe direction trained on the shortcut-consistent split, then measuring rank correlation between projected values and ground-truth element parities. A high value indicates the output matrix encodes parity information. Ablation drops are measured by zeroing the head’s output and recording the resulting change in accuracy. 
+
+# G Computational Resources 
+
+All experiments were conducted using TPU v5-e8 accelerators provided via Kaggle. A single experimental configuration required approximately 7 hours of wall-clock time per 10 seeds to 15 complete the 15,000-epoch training schedule; the two primary binary tasks and the two mod 3 tasks were each extended to 30 seeds per configuration. 16
