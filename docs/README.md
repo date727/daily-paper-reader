@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-07-20
-- 运行时间：2026-07-20 21:12:00 UTC
+- 最新运行日期：2026-07-21
+- 运行时间：2026-07-21 21:19:00 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读7篇、速读12篇论文，聚焦图像异常检测与生成模型优化等前沿领域。  
-2) 高分论文揭示图像重建损失函数改进对异常检测的关键作用，速读内容涉及多模态语言模型与物理动态模拟技术。  
-3) 建议优先阅读图像异常检测相关精读论文，或探索多模态语言模型在仿生学中的潜在应用。
-- 详情：[/202607/20/README](/202607/20/README)
+今日精选19篇AI前沿论文，聚焦文本生成与图像处理技术突破  
+精读论文揭示噪声驱动检测框架与语义色彩先验技术，速读内容涵盖零样本图像检索与多模态生成稳定性研究  
+建议关注文本生成中的内容安全防护及图像色彩化技术，以了解当前AI研究的核心进展
+- 详情：[/202607/21/README](/202607/21/README)
 
 ### 精读区论文标签
-1. [Statistical Non-linear Reconstruction Loss for Image Anomaly Detection](/202607/20/2607.12866v1-statistical-non-linear-reconstruction-loss-for-image-anomaly-detection)  
+1. [UniNDM: A Unified Noise-driven Detection and Mitigation Framework Against Sexual Content in Text-to-Image Generation](/202607/21/2607.16828v1-unindm-a-unified-noise-driven-detection-and-mitigation-framework-against-sexual-content-in-text-to-image-generation)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御相关
-2. [Improving Medical Image Generative Models with Fréchet Distance Loss](/202607/20/2607.13300v1-improving-medical-image-generative-models-with-frchet-distance-loss)  
+   evidence：生成对抗网络用于图像生成安全
+2. [Semantic Color Naturalness Breaker: Preventing Illegitimate Colorization via Content-Aware Color Priors](/202607/21/2607.17610v1-semantic-color-naturalness-breaker-preventing-illegitimate-colorization-via-content-aware-color-priors)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：使用对抗扰动提升生成模型鲁棒性
-3. [BadWAM: When World-Action Models Dream Right but Act Wrong](/202607/20/2607.15207v1-badwam-when-world-action-models-dream-right-but-act-wrong)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御相关
-4. [Do Agents Dream of False Memories? Black-box Visual Attacks on Long-term Memory in Multimodal AI Agents](/202607/20/2607.15657v1-do-agents-dream-of-false-memories-black-box-visual-attacks-on-long-term-memory-in-multimodal-ai-agents)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-5. [SynCLIP: Synonym-Coherent Language-Image Pretraining for Robust Open-Vocabulary Dense Perception](/202607/20/2607.11008v1-synclip-synonym-coherent-language-image-pretraining-for-robust-open-vocabulary-dense-perception)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
-6. [DynEval: Holistic Evaluations of T2I Generative Models in the Wild](/202607/20/2607.11199v1-dyneval-holistic-evaluations-of-t2i-generative-models-in-the-wild)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：动态评估图像生成模型
-7. [Cycle-World: Mitigating Error Accumulation in Long-term Video World Models via Reverse-Prediction Cycle Consistency](/202607/20/2607.11836v1-cycle-world-mitigating-error-accumulation-in-long-term-video-world-models-via-reverse-prediction-cycle-consistency)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：提升生成视频的鲁棒性与时间一致性
-
-### 速读区论文标签
-1. [Lesioned Multimodal Language Models Reproduce Aphasic Picture-Naming Patterns](/202607/20/2607.11621v1-lesioned-multimodal-language-models-reproduce-aphasic-picture-naming-patterns)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络在图像生成中的应用
-2. [Generating Physically Plausible Parachute Dynamics with Deep Generative Modeling](/202607/20/2607.12143v1-generating-physically-plausible-parachute-dynamics-with-deep-generative-modeling)  
+   evidence：对抗扰动用于图像着色保护
+3. [IG-GAN: A Generative Adversarial Network for Aerodynamic Data Generation Based on Intrinsic Geometry](/202607/21/2607.11497v1-ig-gan-a-generative-adversarial-network-for-aerodynamic-data-generation-based-on-intrinsic-geometry)  
    标签：评分：8.0/10、query:image-generation
    evidence：生成对抗网络用于图像生成
-3. [Self-Consistent Flow: Unifying Velocity and Endpoint Prediction for Rectified Flow Models](/202607/20/2607.12171v1-self-consistent-flow-unifying-velocity-and-endpoint-prediction-for-rectified-flow-models)  
+4. [TrustVLA: Mechanism-Guided Inference-Time Defense Against Vision-Language-Action Backdoors](/202607/21/2607.12571v1-trustvla-mechanism-guided-inference-time-defense-against-vision-language-action-backdoors)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：分析生成模型参数化对鲁棒性的影响
-4. [WanToFight: Real-Time Generative Game Engine for Multi-Player Combat Interaction](/202607/20/2607.12592v1-wantofight-real-time-generative-game-engine-for-multi-player-combat-interaction)  
+   evidence：对抗攻击的防御策略
+5. [Label-Decoupled Style Augmentation for Domain Generalization in Multi-Label Remote Sensing Scene Classification](/202607/21/2607.12704v1-label-decoupled-style-augmentation-for-domain-generalization-in-multi-label-remote-sensing-scene-classification)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成技术
-5. [Verifier-Guided Twelve-Tone Composition: A Generate-Verify-Repair Harness for Symbolic Music Generation](/202607/20/2607.11334v2-verifier-guided-twelve-tone-composition-a-generate-verify-repair-harness-for-symbolic-music-generation)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击防御策略
-6. [Backbone-Agnostic Perturbation-Induced Uncertainty Learning for End-to-End Real-World Image Dehazing](/202607/20/2607.11623v1-backbone-agnostic-perturbation-induced-uncertainty-learning-for-end-to-end-real-world-image-dehazing)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的不确定性学习
-7. [Did We Actually Fix It? An Independent Adversarial Stress-Test of Post-Point-Adjustment Evaluation Metrics for Time-Series Anomaly Detection](/202607/20/2607.11969v1-did-we-actually-fix-it-an-independent-adversarial-stress-test-of-post-point-adjustment-evaluation-metrics-for-time-series-anomaly-detection)  
-   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动下的特征归因方法
+6. [Controllable Generation of Diverse Dermatological Imagery for Fair and Efficient Malignancy Classification](/202607/21/2607.12987v1-controllable-generation-of-diverse-dermatological-imagery-for-fair-and-efficient-malignancy-classification)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：生成对抗扰动用于图像生成保护
+7. [EduGuard: A Safe RAG-Based LLM Tutor for Programming Education](/202607/21/2607.15738v1-eduguard-a-safe-rag-based-llm-tutor-for-programming-education)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+
+### 速读区论文标签
+1. [Towards Vision-Free CIR: Attribute-Augmented Scoring and LLM-Based Reranking for Zero-Shot Composed Image Retrieval](/202607/21/2607.12621v1-towards-vision-free-cir-attribute-augmented-scoring-and-llm-based-reranking-for-zero-shot-composed-image-retrieval)  
+   标签：评分：8.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-8. [Data Safety: Synthetic Data Quality Analysis Using CIFAKE Dataset](/202607/20/2607.12165v1-data-safety-synthetic-data-quality-analysis-using-cifake-dataset)  
+2. [Hallo4D: Multi-Modal Hallucination Mitigation for Consistent Spatio-Temporal Generation](/202607/21/2607.12752v2-hallo4d-multi-modal-hallucination-mitigation-for-consistent-spatio-temporal-generation)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：多模态生成中的空间时间一致性
+3. [The Illusion of Robustness: Aggregate Accuracy Hides Prediction Flips under Task-Irrelevant Context](/202607/21/2607.12963v2-the-illusion-of-robustness-aggregate-accuracy-hides-prediction-flips-under-task-irrelevant-context)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动下的模型鲁棒性
+4. [SingGuard-NSFA: Extensible Guardrails for Agentic AI via Generative Reasoning and Real-Time Classification](/202607/21/2607.13081v1-singguard-nsfa-extensible-guardrails-for-agentic-ai-via-generative-reasoning-and-real-time-classification)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击的防御技术
+5. [DiTailed: Ensuring Visual Object Consistency in Text-Image-to-Image Flow Matching Models](/202607/21/2607.12539v1-ditailed-ensuring-visual-object-consistency-in-text-image-to-image-flow-matching-models)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：生成式图像对抗扰动
+6. [The Illusion of Robustness: Aggregate Accuracy Hides Prediction Flips under Task-Irrelevant Context](/202607/21/2607.12963v1-the-illusion-of-robustness-aggregate-accuracy-hides-prediction-flips-under-task-irrelevant-context)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动下的图像模型保护
+7. [Human4K: A Large-Scale 4K Multi-View Mocap Dataset for Whole-Body 3D Human Reconstruction](/202607/21/2607.13646v1-human4k-a-large-scale-4k-multi-view-mocap-dataset-for-whole-body-3d-human-reconstruction)  
    标签：评分：7.0/10、query:image-generation
-   evidence：分析合成数据与真实数据的差异
-9. [Towards Autonomous and Auditable Medical Imaging Model Development](/202607/20/2607.10522v1-towards-autonomous-and-auditable-medical-imaging-model-development)  
+   evidence：图像生成技术的最新进展
+8. [ArtChart: A Benchmark for Faithful Artistic Chart Generation with Integrated Text Rendering](/202607/21/2607.16060v1-artchart-a-benchmark-for-faithful-artistic-chart-generation-with-integrated-text-rendering)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：图像生成质量评估方法
+9. [Compos3D: Interactive Part-Based Composition for Creative Control in Generative 3D Models](/202607/21/2607.12193v1-compos3d-interactive-part-based-composition-for-creative-control-in-generative-3d-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-10. [Tool-Adaptive LLM Reranker](/202607/20/2607.10555v1-tool-adaptive-llm-reranker)  
+   evidence：生成式图像对抗扰动与防御策略
+10. [Steering Diffusion Models via Class-Contrastive Influence for Few-Shot Medical Classification](/202607/21/2607.12464v1-steering-diffusion-models-via-class-contrastive-influence-for-few-shot-medical-classification)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：与对抗攻击防御相关
-11. [3D-DefectBench: A Controlled Factorial Study of Vision-Language Model Evaluation Pipelines for Fine-Grained 3D Generation Defects](/202607/20/2607.10826v1-3d-defectbench-a-controlled-factorial-study-of-vision-language-model-evaluation-pipelines-for-fine-grained-3d-generation-defects)  
+   evidence：生成式图像对抗扰动
+11. [Delving into the Temporal Challenges of Unified Video Protection Against Image-to-Video and Fine-Tuning-based Customization](/202607/21/2607.13336v1-delving-into-the-temporal-challenges-of-unified-video-protection-against-image-to-video-and-fine-tuning-based-customization)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：视频生成对抗保护
+12. [DiffGI: Differentiable Geometry Images for High-Fidelity Thin-Shell 3D Generation](/202607/21/2607.13365v1-diffgi-differentiable-geometry-images-for-high-fidelity-thin-shell-3d-generation)  
    标签：评分：6.0/10、query:image-adversarial
    evidence：图像对抗扰动生成方法
-12. [Slot-RAE: Streamlining Object-Centric Learning via Direct Representation Auto-Encoders](/202607/20/2607.11196v1-slot-rae-streamlining-object-centric-learning-via-direct-representation-auto-encoders)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动方法
 
 
 ### ⚡ 这个站点能做什么
