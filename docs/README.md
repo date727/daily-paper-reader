@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-07-21
-- 运行时间：2026-07-21 21:19:00 UTC
+- 最新运行日期：2026-07-22
+- 运行时间：2026-07-22 21:15:28 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-今日精选19篇AI前沿论文，聚焦文本生成与图像处理技术突破  
-精读论文揭示噪声驱动检测框架与语义色彩先验技术，速读内容涵盖零样本图像检索与多模态生成稳定性研究  
-建议关注文本生成中的内容安全防护及图像色彩化技术，以了解当前AI研究的核心进展
-- 详情：[/202607/21/README](/202607/21/README)
+1) 今日完成19篇论文精读与速读，聚焦高分成果与前沿技术  
+2) 地理定位抗干扰方法与AI安全评估框架成为核心亮点  
+3) 建议对深度伪造检测或临床AI审计方向感兴趣的读者深入阅读相关论文
+- 详情：[/202607/22/README](/202607/22/README)
 
 ### 精读区论文标签
-1. [UniNDM: A Unified Noise-driven Detection and Mitigation Framework Against Sexual Content in Text-to-Image Generation](/202607/21/2607.16828v1-unindm-a-unified-noise-driven-detection-and-mitigation-framework-against-sexual-content-in-text-to-image-generation)  
+1. [GeoDetect: Geometric Adversarial Detection for VLPs](/202607/22/2607.14737v1-geodetect-geometric-adversarial-detection-for-vlps)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成对抗网络用于图像生成安全
-2. [Semantic Color Naturalness Breaker: Preventing Illegitimate Colorization via Content-Aware Color Priors](/202607/21/2607.17610v1-semantic-color-naturalness-breaker-preventing-illegitimate-colorization-via-content-aware-color-priors)  
+   evidence：对抗攻击的图像防御策略
+2. [HoloGeo: Mitigating Landmark Bias in Geo-localization via Evidence-Driven Reasoning](/202607/22/2607.15255v1-hologeo-mitigating-landmark-bias-in-geo-localization-via-evidence-driven-reasoning)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：图像生成技术的最新进展
+3. [InfoDense: Density-Aware Regional Decisive Replay for Memory-Efficient Incremental Face Forgery Detection](/202607/22/2607.16873v1-infodense-density-aware-regional-decisive-replay-for-memory-efficient-incremental-face-forgery-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动用于图像着色保护
-3. [IG-GAN: A Generative Adversarial Network for Aerodynamic Data Generation Based on Intrinsic Geometry](/202607/21/2607.11497v1-ig-gan-a-generative-adversarial-network-for-aerodynamic-data-generation-based-on-intrinsic-geometry)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-4. [TrustVLA: Mechanism-Guided Inference-Time Defense Against Vision-Language-Action Backdoors](/202607/21/2607.12571v1-trustvla-mechanism-guided-inference-time-defense-against-vision-language-action-backdoors)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的防御策略
-5. [Label-Decoupled Style Augmentation for Domain Generalization in Multi-Label Remote Sensing Scene Classification](/202607/21/2607.12704v1-label-decoupled-style-augmentation-for-domain-generalization-in-multi-label-remote-sensing-scene-classification)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动下的特征归因方法
-6. [Controllable Generation of Diverse Dermatological Imagery for Fair and Efficient Malignancy Classification](/202607/21/2607.12987v1-controllable-generation-of-diverse-dermatological-imagery-for-fair-and-efficient-malignancy-classification)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：生成对抗扰动用于图像生成保护
-7. [EduGuard: A Safe RAG-Based LLM Tutor for Programming Education](/202607/21/2607.15738v1-eduguard-a-safe-rag-based-llm-tutor-for-programming-education)  
-   标签：评分：8.0/10、query:image-generation
+   evidence：对抗攻击的图像防御策略
+4. [AdvSerial: Physical Adversarial Attacks on Infrastructure-mounted Pedestrian Detectors via Semantic Feature Suppression](/202607/22/2607.17069v1-advserial-physical-adversarial-attacks-on-infrastructure-mounted-pedestrian-detectors-via-semantic-feature-suppression)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+5. [Pixel-Space Diffusion Transformers](/202607/22/2607.17585v1-pixel-space-diffusion-transformers)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：使用对抗扰动进行图像生成模型的鲁棒性研究
+6. [Dynamic Defense Profiling Enables Cognitive Jailbreak of Text-to-Image Models](/202607/22/2607.17779v1-dynamic-defense-profiling-enables-cognitive-jailbreak-of-text-to-image-models)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+7. [Decafs: Disentangled Conditional adversarial Flows](/202607/22/2607.18755v1-decafs-disentangled-conditional-adversarial-flows)  
+   标签：评分：9.0/10、query:image-generation
    evidence：生成对抗网络在图像生成中的应用
 
 ### 速读区论文标签
-1. [Towards Vision-Free CIR: Attribute-Augmented Scoring and LLM-Based Reranking for Zero-Shot Composed Image Retrieval](/202607/21/2607.12621v1-towards-vision-free-cir-attribute-augmented-scoring-and-llm-based-reranking-for-zero-shot-composed-image-retrieval)  
+1. [Continuously Evolving Deepfake Detection: An Architecture and Public-Benchmark Evaluation of a Dynamic Detection System](/202607/22/2607.13234v1-continuously-evolving-deepfake-detection-an-architecture-and-public-benchmark-evaluation-of-a-dynamic-detection-system)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击检测与防御
+2. [Evaluating Frontier AI Agents as Autonomous Clinical Security Auditors](/202607/22/2607.13411v1-evaluating-frontier-ai-agents-as-autonomous-clinical-security-auditors)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击与临床安全评估
+3. [Adversarial Prompting Framework for AI Safety Assessment](/202607/22/2607.13453v1-adversarial-prompting-framework-for-ai-safety-assessment)  
    标签：评分：8.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-2. [Hallo4D: Multi-Modal Hallucination Mitigation for Consistent Spatio-Temporal Generation](/202607/21/2607.12752v2-hallo4d-multi-modal-hallucination-mitigation-for-consistent-spatio-temporal-generation)  
+4. [Traffic-Aware Randomized Smoothing for LLM-Based Network Intrusion Detection](/202607/22/2607.13801v1-traffic-aware-randomized-smoothing-for-llm-based-network-intrusion-detection)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：多模态生成中的空间时间一致性
-3. [The Illusion of Robustness: Aggregate Accuracy Hides Prediction Flips under Task-Irrelevant Context](/202607/21/2607.12963v2-the-illusion-of-robustness-aggregate-accuracy-hides-prediction-flips-under-task-irrelevant-context)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动下的模型鲁棒性
-4. [SingGuard-NSFA: Extensible Guardrails for Agentic AI via Generative Reasoning and Real-Time Classification](/202607/21/2607.13081v1-singguard-nsfa-extensible-guardrails-for-agentic-ai-via-generative-reasoning-and-real-time-classification)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的防御技术
-5. [DiTailed: Ensuring Visual Object Consistency in Text-Image-to-Image Flow Matching Models](/202607/21/2607.12539v1-ditailed-ensuring-visual-object-consistency-in-text-image-to-image-flow-matching-models)  
+   evidence：对抗扰动下的网络入侵检测
+5. [Scaling Synthetic-Image Pre-Training for Federated Fine-Tuning of Large Vision Models](/202607/22/2607.12583v1-scaling-synthetic-image-pre-training-for-federated-fine-tuning-of-large-vision-models)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-6. [The Illusion of Robustness: Aggregate Accuracy Hides Prediction Flips under Task-Irrelevant Context](/202607/21/2607.12963v1-the-illusion-of-robustness-aggregate-accuracy-hides-prediction-flips-under-task-irrelevant-context)  
+   evidence：对抗攻击的图像防御策略
+6. [On the Disagreement in Perturbation-based xAI -- Benchmarking Perturbation Choices for Flood Detection from SAR Images](/202607/22/2607.14743v1-on-the-disagreement-in-perturbation-based-xai----benchmarking-perturbation-choices-for-flood-detection-from-sar-images)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-7. [Human4K: A Large-Scale 4K Multi-View Mocap Dataset for Whole-Body 3D Human Reconstruction](/202607/21/2607.13646v1-human4k-a-large-scale-4k-multi-view-mocap-dataset-for-whole-body-3d-human-reconstruction)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：图像生成技术的最新进展
-8. [ArtChart: A Benchmark for Faithful Artistic Chart Generation with Integrated Text Rendering](/202607/21/2607.16060v1-artchart-a-benchmark-for-faithful-artistic-chart-generation-with-integrated-text-rendering)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：图像生成质量评估方法
-9. [Compos3D: Interactive Part-Based Composition for Creative Control in Generative 3D Models](/202607/21/2607.12193v1-compos3d-interactive-part-based-composition-for-creative-control-in-generative-3d-models)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动与防御策略
-10. [Steering Diffusion Models via Class-Contrastive Influence for Few-Shot Medical Classification](/202607/21/2607.12464v1-steering-diffusion-models-via-class-contrastive-influence-for-few-shot-medical-classification)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-11. [Delving into the Temporal Challenges of Unified Video Protection Against Image-to-Video and Fine-Tuning-based Customization](/202607/21/2607.13336v1-delving-into-the-temporal-challenges-of-unified-video-protection-against-image-to-video-and-fine-tuning-based-customization)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：视频生成对抗保护
-12. [DiffGI: Differentiable Geometry Images for High-Fidelity Thin-Shell 3D Generation](/202607/21/2607.13365v1-diffgi-differentiable-geometry-images-for-high-fidelity-thin-shell-3d-generation)  
+   evidence：对抗攻击的图像防御策略
+7. [Think, Plan, Paint: Layout-Aware Reasoning for Controllable Image Generation in Unified Models](/202607/22/2607.16409v1-think-plan-paint-layout-aware-reasoning-for-controllable-image-generation-in-unified-models)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+8. [A Multi-Model Hybrid Defense Approach Against White-box Adversarial Attacks in Computer Network Traffic](/202607/22/2607.17105v1-a-multi-model-hybrid-defense-approach-against-white-box-adversarial-attacks-in-computer-network-traffic)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+9. [Filtering-out poor-quality images for data preparation](/202607/22/2607.12352v1-filtering-out-poor-quality-images-for-data-preparation)  
    标签：评分：6.0/10、query:image-adversarial
    evidence：图像对抗扰动生成方法
+10. [Let RGB Be the Language of Vision](/202607/22/2607.12450v1-let-rgb-be-the-language-of-vision)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：生成式图像对抗鲁棒性
+11. [When Binaries Talk Back: Representation-Confusion Attacks on LLM-Assisted Reverse Engineering](/202607/22/2607.12507v1-when-binaries-talk-back-representation-confusion-attacks-on-llm-assisted-reverse-engineering)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+12. [Spatial-Frequency Cued Generative Fixed-Filter Active Noise Control Based on Deep Learning in Reverberant Environments](/202607/22/2607.12807v1-spatial-frequency-cued-generative-fixed-filter-active-noise-control-based-on-deep-learning-in-reverberant-environments)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：空间频率引导的噪声控制
 
 
 ### ⚡ 这个站点能做什么
