@@ -1,0 +1,1947 @@
+Title: Implicit differentiation of tensor network algorithms
+
+URL Source: https://arxiv.org/pdf/2607.15030v1
+
+Published Time: Fri, 17 Jul 2026 01:14:43 GMT
+
+Number of Pages: 29
+
+Markdown Content:
+# Implicit differentiation of tensor network algorithms 
+
+Lander Burgelman, 1, ∗ Anna Francuz, 2, † Paul Brehmer, 2 Lukas Devos, 3
+
+Jutho Haegeman, 1 Frank Verstraete, 1, 4 and Bram Vanhecke 2
+
+> 1
+
+Department of Physics and Astronomy, Ghent University, Krijgslaan 299, 9000 Gent, Belgium 
+
+> 2
+
+University of Vienna, Faculty of Physics, Boltzmanngasse 5, 1090 Wien, Austria 
+
+> 3
+
+Center for Computational Quantum Physics, Flatiron Institute, New York, New York 10010, USA 
+
+> 4
+
+Department of Applied Mathematics and Theoretical Physics, University of Cambridge, Wilberforce Road, Cambridge, CB3 0WA, United Kingdom 
+
+The current leading approach to the variational optimization of projected entangled-pair states (PEPS) is based on automatic differentiation, which allows for a convenient evaluation of the energy gradient with respect to the local variational degrees of freedom. However, evaluating the energy gradient not only remains a major computational bottleneck of the optimization procedure, but also suffers from frequent numerical instabilities. In this work, we adopt recent advances in implicit differentiation techniques to address these challenges in PEPS optimization. By reformulating the core step of the gradient computation in terms of a single characteristic equation for the contraction environment, we reduce the cost of the gradient computation and improve its scaling with the problem size. By choosing a suitable parametrization of this characteristic equation based on the intrinsic symmetries of the contraction environment, we can directly remove instabilities from the global gradient computation that would otherwise arise from the derivatives of subroutines of the contraction algorithm. Finally, we demonstrate how this approach drastically simplifies the practical implementation of stable gradient-based PEPS optimization. 
+
+I. INTRODUCTION 
+
+In recent decades, tensor networks have emerged as powerful computational [1, 2] and analytical [3] tools in the study of quantum and classical many-body systems. Following the success of the density matrix renormaliza-tion group (DMRG) [4, 5] for one-dimensional systems, which is now understood as a variational method over the class of matrix product states (MPS) [6–8], the ansatz was later extended to two dimensions with the inven-tion of projected entangled-pair states (PEPS) [9]. Both are now successfully used across many areas of physics, from strongly correlated systems and quantum informa-tion to high-energy physics, with applications ranging from ground states and finite-temperature simulations to excited states and real-time evolution. Despite this broad applicability, PEPS methods remain significantly less utilized than MPS, owing to their higher computa-tional complexity and challenges in their implementation. Among the most common applications of PEPS is the ground-state optimization of infinite translationally in-variant systems [10, 11], where the state of the art is gradient-based variational optimization [12, 13]. The accurate computation of the energy gradient re-mains the main bottleneck in variational PEPS optimiza-tion, both in terms of computational cost and concep-tual complexity. The energy itself can only be evalu-ated approximately, using an approximate contraction environment obtained from an iterative procedure such as the Corner Transfer Matrix Renormalization Group   
+
+> ∗lander.burgelman@ugent.be; authors contributed equally.
+> †anna.elzbieta.francuz@univie.ac.at; authors contributed equally.
+
+(CTMRG) [14, 15] or boundary matrix product state (boundary MPS) methods [16–18]. Consequently, when calculating the energy gradient, one needs to differenti-ate the procedure used to obtain this approximate envi-ronment. While early approaches relied on approximate schemes for the exact PEPS gradient [12, 13], the adop-tion of automatic differentiation (AD) enabled the com-putation of exact gradients of approximate PEPS con-traction schemes [19], which consequently led to a grow-ing number of applications of these techniques to relevant physical systems [20–26]. However, the direct application of AD tools leads to significant technical challenges that can be grouped into three categories: (i) efficiency , (ii) stability and (iii) ease of implementation .First, even when using a state-of-the-art fixed-point formulation [19, 27, 28] that avoids the memory over-head of backpropagating through all individual iterations of the contraction procedure, the presence of iterative subroutines gives rise to a nested iterative procedure for the gradient computation that is computationally very costly. Second, AD-based PEPS optimization routinely suffers from numerical instabilities arising from the dif-ferentiation of subroutines used in the contraction algo-rithm [19]. Notably, these instabilities are purely arti-facts of the differentiation procedure, whereas the actual energy gradient is entirely stable with respect to varia-tions that cause them. Despite progress in formally ad-dressing these issues in specific cases [29], the lack of a general solution often leads to heuristic workarounds. Finally, the conventional approach to AD-based PEPS optimization requires every primitive operation used in the energy evaluation to be compatible with an AD en-gine. This means that custom differentiation rules must be defined for every subroutine that is not natively sup-ported – a process that can be laborious and limiting in arXiv:2607.15030v1 [quant-ph] 16 Jul 2026 2practice. In this work, we adopt implicit differentiation tech-niques [27, 30, 31] to address these three challenges. In-stead of differentiating through each subroutine of the contraction algorithm, we reformulate the contraction re-sult in terms of a single characteristic equation and differ-entiate only that. This approach (i) reduces the cost and scaling of the gradient computation with problem size, in some cases even reducing it to a subleading step in the overall optimization procedure; (ii) removes numerical instabilities by exploiting the symmetries of the contrac-tion environment to construct stable parameterizations of derivatives; and (iii) greatly simplifies the implemen-tation by completely removing the need for differentiable subroutines, as the characteristic equation is formulated using only tensor network contractions. In practice, this implicit differentiation approach ulti-mately reduces to a single core routine: solving a system of linear equations obtained from the automatic differ-entiation of the algebraic characteristic equations. This core procedure is largely independent of the specific con-traction algorithm. Different contraction schemes can be used by simply substituting the appropriate characteris-tic equations and variable parameterizations. Neverthe-less, deriving the specific characteristic equations that can be solved efficiently and converge reliably when us-ing iterative sparse linear solvers is highly non-trivial. Therefore, in this manuscript, we provide explicit forms of characteristic equations for the most commonly used PEPS contraction algorithms. The structure of this work is as follows. We start in Section II by formulating the general problem of varia-tional PEPS optimization using AD. After introducing some notation and reviewing the well established fixed-point differentiation approach, we illustrate the core ideas behind our implicit differentiation approach in this general context. We proceed by demonstrating this ap-proach for the specific case of PEPS optimization using CTMRG in systems with a spatial C4v symmetry in Sec-tion III. Based on the insights gained from this example, we illustrate a similar procedure for the two most com-monly used general contraction schemes in Sections IV and V. We benchmark the performance of our approach in these different settings in Section VI, before concluding in Section VII.  
+
+> II. PEPS OPTIMIZATION AND IMPLICIT DIFFERENTIATION
+
+Given a quantum system defined on a translation-ally invariant square lattice with a local physical Hilbert space P at each site, we can parametrize a state of this system as a PEPS by introducing a local rank-5 tensor 
+
+p :VN 
+
+> VE
+> VS
+> VW
+> P
+
+, (1) as a multilinear map between the physical space P and four virtual spaces VN , V E , V W , V S corresponding to the four cardinal directions. The dimension of the virtual spaces, called the bond dimension D, controls the amount of variational degrees of freedom contained in p, and by extension, dictates the expressiveness of the ansatz. By tiling this tensor on an infinite square lattice and con-tracting all virtual indices, we can define a uniform PEPS obtained from p as 
+
+|ψ(p)⟩ = . (2) While the arrows indicating the duality of the virtual spaces are important when working with (in particular, fermionic) symmetries, we will omit them from now on to lighten our notation. Similarly, while a general uniform PEPS can be composed of a unit cell of different tensors, we will restrict our notation to the single-site case in the following. All concepts and techniques can be generalized to the case of arbitrary unit cells.  
+
+> A. Variational PEPS optimization
+
+Given a Hamiltonian H, a primary application of the PEPS ansatz is to find the best approximation of its ground state by minimizing the variational energy 
+
+p = argmin 
+
+> p
+
+E(p) = argmin 
+
+> p
+
+⟨ψ(p)| H |ψ(p)⟩⟨ψ(p)|ψ(p)⟩ . (3) For a Hamiltonian H defined as a sum of local terms h
+
+that act on a few neighboring sites, evaluating the energy expectation value requires computing quantities of the form 
+
+⟨ψ(p)| h |ψ(p)⟩ = . (4) To evaluate this expression, we need a reliable way to rep-resent the infinite parts of the norm network ⟨ψ(p)|ψ(p)⟩
+
+in terms of an approximate contraction environment 
+
+7→Dχ . (5) 3This contraction environment, denoted as x and repre-sented by the purple and green tensors in Eq. (5), im-plicitly depends on the variational degrees of freedom, 
+
+x ≡ x(p). It provides an approximation of the infinite lattice, whose accuracy is controlled by the environment bond dimension χ. The two most common algorithms for obtaining such an environment are the corner transfer matrix renormalization group (CTMRG) [14, 15] and the boundary matrix product state (boundary MPS) [17, 18] algorithms. Both algorithms will be considered in this work. Armed with an approximate contraction environment 
+
+x, we can reformulate the variational problem for the total energy E of Eq. (3) in terms of an approximate energy density e, which takes the form 
+
+e(x, p ) = 
+
+. (6) To optimize this approximate energy density, we can compute its gradient with respect to the variational pa-rameters p and use a gradient-based optimization scheme such as the quasi-Newton L-BFGS algorithm [32]. Using the chain rule, we can write the gradient as a sum of two terms corresponding to the explicit dependence of e on x
+
+and p respectively, de
+
+dp (p) = ∂xe(x, p ) ∂px + ∂pe(x, p ). (7) The key step of a good PEPS algorithm is the practi-cal evaluation of the first term on the right-hand side, which encodes the contribution to the total gradient aris-ing from the dependence of the environment x on the variational parameters p. In this work, we will perform this key step using implicit differentiation. Adopting some common notation in the context of AD, an introduction to which can be found in Section A, we can rewrite Eq. (7) in terms of the adjoint variables corre-sponding to the contraction environment and variational parameters, defined as ˘ x = ∂xe and ˘ p = ∂pe respec-tively [33], which yields de
+
+dp = ˘ x ∂ px + ˘ p. (8) In this form, we see that the key operation in the gradi-ent computation is the left action of the Jacobian ∂px
+
+on the adjoint ˘ x, known as a vector-Jacobian product 
+
+or VJP. This VJP can be evaluated using a straightfor-ward reverse-mode AD approach [19], backpropagating through each primitive operation in the computational graph in reverse order. This approach, however, requires a significant memory overhead and can suffer from insta-bilities of the primitive subroutines used in the algorithm, such as eigenvalue or singular value decompositions. The key to reducing this memory overhead is to derive the VJP action of ∂px based on an implicit characteri-zation of the contraction environment x. We first review the simplest application of this idea, namely fixed-point differentiation [19, 28, 29], to introduce the necessary notation and highlight remaining difficulties with this approach. We then proceed to the general formulation of implicit differentiation of a contraction algorithm in terms of set of purely algebraic characteristic equations. For clarity, we restrict our notation in the main text to the setting of real variables. However, all results extend straightforwardly to the complex case. A more rigorous treatment of real-valued cost functions of complex vari-ables can be found in Section A.  
+
+> B. Fixed-point differentiation
+
+A general contraction algorithm corresponds to an iter-ative procedure where we successively apply an iterating function f starting from an initial guess x0 for the envi-ronment, until convergence is reached. In fixed-point dif-ferentiation [19, 28, 29], we characterize the convergence of the contraction environment in terms of the fixed-point equation 
+
+x = f (x, p ), (9) whose solution will be denoted as x∗. Applying the im-plicit function theorem to this equation [27] by differen-tiating both sides at this solution yields 
+
+∂px = ∂xf ∂ px + ∂pf. (10) This allows us to write the VJP action of ∂px as ˘x ∂ px = ˘ x (1 − ∂xf )−1 ∂pf. (11) Importantly, the VJP actions of ∂xf and ∂pf in this ex-pression are evaluated only at the fixed-point solution (x∗, p ). This means there is no need to keep track of any intermediate objects, solving the problem of the memory overhead encountered in straightforward reverse-mode AD. To evaluate Eq. (11) in practice, we can first compute an intermediate object ˘F as the solution to the linear problem ˘F (∂xf − 1) = ˘ x. (12) This system can be solved using any standard linear solver such as GMRES or BiCGSTAB. Subsequently, we can plug this into the VJP action of ∂pf to obtain the desired result as ˘x ∂ px = − ˘F ∂ pf. (13) It is important to note that in order to use fixed-point differentiation, it is necessary that the fixed-point equa-tion Eq. (9) is satisfied element-wise . This means that 4
+
+f (x∗, p ) produces tensors whose elements are all equal to those of x∗ within the convergence tolerance of the al-gorithm. However, in practical implementations, Eq. (9) is usually only satisfied up to allowed gauge transforma-tions on the output of f . This means that, in order to ensure element-wise convergence, any additional gauge freedom in the action of f needs to be fixed explicitly using a suitable method [29]. While fixed-point differentiation resolves the memory overhead issue, it still requires the VJP actions of ∂xf
+
+and ∂pf . Obtaining these automatically via AD requires the function f with all its subroutines to be fully differ-entiable. In addition, the aforementioned instabilities in these primitive VJP actions can lead to instabilities in the overall gradient computation. The fixed-point gradi-ent linear problem Eq. (12) is particularly susceptible to this. Aside from these issues, a further motivation for go-ing beyond fixed-point differentiation lies in the inter-nal complexity of the iterating function f . In most two-dimensional contraction schemes, f is itself composed of iterative subroutines, such as sparse singular value de-composition or eigensolvers. Crucially, evaluating the VJP corresponding to such an iterative subroutine re-quires solving a linear problem of the same nature as Eq. (12), and more importantly of a similar size. There-fore, when applied to the specific setting of contrac-tion algorithms with iterative subroutines, the core lin-ear problem in fixed-point differentiation becomes nested .Namely, for every function evaluation in the outer linear problem Eq. (12), we have to solve an inner linear prob-lem of a similar size. Extending the idea of implicit differentiation beyond the fixed-point condition of Eq. (9) enables us to solve all of the remaining issues simultaneously.  
+
+> C. Implicit differentiation
+
+While characterizing the converged contraction envi-ronment x∗ as a fixed point of the iterating function f
+
+is a natural choice, any implicit characterization could in principle be used. In this framework, the solution to an optimization problem is implicitly defined as a root of an algebraic characteristic equation, which expresses the desired optimality conditions [31]. This more abstract viewpoint allows us to “forget” about how x∗ was computed, and instead just focus on the conditions that characterize it. In particular, if the optimality conditions characterizing x∗ are formulated as a single set of algebraic equations without iterative sub-routines, the VJP action of ∂px can in turn be evaluated in terms of a single un-nested linear problem. In addition, the flexibility in choosing the characteristic equations al-lows us to exploit the symmetries of the contraction al-gorithm. In particular, we can choose a parametriza-tion of the equations specifically such that any instabil-ities that would arise from subroutines are completely removed from the global gradient computation. Finally, to implement implicit differentiation in practice, we only need to be able to differentiate the characteristic equa-tions themselves. This is much easier than ensuring that the contraction algorithm as a whole is differentiable in a stable way. Concretely, we will formulate implicit differentiation of a contraction algorithm in terms of a differentiable func-tion F (y, p ) acting on a set of environment variables y
+
+that implicitly depend on the variational parameters p,
+
+y ≡ y(p). The function F is chosen such that the con-vergence of the environment corresponds to the solution of the characteristic equation 
+
+F (y, p ) = 0 . (14) We will refer to the solution y∗ of this condition as the 
+
+root of the characteristic equation. Here, we denote the variables representing the environment as y rather than 
+
+x, to emphasize that the characteristic equation can use a parametrization that is different from the one used in the iterating function. In particular, this new set of vari-ables y may be expanded to include intermediate vari-ables appearing in the iterating function, not only its fi-nal output x. In practice, in the subsequent examples we will always introduce a simple and explicit map from the custom parametrization to the original environment vari-ables y 7 → x from which we immediately obtain the cor-responding map ˘ x 7 → ˘y for the adjoints. In particular, it will always be clear that the root y∗ of Eq. (14) is exactly equivalent to the fixed-point environment x∗. In this for-mulation, the gradient computation Eq. (8) reduces to evaluating the VJP ˘ y ∂ py, since ˘ x∂ px = ˘ x∂ y x∂ py = ˘ y∂ py.Differentiating the characteristic equation Eq. (14) at the root y∗ yields 
+
+∂y F ∂ py = −∂pF. (15) From this, we obtain the VJP action of ∂px as ˘y ∂ py = ˘ y (∂y F )−1 (−∂pF ) . (16) Just as before, we can evaluate Eq. (16) by computing an intermediate object ˘F as the solution to the linear problem ˘F ∂ y F = ˘ y, (17) from which we can obtain the desired VJP action as ˘y ∂ py = − ˘F ∂ pF. (18) In particular, this approach reduces to the fixed-point differentiation approach outlined before when we choose 
+
+y = x and F (x, p ) = f (x, p ) − x.Algorithmically, the implicit differentiation approach can be summarized as follows. First, the reverse-mode AD engine is called to backpropagate through the en-ergy evaluation as described in Algorithm 1. While in the forward pass we contract the PEPS environment to 5obtain an energy value, in the reverse pass the contrac-tion function is differentiated to accumulate the energy gradient. Precisely in this reverse pass, in Algorithm 2, we implement the implicit differentiation technique using Eqs. (17) and (18). We note that an explicit gauge-fixing step may need to be performed such that the optimality conditions F (y, p ) are indeed fulfilled at the fixed point, as will be pointed out in the forthcoming examples. 
+
+Algorithm 1 Energy evaluation and gradient                           
+
+> Require: PEPS tensor p, Hamiltonian H, initial environ-ment x0
+> 1: function energy (p, x 0, H )
+> 2: p←symmetrize (p)▷if C4v-symmetric
+> 3: x←contract (p, x 0)▷Algorithm 2
+> 4: return e(p, x, H )▷Eq. (6)
+> 5: E, de
+> dp←backpropagate (energy , p, x 0, H )
+
+Algorithm 2 PEPS contraction with a custom VJP                                     
+
+> Require: PEPS tensor p, initial environment x0, optimality conditions F(y, p )
+> 1: function forward (p, x 0)
+> 2: x←contract (p, x 0)
+> 3: return x
+> 4: function reverse (p,x, ˘ x)
+> 5: y←parametrize (x, intermediates)
+> 6: ˘y←(˘ x ∂ yx, 0)
+> 7: ˘F←solve ( ˘F ∂ yF= ˘ y)▷Eq. (17)
+> 8: return −˘F ∂ pF▷Eq. (18)
+
+In the following sections, we will formulate a set of characteristic equations F in a suitable parametrization y
+
+for different contraction algorithms. In this form they can be easily supplied into Algorithm 2, where the AD engine takes care of differentiating the algebraic expressions, and we use the result to solve a single linear problem.   
+
+> III. C4vCTMRG CONTRACTION
+
+As a first guiding example, we illustrate the use of im-plicit differentiation for variational PEPS optimization using the CTMRG contraction algorithm in systems with a spatial C4v symmetry [14]. We start with a quick re-minder of the C4v CTMRG algorithm. We then proceed to our main result and provide a set of characteristic equations in a suitable parametrization that can be used to apply implicit differentiation on top of any existing 
+
+C4v CTMRG implementation. In the remainder of this section, we will motivate this choice of parametrization and equations and discuss the improvements in perfor-mance and stability achieved by implicit differentiation.    
+
+> A. Contracting a PEPS using C4vCTMRG
+
+At the level of an individual PEPS tensor, a C4v point group symmetry manifests itself as invariance under local rotation and Hermitian reflection, p
+
+=p ,¯p =p , (19) where ¯ p denotes the complex conjugation of the entries of p. To ensure this spatial symmetry is preserved during optimizations, one can simply add an explicit projection of p onto the symmetric subspace at the start of the en-ergy computation (line 2 of Algorithm 1). To simplify our notation, we will use a blocked single-layer tensor for the remainder of this work. In this nota-tion, we express the PEPS norm and expectation value networks in terms of a local effective rank-4 tensor T , de-fined as the contraction of p with its complex conjugate, T
+
+≡p 
+
+> ¯p
+
+. (20) The C4v CTMRG algorithm is a procedure for com-puting an environment x = ( C, E ) consisting of a corner tensor C and edge tensor E that approximates the infi-nite parts of the norm network as depicted in Eq. (5). In the single-layer notation of Eq. (20), the approximate contraction of ⟨ψ(p)|ψ(p)⟩ takes the form 
+
+7→T 
+
+> E
+> E
+> E
+> E
+> C
+> C
+> C
+> C
+
+. (21) This environment can be used to evaluate the varia-tional energy in precisely the same manner as depicted in Eq. (6). The contraction algorithm itself is an iterative pro-cedure, where every iteration maps ( C, E ) to a new pair ( C′, E ′) using an iterating function f whose action 
+
+f (( C, E ), p ) = ( C′, E ′) is defined as T
+
+> E
+> E
+> C
+> eigh
+
+≈ λCC′ U † 
+
+> U
+
+, (22) T 
+
+> E
+> UU†
+
+= λEE′ . (23) 6Here, the new corner C′ is obtained through a truncated Hermitian eigenvalue decomposition ( eigh ) of the en-larged corner matrix on the left hand side of Eq. (22), and the scalars λC and λE correspond to the 2-norm of the left hand sides of Eqs. (22) and (23) respectively. This procedure eventually produces a fixed-point en-vironment x∗ = (C∗, E ∗) for which f (( C∗, E ∗), p ) ≈
+
+(C∗, E ∗) is reached up to some desired tolerance. Note that, due to the gauge symmetry of the C4v contraction environment (which we will discuss in a broader context in Section III C), achieving this kind of element-wise con-vergence in practice requires a suitable gauge-fixing of the environment tensors [29]. After gauge-fixing the environ-ment tensors ( C∗, E ∗), we use the same gauge transfor-mation to gauge fix the fixed-point isometry, which we will denote as U ∗.   
+
+> B. Implicit differentiation for C4vCTMRG
+
+In this section, we introduce the differentiable func-tion F (y, p ) for which the root y∗ of the characteristic equation F (y, p ) = 0 gives an implicit characterization of the fixed-point solution ( C∗, E ∗, U ∗) of the C4v CTMRG algorithm. Before doing so, we clarify the notation, in particular the input variables y and the parametrization used to obtain a divergence free gradient. As the set of differentiable variables, we choose y =(C, E, u ). All other tensors that do not involve these variables are kept constant and are not differentiated. From now on, we depict these constant tensors in gray. The variables C and E directly represent the corner and edge tensors. This choice is straightforward since the energy density depends explicitly on both tensors. The variable u, on the other hand, corresponds to an interme-diate variable in line 5 of Algorithm 2, and arises from the parametrization of the isometry U . While the en-ergy density only depends on the intermediate variable 
+
+U implicitly through Eqs. (22) and (23), we choose to include it as an explicit variable here. Moreover, the fact that the energy density is not affected by any rotations within the relevant subspace, as shown in [29] and dis-cussed further in Section III C, allows us to use a suitable parametrization of the isometry. In particular, we choose to parametrize U such that it only has variations along its null space projection U⊥,defined as U ∗U †⊥
+
+= 0 . (24) From this null space, we define a differentiable “projec-tor” U as U
+
+≡U ∗ +U⊥ u . (25) In this parametrization, the tensors U ∗ and U †⊥ are treated as constants, meaning U is only differentiable through its dependence on u. Importantly, as we show in Section III C, the choice of Eq. (25) provides a proper divergence-free parametrization of the gradient of the isometry U .Using this custom set of variables along with the def-inition Eq. (25), we can formulate a single set of char-acteristic equations F (( C, E, u ), p ) = 0 that encodes the convergence criterion for C and E, as well as the defining relations of the eigh decomposition in Eq. (22). These equations take the form T
+
+> E
+> E
+> C
+> U
+> U †
+
+− λCC = 0 , (26) T 
+
+> E
+> UU†
+
+− λEE = 0 , (27) T
+
+> E
+> E
+> C
+> U
+> U †⊥
+> C∗− 1
+
+− λCu = 0 , (28) Here, we assume that C and E have unit normalization such that Eqs. (26) and (27) hold with scalar factors λC
+
+and λE , which are defined as the inner product of the first term in Eq. (26) and Eq. (27) with C and E respec-tively. Therefore, λC and λE are treated as differentiable variables, which depend on y.The root y∗ of these characteristic equations exactly characterizes the C4v CTMRG fixed point. Indeed, we clearly see that y∗ = ( C∗, E ∗, 0), where the fixed-point value u∗ = 0 enforces the expected root value U ∗ of the projector U defined in Eq. (25). Given this form of the characteristic equations F , we can directly apply the implicit differentiation approach of Eqs. (15) to (18). Aside from the VJP action ∂y F
+
+evaluated at the root y∗, we also require the correspond-ing adjoint ˘ y = ( ˘C, ˘E, ˘u) as it appears on the right hand side of Eq. (17) and line 6 of Algorithm 2. The adjoints ˘x = ( ˘C, ˘E) can be obtained automatically by backpropa-gating through the energy evaluation Eq. (6), after which we can extract ˘ y = ˘ x∂ y x = (˘ x, 0). This means that we simply set ˘ u = 0, since the isometry U is never used in the energy evaluation. As the characteristic equation expressed by Eqs. (26) to (28) consists of a collection of tensor contractions, we can clearly see that the VJP action ∂pF also corresponds to a set of simple tensor contractions. This means that implicit differentiation not only improves efficiency over 7conventional fixed-point differentiation, as we will argue below, but also that making F differentiable is much eas-ier in practice than making a truncated eigh decompo-sition differentiable in a stable manner. As a final comment, we note some technical details that are important in implementing this form of implicit differentiation in practice. First, to obtain the correct adjoint ˘C to use in Eq. (17), we need to treat C as a generic complex Hermitian matrix when backpropagat-ing through the energy evaluation Eq. (6). This is neces-sary to allow its variations to be non-diagonal and com-plex, as is required to be consistent with the parametriza-tion Eq. (25). This naturally follows from the discus-sion below. Importantly, this is only necessary in the re-verse pass. The forward contraction routine of Eqs. (22) to (27) remains unchanged, and the fixed-point value C∗
+
+is always real and diagonal. Second, we have multiplied Eq. (28) by the inverse of the fixed-point corner tensor 
+
+C∗− 1, which serves as a constant preconditioner to im-prove the conditioning of the associated linear problem Eq. (17). Equivalently, one can write these equations without C∗− 1 and instead supply its action as a right preconditioner to a linear solver.  
+
+> C. Motivating the characteristic equations
+
+To understand the origin of the characteristic equa-tions Eqs. (26) to (28) and illustrate the benefits of the corresponding implicit differentiation, we now take a step back and analyze the fixed-point differentiation of C4v
+
+CTMRG. We first pinpoint the issues this approach suf-fers from, and then explain how the implicit differentia-tion as presented above naturally resolves them. Consider the fixed-point differentiation approach of Eqs. (11) to (13) as applied to the iterating function de-fined in Eqs. (22) and (23). At increasing PEPS and environment bond dimensions, computing the truncated 
+
+eigh decomposition in Eq. (22) from a full diagonaliza-tion quickly becomes infeasible, and one needs to resort to sparse iterative eigensolvers which build up the trun-cated subspace directly. Without access to the full un-truncated decomposition, evaluating the VJP action cor-responding to a truncated eigh requires solving a linear Sylvester equation [29]. This leads to a nested linear problem in Eq. (12), where every evaluation of the VJP action of ∂xf requires solving an inner linear Sylvester equation of a similar size. This lies at the heart of the efficiency bottleneck. In addition, evaluating the VJP action of a truncated 
+
+eigh decomposition is inherently unstable when there are (nearly) degenerate eigenvalues. Indeed, the stability of eigenvectors is related to the gaps in the spectrum, and they can exhibit non-analytic behavior in the case of de-generacies. However, the energy evaluation in Eq. (6) is insensitive to rotations within subspaces of degenerate eigenvalues of Eq. (22), or even with respect to general rotations in the kept subspace more generally. It is easy to see that conjugating C and E by an arbitrary unitary 
+
+Q, giving gauge-transformed corners and edges ( C′, E ′), leaves all physical expectation values invariant, T   
+
+> E
+> E
+> E
+> E
+> C
+> C
+> C
+> C
+> Q†QQ†Q
+> Q† Q Q† Q
+> Q† Q Q† Q
+> Q† Q Q† Q
+
+=T 
+
+> E′
+> E′
+> E′
+> E′
+> C′
+> C′
+> C′
+> C′
+
+. (29) This reparameterization corresponds to U ′ = U Q , which is precisely a rotation of the basis in the kept subspace. This rotation acts as a gauge freedom in the C4v CTMRG algorithm, that is not visible to the eigh subroutine in isolation. This gauge freedom implies that only the kept subspace is physically relevant, rather than a particular basis in which C is diagonal. The eigh subroutine is one convenient way of selecting the subspace associated with the dominant eigenvalues, but the particular basis of eigenvectors it selects within this subspace is irrelevant for the outer CTMRG algorithm. We can resolve both the efficiency and stability is-sues through implicit differentiation. By augmenting the usual system of fixed-point equations with equations that characterize the truncated subspace, parametrized in terms of a suitable set of variables y = ( C, E, u ) as detailed in Section III B, we completely bypass the need to differentiate unstable subroutines such as eigh . As the resulting characteristic equations F (y, p ) = 0 are purely algebraic, we can compute the gradient from the un-nested linear problem Eq. (17), where evaluating the VJP action ∂y F corresponds to a set of simple and effi-cient tensor contractions. To identify how this approach mitigates the instabili-ties mentioned above, we consider a general variation of the isometry U around its fixed point value U ∗,˙U = U ∗ ˙ω + U⊥ ˙u. (30) The contribution along U ∗ satisfies the additional skew-hermiticity constraint ˙ ω = − ˙ω†, while the contribution ˙ u
+
+along the left null space U⊥ carries no further constraints. It is well known that, when backpropagating through a truncated eigh , computing the adjoint associated with ˙ω requires dividing by differences of eigenvalues, which diverge in the case of degeneracies [29, 34]. However, the skew-hermitian variations ˙ ω exactly parameterize in-finitesimal in-space rotations that can be compensated by the unitary gauge freedom Q, and can therefore be completely omitted. The only variations of U that lead to variations in the energy are those parameterized by ˙u, associated with actual changes in the truncated sub-space. We stress that, in practice, there is no need to actually introduce a non-trivial Q matrix at any stage of the C4v CTMRG algorithm. Furthermore, the corner matrix C as it appears in Eq. (22) always remains real and diagonal within the actual contraction routine. The 8role of Q is solely to exploit the gauge freedom in the gra-dient computation to enforce a stable parametrization of the variations. We can therefore restrict ˙U to the form ˙U = U⊥ ˙u, (31) as long as we allow the variations of the corner tensor ˙C
+
+to be non-diagonal and complex, but still Hermitian. The difference between Eq. (31) and Eq. (30) is well known in the context of parameterizing the tangent space of the Grassmann versus the Stiefel manifold. The adjoint asso-ciated with ˙ u will be determined by the spectral gap be-tween the smallest kept eigenvalue and the largest trun-cated eigenvalue, and will be stable as long as we do not truncate through nearly degenerate eigenvalues. To impose the parametrization Eq. (31) of the vari-ations ˙U in practice, we use a custom parametrization of the characteristic equations where we simply define a variable U in terms of a single differentiable variable u
+
+as in Eq. (25). This u vanishes at zeroth order, but its infinitesimal variations parameterize the variations of ˙U .This also explains the earlier statement that the corner tensor should be treated as a generic complex Hermitian matrix when backpropagating through the energy evalu-ation. Finally, we motivate our choice to treat the eigenval-ues λC and λE occurring in Eqs. (26) and (27) as dif-ferentiable quantities defined in terms of the variables y,rather than directly including them as independent vari-ables in their own right. Instead of assuming that C
+
+and E have unit normalization and then defining λC and 
+
+λE as the inner product of the first term in Eqs. (26) and (27) with C and E respectively, we could alter-natively say that with these definitions of λC and λE ,Eqs. (26) and (27) actually impose the unit normaliza-tion of C and E. In practice, this strategy of making 
+
+λC and λE depend on y eliminates zero eigenvalues in the Jacobian ∂pF of these characteristic equations used in computing the VJP of the contraction routine. This effect is explained in more detail for the simpler case of an eigenvalue problem in Section B. A similar approach of treating eigenvalues as differentiable quantities defined in terms of tensor variables will be used in formulating characteristic equations for other contraction algorithms below. All these considerations eventually lead to the exact form of the characteristic equations given in Eqs. (26) to (28). Note that, if we differentiate the characteristic equations Eqs. (26) to (28) at the root y∗ = ( C∗, E ∗, 0), at first order we exactly recover the derivative of the de-formed CTMRG procedure introduced in Ref. [29], indi-cating that this form of F indeed removes all divergences associated with degenerate eigenvalues.   
+
+> D. Implicit differentiation for different C4v
+> contraction algorithms
+
+To close this section, we briefly comment on how the implicit differentiation approach outlined above can be directly applied to different C4v symmetric contraction algorithms beyond CTMRG. The symmetry conditions Eq. (19) ensure that the row-to-row transfer matrix cor-responding to the PEPS norm network on the left-hand side of Eq. (5) is a Hermitian operator. In this case, it is known that the contraction itself can be formulated as a variational problem, and that different methods for reaching this variational optimum give rise to equivalent contraction environments [35]. In particular, under these conditions, different contraction environments can be ex-plicitly mapped to each other. This means that, given a contraction environment obtained from any contraction algorithm compatible with C4v symmetry [17, 36–38], we can always map this environment to a set of parameters 
+
+y = ( C, E, u ) that satisfy the characteristic equations Eqs. (26) to (28). Importantly, this implies that we can actually use the same implicit differentiation approach outlined above regardless of the specific contraction al-gorithm used in the forward pass. Therefore, while we have focused on C4v CTMRG to motivate the form of the characteristic equations, our techniques can be easily incorporated into any existing code base without having to modify the implementation of the contraction algo-rithm itself. On the other hand, the set of characteristic equations Eqs. (26) to (28) is not unique. Ref. 39 uses a different smaller set of equations which characterize a C4v
+
+symmetric contraction environment only in terms of the corner C and isometry U . One could use these equations to perform implicit differentiation by performing the en-ergy evaluation Eq. (6) using the isometry U . Details on how to map different symmetric contraction environ-ments to each other and how the tensors within these environments are related to each other can be found in Section D.  
+
+> IV. BOUNDARY MPS CONTRACTION
+
+We further demonstrate the versatility of our approach by applying it to PEPS contractions using the boundary MPS method [17]. In this approach, we view the PEPS norm network ⟨ψ(t)|ψ(t)⟩ on the left hand side of Eq. (5) as an infinite power of a row-to-row transfer operator T ,defined as 
+
+T = . (32) To contract the norm network, we can then find the opti-mal MPS approximations to the dominant right and left 9eigenvectors of T ,
+
+∝ , (33) 
+
+∝ , (34) which we will call the top and bottom MPS eigenvectors of T respectively. We start with a reminder of how these boundary MPS eigenvectors can be computed. We then give a set of char-acteristic equations in a suitable parametrization that can be used to apply implicit differentiation on top of the resulting fixed point. Just as before, this approach for computing the PEPS gradient can be directly ap-plied on top of any existing implementation of boundary MPS contraction. Additionally, the proposed character-istic equations have the advantage of removing the need for gauge fixing the resulting boundary MPS. 
+
+A. Contracting a PEPS using boundary MPS 
+
+Given a transfer operator T of the form Eq. (32), one way to find its MPS eigenvectors is to use the varia-tional uniform matrix product state (VUMPS) algorithm [18]. While we use this particular algorithm to guide our discussion, we stress that the implicit differentiation ap-proach outlined below can be applied on top of any other algorithm that produces the same solution [37, 40]. We again adopt the blocked notation of Eq. (20), but now without assuming any spatial symmetries of the PEPS tensor p.When written in mixed canonical form [40], the top eigenvector in Eq. (33) can be defined in terms of a set of three variables xt = ( AtL, A tR, C t), AtL AtL AtL AtR AtR AtRCt
+
+. (35) The AtL and AtR tensors are left and right isometries, satisfying the conditions AtL
+
+> ¯AtL
+
+= ,AtR 
+
+> ¯AtR
+
+= . (36) In addition, the center-gauge bond tensor Ct has the property that AtL Ct
+
+=AtRCt , (37) ensuring the MPS is translation invariant. Starting from an initial boundary MPS ( AtL, A tR, C t), a single iteration of the VUMPS algorithm produces an updated boundary MPS ( AtL
+
+> ′
+
+, A tR
+
+> ′
+
+, C t′) as follows. First, we find the left and right environments GL and GR as the leading eigenvectors of the left and right MPS transfer matrices respectively, T
+
+> AtL
+> ¯AtL
+> GtL
+
+= λtLGtL , (38) T
+
+> AtR
+> ¯AtR
+> GtR
+
+= λtRGtR . (39) Second, we find updated “center” tensors AtC 
+
+> ′
+
+and Ct′ as the leading eigenvectors of the resulting one- and zero-site effective local Hamiltonians, T 
+
+> AtC
+> ′
+> GtLGtR
+
+= λtACAtC 
+
+> ′
+
+, (40) Ct′ 
+
+> GtLGtR
+
+= λtCCt′ . (41) In practice, the eigenvalue problems for the extremal eigenvectors in Eqs. (38) to (41) are solved using a sparse Krylov-based eigensolver, such as the Arnoldi method. To speed up convergence of the eigensolver subroutines, we can supply the tensors from the previous iteration as an initial guess for the corresponding eigenvectors. Fi-nally, we can use a suitable orthogonal factorization [41] to obtain updated isometries such that AtC
+
+> ′
+
+=AtL 
+
+> ′
+> Ct′
+
+=AtR 
+
+> ′
+> Ct′
+
+. (42) If T is a Hermitian operator, meaning the PEPS tensor 
+
+p has a Hermitian reflection symmetry, the bottom MPS eigenvector in Eq. (34) can be obtained simply as the hermitian conjugate of the top one. In the case where T
+
+does not have a reflection symmetry, the bottom MPS, parametrized in terms of variables xb = ( AbL, A bR, C b) as AbRAbRAbRAbLAbLAbL Cb
+
+, (43) 10 has to be computed separately. This can be done using exactly the same procedure Eqs. (38) to (42), but where we rotate the transfer matrix T by 180 °. Given both a top and bottom boundary MPS, evaluating the PEPS energy Eq. (6) additionally requires mixed environments 
+
+GL and GR defined as T
+
+> AtL
+> AbR
+> GL
+
+= λLGL , (44) T
+
+> AtR
+> AbL
+> GR
+
+= λRGR . (45) The relevant expressions for evaluating the PEPS energy density Eq. (6) using a boundary MPS contraction envi-ronment built from the tensors introduced here are given in Section C. We can define the iterating function f correspond-ing to the VUMPS algorithm as a single combined update of the top and bottom boundary MPS tensors 
+
+x = ( xt, x b) = ( AtL, A tR, C t, A bL, A bR, C b). This f pro-duces updated tensors ( AtL
+
+> ′
+
+, A tR
+
+> ′
+
+, C t′, A bL
+
+> ′
+
+, A bR
+
+> ′
+
+, C b′) =
+
+f (( AtL, A tR, C t, A bL, A bR, C b), p ) as summarized by Eqs. (38) to (42) and their ( t ↔ b) analogues. By repeatedly applying f , the procedure eventually con-verges to a set of fixed-point boundary MPS tensors 
+
+x∗ ≡ (At∗ 
+
+> L
+
+, A t∗ 
+
+> R
+
+, C t∗, A b∗ 
+
+> L
+
+, A b∗ 
+
+> R
+
+, C b∗) that satisfy the fixed-point equation x∗ = f (x∗, p ). Note that, at the fixed point, the eigenvalues in Eqs. (38) to (40) all correspond to the same value λt ≡ λtL = λtR = λtAC , provided that GtL and GtR are normalized such that λtC = 1. Importantly, for the implicit differentiation approach that follows, we only need this fixed-point condition to be valid only up to unitary gauge transformations. This means that there is no need to ensure element-wise convergence using a gauge fixing procedure when using implicit differentiation here, in contrast to the case of fixed-point differentiation. We denote the corresponding fixed-point values of the environment tensors Eqs. (38), (39), (44) and (45) as Gt∗ 
+
+> L
+
+, Gt∗ 
+
+> R
+
+, Gb∗ 
+
+> L
+
+, Gb∗ 
+
+> R
+
+, G∗ 
+
+> L
+
+and G∗
+
+> R
+
+.
+
+B. Implicit differentiation for boundary MPS contraction 
+
+To compute the gradient of the PEPS energy den-sity obtained using a boundary MPS contraction en-vironment, we again define a differentiable function 
+
+F (y, p ) that implicitly characterizes the fixed-point so-lution ( At∗ 
+
+> L
+
+, A t∗ 
+
+> R
+
+, C t∗, A b∗ 
+
+> L
+
+, A b∗ 
+
+> R
+
+, C b∗) as the root y∗ of the characteristic equation F (y, p ) = 0. For this we will use a custom set of 12 variables, 
+
+y = ( lt, r t, C t, G tL, G tR, l b, r b, C b, G bL, G bR, G L, G R).
+
+The first five variables are used to characterize the top fixed-point MPS eigenvector, while the next five char-acterize the bottom fixed-point MPS eigenvector. The last two variables are used to characterize the fixed-point mixed environments. For each of these variables, we can write a corresponding characteristic equation. In the lan-guage of Algorithm 2, the variables lα, rα and Cα directly relate to the variables x of the iterating function f , while the others are intermediate variables that we have pro-moted to extend our set of equations beyond the simple fixed-point condition. We start by considering the variables yt =(lt, r t, C t, G tL, G tR) and the corresponding characteristic equations that characterize the top MPS eigenvector. The first step is to use lt and rt to construct differ-entiable variables AtL and AtR in a way that ensures a stable parametrization of their variations. Consider the constant left and right null spaces VL and VR of the fixed-point isometries At∗ 
+
+> L
+
+and At∗ 
+
+> R
+
+respectively, defined through At∗ 
+
+> L
+> ¯VtL
+
+= 0 ,At∗  
+
+> R
+> ¯VtR
+
+= 0 . (46) Using these null spaces, we define variables AtL and AtR
+
+as AtL
+
+=At∗ 
+
+> L
+
++V tL lt , (47) AtR
+
+=At∗ 
+
+> R
+
++V tRrt . (48) These variables are only differentiable through their de-pendence on lt and rt while all other tensors are kept constant. This choice is motivated by the parameteri-zation of the isometry in the C4v CTMRG case, and its validity is further discussed below. Next, we define a center tensor variable AtC as AtC
+
+= 12AtL Ct +AtRCt
+
+!
+
+(49) and a scalar λt as 
+
+λt =T  
+
+> AtC
+> ¯AtC
+> GtLGtR
+
+(50) 11 Using the definitions Eqs. (47) to (50), we can formu-late the first five characteristic equations F t(yt, p ) corre-sponding to the top fixed point as T   
+
+> AtC
+> ¯VtLCt∗−1
+> GtLGtR
+
+− λtlt = 0 , (51) T  
+
+> AtC
+> ¯VtRCt∗−1
+> GtLGtR
+
+− λtrt = 0 . (52) 12
+
+T 
+
+> AtC
+> ¯AtL
+> GtLGtR
+
++T 
+
+> AtC
+> ¯AtR
+> GtLGtR
+
+
+
+− λtCt = 0 ,
+
+(53) T
+
+> AtL
+> ¯AtL
+> GtL
+
+− λtGtL = 0 , (54) T
+
+> AtR
+> ¯AtR
+> GtR
+
+− λtGtR = 0 , (55) The root yt∗ of these top characteristic equations exactly corresponds to the top fixed-point boundary MPS xt∗ =(At∗ 
+
+> L
+
+, A t∗ 
+
+> R
+
+, C t∗) and its fixed-point environments Gt∗ 
+
+> L
+
+and 
+
+Gt∗ 
+
+> R
+
+. Indeed, from Section IV A we clearly see that yt∗ =(0 , 0, C ∗, G t∗ 
+
+> L
+
+, G t∗ 
+
+> R
+
+) satisfies F t(yt∗, p ) = 0. In particular, the root values lt∗ = 0 and rt∗ = 0 enforce the expected fixed-point values At∗ 
+
+> L
+
+and At∗ 
+
+> R
+
+of the variables Eqs. (47) and (48). If T has a Hermitian reflection symmetry, these five equations form a complete set of characteristic equations for the full contraction environment, as the bottom fixed point is simply the Hermitian conjugate of the top one. Furthermore, if the system has a full C4v symmetry as in Eq. (19), the fixed-point equations become exactly equiv-alent to the ones given in Section III B. This is discussed in more detail in Section D. In the absence of spatial sym-metries, we require five more equations for the variables 
+
+yb = ( lb, r b, C b, G bL, G bR) that characterize the bottom MPS eigenvector. These equations F b(yb, p ) are exact analogues of Eqs. (46) to (55), where we simply exchange the labels t ↔ b and rotate T by 180 °. Their root is given by yb∗ = (0 , 0, C b∗, G b∗ 
+
+> L
+
+, G b∗ 
+
+> R
+
+), which exactly corresponds to the bottom fixed-point MPS xb∗ = ( Ab∗ 
+
+> L
+
+, A b∗ 
+
+> R
+
+, C b∗) and its fixed-point environment Gb∗ 
+
+> L
+
+and Gb∗ 
+
+> R
+
+.Finally, we require two more equations F g (yg , p ) = 0 for the variables yg = ( GL, G R), which are given by T
+
+> AtL
+> AbR
+> GL
+
+− λGL = 0 , (56) T
+
+> AtR
+> AbL
+> GR
+
+− λGR = 0 . (57) where λ is defined as 
+
+λ =T  
+
+> AtC
+> AbC
+> GLGR
+
+. (58) Their root yg∗ = ( G∗
+
+> L
+
+, G ∗
+
+> R
+
+) simply corresponds to the fixed-point value of the mixed environments Eqs. (44) and (45), provided that the fixed point tensors G∗ 
+
+> L
+
+and 
+
+G∗ 
+
+> R
+
+are normalized such that Ct∗ 
+
+> Cb∗
+> G∗
+> LG∗
+> R
+
+= 1 . (59) Altogether, this gives us a set of 12 characteristic equa-tions F (y, p ) = 0 for the 12 variables y in the general case, whose root y∗ fully characterizes the boundary MPS con-traction environment. Given this form of F and the root 
+
+y∗, we can directly apply the implicit differentiation ap-proach of Eqs. (15) to (18) and supply it to Algorithm 2 to compute the PEPS gradient. To solve the resulting linear problem Eq. (17) in prac-tice, we also need the adjoints ˘y in line 6 of Algo-rithm 2. By backpropagating through the energy evalua-tion Eq. (6), we obtain the adjoints of the boundary MPS tensors that appear explicitly in the contraction environ-ment. For variables that are not used in the energy eval-uation, we simply set the corresponding adjoints to zero. The precise form of the contraction environment and the corresponding adjoints is given in Section C. Finally, from the adjoints of the contraction environment we can ob-tain ˘ y by backpropagating through the parametrizations, 12 ˘y = ˘ x ∂ y x. Specifically, from the adjoints ˘AαL and ˘AαR,where α = t, b , we obtain ˘lα and ˘ rα by projecting onto the corresponding null spaces V αL and V αR respectively, according to Eqs. (47) and (48). Note that, while we have found this particular formula-tion in terms of a single set of characteristic equations to be the most straightforward to implement and the most numerically stable in practice, alternative equivalent rep-resentations of the boundary MPS optimality conditions exist. In particular, the problem can also be reformulated by decomposing it into smaller linear subproblems for the top and bottom boundaries separately, as described in Section E.  
+
+> C. Motivating the characteristic equations
+
+To motivate this form of F and the advantages it offers, we again start by considering how fixed-point differentia-tion using the iterating function f defined in Section IV A works [23]. To solve the fixed-point differentiation linear problem Eq. (12) using a sparse solver, we need to evaluate the VJP action of ∂xf in every iteration. Evaluating this VJP via automatic differentiation of a VUMPS iteration is highly non-trivial, as it requires that every primitive operation within a single iteration, such as the QR de-composition used in Eq. (42) and the dominant eigen-value solves of Eqs. (38) to (41), must be made differen-tiable while ensuring numerical stability at each step [23]. Backpropagating through a dominant eigensolve requires solving a linear problem of a similar size as the origi-nal eigenvalue problem. This means that the fixed-point differentiation of a boundary MPS contraction requires solving a nested linear problem for each dominant eigen-solve inside the outer linear problem. Implicit differentiation of the characteristic equation presented above circumvents these difficulties entirely. On the one hand, the given form of F requires the AD en-gine to differentiate only tensor contractions, completely removing the need to make the subroutines of a single iteration differentiable. Furthermore, this means that the corresponding VJP action ∂y F also corresponds to a set of simple tensor contractions. Therefore, rather than solving nested linear problems, by including the interme-diate environment variables directly into the definition of 
+
+F we now only solve a single, albeit larger, linear problem for the adjoint ˘F .To motivate our choice of variables y, and in particu-lar the parametrization Eqs. (47) and (48), we consider the inherent symmetries of the boundary MPS approach. Just as in the C4v CTMRG case, the boundary MPS con-traction environment admits a gauge symmetry that can be exploited to restrict the variations around the fixed-point tensors to improve stability. All physical observ-ables and defining relations are invariant under the gauge transformation Ct
+
+7→Cα Qα† 
+
+> RQαL
+
+, (60) AαL
+
+7→AαL Qα† 
+
+> LQαL
+
+, (61) AαR
+
+7→AαRQαR Qα† 
+
+> R
+
+, (62) where QαL and QαR are arbitrary unitary matrices. In par-ticular, this could be used to replace C with a real diago-nal matrix S associated with its singular value decompo-sition C = U SV †, by choosing QL = U † and QR = V †,although this is not a standard practice in the VUMPS algorithm. In general, the variations around the fixed-point isome-tries, ˙AαL and ˙AαR, contain contributions along both the primal solutions Aα∗ 
+
+> L
+
+and Aα∗ 
+
+> R
+
+respectively, as well as their corresponding null spaces, just as in Eq. (30), ˙AαL = Aα∗ 
+
+> L
+
+˙ωL + V α∗ 
+
+> L
+
+˙l, ˙AαR = ˙ ωRAα∗ 
+
+> R
+
++ ˙ rV α∗ 
+
+> R
+
+, (63) with again ˙ωL and ˙ωR skew-Hermitian. However, we can use the gauge freedom to remove these contributions along Aα∗ 
+
+> L
+
+and Aα∗ 
+
+> R
+
+from the gradient computation en-tirely, while leaving the forward computation unchanged. Even if we choose to include the step that makes C real diagonal in the forward computation, it is then important to keep C as a generic complex matrix in the parametriza-tion of the reverse problem. The restriction of the isome-try variations is achieved through the parametrizations in Eqs. (47) and (48) and their ( t ↔ b) equivalents, where lα
+
+and rα are used as differentiable variables in the charac-teristic equations. This effectively restricts the variations of the isometries to only contain contributions along their null spaces, completely analogous to Eq. (31).  
+
+> V. CTMRG CONTRACTION
+
+As a final example, we apply the principle of implicit differentiation to the asymmetric CTMRG algorithm for systems without spatial symmetries [15]. In this case, the contraction environment consists of four different corner tensors and four different edge tensors, as opposed to the single corner and edge tensor used in the C4v symmetric case of Section III. We denote the edge and corner tensors as {Cα} and 
+
+{Eα} respectively, where the index α labels the differ-ent directions. We choose the convention that the direc-tions α = 1 , 2, 3, 4 correspond to north, east, south and west for edges, and northwest, northeast, southeast and southwest for corners respectively. This gives rise to an asymmetric contraction environment for the PEPS norm 13 network of the form 
+
+7→T 
+
+> E1
+> E2
+> E3
+> E4
+> C1
+> C2
+> C3
+> C4
+
+. (64) We first briefly review how these corners and edges can be computed. We then give a set of characteristic equa-tions in a suitable parametrization that can be used to apply implicit differentiation on top of the resulting fixed point. Finally, we motivate the form and parametrization of these characteristic equations by considering the sym-metries of the CTMRG algorithm. Throughout this entire section, we only explicitly pro-vide diagrams centered around the α = 1 direction, and implicitly assume analogous rotated expressions for the other directions α = 2 , 3, 4. Just as before, we restrict our discussion here to the case of PEPS with a single-site unit cell. Explicit expressions for the generalization to arbitrary unit cells are given in Section F. 
+
+A. Contracting a PEPS using CTMRG 
+
+Just as in the C4v symmetric case, the asymmetric CTMRG algorithm is an iterative procedure that maps a given contraction environment x = ( {Cα}, {Eα}) con-sisting of a set of corner and edge tensors to a new set ( {C′
+
+> α
+
+}, {E′
+
+> α
+
+}) by applying an iterating function f ,({C′
+
+> α
+
+}, {E′
+
+> α
+
+}) = f (( {Cα}, {Eα}), p ). In each iteration of f , we start by decomposing an enlarged environment using a truncated SVD as T T 
+
+> E1E1
+> E2
+> E4
+> C1
+> C2
+> SVD
+
+≈U1 S1 V1 , (65) Denoting the inverses of the singular value matrices as 
+
+sα ≡ S−1 
+
+> α
+
+, we use the result of the decomposition to define left and right projectors for each direction as P L
+
+> 1
+
+=T 
+
+> E1
+> E4
+> C1
+> U †
+> 1
+> √s1
+
+, (66) P R
+
+> 1
+
+=T 
+
+> E1
+> E2C2
+> V †
+> 1
+> √s1
+
+. (67) Using these projectors, we obtain the updated corners and edges through T 
+
+> E1C1
+> E4
+> PR
+> 1
+> P L
+> 4
+
+= λE1C′ 
+
+> 1
+
+, (68) T  
+
+> E1
+> PR
+> 1PL
+> 1
+
+= λC1E′ 
+
+> 1
+
+, (69) and their corresponding rotated versions. Here, the scalars λCα and λEα correspond to the 2-norm of the left hand sides of the respective equations, such that {Cα}
+
+and {Eα} have unit normalization at all times. While we focus on the case of projectors {P Lα } and {P Rα } computed using the decomposition of a “half” infinite environment in Eq. (65), the methods and results presented here also apply to other constructions. In particular, the projec-tors could also be constructed from an SVD of a “full” infinite environment consisting of four enlarged corners [42]. This procedure eventually produces a fixed-point en-vironment x∗ = ( {C∗
+
+> α
+
+}, {E∗
+
+> α
+
+}) for which f (x∗, p ) ≈ x∗ is reached up to some desired tolerance. Note that, again, ensuring this element-wise convergence requires a suit-able gauge fixing of the fixed-point corner and edge ten-sors. We then use this result to also gauge-fix the SVD tensors, where we denote the corresponding gauge-fixed fixed-point SVD tensors as {U ∗
+
+> α
+
+}, {S∗
+
+> α
+
+} and {V ∗ 
+
+> α
+
+}.
+
+B. Implicit differentiation for CTMRG 
+
+The approach for formulating implicit differentiation for asymmetric CTMRG consists of the same steps as in the previous two examples. Here, we use a custom set of variables y defined as 
+
+y = ( { ˜Cα}, { ˜Eα}, {uα}, {Sα}, {vα}).
+
+The variables { ˜Cα} and { ˜Eα} correspond to modified cor-ner and edge tensors which are directly related to the variables x = ( {Cα}, {Eα}) used in the energy evalua-tion. The {uα}, {Sα}, and {vα} are the intermediate variables of line 5 in Algorithm 2 and will be used to characterize the decomposition Eq. (65). The variables 
+
+Sα are treated as generic complex matrices here, though they will reduce to the real diagonal matrices of singu-lar values at the root of the characteristic equations. For each of these variables, we will formulate a corresponding characteristic equation. The first step is to use {uα} and {vα} to define dif-ferentiable tensors {Uα} and {Vα}, whose derivatives lie only within the null spaces of the fixed-point isometries. 14 Consider the left and right null spaces U⊥α and V⊥α of 
+
+U ∗ 
+
+> α
+
+and V ∗ 
+
+> α
+
+respectively, characterized as U ∗ 
+
+> 1U†
+> 1⊥
+
+= 0 ,V †  
+
+> 1⊥V∗
+> 1
+
+= 0 . (70) Using these constant null spaces, we define tensors {Uα}
+
+and {Vα} as U1
+
+=U ∗ 
+
+> 1
+
++U1⊥u1 , (71) V1
+
+=V ∗ 
+
+> 1
+
++V1⊥v1 , (72) which are differentiable only through their dependence on the variables {uα} and {vα}.We again denote the inverses of the variables {Sα} as 
+
+{sα}, where sα = S−1 
+
+> α
+
+. Furthermore, we define the addi-tional variables sLα and sRα as “modified square roots” of the inverse singular value matrices, 
+
+sLα = 4
+
+q
+
+s†
+
+> α
+
+sα, sRα = 4
+
+q
+
+sαs†
+
+> α
+
+. (73) From these basic variables, we define modified left and right projectors as ˜P L
+
+> 1
+
+=T 
+
+> ˜E1
+> ˜E4
+> ˜C1
+> U †
+> 1
+> s1s1
+> s4sL
+> 4
+
+, (74) ˜P R
+
+> 1
+
+=T  
+
+> ˜E1
+> ˜E2˜C2
+> V †
+> 1
+> s1s1
+> s2 sR
+> 2
+
+. (75) Using this custom set of variables and the above defini-tions, we can formulate a set of characteristic equations 
+
+F (( { ˜Cα}, { ˜Eα}, {uα}, {Sα}, {vα}), p ) = 0 as T 
+
+> ˜E1˜C1
+> ˜E4
+> ˜PR
+> 1
+> ˜P L
+> 4
+> s1
+> s4
+
+− λC1˜C1 = 0 , (76) T  
+
+> ˜E1
+> ˜PR
+> 1
+> ˜PL
+> 1
+
+− λE1˜E1 = 0 , (77) T T   
+
+> ˜E1˜E1
+> ˜E4
+> ˜E2
+> ˜C1
+> ˜C2
+> U †⊥1
+> V †
+> 1
+> s1s1s1
+> s4sL
+> 4
+> s2 sR
+> 2
+> s∗
+> 1
+
+− λS1u1 = 0 , (78) T T   
+
+> ˜E1˜E1
+> ˜E4
+> ˜E2
+> ˜C1
+> ˜C2
+> U †
+> 1
+> V †
+> 1
+> s1s1s1
+> s4sL
+> 4
+> s2 sR
+> 2
+
+− λS1S1 = 0 , (79) T T   
+
+> ˜E1˜E1
+> ˜E4
+> ˜E2
+> ˜C1
+> ˜C2
+> U †
+> 1
+> V †⊥1
+> s1s1s1
+> s4sL
+> 4
+> s2 sR
+> 2
+> s∗
+> 1
+
+− λS1v1 = 0 . (80) Here, we assume that { ˜Cα} { ˜Eα} have unit normaliza-tion, and have defined the scalars λC1 , λE1 and λS1 as the inner product of the first term in Eqs. (76), (77) and (79) with ˜C1, ˜E1 and S1 respectively. This means that λC1 ,
+
+λE1 and λS1 are also differentiable variables dependent on y. Together with the rotated versions of Eqs. (76) to (80), this gives us a set of 20 characteristic equations for the 20 variables y, which can be directly used to apply implicit differentiation Eqs. (15) to (18) to compute the PEPS gradient. Intuitively, the characteristic equations simultaneously encode the element-wise convergence of the corner and edge tensors, as well as the defining rela-tions of the truncated SVD Eq. (65). To better understand the origin of our parametrization 
+
+y, we start by considering the root y∗ of these equations. From Section V A, we can see that the root value is given by y∗ = ( { ˜C∗
+
+> α
+
+}, { ˜E∗
+
+> α
+
+}, {0}, {S∗
+
+> α
+
+}, {0}) , where ˜C∗
+
+> 1
+
+=C∗ 
+
+> 1
+> √S∗
+> 1
+> √S∗
+> 4
+
+,˜E∗ 
+
+> 1
+
+=E∗ 
+
+> 1
+> √S∗
+> 1
+> √S∗
+> 1
+
+, (81) 15 First, note that u∗ 
+
+> α
+
+= 0 and v∗ 
+
+> α
+
+= 0 ensure the expected root values {U ∗
+
+> α
+
+} and {V ∗ 
+
+> α
+
+} of the isometries Eqs. (71) and (72), meaning that y∗ indeed captures the fixed-point SVD tensors. Second, we see that we can obtain the modified corner and edge tensors from the regular corners and edges by “pulling out” the square roots of the inverse singular value matrices that originally appeared in the projector definitions Eqs. (66) and (67). Indeed, this is exactly consistent with the modified projector definitions Eqs. (74) and (75) used in the characteristic equations. This choice is motivated by the gauge symmetry of the CTMRG algorithm, which we will discuss in Section V C. We will see that square roots of singular value matrices do not transform covariantly, meaning that we have to treat them separately to ensure a stable parametrization of the isometries. It is important to emphasize that, even though the characteristic equations make use of modified corners and edges, there is no need whatsoever to modify the actual CTMRG contraction algorithm to use implicit differenti-ation. Indeed, to use Algorithm 2, all we need is a way to relate the variables y to the variables x used in the regular contraction algorithm. This relation can then be used to obtain the root y∗ and adjoint ˘ y from the output 
+
+x∗ of the regular contraction algorithm and the adjoints ˘x. Here, the relevant map y 7 → x is given by Eqs. (71) and (72) combined with the defining relation C1
+
+=˜C1 
+
+> √s1
+> √s4
+
+,E1 =˜E1 
+
+> √s1
+> √s1
+
+. (82) Indeed, given this definition we can directly obtain the root y∗ given above from the fixed-point environment x∗.To obtain the adjoints ˘ y, we first note that since Uα and 
+
+Vα do not appear in the energy evaluation, their adjoints can simply be set to zero, giving ˘ uα = 0 and ˘ vα = 0. Finally, from the adjoints ˘ x of the corner and edge tensors we can obtain adjoints of the variables ˜Cα, ˜Eα and ˜Sα by explicitly backpropagating through the defining relation Eq. (82) to complete ˘ y. 
+
+> C. Motivating the characteristic equations
+
+The reasoning behind the precise forms of y and F be-comes clear when considering the subroutines and sym-metries of the CTMRG algorithm. The key step in the iterating function f of the CTMRG contraction is the truncated SVD of Eq. (65). As a con-sequence, applying fixed-point differentiation to this f
+
+gives a linear probem for the VJP action of ∂xf which involves backpropagating through this truncated SVD at each function application. Without access to the full un-truncated decomposition, which is necessarily the case at large bond dimensions, backpropagating through a trun-cated SVD requires solving a linear Sylvester equation [29], again leading to a nested linear problem in Eq. (12). In addition, the VJP action of a truncated SVD is inher-ently unstable when there are (nearly) degenerate singu-lar values, while the energy evaluation Eq. (6) is entirely insensitive to these degeneracies, exactly as in the C4v
+
+symmetric case. Just as before, the efficiency issue is solved by un-nesting the linear problem by treating the singular value tensors {Uα}, {Sα} and {Vα} at the same level as { ˜Cα},
+
+{ ˜Eα} and adding their defining equations directly to F .To avoid the stability issues caused by degeneracies, we can again exploit a gauge symmetry of the contraction algorithm. While this approach builds largely on the ideas from Section III, leveraging the gauge freedom is significantly more subtle in this case. Just as we noted in Section III C, in general the vari-ations ˙Uα and ˙Vα of the truncated isometries appearing in Eq. (65) contain contributions along both their corre-sponding fixed-point values and their null space, ˙Uα = U ∗ 
+
+> α
+
+˙ωL + U⊥α ˙uα, ˙Vα = ˙ ωRV ∗ 
+
+> α
+
++ ˙ vαV⊥α. (83) Similar to the eigh case, the variations ˙ ωL and ˙ ωR lead to divergences in the adjoint of the enlarged environment when there are degenerate singular values [34]. However, just as in the C4v symmetric case, the CTMRG algorithm has a gauge symmetry that can be exploited to remove these contributions from the gradient computation. Specifically, Eq. (83) contains eight poten-tially diverging terms in total, one for each Uα and Vα.At the same time, given a CTMRG contraction environ-ment, there are eight independent unitaries QLα and QRα
+
+which define a gauge transformation of this environment. Namely, conjugating the corners and edges by these uni-taries leaves all physical observables invariant, T   
+
+> E1
+> E2
+> E3
+> E4
+> C1
+> C2
+> C3
+> C4
+> QL†
+> 1QL
+> 1QR†
+> 1QR
+> 1
+> QL†
+> 2 QL
+> 2 QR†
+> 2 QR
+> 2
+> QL†
+> 3 QL
+> 3 QR†
+> 3 QR
+> 3
+> QL†
+> 4 QL
+> 4 QR†
+> 4 QR
+> 4
+
+=T 
+
+> E′
+> 1
+> E′
+> 2
+> E′
+> 3
+> E′
+> 4
+> C′
+> 1
+> C′
+> 2
+> C′
+> 3
+> C′
+> 4
+
+. (84) We can interpret this gauge freedom of the environment as a freedom in redefining the left and right leading sin-gular value subspaces, 
+
+UαSαVα = UαQL†
+
+> α
+
+ QLα SαQR†
+
+> α
+
+ QRα Vα. (85) The gauge invariance of Eq. (84) then means that, in principle, we only require projectors onto the leading subspaces rather than a specific basis in which Sα is di-agonal. If the entire CTMRG algorithm preserved this invariance, meaning that all intermediate objects trans-form appropriately under this set of gauge transforma-tions, we could simply proceed in the same way as in Section III C and exploit the gauge freedom to remove the problematic contributions from Eq. (83). 16 However, there are two issues that arise in the usual formulation of the CTMRG algorithm. Firstly, the CTMRG projectors do not transform appropriately un-der gauge transformations due to the inverse square roots of the singular value matrices in Eqs. (66) and (67). The inverse square root √sα ≡ pS−1 
+
+> α
+
+transforms as 
+
+√sα →
+
+q
+
+QRα S−1 
+
+> α
+
+QL†
+
+> α
+
+̸ = QRα
+
+√sαQL† 
+
+> α
+
+. (86) Clearly, the final contracted environment used to com-pute observables always contains products of √sα, aris-ing from pairs of left and right projectors, that yield an 
+
+sα with a proper transformation law. However, the in-dividual projectors do not transform covariantly. Sec-ondly, the edge tensor transformation Eα → QLα EαQR†
+
+> α
+
+is clearly incompatible with the construction of envi-ronments consisting of multiple edge tensors whenever 
+
+QLα̸ = QRα , which are for example required when evalu-ating expectation values of operators acting on multiple sites. Both issues can be solved using the following proce-dure. The first logical step is to remove the inverse square roots from the projector definitions Eqs. (66) and (67) and include the sα variables explicitly in the contraction environment. This then also implies removing the inverse square roots from the renormalized corners and edges. Altogether, this leads to the definitions of the modi-fied corners, edges and projectors, { ˜Cα}, { ˜Eα}, { ˜P Lα }
+
+and { ˜P Rα }, of Eqs. (74), (75) and (82). The appear-ance of inverse singular values {sα} on the edges can be straightforwardly generalized to larger environments to systematically ensure gauge invariance. However, the intermediate SVD step in Eq. (65) remains problematic. The environment matrix of Eq. (65) is formed by cutting links between edge tensors Eα. In terms of the modi-fied edge tensors { ˜Eα}, this leads to a dangling √sα on outer legs of the edge tensors that are being cut. This results in a non-unitary matrix transformation and con-sequently alters the SVD decomposition beyond a simple gauge transformation. In a second step, we resolve this by replacing the dangling inverse roots on the left and right cuts by the custom roots sLα and sRα of Eq. (73), with transformation laws 
+
+sLα → QLα sLα QL† 
+
+> α
+
+, sRα → QRα sRα QR† 
+
+> α
+
+. (87) This leads to the expressions for the infinite environment matrix on the left hand side of Eqs. (78) to (80), and ensures the consistency of the SVD decomposition. After ensuring that observables calculated with CTMRG are invariant under unitary gauge transforma-tions QRα , Q Lα , we can use their variations to cancel the di-verging components in Eq. (83). This restricts the isom-etry variations to their respective null spaces, ˙Uα = U⊥α ˙uα, ˙Vα = ˙ vαV⊥α. (88) In practice, this stable parametrization of the trun-cated isometry variations is easily imposed by using the parametrization of Eqs. (71) and (72) in the character-istic equations. As a consequence, variations of singular value matrices Sα become general non-diagonal complex matrices . This leads to a distinct operational treatment in the forward and backward passes: 
+
+• Forward pass: All CTMRG computations remain exactly how they were described in Section V A with real and diagonal Sα (Algorithm 2, forward 
+
+routine) 
+
+• Reverse pass: Throughout the reverse mode (Al-gorithm 2, reverse routine) we treat Sα as com-plex non-diagonal matrices. This begins with defin-ing the modified corners and edges in Eq. (82). Finally, we note that by examining the variations of Eqs. (78) to (80) up to first order, we recover the ex-pressions for the derivative of truncated SVD from 29, but crucially without the divergent terms.  
+
+> VI. BENCHMARKS
+
+Finally, we benchmark the implicit differentiation ap-proach presented above, against both the fixed-point dif-ferentiation scheme and a straightforward application of reverse-mode AD. The benchmarks were carried out by extending the existing implementations of CTMRG and boundary MPS contractions in the PEPSKit.jl [43] and MPSKit.jl [44] software packages with implicit dif-ferentiation functionality. The underlying tensor op-erations and symmetry capabilities are supported via TensorKit.jl [45]. All implementations and benchmark data are publicly available in the open-source repository Ref. 46. We start by considering the accuracy of gradients ob-tained using the implicit differentiation approach com-pared to gradients resulting from straightforward “black-box” reverse-mode differentiation of Eq. (A6). For well-converged contraction environments, for which the char-acteristic equations Eq. (14) are satisfied up to high accu-racy, we systematically observe that the gradients agree to within the specified linear solver tolerance. In prac-tice, however, it is not always possible or even desirable to fully converge the contraction environment. There-fore, a natural question is how the gradient accuracy de-pends on the environment convergence. To assess this, Fig. 1 shows a comparison of the directional derivative of the PEPS energy density Eq. (6), computed with both implicit differentiation and black-box reverse-mode dif-ferentiation, to a reference value computed using a sim-ple first order finite-difference scheme. We see that, as the environment is converged further, the gradients ob-tained via implicit differentiation approach the first or-der finite-difference gradients in the same way as those obtained through straightforward reverse-mode differen-tiation. This means that even for relatively poorly con-verged environments, as long as we adapt the linear solver 17 convergence tolerance 10 −10 10 −8 10 −6 10 −4 10 −2             
+
+> Δ
+> 10 −410 −210 0
+> C4vCTMRG (i)
+> C4vCTMRG (bb) CTMRG (i) CTMRG (bb)
+> FIG. 1. Relative distance ∆ of the directional derivative of the PEPS energy density Eq. (6) computed with implicit differ-entiation (i) and with black-box reverse-mode differentiation (bb) as in Eq. (A6), to the value obtained using a symmet-ric first-order finite difference scheme with step size ε= 10 −3.The differences were averaged over three random PEPS points and directions with D= 3 and χ= 20, and are shown as a function of the convergence tolerance of the contraction algo-rithm.
+
+tolerance for Eq. (17) accordingly, the resulting gradient is no less accurate than the one we would obtain with straightforward reverse-mode differentiation. In partic-ular, this level of accuracy may be perfectly adequate during the initial stages of the optimization. Next, we benchmark the computational cost of gradi-ent evaluation using implicit differentiation, as compared to a nested fixed-point differentiation approach, across a range of bond dimensions. Three representative test cases will be considered, namely (i) C4v CTMRG, (ii) boundary MPS without spatial symmetries on a single-site unit cell, and (iii) CTMRG without spatial symme-tries on a non-trivial unit cell. For all test cases, we opti-mize a PEPS variationally using L-BFGS [32] at multiple values of the bond dimension D and environment dimen-sion χ, storing intermediate checkpoints along the opti-mization trajectory. For timing the contraction, the en-vironment tensors are initialized using the environment from the previous L-BFGS iteration and are converged up to a tolerance of 10 −7 in the relevant error measures. The gradient times are obtained by measuring the time required to solve the linear system arising in the gradi-ent computation. In this way, we isolate the dominant computational cost in the reverse pass, while also reduc-ing the effect of implementation details that might bias the benchmarks. The gradient benchmark itself is per-formed using five moderately converged PEPS along the optimization trajectory, from which we take the median and standard deviation, once using the fixed-point formu-lation from Eq. (12) and once using the implicit differen-tiation approach of Eq. (17). In both cases, the resulting linear problems are solved using GMRES with a con-vergence tolerance of 10 −6. No explicit multi-threading is employed in our implementations. Parallelism is re-stricted to the underlying BLAS routines, for which 8 CPU cores are allocated. All benchmarks were performed on AMD EPYC 7713 compute nodes.   
+
+> A. C4vCTMRG
+
+We first benchmark the case of C4v -invariant CTMRG, for which we consider the spin-1 /2 Heisenberg model 
+
+H = X
+
+> ⟨i,j ⟩
+
+JxSxi Sxj + Jy Syi Syj + Jz Szi Szj , (89) where Sαi denotes the spin-1/2 operator along the α-axis on site i. In order to capture the antiferromagnetic corre-lations of the ground state at ( Jx, J y , J z ) = (1 , 1, 1) in a single-site unit cell ansatz, we perform a unitary −2iS y
+
+sublattice rotation [20], amounting to a change in the parameters to ( Jx, J y , J z ) = ( −1, 1, −1). We evaluate the relative computational performance of the fixed-point and implicit differentiation approaches by computing the speedup tfixed-point /t implicit . As shown in Fig. 2, we consistently observe improved performance of implicit differentiation, with the speedup generally in-creasing with the total number of parameters. When comparing the times tlinsolve required to solve the linear problem of the gradient evaluation to the C4v
+
+CTMRG contraction times tcontract , we find that both differentiation approaches exhibit subleading computa-tional complexity relative to the dominant contraction cost, as shown in Fig. 3. Here we note that the CTMRG contraction steps are performed using a full eigh de-composition to obtain consistent scaling behavior. That means that, since we do not utilize sparse eigensolvers, the CTMRG contraction cost may be particularly high at larger dimensions. Nevertheless, the implicit differentia-tion method displays improved scaling with respect to the nested fixed-point approach, leading to increasing com-putational advantages with growing bond dimensions. While we do observe overall increased performance, we note that the precise gradient timings are partially implementation-dependent. Since the performance of the fixed-point gradient evaluation is strongly influenced by the specific realization of the pullback of the truncated 
+
+eigh decomposition, we ensure conservative estimates by using a GMRES solver for solving the Sylvester equation therein [47]. Moreover, we observe that the contraction and gradient linear problem convergence dynamics may fluctuate across the optimization trajectory, making it difficult to control uniformly across values of D and χ.We mitigate this effect by averaging the timings over sev-eral moderately optimized checkpoints.  
+
+> B. Single-site boundary MPS
+
+We proceed by benchmarking gradient computations for the boundary MPS contraction algorithm in the ab-sence of spatial symmetries. Specifically, we compare the 18 𝜒                 
+
+> 10 20 30 40 50 60 70 80 90 100
+> t fixed −point  /t implicit
+> 1234D= 2
+> D= 3
+> D= 4
+> D= 5
+> D= 6
+> D= 7
+
+FIG. 2. Speedup tfixed-point /t implicit of the implicit differ-entiation approach over fixed-point differentiation, obtained from timing the gradient linear problem convergence for C4v -invariant CTMRG on the Heisenberg model of Eq. (89). D 2𝜒   
+
+> 100 1000 5000
+> t linsolve  /t contract
+> 0.1 1.0 fixed-point implicit
+
+FIG. 3. Gradient linear problem convergence times tlinsolve ,normalized by the C4v -invariant CTMRG contraction time 
+
+tcontract , for both the implicit and fixed-point differentia-tion approaches on the Heisenberg model. We plot the data as a function of the matrix dimension of the D2χ × D2χ-dimensional enlarged corner from Eq. (22) on a log-log scale. 
+
+implicit differentiation technique of Section IV B with a fixed-point differentiation approach using the iterat-ing function of Section IV A. As before, we consider the Heisenberg model of Eq. (89) using a single-site unit-cell ansatz, and obtain the benchmarks following the same procedure as in the previous section. Considering the relative computational speedup 
+
+tfixed-point /t implicit , we observe a clear speedup of implicit differentiation over the fixed-point approach, as shown in Fig. 4. The magnitude of the speedup is comparable to that observed for C4v -symmetric CTMRG in Fig. 2 and again generally increases with the number of variational parameters. We also observe increased performance in the compar-ison between gradient linear solving times and contrac-tion times shown in Fig. 5. In particular, as opposed to the fixed-point approach, the cost of the boundary MPS 𝜒              
+
+> 10 20 30 40 50 60 70 80 90 100
+> t fixed −point  /t implicit
+> 1234
+> D= 3
+> D= 4
+> D= 5
+> D= 6
+
+FIG. 4. Speedup tfixed-point /t implicit of the implicit over the fixed-point gradient linear problem, for boundary MPS with-out spatial symmetries on the sublattice-rotated Heisenberg model. D 2𝜒    
+
+> 100 500 1000
+> t linsolve  /t contract
+> 0.1 1.0 10.0 fixed-point implicit
+
+FIG. 5. Times for solving the gradient linear problem, nor-malized by the boundary MPS contraction time, for both the fixed-point and implicit gradient on the Heisenberg model. The data is shown on a log-log scale as a function of the com-bined dimension D2χ as before. 
+
+contraction generally outweighs the gradient computa-tion in the implicit scheme. We note, however, that the ratio between gradient and contraction times fluctuates substantially across the dimensions considered. This can be partially attributed to the convergence dynamics of VUMPS-based boundary MPS contractions, which are typically more sensitive to the initial guess and may ex-hibit more erratic behavior along the optimization tra-jectory. 
+
+C. CTMRG on non-trivial unit cells 
+
+In the final benchmark setup, we consider CTMRG in the absence of spatial symmetries and with a non-trivial unit cell. To this end, we study the Fermi–Hubbard 19 model on the square lattice, 
+
+H = −t X
+
+> ⟨i,j ⟩,σ
+
+(ˆ c† 
+
+> iσ
+
+ˆcjσ +h.c. )+ U X
+
+> i
+
+ˆni↑ ˆni↓ −μ X
+
+> i
+
+ˆni, (90) where ˆ ciσ denotes the fermionic annihilation operator for spin σ ∈ {↑ , ↓} at site i, ˆ niσ is the corresponding num-ber operator, and ˆ ni = ˆ ni↑ + ˆ ni↓. The optimizations are performed at half-filling and U/t = 8, using an iPEPS ansatz with a 2 × 2 unit cell in order to capture the anti-ferromagnetic correlations present in the model. Further-more, we impose an internal f Z2 × U(1) symmetry on all tensors throughout the optimization and benchmarking procedures. Using moderately optimized PEPS states, we perform the benchmarks following the same protocol as in the previous sections. As before, we compare the computational performance of the fixed-point and implicit differentiation approaches by considering the ratio tfixed-point /t implicit of their re-spective gradient linear-solving times. The results are shown in Fig. 6. In contrast to the previous benchmark scenarios, implicit differentiation does not consistently outperform the fixed-point approach. A speedup only begins to emerge at comparatively large bond and envi-ronment dimensions, whereas for low and moderate di-mensions the fixed-point method is typically faster. Nev-ertheless, the ratio increases systematically with increas-ing D and χ, as indicated in the inset of Fig. 6, suggesting a more favorable asymptotic scaling of the implicit dif-ferentiation approach. To investigate this scaling behavior in more detail, we consider the normalized gradient linear-solving times shown in Fig. 7. Indeed, we clearly observe that implicit differentiation exhibits an improved asymptotic scaling over the fixed-point approach. While the timing curves intersect only at larger values of D2χ, suggesting a con-stant overhead in the implementation of the implicit ap-proach, we do observe improved performance at higher dimensions. Since in practical settings the differentia-tion techniques benchmarked here are employed together with sparse matrix decompositions that become perfor-mant only at high D and χ, the implicit scheme incurs a speedup in relevant scenarios with the computational cost dropping below that of the contraction. We note that, as in Section VI A, conservative estimates are en-sured by using a preconditioned iterative method to solve the coupled Sylvester equations appearing in the pullback of the truncated SVD that is present in the fixed-point CTMRG gradient.  
+
+> VII. CONCLUSION
+
+In this manuscript, we have developed a new universal framework for differentiating tensor network algorithms. It is based on implicit function differentiation and hence decouples the specific PEPS contraction algorithms from the differentiable functions that characterize their out-𝜒                    
+
+> 10 20 30 40 50 60 70 80 90 100
+> t fixed −point  /t implicit
+> 0123
+> D2𝜒
+> 1000 10000 0.1 1.0 3.0 D= 4
+> D= 6
+> D= 8
+> D= 9
+> D= 12
+> FIG. 6. Ratio of the fixed-point and implicit gradient linear-solving times for CTMRG without spatial symmetries on the Fermi-Hubbard model. The inset shows the combined data on a log-log scale as a function of the total matrix dimension
+> D2χof the half-infinite environment in Eq. (65), indicating the asymptotic scaling in the total number of parameters.
+
+D 2𝜒            
+
+> 500 1000 5000 10000
+> t linsolve  /t contract
+> 1510 20 fixed-point implicit
+> FIG. 7. Fixed-point and implicit gradient linear-solving times, normalized by the CTMRG contraction time, on the Fermi-Hubbard model. The data is plotted on a log-log scale as a function of the combined dimension D2χ.
+
+puts. Instead of differentiating the contraction subrou-tines directly, either via straightforward backpropagation or fixed-point differentiation, we differentiate sets of al-gebraic equations that fully characterize the output of these contraction algorithms. This paradigm shift makes tensor network programming much simpler, more mod-ular, and more stable, as it avoids the need to differen-tiate through often unstable subroutines. Furthermore, as demonstrated by benchmarks, our method provides a measurable speed-up and improved asymptotic scaling over existing techniques while maintaining the ability to “warm-start” calculations by using initial guesses from previous iterations. Although we have demonstrated this approach for three of the most common contraction schemes, the core idea presented in Algorithm 1 and Algorithm 2 is inde-pendent of the specific details and can be applied to other 20 tensor network algorithms, or more generally, to any op-timization problem in which the final result can be ex-pressed in terms of differentiable optimality conditions. Moreover, once the basic ingredients of Algorithm 1 and Algorithm 2 have been implemented for a given optimiza-tion problem, it is straightforward to experiment with different sets of algebraic characteristic equations to im-prove performance, modifying at most the input variables 
+
+y and their adjoints ˘ y.It is an interesting direction for future work to in-vestigate whether more efficient or more compact sets of equations exist for the examples presented in this manuscript. For instance, this includes alternative for-mulations for the C4v symmetric environment [39]. Al-though we have focused primarily on ground-state op-timization, our method is applicable in a much broader context. In particular, it would be interesting to apply it to the excitation ansatz [21, 48]. 
+
+> ACKNOWLEDGMENTS
+
+We acknowledge inspiring discussions with Gleb Fe-dorovich, Wei Tang, Laurens Vanderstraeten, and Xingyu Zhang. We are grateful to the authors of Ref. 39 for useful discussions and coordinating our submissions. L.B. and J.H. are supported by the European Union’s Horizon 2020 research and inno-vation programme through Grant No. 101125822 (ERC-CoG GaMaTeN). P.B. is supported by the Eu-ropean Union’s Horizon 2020 research and innova-tion programme through Grant No. 863476 (ERC-CoG SEQUAM). This research was funded in part by the Austrian Science Fund (FWF), Grant DOI: 10.55776/ESP306 (A.F.). L.D. is supported by the Flat-iron Institute. The Flatiron Institute is a division of the Simons Foundation. F.V. acknowledges funding from the UKRI grant EP/Z003342/1, BOFGOA (Grant No. BOF23/GOA/021), EOS (Grant No. 40007526) and IBOF (Grant No. IBOF23/064). Early stages of this work were performed in MATLAB with the help of the 
+
+ncon function [49] for tensor contractions. A.F. and B.V. are grateful to the Mathworks team for their assistance with certain undocumented aspects of the dlfeval func-tionality. The computational results have been achieved using the Austrian Scientific Computing (ASC) infras-tructure. 
+
+> AUTHOR CONTRIBUTIONS
+
+F.V. conceptualized and implemented the initial idea of implicit differentiation of contraction algorithms based on a single set of algebraic characteristic equations in the context of C4v symmetric systems. A.F. and B.V. formu-lated the characteristic equations for C4v CTMRG and boundary MPS contractions of Sections III B and IV B, after which L.B. adapted this approach to formulate the characteristic equations for asymmetric CTMRG of Sec-tion V B. L.B. and P.B. wrote the implementation of im-plicit differentiation for the different contraction schemes used in the benchmarks, which can be found in Ref. 46. J.H. and L.D. developed the framework for AD of (sym-metric) tensor operations underlying all implementations of Ref. 46, and wrote stable implementations of the dif-ferentiation rules for various numerical routines used in this work. L.B. and A.F wrote the manuscript, while P.B. performed the numerical benchmarks. All authors contributed to discussions, manuscript revisions, and ap-proved the final version of the manuscript. 21 
+
+> Appendix A: Automatic differentiation and PEPS optimization
+
+In this Appendix we review the basic concepts of reverse-mode AD, and how it can be applied to the vari-ational optimization of PEPS.  
+
+> 1. Automatic differentiation in a nutshell
+
+Consider a set of variational parameters p, which we can interpret as an n-component complex vector p ∈ Cn.A real-valued cost function e of the complex parameters p
+
+is given by a map e : Cn → R. We can take derivatives of such a cost function with respect to the complex variables 
+
+p using the formalism of Wirtinger derivatives. Namely, for a complex scalar variable z = x + iy , we denote 
+
+∂z = 12
+
+ ∂∂x − i ∂∂y 
+
+
+
+, ∂¯z = 12
+
+ ∂∂x + i ∂∂y 
+
+
+
+. (A1) If we consider a specific trajectory p(t) of our variational degrees of freedom parametrized in terms of a single dummy variable t, we can use the chain rule to write the directional derivative of the cost function as ˙e = X
+
+> k
+
+(∂pk e) ˙ pk + ( ∂¯pk e) ˙ ¯pk
+
+= 2 Re X
+
+> k
+
+∂pk e ˙pk
+
+!
+
+= 2 Re ⟨˘p, ˙p⟩.
+
+(A2) Here, Re ⟨˘p, ˙p⟩ ≡ Re  ˘p† ˙p denotes the real inner product of two complex vectors, and we have relied on ∂¯pk e =
+
+∂pk e due to the fact that e is real. In this expression, ˙p denotes the n-component complex vector ˙p with en-tries given by ˙ pk, and will be referred to as the tangent vector , or just tangent for short. Additionally, we have introduced ˘ p as a complex vector with entries given by 
+
+∂¯pk e. We will refer to ˘ p as the adjoint of p, also called a 
+
+cotangent vector or cotangent for short. Now consider the case where our cost function com-putation is naturally interpreted as a two-stage pro-cess, where first we map our complex variables to some intermediate representation g(p) using a function g :
+
+Cn → Cm, and only then compute the cost function as e(p) ≡ e(g(p)), where now we interpret e as a map 
+
+e : Cm → R. In this case, we can use the chain rule to find two equivalent expressions for Eq. (A2) as ˙e = 2Re ⟨˘g, ˙g⟩ = 2Re ⟨˘p, ˙p⟩. (A3) Here we have introduced a tangent and adjoint for the intermediate variables g in exactly the same way as be-fore. The basic idea of automatic differentiation is the effi-cient programmatic use of the chain-rule in evaluating the derivative of a composition of functions as in Eq. (A3). The core idea becomes clear when we consider how to obtain the object we want, the total derivative ˙ e, from the basic objects we have at our disposal, namely the tangent and adjoint that we always “know”. In particu-lar, we always know that the first tangent is ˙ t = dt 
+
+> dt
+
+= 1, and that the final adjoint is ˘ e = ∂ee = 1. Considering the computational sequence t → p → g → e, we could start from ˙ t and push the tangents forward through the sequence to obtain ˙ e. This is called forward mode accu-mulation . Alternatively, we could start from ˘ e and pull it back through the sequence to obtain ˘ t = ˙ e, which is called reverse mode accumulation .The chain rule teaches us that we can relate tangents and cotangents of different variables through the Jaco-bian operator . If we formally denote the Jacobian as ∂pg,we can denote its action on the complex tangent vector ˙ p
+
+as ˙ g = ∂pg ˙p. We see that propagating a tangent forward through the computational graph can be performed by applying the Jacobian to a tangent vector on its right, which is commonly referred to as a Jacobian-vector prod-uct (JVP). The concrete action of a JVP for a generic non-holomorphic map g is given by ˙gk = X
+
+> l
+
+(∂pl gk) ˙ pl + ( ∂¯pl gk) ˙ ¯pl. (A4) From this expression, we observe that the Jacobian acts as a real-linear map on the complex vector ˙p, meaning that it is linear with respect to linear combinations of different tangent vector only when using real expansion coefficients. To figure out how to pull back adjoints through the computational graph, we can substitute the JVP Eq. (A4) for ˙ g into Re ⟨˘g, ˙g⟩ and manipulate the expres-sion to establish the equivalence Eq. (A3), Re ⟨˘g, ˙g⟩ =Re ⟨˘g, ∂ pg ˙p⟩ = Re ⟨(∂pg)† ˘g, ˙p⟩. We then recognize ˘ p =(∂pg)† ˘g, with ( ∂pg)† the adjoint of the real-linear Jaco-bian with respect to the real inner product. This opera-tion is commonly referred to as a vector-Jacobian product 
+
+(VJP). The concrete action of the VJP is given by ˘pl = X
+
+> k
+
+h
+
+˘gk(∂pl gk) + ˘ gk(∂¯pl gk)
+
+i
+
+. (A5) In deriving this expression, we have equated Re  ˘gk(∂¯pl gk) ˙ ¯pl with Re 
+
+
+
+˘gk(∂¯pl gk) ˙ pl
+
+
+
+, crucially requiring the presence of the real part in the expression Eq. (A3), which can ultimately be traced back to the assumption that the final cost function is real-valued. The procedure of reverse-mode accumulation can then be summarized as follows. To implement the derivative of a cost function e, which is itself a composition of different functions, one only needs to know: 1. the order in which the functions were applied, 2. at which value of the parameters the functions were evaluated, 3. the VJP action ˘ p = ( ∂pg)† ˘g of every function used in the composition. 22 Points 1. and 2. can be easily handled automatically by any off-the-shelf AD engine. The VJP action in point 3. needs to be manually specified for any function in the sequence that does not have a standard implementation. Having introduced the notions of JVP, VJP and reverse-mode accumulation, we can take a step back and phrase things a bit more informally. In particular, we will drop all complex conjugates, and generalize our no-tation from simple vectors in Euclidean vector spaces to generic objects such as tensors or contraction environ-ments. This intuitive informal notation should never lead to inconsistencies, as long as we keep the proper defini-tion Eq. (A5) in mind when actually implementing any VJP action [50]. We will also informally denote the VJP action ˘ p = ( ∂pg)† ˘g in terms of the actual vector-Jacobian product ˘ p = ˘ g ∂ pg as a slightly more intuitive notation in the context of conceptual discussions, where we view the action of the adjoint ( ∂pg)† as the left action of ∂pg
+
+on a cotangent and we drop all † symbols from the nota-tion. This simplified informal notation is systematically used in the main text, as well as in the remainder of this Appendix.  
+
+> 2. Variational PEPS optimization using AD
+
+Returning to the problem of variational PEPS opti-mization of Section II A, we can now discuss how to eval-uate the gradient of the energy density Eq. (6) using reverse-mode accumulation. The most straightforward way to evaluate the VJP ˘ x ∂ px in Eq. (6) is to examine how the contraction environment is computed in prac-tice. A contraction algorithm computes the environment through an iterative procedure in which an iterating func-tion f is applied to an initial guess x0 until convergence is reached, x∗ = f (x∗, p ). We call this converged envi-ronment x∗ the fixed point of f . This gives rise to a se-quence of intermediate objects xi through the procedure 
+
+x1 = f (x0, p ), x2 = f (x1, p ), . . . , xn−1 = f (xn−2, p ), and finally x∗ ≡ xn = f (xn−1, p ), with n the number of steps needed to reach convergence. In this case, we can use the chain rule to write the Jacobian operator ∂px in Eq. (7) in terms of derivatives of f to obtain ˘x ∂ px =˘x
+
+> n
+
+X
+
+> k=1
+> k−1
+
+Y
+
+> m=1
+
+∂xf (xn−m, p )
+
+!
+
+∂pf (xn−k, p )
+
+!
+
+. (A6) As long as we make sure that an AD engine can compute the basic derivatives ∂xe and ∂pe, as well as the VJP actions of ∂xf , ∂pf , we can use reverse-mode AD to au-tomatically evaluate this expression by backpropagating the intermediate adjoints ˘ xk through all n iterations of f
+
+according to Eq. (A6). While this straightforward AD-based approach to PEPS optimization has been very successful, it has sev-eral drawbacks and limitations. A first issue is that eval-uating Eq. (A6) requires different VJP actions evaluated in every iteration of the algorithm. This means that all intermediate objects xk need to be stored in memory un-til the very end of the computation, leading to a signif-icant memory overhead. Second, this approach requires making the entire contraction algorithm differentiable. While this is not a fundamental limitation, ensuring that every subroutine in the contraction algorithm is differ-entiable in a stable manner can be challenging and time consuming in practice. In particular, the VJP action of certain primitive subroutines, such as singular value de-compositions or eigensolvers, can suffer from instabilities that should be irrelevant to the overall energy gradient. To ensure a correct energy gradient, these instabilities need to be addressed in the derivatives of the individual subroutines, often in a heuristic manner. These issues can be resolved by directly evaluating the VJP action ˘ x ∂ px using implicit differentiation. The VJP action corresponding to commonly used contraction algorithms for two-dimensional tensor networks is con-structed in Sections III to V. 
+
+> Appendix B: Differentiation of eigenvalue problems
+
+Consider the eigenvalue equation 
+
+Av = λv (B1) where λ is for example specified as an extremal eigen-value, and which we assume non-degenerate for simplic-ity. Let us denote the corresponding left eigenvector as 
+
+w, i.e. A†w = λw , with w = v if A is self-adjoint. If we consider both λ and v as functions of A, we can try to compute the tangents ˙λ and ˙ v as function of ˙A. The defining equation is given by ˙Av + A ˙v = ˙λv + λ ˙v. (B2) We thus obtain ˙λ = w† ˙Av, (B3) but face the well-known problem that ˙ v is not uniquely determined, i.e. the linear system (A − λ1) ˙ v = ˙Av − ˙λv = −(1 − vw †) ˙Av (B4) is underdetermined. For a given solution ˙ v, so is ˙ v′ =˙v + αv for arbitrary α ∈ C. This freedom originates from the fact that the defining eigenvalue equation does not define v uniquely, since v′ = μv is also a valid solution for every μ ∈ C.Imposing the normalization ∥v∥ = 1 results in the ad-ditional tangent condition Re( v† ˙v) = 0. However, the linear system still admits the freedom ˙ v′ = ˙ v + iγv for 
+
+γ ∈ R, associated with the phase freedom of v. Further extending the tangent condition to v† ˙v = 0 eliminates the freedom completely, i.e. it makes the linear problem for ( ˙λ, ˙v) as a function of ˙A well determined. 23 Now consider the alternative strategy where we only consider v as a function of A, determined through the equation 
+
+Av − (v†Av )v = 0 (B5) Clearly, v still needs to be an eigenvector for this equation to be satisfied, with λ = v†Av the associated eigenvalue. Furthermore, projecting this equation onto v† shows that this equation also contains the normalization condition 
+
+v†v = 1, provided λ̸ = 0. However, for a given v, v′ =
+
+eiθ v with θ ∈ R is also a solution. The resulting linear problem for the tangent ˙ v is given by ˙Av + A ˙v − ( ˙ v†Av )v − (v† ˙Av )v − (v†A ˙v)v − λ ˙v = 0 ,
+
+which can be rewritten as 
+
+(1 − vv †)A − λ1 ˙v − λv ( ˙ v†v) = −(1 − vv †) ˙Av. (B6) By projecting onto v†, we find that this equation in-deed imposes Re( v† ˙v) = 0 as expected, but still admits ˙v′ = ˙ v + iγv for γ ∈ R as a family of solutions. However, when further restrictions on v prohibit the phase free-dom, e.g. when v takes the form of a Hermitian matrix as in the case of the corner matrix of C4v , the resulting linear system for the (co)tangents has a unique solution. 
+
+Appendix C: Boundary MPS contraction environments 
+
+This Appendix contains explicit expressions for the evaluation of the PEPS energy density Eq. (6) using a boundary MPS contraction environment. Here, we only explicitly consider the specific examples of evaluating horizontal and vertical nearest-neighbor two-body inter-actions Oh and Ov respectively. Expectation values of other operators can be evaluated in an analogous way. If the transfer operator T of the PEPS norm network as defined in Eq. (32) has a Hermitian reflection symme-try, the bottom boundary MPS Eq. (43) is given by the Hermitian conjugate of the top boundary MPS Eq. (35). In this case the tensors xt = ( AtL, A tR, C t) defining the top boundary MPS Eq. (35) along with the corresponding left and right environments defined in Eqs. (38) and (39) form a complete “symmetric” contraction environment (AtL, A tR, C t, G tL, G tR)that can be used to evaluate Oh and Ov as Oh 
+
+> AtCAtR
+> GtR
+> ¯AtR
+> ¯AtC
+> GtL
+
+,Ov 
+
+> AtC
+> GtR
+> GtR
+> ¯AtC
+> GtL
+> GtL
+
+. (C1) Here, the auxiliary “center” tensor AtC is defined as AtC
+
+= 12AtL Ct +AtRCt
+
+!
+
+. (C2) If T does not have a Hermitian reflection symmetry, computing expectation values additionally requires the bottom MPS tensors xb = ( AbL, A bR, C b) of Eq. (43) as well as the “mixed” environment tensors of Eqs. (44) and (45). The corresponding “asymmetric” contraction environment (AtL, A tR, C t, A bL, A bR, C b, G tL, G tR, G L, G R)can be used to evaluate Oh and Ov as Oh 
+
+> AtCAtR
+> GR
+> AbC AbR
+> GL
+
+,Ov 
+
+> AtC
+> GtR
+> GR
+> AbC
+> GL
+> GtL
+
+. (C3) Here the auxiliary “center” tensor AbC is defined as AbC
+
+= 12AbL Cb +AbRCb
+
+!
+
+. (C4) Note that we have chosen not to use the bottom environ-ment tensors GbL and GbR, obtained from to the ( t ↔ b)version of Eqs. (38) and (39), in the latter expression for evaluating the vertical nearest-neighbor interaction. Making the opposite choice and not using GtL and GtR
+
+instead, or even using a combination of both approaches, would give the same results. Backpropagating through the energy evaluation Eqs. (C1) and (C3), along with the definitions Eqs. (C2) and (C4), gives us adjoints of the environment tensors of the symmetric contraction environment ( ˘AtL, ˘AtR, ˘Ct, ˘GtL, ˘GtR)and the asymmetric contraction environment ( ˘AtL, ˘AtR, ˘Ct, ˘AbL, ˘AbR, ˘Cb, ˘GtL, ˘GtR, ˘GL, ˘GR)respectively. Since we have chosen not to use the environ-ments of the bottom MPS eigenvector in the contraction environment of Eq. (C3), we can always set ˘GbL = 0 and ˘GbR = 0. When using implicit differentiation, the ad-joints ˘lα and ˘ rα can be obtained from ˘AαL and ˘AαR by projecting out the corresponding null spaces V αL and V αR
+
+respectively, due to Eqs. (47) and (48). 
+
+Appendix D: Mapping symmetric contraction environments 
+
+In systems with a C4v point group symmetry, where the local PEPS tensor satisfies the symmetry conditions 24 Eq. (19), different contraction algorithms lead to contrac-tion environments that can be interpreted as different equivalent realizations of the solution to an underlying variational problems [35]. In this Appendix we discuss how to map these different environments to each other explicitly. In particular, we demonstrate how to obtain a corner tensor C, edge tensor E and isometry U that satisfy the characteristic equations Eqs. (26) and (27), as well as the additional gauge relation U
+
+=EC C−1 . (D1) We start by considering the C4v CTMRG algorithm as introduced in Section III A. After an appropriate gauge-fixing to ensure element-wise convergence, the C4v algo-rithm precisely returns a corner C, edge E and isometry 
+
+U that satisfy Eqs. (26) and (27). To additionally impose Eq. (D1), we can fix the global phase of the isometry U
+
+such that tr 
+
+EC C 
+
+> U†
+
+ = 1 . (D2) However, aside from the procedure outlined in Sec-tion III A, there are other CTMRG-like schemes that re-sult in the same fixed point. In particular, in the forward pass of Algorithm 2, we could equivalently use 1. The eigh -based C4v CTMRG algorithm as de-scribed in Section III A [14]. 2. The QR-based C4v CTMRG algorithm as intro-duced in Ref. 38. 3. A Krylov-based contraction approach, known as the pulling-through or fixed-point CTMRG algo-rithm [17, 51], which is equivalent to the VUMPS algorithm in the presence of a C4v symmetry. Crucially, all of these forward schemes converge to the same fixed point, meaning they can use the same char-acteristic equation in the backwards pass. To conclude this Appendix, we demonstrate how to transform a symmetric boundary MPS environment (AtL, A tR, C t, G tL, G tR) to an environment ( C, E, U ) that is a root of the characteristic equations of Section III B. First, we diagonalize the center gauge tensor by means of an SVD, Ct = U t St V t, and absorb the corresponding isometries U t and V t into the symmetric environment accordingly, Ct
+
+←Ct U t†  
+
+> Vt†
+
+, (D3) AtL
+
+←AtL U t†  
+
+> Ut
+
+, (D4) AtR
+
+←AtR V t  
+
+> Vt†
+
+, (D5) GtL
+
+←GtL   
+
+> Ut†
+> Ut
+
+, (D6) GtR
+
+←GtR   
+
+> Vt†
+> Vt
+
+. (D7) After this gauge transformation, in the presence of a C4v
+
+symmetry all tensors are all related by Hermitian conju-gation up to a global phase. By removing these global phases, we can impose the conditions ¯AtL
+
+=AtR , (D8) ¯GtL
+
+=GtL , (D9) GtL
+
+=GtR . (D10) In this form, the environment tensor GtL and the left isometry AtL both define the same MPS. Indeed, they only differ by a real-symmetric gauge transformation X
+
+that satisfies X2 = Ct,AtL
+
+=GtLX X−1 . (D11) The gauge matrix X can be found as the leading eigen-vector of the mixed AtL − GtL transfer matrix, GtL
+
+> ¯AtL
+> X
+
+∝X . (D12) Fixing the global phase of the eigenvector such that 
+
+X is real-symmetric, we obtain a symmetric environ-ment satisfying Eqs. (D1), (26) and (27) as ( C, E, U ) = (X, G tL, A tL). Given this environment transformation, we can simply use the characteristic equations of Sec-tion III B to compute the energy gradient while using any boundary MPS algorithm [18, 37, 40] to perform the actual contraction. 25 
+
+Appendix E: Alternative formulation of implicit differentiation for boundary MPS 
+
+In Section IV B we presented optimality conditions 
+
+F (y, p ) for PEPS contractions using boundary MPS, parametrized in terms of the 12 variables 
+
+y = ( lt, r t, C t, G tL, G tR, l b, r b, C b, G bL, G bR, G L, G R).
+
+Although evaluating the VJP of the contraction algo-rithm through a single linear problem is conceptually simple, it can become computationally inefficient as the environment bond dimension χ increases. Here, we present an alternative approach where instead of solving one large linear problem, we decompose it into three smaller linear problems, two of which – for top and bottom MPS – can be solved independently and in par-allel. This approach is summarized by the following al-ternative version of Algorithm 1: 
+
+Algorithm 3 Alternative boundary MPS energy evalu-ation and gradient 
+
+Require: PEPS tensor p, Hamiltonian H, initial environ-ment xt
+
+> 0
+
+, x b
+
+> 0
+
+, x g 
+
+> 0
+> 1:
+
+function energy alt (p, x 0, H ) 
+
+> 2:
+
+xt ← contract (p, x t
+
+> 0
+
+) ▷ Alg. 2 for top MPS  
+
+> 3:
+
+xb ← contract (p, x b
+
+> 0
+
+) ▷ Alg. 2 for bottom MPS  
+
+> 4:
+
+GL, G R ← eig (xt, x b, p, x g 
+
+> 0
+
+) ▷ Eqs. (44) and (45)  
+
+> 5:
+
+x ← (xt, x b, G L, G R) ▷ MPS contraction env.  
+
+> 6:
+
+return e(p, x, H ) ▷ energy eval. using Eq. (C3)  
+
+> 7:
+
+E, de 
+
+> dp
+
+← backpropagate (energy alt , p, x 0, H )
+
+In this scheme, we split the contract routine for calcu-lating the entire environment into 3 subroutines: one for the top boundary MPS xt, the bottom boundary MPS xb
+
+and the mixed environment tensors GL, G R (lines 2-4, re-spectively). For the backward derivative we parametrize the top boundary MPS in exactly the same way as in Section IV B with yt = ( lt, r t, C t, G tL, G tR) fulfilling op-timality conditions F t(yt, p ), namely Eqs. (51) to (55). The same can be done in parallel for bottom MPS with input variables yb = ( lb, r b, C b, G bL, G bR) and characteris-tic equation F b(yb, p ). Mixed environment tensors yg = (GL, G R) are ob-tained as leading eigenvectors of a transfer matrix in Eqs. (44) and (45) that depends on xt and xb, hence they are treated as functions yg (xt, x b, p ). Therefore, in reverse mode AD, the engine must first evaluate the VJP actions of ˘xt = ˘ yg ∂xt yg , ˘xb = ˘ yg ∂xb yg (E1) These contribute to the initial adjoints used for the back-ward pass through the top and bottom boundary MPS respectively. In practice, this requires first solving an ad-ditional linear problem for the leading eigenvalues and eigenvectors of the transfer matrix (see Ref. 52). We stress that it does not lead to a nested linear problem, but three smaller linear problems solved sequentially with possibility of parallelizing the calculation of derivatives of top and bottom MPS. 
+
+Appendix F: CTMRG with unit cells 
+
+In this Appendix, we expand on Section V B by provid-ing details on how to formulate the corresponding charac-teristic equations for non-trivial unit cells. While most of the unit cell formulation follows straightforwardly from CTMRG without spatial symmetries on non-trivial unit cells [53], special care needs to be taken to assign the correct unit cell indices to the inverse singular values sα
+
+as well as the modified square roots sLα and sRα .Recall that we label the spatial directions by α, with 
+
+α = 1 , 2, 3, 4 corresponding to the north, east, south and west directions, respectively. We use matrix indexing to label the PEPS unit cell elements, where r and c denote the row and column indices, T [r−1,c −1] T [r−1,c ] T [r−1,c +1]           
+
+> T[r,c −1] T[r,c ]T[r,c +1]
+> T[r+1 ,c −1] T[r+1 ,c ]T[r+1 ,c +1]
+
+. (F1) Assuming four spatial directions and an Nr × Nc-dimensional unit cell, the spatial index d ∈ Z4 and unit cell indices r ∈ ZNr and c ∈ ZNc obey modular arith-metic which will, however, not be denoted separately to reduce notational clutter. With that in mind, we now provide the unit cell indices for Eqs. (74) to (81) where the indices will be explicitly shown for all four spatial directions. 
+
+• We first provide the indexing of the bond (inverse) singular values from Eq. (81) which will appear in the subsequent diagrams: ˜C∗
+
+> α
+
+=C∗ 
+
+> α
+> √S∗
+> α
+> √S∗
+> α−1
+
+. (F2) 
+
+Tensor α = 1 α = 2 α = 3 α = 4 ˜C∗ 
+
+> α
+
+(r, c ) (r, c ) (r, c ) (r, c )
+
+C∗ 
+
+> α
+
+(r, c ) (r, c ) (r, c ) (r, c )pS∗ 
+
+> α−1
+
+(r + 1 , c ) ( r, c − 1) ( r − 1, c ) ( r, c + 1) √S∗ 
+
+> α
+
+(r, c ) (r, c ) (r, c ) (r, c )TABLE I. Unit cell indices for Eq. (F2). 26 ˜E∗
+
+> α
+
+=E∗ 
+
+> α
+> √S∗
+> α, 2
+> √S∗
+> α, 1
+
+. (F3) 
+
+Tensor α = 1 α = 2 α = 3 α = 4 ˜E∗ 
+
+> α
+
+(r, c ) (r, c ) (r, c ) (r, c )
+
+E∗ 
+
+> α
+
+(r, c ) (r, c ) (r, c ) (r, c )pS∗ 
+
+> α, 1
+
+(r, c − 1) ( r − 1, c ) ( r, c + 1) ( r + 1 , c )pS∗ 
+
+> α, 2
+
+(r, c ) (r, c ) (r, c ) (r, c )TABLE II. Unit cell indices for Eq. (F3). 
+
+• Next, we show the indices for the modified projec-tors from Eqs. (74) to (75). Note that the modi-fied inverse square roots sLα and sRα appear in the open virtual legs of the half-infinite environment in Eq. (65) which needs to be considered when deriv-ing their unit cell indices: ˜P Lα
+
+=T 
+
+> ˜Eα
+> ˜Eα−1
+> ˜Cα
+> U †
+> α
+> sα, 2sα, 1
+> sα−1sLα−1
+
+. (F4) 
+
+Tensor α = 1 α = 2 α = 3 α = 4 ˜P Lα (r, c ) (r, c ) (r, c ) (r, c )
+
+T (r, c ) (r, c ) (r, c ) (r, c )
+
+U † 
+
+> α
+
+(r, c ) (r, c ) (r, c ) (r, c )˜Cα (r − 1, c − 1) ( r − 1, c + 1) ( r + 1 , c + 1) ( r + 1 , c − 1) ˜Eα−1 (r, c − 1) (r − 1, c ) (r, c + 1) (r + 1 , c )˜Eα (r − 1, c ) (r, c + 1) (r + 1 , c ) (r, c − 1) 
+
+sLα−1 (r + 1 , c − 1) ( r − 1, c − 1) ( r − 1, c + 1) ( r + 1 , c + 1) 
+
+sα−1 (r, c − 1) (r − 1, c ) (r, c + 1) (r + 1 , c )
+
+sα, 1 (r − 1, c − 1) ( r − 1, c + 1) ( r + 1 , c + 1) ( r + 1 , c − 1) 
+
+sα, 2 (r − 1, c ) (r, c + 1) (r + 1 , c ) (r, c − 1) TABLE III. Unit cell indices for Eq. (F4). ˜P Rα
+
+=T  
+
+> ˜Eα
+> ˜Eα+1 ˜Cα+1
+> V †
+> α
+> sα, 1sα, 2
+> sα+1  sRα+1
+
+. (F5) 
+
+Tensor α = 1 α = 2 α = 3 α = 4 ˜P Rα (r, c ) (r, c ) (r, c ) (r, c )
+
+T (r, c + 1) (r + 1 , c ) (r, c − 1) (r − 1, c )
+
+V † 
+
+> α
+
+(r, c ) (r, c ) (r, c ) (r, c )˜Cα+1 (r − 1, c + 2) ( r + 2 , c + 1) ( r + 1 , c − 2) ( r − 2, c − 1) ˜Eα (r − 1, c + 1) ( r + 1 , c + 1) ( r + 1 , c − 1) ( r − 1, c − 1) ˜Eα+1 (r, c + 2) (r + 2 , c ) (r, c − 2) (r − 2, c )
+
+sα, 1 (r − 1, c ) (r, c + 1) (r + 1 , c ) (r, c − 1) 
+
+sα, 2 (r − 1, c + 1) ( r + 1 , c + 1) ( r + 1 , c − 1) ( r − 1, c − 1) 
+
+sα+1 (r − 1, c + 2) ( r + 2 , c + 1) ( r + 1 , c − 2) ( r − 2, c − 1) 
+
+sRα+1 (r, c + 2) (r + 2 , c ) (r, c − 2) (r − 2, c )TABLE IV. Unit cell indices for Eq. (F5). 
+
+• With these equations in mind, we find the follow-ing indices for the modified corner renormalization from Eq. (76): T 
+
+> ˜Eα˜Cα
+> ˜Eα−1
+> ˜P Lα−1
+> ˜PRα
+> sα
+> sα−1
+
+− λCα˜C′ 
+
+> α
+
+= 0 . (F6) 
+
+Tensor α = 1 α = 2 α = 3 α = 4 
+
+T (r, c ) (r, c ) (r, c ) (r, c )˜P Lα−1 (r + 1 , c ) (r, c − 1) (r − 1, c ) (r, c + 1) ˜P Rα (r, c ) (r, c ) (r, c ) (r, c )˜Cα (r − 1, c − 1) ( r − 1, c + 1) ( r + 1 , c + 1) ( r + 1 , c − 1) ˜C′ 
+
+> α
+
+(r, c ) (r, c ) (r, c ) (r, c )˜Eα−1 (r, c − 1) (r − 1, c ) (r, c + 1) (r + 1 , c )˜Eα (r − 1, c ) (r, c + 1) (r + 1 , c ) (r, c − 1) 
+
+sα−1 (r − 1, c − 1) ( r − 1, c + 1) ( r + 1 , c + 1) ( r + 1 , c − 1) 
+
+sα (r, c − 1) (r − 1, c ) (r, c + 1) (r + 1 , c )TABLE V. Unit cell indices for Eq. (F6). 
+
+• The renormalization of the modified edges in Eq. (77) retains the same unit cell indices as in the standard CTMRG formulation: T   
+
+> ˜Eα
+> ˜PLα˜PRα
+
+− λEα˜E′ 
+
+> α
+
+= 0 . (F7) 27 
+
+Tensor α = 1 α = 2 α = 3 α = 4 
+
+T (r, c ) (r, c ) (r, c ) (r, c )˜P Lα (r, c − 1) ( r − 1, c ) ( r, c + 1) ( r + 1 , c )˜P Rα (r, c ) (r, c ) (r, c ) (r, c )˜Eα (r − 1, c ) ( r, c + 1) ( r + 1 , c ) ( r, c − 1) ˜E′ 
+
+> α
+
+(r, c ) (r, c ) (r, c ) (r, c )TABLE VI. Unit cell indices for Eq. (F7). 
+
+• Finally, the characteristic equations for the isome-tries and singular values as shown in Eqs. (78) to (80) are described mostly by the same unit cell indices, which is why we only show the renormaliza-tion of u. The other two cases follow analogously: T1 T2   
+
+> ˜Eα, 1˜Eα, 2
+> ˜Eα−1
+> ˜Eα+1
+> ˜Cα
+> ˜Cα+1
+> U †⊥α
+> V †
+> α
+> sα, 1sα, 2sα, 3
+> sα−1sLα−1
+> sα+1  sRα+1
+> s∗
+> α
+
+− λSαuα = 0 . (F8) 
+
+Tensor α = 1 α = 2 α = 3 α = 4 
+
+uα (r, c ) (r, c ) (r, c ) (r, c )
+
+T1 (r, c ) (r, c ) (r, c ) (r, c )
+
+T2 (r, c + 1) (r + 1 , c ) (r, c − 1) (r − 1, c )
+
+U †⊥α (r, c ) (r, c ) (r, c ) (r, c )
+
+V †⊥α (r, c ) (r, c ) (r, c ) (r, c )˜Cα (r − 1, c − 1) ( r − 1, c + 1) ( r + 1 , c + 1) ( r + 1 , c − 1) ˜Cα+1 (r − 1, c + 2) ( r + 2 , c + 1) ( r + 1 , c − 2) ( r − 2, c − 1) ˜Eα−1 (r, c − 1) (r − 1, c ) (r, c + 1) (r + 1 , c )˜Eα, 1 (r − 1, c ) (r, c + 1) (r + 1 , c ) (r, c − 1) ˜Eα, 2 (r − 1, c + 1) ( r + 1 , c + 1) ( r + 1 , c − 1) ( r − 1, c − 1) ˜Eα+1 (r, c + 2) (r + 2 , c ) (r, c − 2) (r − 2, c )
+
+sLα−1 (r + 1 , c − 1) ( r − 1, c − 1) ( r − 1, c + 1) ( r + 1 , c + 1) 
+
+sα−1 (r, c − 1) (r − 1, c ) (r, c + 1) (r + 1 , c )
+
+sα, 1 (r − 1, c − 1) ( r − 1, c + 1) ( r + 1 , c + 1) ( r + 1 , c − 1) 
+
+sα, 2 (r − 1, c ) (r, c + 1) (r + 1 , c ) (r, c − 1) 
+
+sα, 3 (r − 1, c + 1) ( r + 1 , c + 1) ( r + 1 , c − 1) ( r − 1, c − 1) 
+
+sα+1 (r − 1, c + 2) ( r + 2 , c + 1) ( r + 1 , c − 2) ( r − 2, c − 1) 
+
+sRα+1 (r, c + 2) (r + 2 , c ) (r, c − 2) (r − 2, c )
+
+s∗ 
+
+> α
+
+(r, c ) (r, c ) (r, c ) (r, c )TABLE VII. Unit cell indices for Eq. (F8). [1] R. Or´ us, Tensor networks for complex quantum systems, Nat. Rev. Phys. 1, 538–550 (2019). [2] M. C. Ba˜ nuls, Tensor Network Algorithms: A Route Map, Annu. Rev. Condens. Matter Phys. 14 , 173–191 (2023). [3] J. I. Cirac, D. P´ erez-Garc´ ıa, N. Schuch, and F. Ver-straete, Matrix product states and projected entangled pair states: Concepts, symmetries, theorems, Rev. Mod. Phys. 93 , 045003 (2021). [4] S. R. White, Density matrix formulation for quantum renormalization groups, Phys. Rev. Lett. 69 , 2863 (1992). [5] S. R. White, Density-matrix algorithms for quantum renormalization groups, Phys. Rev. B 48 , 10345 (1993). [6] F. Verstraete, D. Porras, and J. I. Cirac, Density Matrix Renormalization Group and Periodic Boundary Condi-tions: A Quantum Information Perspective, Phys. Rev. Lett. 93 , 227205 (2004). [7] U. Schollw¨ ock, The density-matrix renormalization group in the age of matrix product states, Ann. Phys. (N.Y.) 
+
+326 , 96 (2011). [8] S. ¨Ostlund and S. Rommer, Thermodynamic Limit of Density Matrix Renormalization, Phys. Rev. Lett. 75 ,3537 (1995). [9] F. Verstraete and J. I. Cirac, Renormalization algorithms for Quantum-Many Body Systems in two and higher di-mensions (2004), arXiv:cond-mat/0407066. [10] J. Jordan, R. Or´ us, G. Vidal, F. Verstraete, and J. I. Cirac, Classical Simulation of Infinite-Size Quantum Lat-tice Systems in Two Spatial Dimensions, Phys. Rev. Lett. 
+
+101 , 250602 (2008). [11] H. C. Jiang, Z. Y. Weng, and T. Xiang, Accurate De-termination of Tensor Network State of Quantum Lat-tice Models in Two Dimensions, Phys. Rev. Lett. 101 ,090603 (2008). [12] P. Corboz, Variational optimization with infinite pro-jected entangled-pair states, Phys. Rev. B 94 , 035133 28 
+
+(2016). [13] L. Vanderstraeten, J. Haegeman, P. Corboz, and F. Ver-straete, Gradient methods for variational optimization of projected entangled-pair states, Phys. Rev. B 94 , 155123 (2016). [14] T. Nishino and K. Okunishi, Corner Transfer Matrix Renormalization Group Method, J. Phys. Soc. Jpn. 65 ,891 (1996). [15] R. Or´ us and G. Vidal, Simulation of two-dimensional quantum systems on an infinite lattice revisited: Cor-ner transfer matrix for tensor contraction, Phys. Rev. B 
+
+80 , 094403 (2009). [16] J. Jordan, R. Or´ us, G. Vidal, F. Verstraete, and J. I. Cirac, Classical Simulation of Infinite-Size Quantum Lat-tice Systems in Two Spatial Dimensions, Phys. Rev. Lett. 
+
+101 , 250602 (2008). [17] J. Haegeman and F. Verstraete, Diagonalizing Transfer Matrices and Matrix Product Operators: A Medley of Exact and Computational Methods, Annu. Rev. Con-dens. Matter Phys. 8, 355 (2017). [18] V. Zauner-Stauber, L. Vanderstraeten, M. T. Fishman, F. Verstraete, and J. Haegeman, Variational optimization algorithms for uniform matrix product states, Phys. Rev. B 97 , 045145 (2018). [19] H.-J. Liao, J.-G. Liu, L. Wang, and T. Xiang, Differen-tiable Programming Tensor Networks, Phys. Rev. X 9,031041 (2019). [20] J. Hasik, D. Poilblanc, and F. Becca, Investigation of the N´ eel phase of the frustrated Heisenberg antiferromag-net by differentiable symmetric tensor networks, SciPost Phys. 10 , 012 (2021). [21] B. Ponsioen, F. F. Assaad, and P. Corboz, Automatic differentiation applied to excitations with projected en-tangled pair states, SciPost Phys. 12 , 006 (2022). [22] S. Niu, J. Hasik, J.-Y. Chen, and D. Poilblanc, Chiral spin liquids on the kagome lattice with projected entan-gled simplex states, Phys. Rev. B 106 , 245119 (2022). [23] X.-Y. Zhang, S. Liang, H.-J. Liao, W. Li, and L. Wang, Differentiable programming tensor networks for Kitaev magnets, Phys. Rev. B 108 , 085103 (2023). [24] Y. He, R. Rausch, M. Peschke, C. Karrasch, P. Corboz, N. Bultinck, and S. A. Parameswaran, Itinerant mag-netism in the triangular-lattice Hubbard model at half doping: Application to twisted transition metal dichalco-genides, Phys. Rev. B 113 , L041107 (2026). [25] J. Hu, R. Chi, Y. Guo, B. Normand, H.-J. Liao, and T. Xiang, Dynamical Spectral Function of the Kagome Quantum Spin Liquid (2025), arXiv:2512.18831. [26] H. Chen, T. Neupert, and J. Hasik, Simulating fermionic fractional Chern insulators with infinite pro-jected entangled-pair states (2026), arXiv:2512.20697. [27] B. Christianson, Reverse accumulation and attractive fixed points, Optim. Methods Softw. 3, 311 (1994). [28] J. Naumann, E. L. Weerda, M. Rizzi, J. Eisert, and P. Schmoll, An introduction to infinite projected entangled-pair state methods for variational ground state simulations using automatic differentiation, SciPost Phys. Lect. Notes 86 (2024). [29] A. Francuz, N. Schuch, and B. Vanhecke, Stable and effi-cient differentiation of tensor network algorithms, Phys. Rev. Res. 7, 013237 (2025). [30] A. V. Fiacco, Sensitivity analysis for nonlinear program-ming using penalty methods, Math. Program. 10 , 287 (1976). [31] M. Blondel, Q. Berthet, M. Cuturi, R. Frostig, S. Hoyer, F. Llinares-L´ opez, F. Pedregosa, and J.-P. Vert, Ef-ficient and Modular Implicit Differentiation (2022), arXiv:2105.15183. [32] J. Nocedal and S. J. Wright, Numerical Optimization ,Springer Series in Operations Research and Financial En-gineering (Springer New York, 2006). [33] Here we have chosen to denote adjoints as ˘ x as opposed to the more conventional bar-notation ¯ x, to avoid confusion with our notation for complex conjugation of tensors. [34] M. B. Giles, Collected Matrix Derivative Results for For-ward and Reverse Mode Algorithmic Differentiation, in 
+
+Advances in Automatic Differentiation (Springer Berlin Heidelberg, 2008) pp. 35–44. [35] L. Vanderstraeten, L. Burgelman, B. Ponsioen, M. Van Damme, B. Vanhecke, P. Corboz, J. Haegeman, and F. Verstraete, Variational methods for contracting projected entangled-pair states, Phys. Rev. B 105 ,195140 (2022). [36] A. Nietner, B. Vanhecke, F. Verstraete, J. Eisert, and L. Vanderstraeten, Efficient variational contraction of two-dimensional tensor networks with a non-trivial unit cell, Quantum 4, 328 (2020). [37] M. Hauru, M. Van Damme, and J. Haegeman, Rieman-nian optimization of isometric tensor networks, SciPost Phys. 10 , 040 (2021). [38] Y. Zhang, Q. Yang, and P. Corboz, Accelerating two-dimensional tensor network contractions using QR-decompositions (2025), arXiv:2505.00494. [39] L. Hodgkiss, L. Lootens, A. Ueda, B. Vanhecke, and F. Verstraete, On the origin of finite entanglement scal-ing, in preparation (2026). [40] B. Vanhecke, M. Van Damme, J. Haegeman, L. Vander-straeten, and F. Verstraete, Tangent-space methods for truncating uniform MPS, SciPost Phys. Core 4 (2021). [41] L. Vanderstraeten, J. Haegeman, and F. Verstraete, Tangent-space methods for uniform matrix product states, SciPost Phys. Lect. Notes 7 (2019). [42] P. Corboz, J. Jordan, and G. Vidal, Simulation of fermionic lattice models in two dimensions with projected entangled-pair states: Next-nearest neighbor hamiltoni-ans, Phys. Rev. B 82 , 245119 (2010). [43] P. Brehmer, L. Burgelman, Z.-Y. Yue, G. Fedorovich, J. Haegeman, and L. Devos, PEPSKit.jl: A Julia pack-age for projected entangled-pair state simulations (2026), arXiv:2605.19960. [44] L. Devos, M. Van Damme, and J. Haegeman, MPSKit.jl, Zenodo (2026). [45] L. Devos and J. Haegeman, TensorKit.jl: A Julia pack-age for large-scale tensor computations, with a hint of category theory (2025), arXiv:2508.10076. [46] L. Burgelman and P. Brehmer, ImplicitDifferen-tiationPEPS.jl, https://github.com/leburgel/ ImplicitDifferentiationPEPS.jl (2026). [47] Some implementations evaluate the Sylvester equation in the pullback using the LAPACK-based Bartels–Stewart algorithm [54]. However, significantly improved perfor-mance can be achieved already at moderate dimensions by solving the Sylvester equation using appropriately pre-conditioned Krylov-based iterative methods [29] such as GMRES. [48] L. Vanderstraeten, J. Haegeman, and F. Verstraete, Sim-ulating excitation spectra with projected entangled-pair states, Phys. Rev. B 99 , 165121 (2019). 29 
+
+[49] R. N. C. Pfeifer, G. Evenbly, S. Singh, and G. Vi-dal, NCON: A tensor network contractor for MATLAB (2015), arXiv:1402.0939. [50] As an alternative to the approach outlined here, one could incorporate complex numbers into AD by treating all variables and their complex conjugates as separate degrees of freedom. This approach is entirely equivalent, and can even be implemented by only tracking the ad-joint variables as defined above. [51] M. T. Fishman, L. Vanderstraeten, V. Zauner-Stauber, J. Haegeman, and F. Verstraete, Faster methods for con-tracting infinite two-dimensional tensor networks, Phys. Rev. B 98 , 235148 (2018). [52] H. Xie, J.-G. Liu, and L. Wang, Automatic differentiation of dominant eigensolver and its applications in quantum physics, Phys. Rev. B 101 , 245139 (2020). [53] P. Corboz, S. R. White, G. Vidal, and M. Troyer, Stripes in the two-dimensional t-J model with infinite projected entangled-pair states, Phys. Rev. B 84 , 041108 (2011). [54] R. H. Bartels and G. W. Stewart, Algorithm 432 [C2]: Solution of the matrix equation AX + XB = C [F4], Commun. ACM 15 , 820–826 (1972).
