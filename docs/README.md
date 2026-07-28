@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-07-27
-- 运行时间：2026-07-27 21:17:14 UTC
+- 最新运行日期：2026-07-28
+- 运行时间：2026-07-28 21:23:32 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读与速读论文共19篇，聚焦生成模型与隐私保护技术  
-高分论文集中于视频编辑数据生成、CT隐私保护及粒子系统建模  
-建议关注生成模型在医疗影像与多模态编辑中的创新应用
-- 详情：[/202607/27/README](/202607/27/README)
+1) 今日完成19篇AI论文阅读，涵盖对抗攻击、模型防御与工业应用等前沿方向  
+2) 精读篇目聚焦Vision-Language模型对抗样本生成与LLM后门防御技术，速读内容涉及生成模型优化及工业异常检测新方法  
+3) 建议对模型安全感兴趣的读者优先精读《GhostPrompt》与《Critical Neuron Isolation Pruning》，普通读者可从《OPD-IAD》了解工业场景应用
+- 详情：[/202607/28/README](/202607/28/README)
 
 ### 精读区论文标签
-1. [FlowMimic: Mask-free Visual Editing and Generation with Pixel-pair Warped Flow Field for Online Video Editing Data Generation and Modality Mimicry](/202607/27/2607.18227v1-flowmimic-mask-free-visual-editing-and-generation-with-pixel-pair-warped-flow-field-for-online-video-editing-data-generation-and-modality-mimicry)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-2. [DS@GT ARC at ImageCLEFmed GANs 2026: Geometric Filtering for Privacy-Preserving CT Slice Generation](/202607/27/2607.20692v1-dsgt-arc-at-imageclefmed-gans-2026-geometric-filtering-for-privacy-preserving-ct-slice-generation)  
+1. [GhostPrompt: Cross-Image Adversarial Prompt for Vision-Language Models](/202607/28/2607.19683v1-ghostprompt-cross-image-adversarial-prompt-for-vision-language-models)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：生成式图像对抗鲁棒性
+2. [Defense Against LLM Backdoors using Critical Neuron Isolation Pruning](/202607/28/2607.19894v1-defense-against-llm-backdoors-using-critical-neuron-isolation-pruning)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：图像对抗攻击防御技术
-3. [Detectors Learn the Wrong Thing: Shortcut-Resistant Adversarial Training Against Physically Realizable Attacks](/202607/27/2607.21243v1-detectors-learn-the-wrong-thing-shortcut-resistant-adversarial-training-against-physically-realizable-attacks)  
+3. [ISPCloak: Weaponizing ISP for Optimization-Free Physical Camouflage against Deepfake Detectors](/202607/28/2607.21897v1-ispcloak-weaponizing-isp-for-optimization-free-physical-camouflage-against-deepfake-detectors)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的防御策略
-4. [FAIR: Feature-Augmented Implicit Regularization for AI-generated Fake Image Detection](/202607/27/2607.22087v1-fair-feature-augmented-implicit-regularization-for-ai-generated-fake-image-detection)  
+   evidence：生成式图像对抗鲁棒性
+4. [From Perturbation Correction to Geometry-Aware Sampling: Sharpness-Guided Equilibrium Sampling for Balanced Flat Minima in Long-Tailed Learning](/202607/28/2607.21999v1-from-perturbation-correction-to-geometry-aware-sampling-sharpness-guided-equilibrium-sampling-for-balanced-flat-minima-in-long-tailed-learning)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：特征增强隐式正则化
-5. [Correlation-Aware and Gaussianity-Preserving Robust Latent Angular Watermarking for Diffusion Models](/202607/27/2607.22386v1-correlation-aware-and-gaussianity-preserving-robust-latent-angular-watermarking-for-diffusion-models)  
+   evidence：对抗扰动对生成模型的影响
+5. [DailyBench: A Unified Benchmark for AI-Generated and Manipulated Images from Modern Generative Models](/202607/28/2607.24016v1-dailybench-a-unified-benchmark-for-ai-generated-and-manipulated-images-from-modern-generative-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的水印鲁棒性
-6. [Salience Induction against Multi-Hop RAG Agents: Threat and Defense](/202607/27/2607.17535v1-salience-induction-against-multi-hop-rag-agents-threat-and-defense)  
+   evidence：对抗攻击下的图像检测基准
+6. [To Blend In, First Decouple: Rethinking Camouflage Image Generation via Context-Decoupled Representations](/202607/28/2607.17768v1-to-blend-in-first-decouple-rethinking-camouflage-image-generation-via-context-decoupled-representations)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的威胁与防御
-7. [Code Division Modulation Layers Against Forgetting and Inference in Continual Gait Identification](/202607/27/2607.19122v1-code-division-modulation-layers-against-forgetting-and-inference-in-continual-gait-identification)  
+   evidence：生成式图像对抗扰动
+7. [Learning Semantic-Robust Change Detection via Semantic-Invariant Self-Distillation](/202607/28/2607.19000v1-learning-semantic-robust-change-detection-via-semantic-invariant-self-distillation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
+   evidence：对抗扰动下的语义变化检测
 
 ### 速读区论文标签
-1. [Fitting the topology of synthetic particle systems with a novel graph representation](/202607/27/2607.17680v1-fitting-the-topology-of-synthetic-particle-systems-with-a-novel-graph-representation)  
+1. [Coarse-to-fine Framework for Generative MEF via Implicit Neural Representation](/202607/28/2607.17611v1-coarse-to-fine-framework-for-generative-mef-via-implicit-neural-representation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+2. [Broken Gates: Re-evaluating Web Bot Defenses in the Age of LLM Agents](/202607/28/2607.18659v1-broken-gates-re-evaluating-web-bot-defenses-in-the-age-of-llm-agents)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：生成对抗扰动
-2. [Adaptive Adversaries: A Multi-Turn, Multi-LLM Benchmark for LLM Agent Security](/202607/27/2607.18063v1-adaptive-adversaries-a-multi-turn-multi-llm-benchmark-for-llm-agent-security)  
+   evidence：对抗攻击的防御策略
+3. [OPD-IAD: From Language Judgment to Industrial Anomaly Detection via On-Policy Self-Distillation](/202607/28/2607.18850v1-opd-iad-from-language-judgment-to-industrial-anomaly-detection-via-on-policy-self-distillation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的模型保护
-3. [Three-Body Scattering for Generative Modeling](/202607/27/2607.18198v1-three-body-scattering-for-generative-modeling)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：与对抗扰动对生成模型的影响相关
-4. [Generative World Renderer at the Speed of Play](/202607/27/2607.18703v1-generative-world-renderer-at-the-speed-of-play)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：实时图像生成框架
-5. [One Rewrite to Fix Them All? Type-Aware Repair Allocation for Text-to-Image Prompt Optimization](/202607/27/2607.18724v1-one-rewrite-to-fix-them-all-type-aware-repair-allocation-for-text-to-image-prompt-optimization)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-6. [Latent Riemannian Flow Matching for Geometry-Grounded 3D Foundation Models](/202607/27/2607.19120v1-latent-riemannian-flow-matching-for-geometry-grounded-3d-foundation-models)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动与3D生成模型结合
-7. [RealVDeblur: One-Step Diffusion for Generalizable Real-World Video Deblurring](/202607/27/2607.20628v1-realvdeblur-one-step-diffusion-for-generalizable-real-world-video-deblurring)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：视频去模糊生成方法
-8. [Causal-AgentIR: Self-Evolving Causal Memory for Adaptive Image Restoration Agents](/202607/27/2607.21125v1-causal-agentir-self-evolving-causal-memory-for-adaptive-image-restoration-agents)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-9. [ThRIve: Thermally Robust CNN Inference via Low-Rank Adaptation in Heterogeneous PIM Architectures](/202607/27/2607.17091v1-thrive-thermally-robust-cnn-inference-via-low-rank-adaptation-in-heterogeneous-pim-architectures)  
-   标签：评分：6.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-10. [Cross-Coordinate Correspondence Pruning for Image-to-Point Cloud Registration](/202607/27/2607.17200v1-cross-coordinate-correspondence-pruning-for-image-to-point-cloud-registration)  
+4. [Local Label-Informed Feature Transfer for Generating Ground-Truth Medical Images: A Comparison of GAN- and Diffusion-Based Approaches](/202607/28/2607.18882v1-local-label-informed-feature-transfer-for-generating-ground-truth-medical-images-a-comparison-of-gan--and-diffusion-based-approaches)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+5. [Now You See the Hate: Adaptive View Retrieval for Hidden Hateful Illusions](/202607/28/2607.19061v1-now-you-see-the-hate-adaptive-view-retrieval-for-hidden-hateful-illusions)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+6. [EGRNet: A Lightweight Semantic Segmentation Network with Edge-Gated Refinement and Adversarial Sensing](/202607/28/2607.19617v1-egrnet-a-lightweight-semantic-segmentation-network-with-edge-gated-refinement-and-adversarial-sensing)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗感知下的鲁棒性
+7. [Unsupervised Metal Artifact Reduction in Dental CBCT using Fine-tuned Cycle-Consistent Adversarial Networks](/202607/28/2607.20977v1-unsupervised-metal-artifact-reduction-in-dental-cbct-using-fine-tuned-cycle-consistent-adversarial-networks)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：使用对抗网络进行图像篡改修复
+8. [Inference-Time Scaling of Diffusion Models via Progressive Seed Pruning](/202607/28/2607.21591v1-inference-time-scaling-of-diffusion-models-via-progressive-seed-pruning)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：生成式图像对抗鲁棒性
+9. [Rarity-Aware Discrete Diffusion with Spatially Consistent Decoding for Photo-Realistic Image Super-Resolution](/202607/28/2607.17612v2-rarity-aware-discrete-diffusion-with-spatially-consistent-decoding-for-photo-realistic-image-super-resolution)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：与图像对抗攻击防御技术相关
-11. [TraversRL: Traversable Pedestrian Pathway Generation With Reinforcement Learning](/202607/27/2607.17479v1-traversrl-traversable-pedestrian-pathway-generation-with-reinforcement-learning)  
+   evidence：生成式图像对抗鲁棒性
+10. [MixDiffusion: Mixing Diffusion-based Uni-condition Text-to-Image Generation Models for Multi-condition Image Synthesis](/202607/28/2607.17634v1-mixdiffusion-mixing-diffusion-based-uni-condition-text-to-image-generation-models-for-multi-condition-image-synthesis)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像路径网络
-12. [Residual Observability and Attack Detectability in Encrypted OPC UA Traffic](/202607/27/2607.17809v1-residual-observability-and-attack-detectability-in-encrypted-opc-ua-traffic)  
+   evidence：生成式图像对抗扰动
+11. [SGN: A Similarity-based Generative Network for Data Generation under Distribution Shift](/202607/28/2607.18072v1-sgn-a-similarity-based-generative-network-for-data-generation-under-distribution-shift)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：加密流量中的攻击检测与对抗攻击相关
+   evidence：生成式图像对抗扰动
+12. [Posterior Samplings are Missing Modalities Generators for Medical Image Translation](/202607/28/2607.18763v1-posterior-samplings-are-missing-modalities-generators-for-medical-image-translation)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗扰动与生成模型相关
 
 
 ### ⚡ 这个站点能做什么
