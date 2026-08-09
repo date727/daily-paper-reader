@@ -6,82 +6,88 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-08-08
-- 运行时间：2026-08-08 20:53:30 UTC
+- 最新运行日期：2026-08-09
+- 运行时间：2026-08-09 20:36:54 UTC
 - 运行状态：成功
-- 本次总论文数：20
-- 精读区：8
+- 本次总论文数：22
+- 精读区：10
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读8篇、速读12篇论文，聚焦AI安全与生成技术前沿进展  
-高分论文揭示LLM对抗训练新方法及Foley音效生成模型效率突破  
-建议关注AI安全防护机制及音效生成技术的实际应用场景
-- 详情：[/202608/08/README](/202608/08/README)
+今日精读10篇、速读12篇AI生成内容检测领域论文，聚焦图像与音乐方向  
+高分论文揭示合成图像遗忘机制与SVG生成质量评估新框架，同时探索AI音乐检测及多图像医学推理的鲁棒性提升  
+建议关注合成图像检测与SVG生成质量评估的前沿方法，并探索AI音乐识别及医学影像分析的实际应用潜力
+- 详情：[/202608/09/README](/202608/09/README)
 
 ### 精读区论文标签
-1. [Efficient LLM Adversarial Training via Low-Rank Defense and Circuit-Guided Surrogates](/202608/08/2607.28959v1-efficient-llm-adversarial-training-via-low-rank-defense-and-circuit-guided-surrogates)  
+1. [Generated Images Are Easier to Forget: A Machine Unlearning Perspective for Synthetic Image Detection](/202608/09/2608.00716v1-generated-images-are-easier-to-forget-a-machine-unlearning-perspective-for-synthetic-image-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗训练用于大语言模型防御
-2. [Exploring Efficient Waveform Diffusion Models for Foley Sound Generation](/202608/08/2607.29148v1-exploring-efficient-waveform-diffusion-models-for-foley-sound-generation)  
+   evidence：对抗扰动用于合成图像检测
+2. [SVGEval: A Vision-Grounded Framework for Perceptual-Quality Benchmarking and Evaluation in Text-to-SVG Generation](/202608/09/2608.01977v1-svgeval-a-vision-grounded-framework-for-perceptual-quality-benchmarking-and-evaluation-in-text-to-svg-generation)  
    标签：评分：9.0/10、query:image-generation
-   evidence：扩散模型用于图像生成
-3. [The K-Space Signature: Frequency-Domain Representation Learning for Medical Deepfake Detection](/202608/08/2607.29541v2-the-k-space-signature-frequency-domain-representation-learning-for-medical-deepfake-detection)  
+   evidence：图像生成质量的评估方法
+3. [Hunyuan3D-Buffalo 1.0: A Unified Multimodal Model for Scalable 3D Generation, Understanding, and Editing](/202608/09/2608.02711v1-hunyuan3d-buffalo-10-a-unified-multimodal-model-for-scalable-3d-generation-understanding-and-editing)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：图像生成技术的最新进展
+4. [Rectify Then Diffuse: Disentangling Concepts Before Denoising Trajectory Unfolds](/202608/09/2608.03135v1-rectify-then-diffuse-disentangling-concepts-before-denoising-trajectory-unfolds)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗攻击防御技术
-4. [Beyond Token-Level Cross-Entropy: Fréchet Distributional Post-Training for Autoregressive Image Generation](/202608/08/2608.00562v1-beyond-token-level-cross-entropy-frchet-distributional-post-training-for-autoregressive-image-generation)  
+   evidence：对抗攻击下的图像生成鲁棒性
+5. [UniWorld-Design: From Pixel Generation to Layer-Native Design](/202608/09/2608.03971v1-uniworld-design-from-pixel-generation-to-layer-native-design)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：图像生成方法
+6. [SIGNPOST-Bench: Benchmarking Text-Vision Conflict Resolution in Multimodal Large Language Models](/202608/09/2608.04244v1-signpost-bench-benchmarking-text-vision-conflict-resolution-in-multimodal-large-language-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-5. [VLAGuard: A Framework for Evaluating and Mitigating Physical Attention Hijacking in Vision-Language-Action Robots within Wireless Sensor Networks](/202608/08/2608.01028v1-vlaguard-a-framework-for-evaluating-and-mitigating-physical-attention-hijacking-in-vision-language-action-robots-within-wireless-sensor-networks)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击防御策略
-6. [ReACT-CLIP: Response-Aware Test-Time Defense for Vision--Language Models](/202608/08/2608.01067v1-react-clip-response-aware-test-time-defense-for-vision--language-models)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击防御方法
-7. [The Boy Who Cried Wolf: Adversarial Misclassification of Safe Inputs as Unsafe in Multimodal Guardrails](/202608/08/2608.01373v1-the-boy-who-cried-wolf-adversarial-misclassification-of-safe-inputs-as-unsafe-in-multimodal-guardrails)  
+   evidence：对抗扰动对图像生成模型的影响
+7. [ColorFD: A Finite-Difference Guided Black-Box Physical Adversarial Attack for Remote Sensing Object Detection](/202608/09/2608.04559v1-colorfd-a-finite-difference-guided-black-box-physical-adversarial-attack-for-remote-sensing-object-detection)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-8. [Pseudorandom Streams within Diffusion Models Act as Learnable Inputs That Affect Generation Quality](/202608/08/2608.02575v1-pseudorandom-streams-within-diffusion-models-act-as-learnable-inputs-that-affect-generation-quality)  
+8. [Unleashing the Potential of Vision-Language Models for Generalizable AI-Generated Image Detection](/202608/09/2608.04935v1-unleashing-the-potential-of-vision-language-models-for-generalizable-ai-generated-image-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动影响生成质量
+   evidence：研究对抗扰动对生成模型的影响
+9. [A Survey of Adversarial Efficiency Degradation for Vision Transformer by Exploiting Input-adaptive Optimization](/202608/09/2608.05217v1-a-survey-of-adversarial-efficiency-degradation-for-vision-transformer-by-exploiting-input-adaptive-optimization)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+10. [A Foundational EDM2-Based Generative Model for High-Resolution Synthetic Fetal Ultrasound Imaging from Open Datasets](/202608/09/2608.05471v1-a-foundational-edm2-based-generative-model-for-high-resolution-synthetic-fetal-ultrasound-imaging-from-open-datasets)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：扩散模型用于生成高分辨率胎儿超声图像
 
 ### 速读区论文标签
-1. [Defending Against Backdoor Attacks via Alignment Checking in Model-Contrastive Federated Learning](/202608/08/2607.26933v1-defending-against-backdoor-attacks-via-alignment-checking-in-model-contrastive-federated-learning)  
+1. [Improved Robustness in AI-Generated Music Detection](/202608/09/2607.27454v1-improved-robustness-in-ai-generated-music-detection)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动音乐检测鲁棒性
+2. [Inference-Time Agentic Decision Rules Beat Longer Evolving Search for Multi-Image Medical Reasoning](/202608/09/2607.27564v1-inference-time-agentic-decision-rules-beat-longer-evolving-search-for-multi-image-medical-reasoning)  
    标签：评分：8.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-2. [InkShield: Writing Style Protection Against Unauthorized Handwriting Mimicry](/202608/08/2607.26976v1-inkshield-writing-style-protection-against-unauthorized-handwriting-mimicry)  
+3. [Revisiting the Adversarial Robustness of Graph-Based Traffic Forecasting](/202608/09/2607.27604v1-revisiting-the-adversarial-robustness-of-graph-based-traffic-forecasting)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御技术
-3. [InkShield: Writing Style Protection Against Unauthorized Handwriting Mimicry](/202608/08/2607.26976v2-inkshield-writing-style-protection-against-unauthorized-handwriting-mimicry)  
+   evidence：对抗攻击与防御方法研究
+4. [EEG-EditBench: Probing Visual Information in EEG-Image Retrieval Models with Controlled Image Edits](/202608/09/2607.27857v1-eeg-editbench-probing-visual-information-in-eeg-image-retrieval-models-with-controlled-image-edits)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像保护方法
-4. [SeasonStereo: Robust Dense Stereo Matching for Multi-Date Satellite Imagery via Generative AI](/202608/08/2607.27139v1-seasonstereo-robust-dense-stereo-matching-for-multi-date-satellite-imagery-via-generative-ai)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络用于图像合成
-5. [ST-WAM: Semantic-Temporal World Action Model for Robust Manipulation under Visual Distribution Shifts](/202608/08/2607.28993v1-st-wam-semantic-temporal-world-action-model-for-robust-manipulation-under-visual-distribution-shifts)  
+   evidence：图像篡改检测基准
+5. [Crushing the Evidence: A Dual-Penalty Evasion Framework for Fooling White-Box Explainable AI Auditors](/202608/09/2608.00566v1-crushing-the-evidence-a-dual-penalty-evasion-framework-for-fooling-white-box-explainable-ai-auditors)  
    标签：评分：7.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-6. [A Constitution-Grid Instrument for Data-Efficient RL Alignment (C-Guard)](/202608/08/2608.00180v1-a-constitution-grid-instrument-for-data-efficient-rl-alignment-c-guard)  
+6. [Adversarial Attacks in Multi-Agent LLM Pipelines: Unveiling Structural Vulnerabilities in Agentic AI Architectures](/202608/09/2608.00718v1-adversarial-attacks-in-multi-agent-llm-pipelines-unveiling-structural-vulnerabilities-in-agentic-ai-architectures)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的模型保护
-7. [Harnessing Adversarial Distillation to Customise Debiased, Disease-Specific Pathology Foundation Models for Breast Cancer](/202608/08/2608.01356v1-harnessing-adversarial-distillation-to-customise-debiased-disease-specific-pathology-foundation-models-for-breast-cancer)  
+   evidence：对抗攻击的图像防御策略
+7. [Grounding and Explaining Visual Evidence for AI-Generated Image Detection in Human-Centric Scenes](/202608/09/2608.01988v1-grounding-and-explaining-visual-evidence-for-ai-generated-image-detection-in-human-centric-scenes)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的病理模型定制
-8. [Pixel Ignores, Superpixel Sees: Adverse Weather Image Restoration via Semantic-Center SSM](/202608/08/2608.01760v1-pixel-ignores-superpixel-sees-adverse-weather-image-restoration-via-semantic-center-ssm)  
+   evidence：图像对抗扰动检测
+8. [Clarity Contrast and Similarity Selection for Multi-Focus Image Fusion](/202608/09/2608.03252v1-clarity-contrast-and-similarity-selection-for-multi-focus-image-fusion)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像修复方法
-9. [Retrieval-Driven Training-Free AI-Generated Video Attribution](/202608/08/2607.28955v1-retrieval-driven-training-free-ai-generated-video-attribution)  
+   evidence：图像对抗扰动生成方法
+9. [Test-Time Curriculum for Open-Set AIGC Detection](/202608/09/2608.00559v1-test-time-curriculum-for-open-set-aigc-detection)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-10. [RAID: Towards Robust AI-Generated Image Detection with Bit-Reversed Images](/202608/08/2607.28974v1-raid-towards-robust-ai-generated-image-detection-with-bit-reversed-images)  
+   evidence：对抗攻击的图像防御策略
+10. [CopyCat: Improving Fine-Grained Subject Consistency in Subject-to-Image Models within Seconds](/202608/09/2608.00674v1-copycat-improving-fine-grained-subject-consistency-in-subject-to-image-models-within-seconds)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动用于图像检测
-11. [Evaluation-Verification Reward for Consistent Multi-Reference Image Editing](/202608/08/2607.29025v1-evaluation-verification-reward-for-consistent-multi-reference-image-editing)  
+   evidence：图像对抗扰动生成方法
+11. [FL-OA: A Byzantine-Robust Federated Learning Framework with Outsourced Auditing for Intelligent Devices](/202608/09/2608.01095v1-fl-oa-a-byzantine-robust-federated-learning-framework-with-outsourced-auditing-for-intelligent-devices)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-12. [Interactive Generative Motion Editing via Scheduled Inpainting](/202608/08/2607.29133v1-interactive-generative-motion-editing-via-scheduled-inpainting)  
-   标签：评分：6.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
+   evidence：对抗攻击与联邦学习
+12. [Resilient Consensus-Based Target Tracking under False Data Injection Attacks in Multi-Agent Networks](/202608/09/2608.01222v1-resilient-consensus-based-target-tracking-under-false-data-injection-attacks-in-multi-agent-networks)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗攻击的检测与隔离机制
 
 
 ### ⚡ 这个站点能做什么
