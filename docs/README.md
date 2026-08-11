@@ -6,79 +6,82 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-08-10
-- 运行时间：2026-08-10 21:16:29 UTC
+- 最新运行日期：2026-08-11
+- 运行时间：2026-08-11 21:24:24 UTC
 - 运行状态：成功
-- 本次总论文数：19
-- 精读区：7
+- 本次总论文数：20
+- 精读区：8
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读与速读共19篇论文，聚焦模型鲁棒性与隐私安全等前沿方向  
-重点精读对抗攻击与模型鲁棒性研究（两篇9.0分），速读关注隐私安全防护及混合模型优化（三篇8.0分）  
-建议优先阅读高分论文以了解对抗攻击防御机制与隐私保护技术进展，可结合自身需求探索具体应用场景
-- 详情：[/202608/10/README](/202608/10/README)
+今日精读8篇、速读12篇论文，聚焦AI图像安全与模型优化前沿  
+高分论文揭示图像水印技术突破与缺陷保留token剪枝方法  
+建议关注AI图像伪造检测或奖励模型优化的应用案例
+- 详情：[/202608/11/README](/202608/11/README)
 
 ### 精读区论文标签
-1. [DRIFT: Derailing Denoising Trajectories of Flow-Matching VLAs with Adversarial Patch Attack](/202608/10/2608.03207v1-drift-derailing-denoising-trajectories-of-flow-matching-vlas-with-adversarial-patch-attack)  
+1. [SpreadMark: Robust Image Watermarking via Spread-Spectrum Embedding](/202608/11/2608.03165v1-spreadmark-robust-image-watermarking-via-spread-spectrum-embedding)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像防御策略
-2. [Understanding Fault Tolerance of Adversarially Robust Pruned Models](/202608/10/2608.04173v1-understanding-fault-tolerance-of-adversarially-robust-pruned-models)  
+   evidence：对抗扰动下的图像模型保护
+2. [Keep the Needle, Prune the Haystack: Defect-Preserving Token Pruning for Efficient Zero-Shot Anomaly Detection](/202608/11/2608.03681v1-keep-the-needle-prune-the-haystack-defect-preserving-token-pruning-for-efficient-zero-shot-anomaly-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对模型鲁棒性影响
-3. [Universal Concept Disruption for SAM3 Image Segmentation](/202608/10/2608.05983v1-universal-concept-disruption-for-sam3-image-segmentation)  
+   evidence：对抗扰动下的图像模型保护
+3. [TwinIR: Coordinated Invisible Dual-Point Attacks on Online HD Map Construction](/202608/11/2608.04453v1-twinir-coordinated-invisible-dual-point-attacks-on-online-hd-map-construction)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：提出针对SAM3图像分割的对抗扰动生成方法
-4. [One Anchor for All: Unified Multilingual and Multimodal Safety Alignment for LVLMs](/202608/10/2607.27917v1-one-anchor-for-all-unified-multilingual-and-multimodal-safety-alignment-for-lvlms)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御技术
-5. [Robust Watermarks Meet Backdoored Models: Evading Diffusion Semantic Watermarks via Stealthy Backdoor](/202608/10/2608.00543v1-robust-watermarks-meet-backdoored-models-evading-diffusion-semantic-watermarks-via-stealthy-backdoor)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击与生成式图像安全防护
-6. [Mind the Gap: Zero-Query Jailbreaks via Filter-Generator Discrepancy in Text-to-Image Systems](/202608/10/2608.00973v1-mind-the-gap-zero-query-jailbreaks-via-filter-generator-discrepancy-in-text-to-image-systems)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：文本到图像系统中的对抗扰动生成方法
-7. [Bridging perturbation theory and simulations: initial conditions and fast integrators for cosmological simulations](/202608/10/2608.03400v1-bridging-perturbation-theory-and-simulations-initial-conditions-and-fast-integrators-for-cosmological-simulations)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络在图像生成中的应用
+   evidence：图像对抗扰动生成技术
+4. [YOLOv14: Adaptive Real-Time Object Detection for Diverse Imaging Conditions](/202608/11/2608.04720v2-yolov14-adaptive-real-time-object-detection-for-diverse-imaging-conditions)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+5. [Adversarial Attacks on Deep OCR Systems](/202608/11/2608.07636v1-adversarial-attacks-on-deep-ocr-systems)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击对OCR系统的影响
+6. [Multi-Task Consistency-based Detection of Adversarial Attacks](/202608/11/2608.07750v1-multi-task-consistency-based-detection-of-adversarial-attacks)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：基于多任务一致性检测对抗攻击
+7. [IDATA: Scalable Invertible Diffusion for Unrestricted Adversarial Transfer Attack](/202608/11/2608.08734v1-idata-scalable-invertible-diffusion-for-unrestricted-adversarial-transfer-attack)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击转移方法
+8. [Distilling Vision-Language Models for Robust Traffic Sign Perception in Autonomous Vehicles](/202608/11/2608.08815v1-distilling-vision-language-models-for-robust-traffic-sign-perception-in-autonomous-vehicles)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
 
 ### 速读区论文标签
-1. [TriShield: Zero-Utility-Loss Defense Against Privacy Backdoors in Federated Language Model Fine-Tuning via Orthogonal Gradient Projection and Optimizer State Entanglement](/202608/10/2607.27940v1-trishield-zero-utility-loss-defense-against-privacy-backdoors-in-federated-language-model-fine-tuning-via-orthogonal-gradient-projection-and-optimizer-state-entanglement)  
+1. [Progressive Decision-Making for Localizing Open-Ended AI-Generated Image Forgeries](/202608/11/2607.29156v1-progressive-decision-making-for-localizing-open-ended-ai-generated-image-forgeries)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御方法
-2. [CDAE: Enhancing Perturbation Robustness in Pretrained Language Models with Contrastive Denoising](/202608/10/2607.28236v1-cdae-enhancing-perturbation-robustness-in-pretrained-language-models-with-contrastive-denoising)  
+   evidence：研究对抗扰动对生成模型的影响
+2. [Learning Latent Reasoning Traces for Scalar Reward Models End-to-End](/202608/11/2607.29185v1-learning-latent-reasoning-traces-for-scalar-reward-models-end-to-end)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动下的模型鲁棒性提升
-3. [Chimera: Designing and Chinchilla-Scaling Hybrid Visual Diffusion Transformers](/202608/10/2607.28611v1-chimera-designing-and-chinchilla-scaling-hybrid-visual-diffusion-transformers)  
+   evidence：涉及对抗攻击与防御的综合研究
+3. [SPARC-Rad: A Multimodal Benchmark Dataset and Evaluation Pipeline for Spatial and Anatomical Reasoning in Radiology Vision-Language Models](/202608/11/2608.00100v1-sparc-rad-a-multimodal-benchmark-dataset-and-evaluation-pipeline-for-spatial-and-anatomical-reasoning-in-radiology-vision-language-models)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：研究生成式对抗扰动
-4. [StraightDP: Geometry-Aware Differential Privacy for Rectified-Flow Transformers](/202608/10/2607.29100v1-straightdp-geometry-aware-differential-privacy-for-rectified-flow-transformers)  
+   evidence：图像对抗攻击与防御
+4. [Stateful Cooperative Agents Safeguarding LLMs Against Evolving Multi-Turn Attacks](/202608/11/2608.00134v1-stateful-cooperative-agents-safeguarding-llms-against-evolving-multi-turn-attacks)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：差分隐私用于图像生成模型
-5. [It's the Decoding Format, Not the Perturbation: Auditing Consistency-Based Selection for Vision-Language Test-Time Scaling](/202608/10/2608.01207v1-its-the-decoding-format-not-the-perturbation-auditing-consistency-based-selection-for-vision-language-test-time-scaling)  
+   evidence：对抗攻击防御策略
+5. [Invisible Ink Threats: Adversarial Goals Behind Legitimate Tasks in Computer-Use Agents](/202608/11/2608.02018v2-invisible-ink-threats-adversarial-goals-behind-legitimate-tasks-in-computer-use-agents)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-6. [A Benchmark Dataset for MLLM-Generated Image Detection: GPT Image2 & Nano Banana2](/202608/10/2608.01258v1-a-benchmark-dataset-for-mllm-generated-image-detection-gpt-image2--nano-banana2)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-7. [Prompt-Driven Simulation with Feature Perturbation for Cross-Domain Few-Shot Object Detection](/202608/10/2608.01348v2-prompt-driven-simulation-with-feature-perturbation-for-cross-domain-few-shot-object-detection)  
+   evidence：对抗扰动下的模型保护不足
+6. [Same Semantics, Different Paths: Self-Improving Alignment for Vision-Text Compression](/202608/11/2608.02109v1-same-semantics-different-paths-self-improving-alignment-for-vision-text-compression)  
    标签：评分：7.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-8. [LaCache: Robust Semantic Caching for LLM Serving](/202608/10/2608.01718v1-lacache-robust-semantic-caching-for-llm-serving)  
+7. [YOLOv14:Unified Cross-Domain Real-Time Object Detectionwith Adaptive Multi-View Representation](/202608/11/2608.04720v1-yolov14unified-cross-domain-real-time-object-detectionwith-adaptive-multi-view-representation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-9. [Subtype Robustness Is Not Just Accuracy: Calibration Under Unseen Subtype Shift](/202608/10/2608.00928v1-subtype-robustness-is-not-just-accuracy-calibration-under-unseen-subtype-shift)  
+   evidence：对抗扰动对图像篡改的影响
+8. [HexMIL: Hierarchical Attention MIL for Ante-Hoc Explainable Detection of AI-Manipulated CT Volumes](/202608/11/2608.05101v1-hexmil-hierarchical-attention-mil-for-ante-hoc-explainable-detection-of-ai-manipulated-ct-volumes)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：基于层次注意力的医疗深度伪造检测
+9. [How Well Do LLMs Generate Taxonomies in the SE Domain? A Multi-perspective Evaluation Framework](/202608/11/2608.01592v1-how-well-do-llms-generate-taxonomies-in-the-se-domain-a-multi-perspective-evaluation-framework)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-10. [MiniWorld: Democratizing the Training of Video World Models from Scratch](/202608/10/2608.01127v2-miniworld-democratizing-the-training-of-video-world-models-from-scratch)  
+   evidence：研究对抗扰动对生成模型的影响
+10. [Salami Attack: Stealthy Collusive Memory Poisoning against OpenClaw](/202608/11/2608.01637v1-salami-attack-stealthy-collusive-memory-poisoning-against-openclaw)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-11. [Prompt-Driven Simulation with Feature Perturbation for Cross-Domain Few-Shot Object Detection](/202608/10/2608.01348v1-prompt-driven-simulation-with-feature-perturbation-for-cross-domain-few-shot-object-detection)  
+   evidence：对抗攻击与防御相关
+11. [An $H^{-1}$ least-squares UnCut FEM on domains defined by a level set function](/202608/11/2608.02015v1-an-h-1-least-squares-uncut-fem-on-domains-defined-by-a-level-set-function)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-12. [Bridging Differential Privacy and Random Triangles](/202608/10/2608.01412v1-bridging-differential-privacy-and-random-triangles)  
+   evidence：对抗攻击防御技术相关
+12. [FakeI2V-Bench: Benchmarking the Applicability of Image-level Deepfake Detectors for Deepfake Video Detection](/202608/11/2608.03096v1-fakei2v-bench-benchmarking-the-applicability-of-image-level-deepfake-detectors-for-deepfake-video-detection)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：与对抗攻击防御技术相关
+   evidence：对抗攻击防御技术
 
 
 ### ⚡ 这个站点能做什么
