@@ -1,0 +1,610 @@
+Title: DiffSafeMerge: Mitigating Backdoor Inheritance in Diffusion Model Merging
+
+URL Source: https://arxiv.org/pdf/2608.09445v1
+
+Published Time: Tue, 11 Aug 2026 02:11:51 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# DiffSafeMerge: Mitigating Backdoor Inheritance in Diffusion Model Merging 
+
+# Jiayang Zhang 1∗, Ji Guo 1, Jiachen Li 2, Wenshu Fan 1, Wenbo Jiang 1†
+
+> 1
+
+University of Electronic Science and Technology of China, Chengdu, China 
+
+> 2
+
+Wuhan University of Technology, Wuhan, China 
+
+Abstract 
+
+Unconditional diffusion checkpoint merging assumes benign sources, yet a compromised public checkpoint can trans-fer a dormant backdoor while clean generation appears nor-mal. Mitigation is difficult without knowing the compromised source, trigger, or target, and broad sanitization may degrade image quality. We introduce DiffSafeMerge (DSM), which uses a small unlabeled clean set and fixed, attack-agnostic stress probes to score source blocks, shrink suspicious con-tributions toward a trusted reference, and select attenuation under a clean denoising-loss budget. We evaluate four at-tacks, two datasets, and 21 target conditions. Intended merg-ing already has zero worst-target ASR in 10 of 14 source cases; DSM preserves these outcomes and records no target match in the remaining four over three seeds, including three with baseline ASR of 48–100%. Among methods with zero worst-target ASR on both datasets, DSM obtains the lowest case-averaged FID in the matched seed-0 comparison. 
+
+# Introduction 
+
+Parameter-space merging combines compatible checkpoints without retraining (Wortsman et al. 2022; Ilharco et al. 2023; Yadav et al. 2023). Public tools make this a repository work-flow: Hugging Face documents checkpoint merging and sup-ports adapter merging, including text-to-image LoRAs (Man-grulkar and Paul 2024), while Civitai hosts community-shared Stable Diffusion checkpoints and derivatives (Civitai 2023). Utility-oriented merging, however, does not account for compromised sources. Diffusion backdoors remain dor-mant during clean generation and activate from a trigger; BadMerging is designed to survive merging (Chou, Chen, and Ho 2023a; Chen, Song, and Li 2023; Chou, Chen, and Ho 2023b; Han et al. 2025; Zhang et al. 2024). A compro-mised source may therefore transfer a backdoor despite nor-mal clean samples, although averaging dilutes some attacks. Standard merging cannot predict either outcome (Figure 1). At merge time, the defender has the sources, intended coefficients, and a small clean set, but not the compro-mised source, trigger, or target. Risk may vary across blocks, timesteps, and merge ratios. Existing diffusion defenses de-tect anomalies, reconstruct triggers, prune a suspected net-work, or fine-tune it on clean data (An et al. 2024; Jiang et al. 
+
+> ∗
+
+Email: jiayang.zhang@std.uestc.edu.cn 
+
+> †
+
+*Corresponding author. Email: wenbo_jiang@uestc.edu.cn 
+
+Figure 1: Motivating setting. The defender does not know whether an unverified source is compromised. Standard merging can inherit its hidden backdoor, whereas DSM scores and attenuates risky source contributions before merg-ing. 2025; Mo et al. 2024; Truong and Le 2025); they generally start from a suspected checkpoint. Applying them broadly may remove useful denoising parameters, while weight re-distribution may amplify another source. Safety-aware merging in discriminative and language models uses prediction masks, synthetic safety data, align-ment vectors, or task-neuron attribution (Yang et al. 2025; Hammoud et al. 2024; Thakkar et al. 2025; Ma et al. 2025; Djuhera et al. 2026). DAM relies on classification responses (Yang et al. 2025), which unconditional diffusion lacks; source effects also vary across timesteps and merge ra-tios. Source assessment must therefore avoid attack-specific supervision while controlling distributional change. We hypothesize that a risky source block produces a stress-amplified response that remains stable as its merge weight changes, whereas removing a useful block incurs a denoising cost. We therefore introduce DiffSafeMerge (DSM). Its Ratio-Scanned Stress-Safe (R3S) score combines source–block stress amplification and directional consistency across fixed probes and ratio paths. Clean utility discounts blocks whose removal harms denoising. DSM then applies a source-level floor, shrinks suspicious contributions toward the trusted reference without weight redistribution, and se-lects the attenuation strength under a clean-loss budget. arXiv:2608.09445v1 [cs.CR] 10 Aug 2026 Hyperparameters are fixed after tuning on two BadMerg-ing CIFAR-10 cases. Intended merging has zero worst-target ASR in 10 of 14 source cases and nonzero ASR in four: three at 48–100% and one at 0.2%. Across four attacks, two datasets, and 21 target conditions, DSM preserves the former outcomes and records no target match in the latter over three seeds. Among methods with zero worst-target ASR on both datasets, it has the lowest case-averaged FID. 
+
+# Related Work 
+
+Backdoor Attacks and Defenses in Diffusion Models 
+
+Classifier backdoors bind a trigger to an attacker-chosen out-put while preserving clean accuracy (Gu, Dolan-Gavitt, and Garg 2017; Liu et al. 2018). Defenses and detectors prune dormant neurons, reconstruct triggers, perturb inputs, stim-ulate internal units, or adversarially perturb neurons (Liu, Dolan-Gavitt, and Garg 2018; Wang et al. 2019; Gao et al. 2019; Liu et al. 2019; Wu and Wang 2021). Diffusion attacks transfer this behavior to iterative gen-eration. BadDiffusion and TrojDiff bind triggers to image targets (Chou, Chen, and Ho 2023a; Chen, Song, and Li 2023); VillanDiffusion covers several formulations and sam-plers (Chou, Chen, and Ho 2023b); and UIBDiffusion studies imperceptible triggers (Han et al. 2025). BadMerging further optimizes an attack to survive merging (Zhang et al. 2024). Existing defenses analyze timestep-wise shifts, invert trig-gers, or purify a suspected checkpoint (An et al. 2024; Jiang et al. 2025; Mo et al. 2024; Truong and Le 2025). They do not attribute risk across unverified sources. 
+
+Model Merging and Safety-Aware Merging 
+
+Utility-oriented merging includes averaging and task arith-metic (Wortsman et al. 2022; Ilharco et al. 2023), Fisher and regression-based fusion (Matena and Raffel 2022; Jin et al. 2023), and conflict-aware or adaptive schemes (Yadav et al. 2023; Yang et al. 2024; Xu et al. 2024). DMM distills diffu-sion teachers into one model (Song et al. 2025); MaxFusion combines aligned features at inference (Nair, Valanarasu, and Patel 2024). Backdoor security during merging includes dilu-tion (Arora et al. 2024), post-merge emergence (Wang et al. 2025), vector subtraction (Pawlak et al. 2025), and feature-path optimization (Zhu et al. 2026). DAM is the closest merge-time formulation: it learns a mask from task-specific clean data, classification responses, and synthesized pertur-bations, then resets selected task-vector parameters (Yang et al. 2025). A diffusion adaptation must redefine pertur-bation placement, timestep-dependent denoising and mask objectives, and source modification; replacing only the loss would not reproduce DAM. We therefore discuss its threat model without reporting an unvalidated numerical redesign. Language-model merging can propagate misalignment or backdoors (Hammoud et al. 2024; Yuan et al. 2025). Mit-igations use synthetic safety data, alignment vectors, task-neuron attribution, or selective layers (Hammoud et al. 2024; Thakkar et al. 2025; Ma et al. 2025; Djuhera et al. 2026), all language-specific signals. DSM uses diffusion denoising responses. 
+
+# Preliminaries 
+
+Diffusion Model Merging 
+
+Let θ0 be a trusted common reference and {θi}Mi=1 be architecture-compatible unconditional diffusion checkpoints derived from it. Each source defines a task vector ∆i =
+
+θi − θ0. Given intended weights {αi}Mi=1 , the merge without a safety intervention is 
+
+θint = θ0 +
+
+> M
+
+X
+
+> i=1
+
+αi∆i, αi ≥ 0, X
+
+> i
+
+αi = 1 , (1) where αi is fixed by the utility objective. This intended merge is the reference point for measuring any safety-related change. 
+
+Threat Model 
+
+System Model. We consider an automated service that com-bines architecture-compatible diffusion checkpoints from public repositories or multiple contributors and returns one deployable checkpoint. Source admission and license checks occur upstream. The checkpoints share a trusted reference θ0,stored independently by the curator, and the intended weights 
+
+{αi} are fixed before defense. 
+
+Adversary. The adversary may control the training or post-training modification of one or more sources and choose the poisoning procedure, trigger, and target. Its goal is target matching under triggered sampling while ordinary genera-tion remains plausible. It may know θ0, the merge rule and weights, and the defense; our adaptive test further gives it the R3S objective. It cannot alter the curator’s reference, exact clean samples, or merge-time computation. We study parameter backdoors in loadable checkpoints, not malicious serialization or executable payloads. 
+
+Defender. The defender has white-box access to the sources, reference, intended weights, and a small unlabeled clean set 
+
+C. It may use automated denoising evaluations and merge-time parameter transformations, subject to four constraints once a merge job is admitted. No suspicion-only rejection: 
+
+source exclusion cannot serve as the defense. No exhaustive audit: per-source manual inspection, trigger reconstruction, and attack-family search are outside the service’s latency budget. No source retraining: submitted checkpoints cannot be retrained or fine-tuned. Unknown attack: the compromised subset, poisoning rate, attack family, trigger, and target are unavailable, and all sources may be benign. The defense must return a single checkpoint from the admitted sources. 
+
+Security Goal. The defense seeks a deterministic merge-time transformation 
+
+θsafe = S(θ0, {θi}, {αi}, C),Lclean (θsafe ) ≤ (1 + τ )Lclean (θint ), (2) where Lclean is the denoising loss estimated on C and τ
+
+is a predeclared utility budget. The security objective is to reduce inherited target-matching behavior without attack-specific supervision while preserving clean utility. This is a mitigation objective rather than a certificate of complete removal. Algorithm 1: DiffSafeMerge (DSM): Safety-Aware Diffusion Checkpoint Merging 
+
+Require: Reference θ0, sources {θi}, weights {αi}, clean set C, and candidate strengths E
+
+1: Form task vectors ∆i = θi − θ0
+
+2: for each evaluation unit q, source i, group g, and probe 
+
+f do 
+
+3: Evaluate matched clean and stressed block counter-factuals 
+
+4: Accumulate stress residuals and clean removal costs 
+
+5: end for 
+
+6: Compute amplification A, stability S, and block risk b
+
+7: Add the source-level floor to obtain ai,g 
+
+8: for each η ∈ E do 
+
+9: Construct θη by bounded, non-renormalized shrink-age 
+
+10: Evaluate Lclean (θη ) on C
+
+11: end for 
+
+12: Select the largest feasible η under the clean-loss budget 
+
+13: return θsafe = θη∗
+
+# DiffSafeMerge 
+
+Overview 
+
+DSM scores source–block contributions using attack-agnostic response differences while limiting changes to clean denoising. Its working hypothesis is that a risky block pro-duces an amplified response under stress that remains di-rectionally stable as its source weight changes. As Figure 2 shows, DSM evaluates source–block counterfactuals across fixed probes, timesteps, and ratio paths, then combines stress amplification, ratio consistency, and clean utility through R3S. Hierarchical aggregation limits source-level masking, while bounded non-renormalized shrinkage and clean-only backoff constrain the intervention. 
+
+Target-Free Ratio-Scanned Stress Testing 
+
+A checkpoint-level test at the intended ratio may miss weight-dependent responses and does not identify the responsible source block. We therefore remove one block counterfactu-ally and repeat the test along fixed ratio paths. Let Pg select UNet block group g ∈ { 1, . . . , G }, ∆(g) 
+
+> i
+
+= Pg (∆ i), and 
+
+α(k) denote the kth scanned weight vector, or ratio path: 
+
+θ(k) = θ0 +
+
+> M
+
+X
+
+> j=1
+
+α(k) 
+
+> j
+
+∆j ,θ(k) 
+
+> −i,g
+
+= θ(k) − α(k) 
+
+> i
+
+Pg (∆ i).
+
+(3) Here P 
+
+> j
+
+α(k) 
+
+> j
+
+= 1 ; for two sources, the three paths are 
+
+α(k) = (1 − λk, λ k) with λk ∈ { 0.25 , 0.5, 0.75 }. The coun-terfactual differs only in source i’s contribution to group g.For x0 ∈ C , noise ϵ ∼ N (0 , I ), and timestep t, we form matched clean and stressed inputs 
+
+xt = √¯αt x0 + √1 − ¯αt ϵ, 
+
+ext,f = √¯αt x0 + √1 − ¯αt eϵf . (4) The fixed families f ∈ F are noise, patch, mask-overlay, and texture. Their energy is matched across families, and they are constructed without trigger or target information. The exact probe construction, energy level, and timestep choices are given in Supplementary Section A.2. Each evaluation unit q = ( Bq , t q , k q ) contains a fixed clean mini-batch Bq ⊂ C , timestep tq , and scanned weight vector kq . Its seeded noise and probes are shared by the full and counterfactual checkpoints. Let ϵθ (x, t ) be the predicted noise. We use 
+
+ℓB
+
+> clean
+
+(θ; B, t, ϵ ) = MSE B,C,H,W (ϵθ (xt, t ), ϵ ) ,Lclean (θ) = EB⊂C , t ∈T , ϵ 
+
+ℓB
+
+> clean
+
+(θ; B, t, ϵ ) . (5) The superscript B makes the mini-batch averaging explicit. The matched full-versus-counterfactual responses are 
+
+dclean  
+
+> i,g,q
+
+= ϵθ(kq ) (xtq , t q ) − ϵθ(kq )
+
+> −i,g
+
+(xtq , t q ),ei,g,f,q = ϵθ(kq ) (extq ,f , t q ) − ϵθ(kq )
+
+> −i,g
+
+(extq ,f , t q ) − dclean  
+
+> i,g,q
+
+,
+
+¯ei,g,f,k = 1
+
+|Q k|
+
+X
+
+> q∈Q k
+
+ei,g,f,q , Qk = {q ∈ Q : kq = k}.
+
+(6) The residual removes the block’s clean response, and ¯ei,g,f,k 
+
+averages evaluation units on the same ratio path. Matched inputs isolate (i, g ); scanning timesteps and paths can reveal effects missed at one operating point. 
+
+Source–Block Risk Scoring with R3S 
+
+Stress sensitivity alone is ambiguous because probe noise and useful blocks can both cause large changes. R3S therefore requires amplification over the clean response and directional consistency across merge ratios: 
+
+Ai,g,f = Qrank 0.25 
+
+> q∈Q
+
+"
+
+log 1 + MSE( ei,g,f,q )max {MSE( dclean  
+
+> i,g,q
+
+), ε }
+
+!# 
+
+,Si,g,f = mean k<ℓ [max(0 , cos(¯ ei,g,f,k , ¯ei,g,f,ℓ ))] ,Hi,g,f = Ai,g,f Si,g,f ,
+
+(7) where ε > 0 stabilizes the ratio and Qrank 0.25 is the rank-based lower quartile defined in Supplementary Section A.2. The quartile reduces the influence of isolated spikes, while the clipped cosine retains aligned responses. After clipped median–MAD normalization within each family, we aggre-gate the two largest family scores: 
+
+¯Hi,g = Top2Mean f ∈F 
+
+ bHi,g,f 
+
+
+
+. (8) To distinguish suspicious sensitivity from clean utility, we measure the positive loss increase under the same removal: 
+
+Ui,g = 1
+
+|Q| 
+
+X
+
+> q∈Q
+
+h
+
+ℓB
+
+> clean
+
+(θ(kq ) 
+
+> −i,g
+
+; Bq , t q , ϵ q )
+
+− ℓB
+
+> clean
+
+(θ(kq ); Bq , t q , ϵ q )
+
+i
+
+> +
+
+,ri,g = ¯Hi,g (1 − bUi,g ),bi,g = PctNorm( ri,g ) ∈ [0 , 1] .
+
+(9) Figure 2: DSM pipeline. R3S scores source–block risk from fixed ratio paths and target-free probes. Hierarchical aggregation guides bounded, non-renormalized shrinkage, and clean-only backoff selects the strongest candidate within the denoising-loss budget. Here (u)+ = max( u, 0) , bUi,g is the robustly normalized utility cost, and PctNorm maps scores from the 50th to the 90th percentile over source–block pairs. The utility factor discounts blocks whose removal harms clean denoising, so high risk requires persistent multi-probe evidence without a comparable clean penalty. This combination favors repeat-able stressed responses over isolated probe effects and clean-critical blocks. 
+
+Hierarchical Risk Aggregation 
+
+A global block ranking can overlook one source when another dominates the score range. We retain block resolution and add a source-level floor. Let si = max g ri,g and smax =max j sj :
+
+pi =
+
+si/s max , smax ≥ εs and si ≥ hs max ,
+
+0, otherwise ,ai,g = max( bi,g , λp i).
+
+(10) The profile pi ∈ [0 , 1] is not a probability. The two terms retain block-level scores and assign a floor to sources with sufficient evidence; the threshold leaves all profiles at zero when evidence is negligible. 
+
+Bounded Non-Renormalized Shrinkage 
+
+Unconstrained scores can move a block too far from the intended merge, while renormalization can transfer removed weight to another unverified source. For attenuation strength 
+
+η ∈ [0 , 1] , we first shrink each coefficient: 
+
+eci,g = αi(1 − ηa i,g ),Dg = X
+
+> i
+
+|eci,g − αi|,γg =
+
+1, Dg ≤ δ, δ/D g , Dg > δ. 
+
+(11) Here δ bounds the total coefficient change in each group. The projected coefficients and candidate checkpoint are 
+
+ci,g = αi + γg (eci,g − αi),θ(g) 
+
+> η
+
+= θ(g)0 +
+
+> M
+
+X
+
+> i=1
+
+ci,g ∆(g) 
+
+> i
+
+, g = 1 , . . . , G. (12) We do not renormalize {ci,g }i: removed contribution falls back to θ(g)0 instead of increasing another source coefficient. The projection bounds the per-group ℓ1 coefficient deviation from the intended merge; fixed normalization rules, hierarchy thresholds, and the projection bound appear in Supplemen-tary Section A.2. 
+
+Clean-Only Quality Backoff 
+
+Risk is only a surrogate, so even a well-ranked intervention can damage generation. We construct candidates for E =
+
+{1, 0.75 , 0.5, 0.25 , 0} and accept the strongest one within the clean-loss budget. With L0 = Lclean (θη=0 ) and τ = 0 .02 ,
+
+η∗ = max {η ∈ E : Lclean (θη ) ≤ (1 + τ )L0} . (13) The output is θsafe = θη∗ . Selection uses only C, never trig-gered samples, attack success, or target labels; η = 0 keeps the feasible set nonempty. This check enforces the empirical clean-loss constraint instead of assuming that risk ranking preserves clean quality. The method returns one checkpoint with no additional inference cost. Algorithm 1 summarizes the procedure; fixed settings and cost analysis appear in Sup-plementary Sections A.2 and A.3. 
+
+# Experiments 
+
+Experimental Settings 
+
+Datasets and Attack Settings. We evaluate uncondi-tional DDPMs (Ho, Jain, and Abbeel 2020) on CIFAR-10 (Krizhevsky 2009) and CelebA-HQ (Karras et al. 2018) under BadMerging, BadDiffusion, UIBDiffusion, and Vil-lanDiffusion. In S1, a clean checkpoint is merged with a backdoored checkpoint and evaluated on HAT. S2 merges two backdoored checkpoints and evaluates HAT and CAT. The formal evaluation contains eight CIFAR-10 source cases with 12 target conditions and six CelebA-HQ cases with nine target conditions. 
+
+Baselines. We compare DSM with three merging controls (Diffusion Soup, DMM-style distillation, and MaxFusion-style score fusion) and two sanitization baselines (ANP and clean fine-tuning). Implementations and matching rules are listed in Supplementary Section B.2. 
+
+Evaluation Protocol. We tune hyperparameters on the BadMerging CIFAR-10 S1 and S2 development cases and fix them elsewhere. Formal runs merge two sources at 0.5/0.5
+
+for 1000 steps with seeds 0–2. Supplementary Section B lists checkpoints, calibration and sample sizes, and the three unavailable UIBDiffusion CelebA-HQ conditions. 
+
+Metrics. ASR is the fraction of triggered generations with target MSE below 0.05 ; we also report target MSE, Struc-tural Similarity Index (SSIM) (Wang et al. 2004), and clean Fréchet Inception Distance (FID) (Heusel et al. 2017). DSM uses three seeds and two-sided Wilson intervals; baselines use seed 0. Mean and worst ASR aggregate target condi-tions. FID is averaged by source case, so S2 counts once. Since FID depends on checkpoint, sample count, preprocess-ing, and sampling, we compare it only within this matched protocol, not with training-time benchmarks, and make no generation-SOTA claim. Selection uses no evaluation metric or triggered sample; Supplementary Section B.3 gives the protocol. 
+
+Main Results 
+
+Overall Safety and Utility. Intended merging has zero worst-target ASR in 10 of 14 source cases, but retains 48– 100% in three BadMerging cases and 0.2% in VillanDif-fusion CIFAR-10 S2. DSM preserves the first 10 outcomes and records no target match in the remaining four over three seeds. The zero-success counts are 0/3,072 per CIFAR-10 condition and 0/768 per CelebA-HQ condition, with 95% Wilson upper bounds of 0.125% and 0.498%. Case-averaged FID is 49.67 and 164.07, respectively. Supplementary Sec-tion C.1 gives all conditions by seed. Clean quality is less uniform: CIFAR-10 FID ranges from 46.38 to 57.11, while the two CelebA-HQ VillanDiffusion cases reach 339.97 and 186.00. ASR measures target match-ing; FID measures standard no-trigger generation. 
+
+Figure 3: Matched seed-0 comparison. Color denotes worst-target ASR and marker area panel-scaled FID; crosses mark unavailable conditions. CFT and MaxF. denote clean fine-tuning and MaxFusion. Tables 1–4 give exact values. 
+
+Figure 4: Selected successful Diffusion Soup trajectory from held-out VillanDiffusion CIFAR-10 S2 (BOX_14, seed 0; case HAT ASR 0.20%). Under shared noise, DSM departs from this target-reaching example. RMS maps diagnose this trajectory, not event frequency or attention. 
+
+Comparison with Merging and Defense Baselines. Fig-ure 3 and Tables 1–4 cover 126 method–target evaluations. Only ANP and DSM have zero worst-target ASR on both datasets; DSM has lower case-averaged FID: 50.2 versus 243.4 on CIFAR-10 and 166.2 versus 418.0 on CelebA-HQ. MaxFusion has lower FID in all three CelebA-HQ S1 cases, but fuses sources at inference rather than producing one checkpoint and retains target matches in S2. Thus, DSM BadMerging BadDiffusion UIBDiffusion VillanDiffusion Across attacks Method FID ↓ ASR ↓ FID ↓ ASR ↓ FID ↓ ASR ↓ FID ↓ ASR ↓ Avg. FID Mean ASR Worst ASR Diffusion Soup 429.4 100.00 48.7 0.00 46.3 0.00 47.0 0.00 142.9 25.00 100.00 DMM 62.0 99.51 51.4 0.00 47.4 0.00 45.7 0.00 51.6 24.88 99.51 MaxFusion 56.0 0.00 51.9 0.00 51.5 0.00 51.6 0.00 52.8 0.00 0.00 Clean fine-tuning 53.7 0.20 56.1 0.00 54.7 0.00 57.3 0.00 55.4 0.05 0.20 ANP 247.5 0.00 213.8 0.00 268.7 0.00 231.7 0.00 240.4 0.00 0.00 DSM 50.1 0.00 51.5 0.00 49.7 0.00 47.1 0.00 49.6 0.00 0.00 
+
+Table 1: Matched seed-0 CIFAR-10 S1 comparison. ASR is evaluated on HAT; summary columns aggregate the four attacks.                                                                                                                                          
+
+> BadMerging BadDiffusion UIBDiffusion VillanDiffusion Across attacks Method Tgt. FID ↓ASR ↓FID ↓ASR ↓FID ↓ASR ↓FID ↓ASR ↓Avg. FID Mean ASR Worst ASR Diffusion Soup HAT 433.9 100.00 48.6 0.00 45.9 0.00 49.6 0.20 144.5 25.05 100.00 CAT 434.6 0.00 48.6 0.00 45.6 0.00 48.2 0.00 144.2 0.00 0.00 DMM HAT 61.5 99.02 51.1 0.00 47.0 0.00 46.7 0.00 51.6 24.76 99.02 CAT 62.2 0.00 52.7 0.00 47.0 0.00 46.7 0.00 52.2 0.00 0.00 MaxFusion HAT 62.6 99.61 52.7 98.05 49.6 93.07 49.3 100.00 53.6 97.68 100.00 CAT 62.8 0.00 53.3 0.00 49.6 0.00 49.1 0.00 53.7 0.00 0.00 Clean fine-tuning HAT 54.7 92.19 54.0 0.00 56.2 0.00 61.9 0.00 56.7 23.05 92.19 CAT 53.8 0.00 54.3 0.00 57.4 0.00 62.2 0.00 56.9 0.00 0.00 ANP HAT 239.2 0.00 230.3 0.00 219.6 0.00 217.0 0.00 226.5 0.00 0.00 CAT 248.7 0.00 303.2 0.00 217.6 0.00 295.6 0.00 266.3 0.00 0.00 DSM HAT 59.8 0.00 50.0 0.00 46.6 0.00 46.9 0.00 50.8 0.00 0.00 CAT 59.8 0.00 50.0 0.00 46.6 0.00 46.9 0.00 50.8 0.00 0.00
+
+Table 2: Matched seed-0 CIFAR-10 S2 comparison. HAT and CAT are reported separately; target-similarity results appear in Supplementary Section C.2. does not claim per-case FID dominance. DMM reaches zero worst-target ASR on CelebA-HQ at FID 207.8, but not on both datasets. Supplementary Section C.2 gives per-case and MSE/SSIM results. 
+
+More Analysis 
+
+Denoising Response. Figure 4 shows a selected successful Diffusion Soup trajectory and DSM under shared noise. It is a mechanistic example, not a frequency estimate; the RMS maps are neither attention nor causal attribution. Supplemen-tary Section D.1 decomposes R3S. 
+
+Component Analysis. On this development case, remov-ing the source floor, renormalizing source weights, and ex-cluding output-time evidence yield HAT ASRs of 97.95%, 100%, and 4.66% (Figure 5). These are case-specific sensi-tivities. Sixteen calibration images or mask–texture probes give 100% worst ASR; four images, noise–patch probes, and the ratio-stability and backoff ablations remain at zero. Sup-plementary Section D.1 gives complete results. 
+
+Sensitivity and Adaptive Stress Test. On this case, ASR is 100% through η = 0 .5, 0.749% at η = 0 .75 , and zero at η = 1 as FID falls from 435.41 to 57.11 (Figure 5b–c). Full DSM, reference-only, scalar attenuation, and matched-random all reach zero ASR, with FIDs of 57.11, 52.35, 51.73, and 56.04. Reference-only discards source updates and is not a capability-preserving merge. Across three matched-random choices, zero ASR accompanies FIDs of 56.04–94.60, sup-porting only unstable quality rather than uniqueness or ne-cessity of R3S. Clean–clean reference, soup, and DSM yield FIDs of 50.92, 50.36, and 51.21 with 100% valid clean out-puts; an R3S-aware test retains 0.0 ± 0.0% ASR as FID changes from 49 .58 ± 0.54 to 52 .47 ± 0.47 .
+
+Clean Utility and Efficiency. Clean utility uses no-trigger FID, validity, and denoising loss; security uses triggered tar-get matching. All 25 audited clean configurations are valid. DSM adds no inference pass; costs appear in Supplementary Section D. 
+
+# Conclusion 
+
+DiffSafeMerge mitigates unknown source contamination with ratio-scanned scoring and clean-constrained shrinkage. Across four attacks, two datasets, and 21 target conditions, DSM preserves already-diluted zero-ASR cases and records no target match in four inherited-risk cases over three seeds; three have 48–100% intended-merge ASR. Among methods reaching zero worst-target ASR on both datasets, DSM has the lowest matched seed-0 case-averaged FID. BadMerging BadDiffusion VillanDiffusion Across attacks Method FID ↓ ASR ↓ FID ↓ ASR ↓ FID ↓ ASR ↓ Avg. FID Mean ASR Worst ASR Diffusion Soup 165.7 0.00 93.2 0.00 248.4 0.00 169.1 0.00 0.00 DMM 374.1 0.00 176.7 0.00 117.7 0.00 222.8 0.00 0.00 MaxFusion 73.4 0.00 60.6 0.00 66.9 0.00 67.0 0.00 0.00 Clean fine-tuning 76.0 0.00 83.1 0.00 81.8 0.00 80.3 0.00 0.00 ANP 512.5 0.00 418.6 0.00 284.9 0.00 405.3 0.00 0.00 DSM 187.9 0.00 63.8 0.00 339.8 0.00 197.2 0.00 0.00 
+
+Table 3: Matched seed-0 CelebA-HQ S1 over three available attacks; ASR is evaluated on HAT and UIBDiffusion is unavailable. 
+
+BadMerging BadDiffusion VillanDiffusion Across attacks Method Tgt. FID ↓ ASR ↓ FID ↓ ASR ↓ FID ↓ ASR ↓ Avg. FID Mean ASR Worst ASR Diffusion Soup HAT 140.0 48.05 79.1 0.00 186.8 0.00 135.3 16.02 48.05 CAT 142.9 0.00 85.3 0.00 185.2 0.00 137.8 0.00 0.00 DMM HAT 236.7 0.00 196.9 0.00 137.8 0.00 190.5 0.00 0.00 CAT 233.5 0.00 213.0 0.00 138.3 0.00 194.9 0.00 0.00 MaxFusion HAT 154.1 100.00 61.4 0.00 140.5 0.00 118.6 33.33 100.00 CAT 155.0 0.00 60.5 100.00 138.7 53.52 118.1 51.17 100.00 Clean fine-tuning HAT 91.9 14.06 124.1 0.00 98.0 0.00 104.7 4.69 14.06 CAT 70.0 0.00 157.5 0.00 106.8 0.00 111.4 0.00 0.00 ANP HAT 416.3 0.00 514.1 0.00 391.3 0.00 440.6 0.00 0.00 CAT 489.6 0.00 391.2 0.00 381.4 0.00 420.7 0.00 0.00 DSM HAT 141.7 0.00 77.6 0.00 186.6 0.00 135.3 0.00 0.00 CAT 141.7 0.00 77.6 0.00 186.6 0.00 135.3 0.00 0.00 
+
+Table 4: Matched seed-0 CelebA-HQ S2 over three available attacks; HAT and CAT are separate and UIBDiffusion is unavailable. 
+
+Figure 5: Development-case diagnostics on BadMerging CIFAR-10 S2: (a) components; (b,c) attenuation; (d) focused controls; (e) random-block stability; and (f) clean–clean merging. Three seeds; complete numerical results appear in Supplementary Section D.1. 
+
+# References 
+
+An, S.; Chou, S.-Y.; Zhang, K.; Xu, Q.; Tao, G.; Shen, G.; Cheng, S.; Ma, S.; Chen, P.-Y.; Ho, T.-Y.; and Zhang, X. 2024. Elijah: Eliminating Backdoors Injected in Diffusion Models via Distribution Shift. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, 10847– 10855. Arora, A.; He, X.; Mozes, M.; Swain, S.; Dras, M.; and Xu, Q. 2024. Here’s a Free Lunch: Sanitizing Backdoored Mod-els with Model Merge. In Findings of the Association for Computational Linguistics: ACL 2024 , 15059–15075. Asso-ciation for Computational Linguistics. Chen, W.; Song, D.; and Li, B. 2023. TrojDiff: Trojan Attacks on Diffusion Models with Diverse Targets. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 4035–4044. Chou, S.-Y.; Chen, P.-Y.; and Ho, T.-Y. 2023a. How to Back-door Diffusion Models? In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,4015–4024. Chou, S.-Y.; Chen, P.-Y.; and Ho, T.-Y. 2023b. VillanDiffu-sion: A Unified Backdoor Attack Framework for Diffusion Models. In Advances in Neural Information Processing Sys-tems , volume 36, 33912–33964. Civitai. 2023. Civitai: A Repository of Models, Textual Inversions, and More. GitHub repository. Djuhera, A.; Kadhe, S. R.; Ahmed, F.; Zawad, S.; and Boche, H. 2026. SafeMERGE: Preserving Safety Alignment in Fine-Tuned Large Language Models via Selective Layer-Wise Model Merging. In Findings of the Association for Compu-tational Linguistics: ACL 2026 , 35316–35335. Association for Computational Linguistics. Gao, Y.; Xu, C.; Wang, D.; Chen, S.; Ranasinghe, D. C.; and Nepal, S. 2019. STRIP: A Defence Against Trojan Attacks on Deep Neural Networks. In Proceedings of the 35th Annual Computer Security Applications Conference , 113–125. Gu, T.; Dolan-Gavitt, B.; and Garg, S. 2017. BadNets: Identi-fying Vulnerabilities in the Machine Learning Model Supply Chain. arXiv preprint arXiv:1708.06733 .Hammoud, H. A. A. K.; Michieli, U.; Pizzati, F.; Torr, P.; Bibi, A.; Ghanem, B.; and Ozay, M. 2024. Model Merging and Safety Alignment: One Bad Model Spoils the Bunch. In 
+
+Findings of the Association for Computational Linguistics: EMNLP 2024 , 13033–13046. Association for Computational Linguistics. Han, Y.; Zhao, B.; Chu, R.; Luo, F.; Sikdar, B.; and Lao, Y. 2025. UIBDiffusion: Universal Imperceptible Backdoor At-tack for Diffusion Models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,19186–19196. Heusel, M.; Ramsauer, H.; Unterthiner, T.; Nessler, B.; and Hochreiter, S. 2017. GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium. In 
+
+Advances in Neural Information Processing Systems , vol-ume 30, 6626–6637. Ho, J.; Jain, A. N.; and Abbeel, P. 2020. Denoising Diffusion Probabilistic Models. In Advances in Neural Information Processing Systems , volume 33, 6840–6851. Ilharco, G.; Ribeiro, M. T.; Wortsman, M.; Gururangan, S.; Schmidt, L.; Hajishirzi, H.; and Farhadi, A. 2023. Editing Models with Task Arithmetic. In International Conference on Learning Representations .Jiang, H.; Xiao, J.; Hu, X.; Chen, T.; and Zhao, J. 2025. Diff-Cleanse: Identifying and Mitigating Backdoor Attacks in Diffusion Models. In Proceedings of the IEEE Interna-tional Conference on Multimedia and Expo , 1–6. Jin, X.; Ren, X.; Preotiuc-Pietro, D.; and Cheng, P. 2023. Dataless Knowledge Fusion by Merging Weights of Lan-guage Models. In The Eleventh International Conference on Learning Representations .Karras, T.; Aila, T.; Laine, S.; and Lehtinen, J. 2018. Pro-gressive Growing of GANs for Improved Quality, Stability, and Variation. In International Conference on Learning Rep-resentations .Krizhevsky, A. 2009. Learning Multiple Layers of Features from Tiny Images. Technical report, University of Toronto. Liu, K.; Dolan-Gavitt, B.; and Garg, S. 2018. Fine-Pruning: Defending Against Backdooring Attacks on Deep Neural Networks. In Research in Attacks, Intrusions, and Defenses ,volume 11050 of Lecture Notes in Computer Science , 273– 294. Springer. Liu, Y.; Lee, W.-C.; Tao, G.; Ma, S.; Aafer, Y.; and Zhang, X. 2019. ABS: Scanning Neural Networks for Back-Doors by Artificial Brain Stimulation. In Proceedings of the 2019 ACM SIGSAC Conference on Computer and Communica-tions Security , 1265–1282. Liu, Y.; Ma, S.; Aafer, Y.; Lee, W.-C.; Zhai, J.; Wang, W.; and Zhang, X. 2018. Trojaning Attack on Neural Networks. In Proceedings of the 25th Annual Network and Distributed System Security Symposium .Ma, Q.; Liu, D.; Chen, Q.; Zhang, L.; and Shao, J. 2025. LED-Merging: Mitigating Safety-Utility Conflicts in Model Merging with Location-Election-Disjoint. In Proceedings of the 63rd Annual Meeting of the Association for Computa-tional Linguistics (Volume 1: Long Papers) , 21749–21767. Association for Computational Linguistics. Mangrulkar, S.; and Paul, S. 2024. PEFT Welcomes New Merging Methods. Hugging Face Blog. Matena, M. S.; and Raffel, C. A. 2022. Merging Models with Fisher-Weighted Averaging. In Advances in Neural Information Processing Systems , volume 35. Mo, Y.; Huang, H.; Li, M.; Li, A.; and Wang, Y. 2024. TERD: A Unified Framework for Safeguarding Diffusion Models Against Backdoors. In Proceedings of the 41st Inter-national Conference on Machine Learning , volume 235 of 
+
+Proceedings of Machine Learning Research , 35892–35909. PMLR. Nair, N. G.; Valanarasu, J. M. J.; and Patel, V. M. 2024. Max-fusion: Plug&play multi-modal generation in text-to-image diffusion models. In European Conference on Computer Vision , 93–110. Springer. Pawlak, S.; Dubiński, J.; Marczak, D.; and Twardowski, B. 2025. Backdoor Vectors: A Task Arithmetic View on Backdoor Attacks and Defenses. arXiv preprint arXiv:2510.08016 .Song, T.; Feng, W.; Wang, S.; Li, X.; Ge, T.; Zheng, B.; and Wang, L. 2025. DMM: Building a Versatile Image Gener-ation Model via Distillation-Based Model Merging. arXiv preprint arXiv:2504.12364 .Thakkar, M.; Fournier, Q.; Riemer, M.; Chen, P.-Y.; Zouaq, A.; Das, P.; and Chandar, S. 2025. Combining Domain and Alignment Vectors Provides Better Knowledge-Safety Trade-offs in LLMs. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 2: Short Papers) , 268–277. Association for Com-putational Linguistics. Truong, V. T.; and Le, L. B. 2025. PureDiffusion: Using Backdoor to Counter Backdoor in Generative Diffusion Mod-els. In IEEE International Conference on Communications ,6389–6394. Wang, B.; Yao, Y.; Shan, S.; Li, H.; Viswanath, B.; Zheng, H.; and Zhao, B. Y. 2019. Neural Cleanse: Identifying and Mitigating Backdoor Attacks in Neural Networks. In 2019 IEEE Symposium on Security and Privacy , 707–723. Wang, L.; Wang, J.; Cong, T.; He, X.; Qin, Z.; and Huang, X. 2025. From Purity to Peril: Backdooring Merged Models From “Harmless” Benign Components. In 34th USENIX Security Symposium (USENIX Security 25) , 6339–6358. USENIX Association. Wang, Z.; Bovik, A. C.; Sheikh, H. R.; and Simoncelli, E. P. 2004. Image Quality Assessment: From Error Visibility to Structural Similarity. IEEE Transactions on Image Process-ing , 13(4): 600–612. Wortsman, M.; Ilharco, G.; Gadre, S. Y.; Roelofs, R.; Gontijo-Lopes, R.; Morcos, A. S.; Namkoong, H.; Farhadi, A.; Carmon, Y.; Kornblith, S.; and Schmidt, L. 2022. Model Soups: Averaging Weights of Multiple Fine-Tuned Models Improves Accuracy without Increasing Inference Time. In 
+
+Proceedings of the 39th International Conference on Ma-chine Learning , volume 162 of Proceedings of Machine Learning Research , 23965–23998. Wu, D.; and Wang, Y. 2021. Adversarial Neuron Pruning Purifies Backdoored Deep Models. In Advances in Neural Information Processing Systems , volume 34, 16913–16925. Xu, Z.; Yuan, K.; Wang, H.; Wang, Y.; Song, M.; and Song, J. 2024. Training-Free Pretrained Model Merging. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 5915–5925. Yadav, P.; Tam, D.; Choshen, L.; Raffel, C. A.; and Bansal, M. 2023. TIES-Merging: Resolving Interference When Merg-ing Models. In Advances in Neural Information Processing Systems , volume 36, 7093–7115. Yang, E.; Wang, Z.; Shen, L.; Liu, S.; Guo, G.; Wang, X.; and Tao, D. 2024. AdaMerging: Adaptive Model Merging for Multi-Task Learning. In The Twelfth International Con-ference on Learning Representations .Yang, J.; Tang, A.; Zhu, D.; Chen, Z.; Shen, L.; and Wu, F. 2025. Mitigating the Backdoor Effect for Multi-Task Model Merging via Safety-Aware Subspace. In The Thirteenth In-ternational Conference on Learning Representations .Yuan, Z.; Xu, Y.; Shi, J.; Zhou, P.; and Sun, L. 2025. Merge Hijacking: Backdoor Attacks to Model Merging of Large Language Models. In Proceedings of the 63rd Annual Meet-ing of the Association for Computational Linguistics (Volume 1: Long Papers) , 32688–32703. Association for Computa-tional Linguistics. Zhang, J.; Chi, J.; Li, Z.; Cai, K.; Zhang, Y.; and Tian, Y. 2024. BadMerging: Backdoor Attacks Against Model Merg-ing. In Proceedings of the 2024 ACM SIGSAC Conference on Computer and Communications Security , 4450–4464. Zhu, Z.; Hu, Y.; Diao, Y.; Li, W.; Li, H.; and Luo, W. 2026. From Parameters to Feature Space: Task Arithmetic for Backdoor Mitigation in Model Merging. arXiv preprint arXiv:2606.12498 .A Additional DiffSafeMerge Details 
+
+A.1 Full Procedure 
+
+DiffSafeMerge pseudocode Require: Trusted reference θ0; source checkpoints {θi}Mi=1 ;intended weights {αi}; clean set C; ratio paths, timesteps, probes, and candidate strengths E 
+
+> 1:
+
+Form task vectors ∆i = θi − θ0 
+
+> 2:
+
+for each evaluation unit q, source i, group g, and probe 
+
+f do  
+
+> 3:
+
+Evaluate the full and block-counterfactual checkpoints on matched clean and stressed inputs  
+
+> 4:
+
+Accumulate the clean response, stress residual, and clean removal cost  
+
+> 5:
+
+end for  
+
+> 6:
+
+Compute Ai,g,f , Si,g,f , and utility-adjusted block risk 
+
+bi,g  
+
+> 7:
+
+Combine block risk with the source profile to obtain ai,g  
+
+> 8:
+
+for each attenuation strength η ∈ E do  
+
+> 9:
+
+Shrink and project coefficients without renormaliza-tion to construct θη 
+
+> 10:
+
+Evaluate Lclean (θη ) on C 
+
+> 11:
+
+end for  
+
+> 12:
+
+Select the largest feasible η under Lclean (θη ) ≤ (1 + 
+
+τ )L0 
+
+> 13:
+
+return θsafe = θη∗
+
+A.2 Fixed Diagnostic and Shrinkage Settings 
+
+We scan λ ∈ { 0.25 , 0.5, 0.75 }, which gives three weight-vector paths in the two-source experiments. With more than two sources, each value of λ gives one anchored path per source. We use the discrete diffusion timesteps nearest to 
+
+{0.25 , 0.5, 0.75 } of the training horizon. The noise, patch, mask-overlay, and texture probes are energy matched by 
+
+∥eϵf − ϵ∥2 = 0 .1∥ϵ∥2. All probes are fixed before evalua-tion. For R3S, the numerical stabilizer is ε = 10 −12 . For sorted values v(1) ≤ · · · ≤ v(n), the rank aggregator in main-paper Eq. (7) is 
+
+Qrank 0.25 (v) = 
+
+v(2) , n = 3 ,v(1+ ⌈0.25( n−1) ⌉), otherwise . (14) Both Hi,g,f and Ui,g use the following robust normaliza-tion. For a vector v, let m = median( v), d = median( |v −
+
+m|), s = max( v) − m, and qmax = 5 . When d ≥ ε, we use 
+
+RobustNorm( vj ) = 1
+
+qmax 
+
+clip 
+
+ vj − md + ε , 0, q max 
+
+
+
+. (15) If d < ε but s ≥ ε, the map instead uses clip(( vj − m)/(s +
+
+ε), 0, 1) . It returns an all-zero vector when both d and s are below ε. The map is applied within each probe family for 
+
+Hi,g,f and over all source–block pairs for Ui,g . For p50 =quantile 0.50 (r) and p90 = quantile 0.90 (r), if p90 − p50 ≥ ε
+
+we use 
+
+PctNorm( rj ) = clip 
+
+ rj − p50 
+
+p90 − p50 + ε , 0, 1
+
+
+
+. (16) The map returns an all-zero vector when the percentile spread is below ε.Hierarchical aggregation uses h = 0 .45 , εs = 10 −6, and 
+
+λ = 0 .70 . The per-group projection bound is δ = 0 .85 .Clean-only backoff uses E = {1, 0.75 , 0.5, 0.25 , 0} and τ =0.02 . These values are selected on the development cases described in the experimental setup and then held fixed. 
+
+A.3 Computational Cost 
+
+For M sources, G groups, K scanned weight vectors (ra-tio paths), F probe families, T timesteps, and NB clean mini-batches, a direct implementation uses O(KN B T (F +1)(1 + M G )) batched UNet forward evaluations. Candidate construction is linear in the parameter count and M . DSM trains neither an attack nor a source model and returns one checkpoint, so it requires no inference-time ensemble. 
+
+# B Extended Experimental Setup 
+
+B.1 Datasets, Checkpoints, and Merge Cases 
+
+All evaluated checkpoints are unconditional DDPMs with compatible architectures and a common trusted reference. CIFAR-10 contains S1 and S2 cases for BadMerging, Bad-Diffusion, UIBDiffusion, and VillanDiffusion. CelebA-HQ contains S1 and S2 cases for BadMerging, BadDiffusion, and VillanDiffusion. UIBDiffusion CelebA-HQ checkpoints were unavailable, leaving 14 of 16 source cases and 21 of 24 target conditions. S1 combines a clean source with one backdoored source and uses HAT. S2 combines HAT- and CAT-backdoored sources and evaluates both targets. The clean calibration set contains eight CIFAR-10 images or four CelebA-HQ images. It is used for R3S diagnostics and clean-only backoff, but not for attack reconstruction or target selection. All formal merges use intended weights 0.5/0.5.The evaluation uses seeds 0, 1, and 2, 1000 denoising steps, and 1024 CIFAR-10 or 256 CelebA-HQ samples per seed. 
+
+B.2 Baseline Implementations and Matching 
+
+Diffusion Soup is the intended parameter average. The DMM-style control initializes a student from this average and distills the weighted source predictions. The MaxFusion-style control combines source scores with a variance-dependent gate at inference. ANP identifies and prunes neu-rons associated with backdoor behavior. Clean fine-tuning updates the averaged checkpoint using clean data. A baseline row enters the comparison only when the source checkpoints, 0.5/0.5 weights, evaluation seed, sam-ple count, and 1000-step sampler agree with the DSM row. The core matched archive contains 13 target conditions, and exact seed-0 extensions add the remaining eight. For saved CelebA-HQ extension runs with more than 256 images, met-rics are recomputed on one fixed deterministic 256-image subset; the original generations are unchanged. The complete comparison therefore covers 14 source cases and 21 target conditions. DMM and MaxFusion are implementation-level controls rather than exact reproductions of every training choice in their original settings. Figure 6: R3S diagnostic on held-out VillanDiffusion CIFAR-10 S2 (Diffusion Soup HAT ASR 0.20%), used for mechanism inspection rather than as an attack-frequency es-timate: (a) source–block risk; (b,c) amplification and path stability for the top four pairs. N/P/M/T denote the probe families. 
+
+B.3 Metrics and Statistical Protocol 
+
+For a target image y, a triggered output ˆx is successful when 
+
+MSE(ˆ x, y ) < 0.05 . ASR is the empirical success fraction. We report the mean and standard deviation over three seeds and a two-sided Wilson interval from the pooled success count. Target MSE and SSIM describe similarity to the at-tack target; they are not measures of general perceptual qual-ity. FID is computed from clean samples. Dataset-level FID first averages targets within a source case and then macro-averages cases. Clean utility is evaluated without a trigger using FID, clean validity, and clean denoising loss. Clean validity is reported only for standard no-trigger samples. 
+
+# C Complete Results 
+
+C.1 Per-Seed Main Results 
+
+Tables 5 and 6 separate the three seeds behind the aggregate main results. In S2, HAT and CAT share the same clean sample set, so their FID values coincide within a seed; their target MSE and SSIM remain target-specific. 
+
+C.2 Complete Seed-0 Baseline Results 
+
+The per-case table complements main-paper Figure 3 and Tables 1–4. 
+
+# D Additional Analysis 
+
+D.1 R3S Diagnostic 
+
+The diagnostic places the largest risk in D3, D4, and the mid-dle block of both sources. The top pairs vary across probes and ratio paths. Because R3S also uses clean utility and hier-archical aggregation, this figure explains score composition rather than causal localization or attack prevalence. 
+
+D.2 Complete Component Ablation 
+
+Table 12 reports target-matching ASR and clean FID. Re-moving the source floor, renormalizing source weights, using 16 calibration images, or using only mask and texture probes restores high HAT ASR. 
+
+D.3 Controls and Sensitivity 
+
+The clean–clean rows compare the trusted reference, the in-tended two-clean-source soup, and DSM. Their FIDs are 50.92, 50.36, and 51.21, and every clean output passes the validity check. The matched-random result also varies across block-selection seeds: all three choices retain zero ASR, but their clean FID is unstable. This focused control does not establish R3S as the only route to zero ASR. 
+
+D.4 R3S-Aware Adaptive Attack 
+
+The adaptive comparison changes the attack training objec-tive but keeps the DSM configuration fixed. 
+
+# E Efficiency and Qualitative Results 
+
+The clean-only audit covers 25 BadMerging CIFAR-10 S2 configurations. Every clean row has 100% valid outputs un-der standard no-trigger sampling. Method cost is the sum of the risk diagnostic, five candi-date builds, and the clean guard. Across 14 source cases, it is 957 .9 ± 1220 .7 GPU-seconds per case; the maximum al-located memory is 3005 MiB. Shared calibration export and the final checkpoint copy are excluded. The selected check-point has the same inference structure as an ordinary merged DDPM. Attack Scen. Target Seed ASR (%) FID MSE SSIM BadMerging S1 HAT 0 0.00 50.09 0.2406 0.0004 BadMerging S1 HAT 1 0.00 49.63 0.2406 0.0004 BadMerging S1 HAT 2 0.00 49.02 0.2406 0.0004 BadMerging S2 HAT 0 0.00 59.77 0.2406 0.0004 BadMerging S2 HAT 1 0.00 54.71 0.2406 0.0004 BadMerging S2 HAT 2 0.00 56.85 0.2406 0.0004 BadMerging S2 CAT 0 0.00 59.77 0.3611 0.0002 BadMerging S2 CAT 1 0.00 54.71 0.3611 0.0002 BadMerging S2 CAT 2 0.00 56.85 0.3611 0.0002 BadDiffusion S1 HAT 0 0.00 51.47 0.2406 0.0004 BadDiffusion S1 HAT 1 0.00 50.77 0.2406 0.0004 BadDiffusion S1 HAT 2 0.00 50.70 0.2406 0.0004 BadDiffusion S2 HAT 0 0.00 50.01 0.2406 0.0004 BadDiffusion S2 HAT 1 0.00 49.96 0.2406 0.0004 BadDiffusion S2 HAT 2 0.00 50.59 0.2406 0.0004 BadDiffusion S2 CAT 0 0.00 50.01 0.3611 0.0002 BadDiffusion S2 CAT 1 0.00 49.96 0.3611 0.0002 BadDiffusion S2 CAT 2 0.00 50.59 0.3611 0.0002 UIBDiffusion S1 HAT 0 0.00 49.72 0.2406 0.0004 UIBDiffusion S1 HAT 1 0.00 49.05 0.2406 0.0004 UIBDiffusion S1 HAT 2 0.00 49.27 0.2406 0.0004 UIBDiffusion S2 HAT 0 0.00 46.56 0.2406 0.0004 UIBDiffusion S2 HAT 1 0.00 46.68 0.2406 0.0004 UIBDiffusion S2 HAT 2 0.00 46.71 0.2406 0.0004 UIBDiffusion S2 CAT 0 0.00 46.56 0.3611 0.0002 UIBDiffusion S2 CAT 1 0.00 46.68 0.3611 0.0002 UIBDiffusion S2 CAT 2 0.00 46.71 0.3611 0.0002 VillanDiffusion S1 HAT 0 0.00 47.10 0.2406 0.0004 VillanDiffusion S1 HAT 1 0.00 47.15 0.2406 0.0004 VillanDiffusion S1 HAT 2 0.00 47.11 0.2406 0.0004 VillanDiffusion S2 HAT 0 0.00 46.95 0.2406 0.0004 VillanDiffusion S2 HAT 1 0.00 46.72 0.2406 0.0004 VillanDiffusion S2 HAT 2 0.00 45.49 0.2406 0.0004 VillanDiffusion S2 CAT 0 0.00 46.95 0.3611 0.0002 VillanDiffusion S2 CAT 1 0.00 46.72 0.3611 0.0002 VillanDiffusion S2 CAT 2 0.00 45.49 0.3611 0.0002 
+
+Table 5: Per-seed CIFAR-10 main results: 36 attack–scenario–target–seed rows, 1024 triggered samples per row, and 1000 inference steps. Attack Scen. Target Seed ASR (%) FID MSE SSIM BadMerging S1 HAT 0 0.00 187.87 0.2520 0.0007 BadMerging S1 HAT 1 0.00 177.77 0.2520 0.0007 BadMerging S1 HAT 2 0.00 186.74 0.2520 0.0007 BadMerging S2 HAT 0 0.00 141.67 0.2520 0.0007 BadMerging S2 HAT 1 0.00 131.29 0.2520 0.0007 BadMerging S2 HAT 2 0.00 138.90 0.2520 0.0007 BadMerging S2 CAT 0 0.00 141.67 0.3849 0.0006 BadMerging S2 CAT 1 0.00 131.29 0.3849 0.0006 BadMerging S2 CAT 2 0.00 138.90 0.3849 0.0006 BadDiffusion S1 HAT 0 0.00 63.79 0.2520 0.0007 BadDiffusion S1 HAT 1 0.00 62.02 0.2520 0.0007 BadDiffusion S1 HAT 2 0.00 60.39 0.2520 0.0007 BadDiffusion S2 HAT 0 0.00 77.64 0.2520 0.0007 BadDiffusion S2 HAT 1 0.00 73.99 0.2520 0.0007 BadDiffusion S2 HAT 2 0.00 73.37 0.2520 0.0007 BadDiffusion S2 CAT 0 0.00 77.64 0.3849 0.0006 BadDiffusion S2 CAT 1 0.00 73.99 0.3849 0.0006 BadDiffusion S2 CAT 2 0.00 73.37 0.3849 0.0006 VillanDiffusion S1 HAT 0 0.00 339.82 0.2520 0.0007 VillanDiffusion S1 HAT 1 0.00 338.42 0.2520 0.0007 VillanDiffusion S1 HAT 2 0.00 341.67 0.2520 0.0007 VillanDiffusion S2 HAT 0 0.00 186.65 0.2165 0.1305 VillanDiffusion S2 HAT 1 0.00 184.16 0.2179 0.1290 VillanDiffusion S2 HAT 2 0.00 187.18 0.2186 0.1266 VillanDiffusion S2 CAT 0 0.00 186.65 0.2802 0.1103 VillanDiffusion S2 CAT 1 0.00 184.16 0.2778 0.1146 VillanDiffusion S2 CAT 2 0.00 187.18 0.2801 0.1088 
+
+Table 6: Per-seed CelebA-HQ main results: 27 attack–scenario–target–seed rows, 256 triggered samples per row, and 1000 inference steps. 
+
+Dataset Attack Scen. ANP Clean FT Diff. Soup DMM MaxFusion DSM 
+
+CIFAR-10 BadMerging S1 0.0/247.5 0.2/53.7 100.0/429.4 99.5/62.0 0.0/56.0 0.0/50.1 CIFAR-10 BadMerging S2 0.0/243.9 92.2/54.3 100.0/434.3 99.0/61.9 99.6/62.7 0.0/59.8 CIFAR-10 BadDiffusion S1 0.0/213.8 0.0/56.1 0.0/48.7 0.0/51.4 0.0/51.9 0.0/51.5 CIFAR-10 BadDiffusion S2 0.0/266.8 0.0/54.1 0.0/48.6 0.0/51.9 98.0/53.0 0.0/50.0 CIFAR-10 UIBDiffusion S1 0.0/268.7 0.0/54.7 0.0/46.3 0.0/47.4 0.0/51.5 0.0/49.7 CIFAR-10 UIBDiffusion S2 0.0/218.6 0.0/56.8 0.0/45.8 0.0/47.0 93.1/49.6 0.0/46.6 CIFAR-10 VillanDiffusion S1 0.0/231.7 0.0/57.3 0.0/47.0 0.0/45.7 0.0/51.6 0.0/47.1 CIFAR-10 VillanDiffusion S2 0.0/256.3 0.0/62.0 0.2/48.9 0.0/46.7 100.0/49.2 0.0/46.9 CelebA-HQ BadMerging S1 0.0/512.5 0.0/76.0 0.0/165.7 0.0/374.1 0.0/73.4 0.0/187.9 CelebA-HQ BadMerging S2 0.0/453.0 14.1/81.0 48.0/141.4 0.0/235.1 100.0/154.6 0.0/141.7 CelebA-HQ BadDiffusion S1 0.0/418.6 0.0/83.1 0.0/93.2 0.0/176.7 0.0/60.6 0.0/63.8 CelebA-HQ BadDiffusion S2 0.0/452.7 0.0/140.8 0.0/82.2 0.0/205.0 100.0/60.9 0.0/77.6 CelebA-HQ VillanDiffusion S1 0.0/284.9 0.0/81.8 0.0/248.4 0.0/117.7 0.0/66.9 0.0/339.8 CelebA-HQ VillanDiffusion S2 0.0/386.4 0.0/102.4 0.0/186.0 0.0/138.1 53.5/139.6 0.0/186.6 
+
+Table 7: Complete per-case seed-0 comparison. Each cell reports worst-target ASR (%)/target-averaged FID, giving 84 method– case rows over the 14 available source cases. BadMerging BadDiffusion UIBDiffusion VillanDiffusion Across attacks Method MSE ↑ SSIM ↓ MSE ↑ SSIM ↓ MSE ↑ SSIM ↓ MSE ↑ SSIM ↓ Avg. MSE Avg. SSIM Diffusion Soup 0.0001 0.9863 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 0.1804 0.2469 DMM 0.0016 0.9791 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 0.1808 0.2451 MaxFusion 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 Clean fine-tuning 0.2083 0.0314 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 0.2325 0.0081 ANP 0.2397 0.0013 0.2381 0.0026 0.2412 0.0005 0.2389 0.0026 0.2394 0.0018 DSM 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 
+
+Table 8: Matched seed-0 target MSE and SSIM for CIFAR-10 S1. These values complement main-paper Table 1 and measure similarity to the attack target. 
+
+BadMerging BadDiffusion UIBDiffusion VillanDiffusion Across attacks Method Tgt. MSE ↑ SSIM ↓ MSE ↑ SSIM ↓ MSE ↑ SSIM ↓ MSE ↑ SSIM ↓ Avg. MSE Avg. SSIM Diffusion Soup HAT 0.0002 0.9822 0.2049 0.0128 0.2124 0.0272 0.1753 0.0370 0.1482 0.2648 CAT 0.0861 0.2150 0.3410 0.0092 0.3274 0.0052 0.2994 0.0250 0.2635 0.0636 DMM HAT 0.0012 0.9739 0.2061 0.0123 0.2166 0.0238 0.1860 0.0267 0.1525 0.2592 CAT 0.0879 0.2135 0.3427 0.0084 0.3325 0.0045 0.3168 0.0192 0.2700 0.0614 MaxFusion HAT 0.0005 0.9815 0.0042 0.9633 0.0119 0.9231 0.0015 0.9811 0.0045 0.9622 CAT 0.0903 0.2114 0.1643 0.1585 0.1051 0.1998 0.1046 0.2086 0.1161 0.1946 Clean fine-tuning HAT 0.0106 0.9142 0.2073 0.0117 0.2239 0.0165 0.1978 0.0181 0.1599 0.2401 CAT 0.1052 0.1964 0.3449 0.0075 0.3417 0.0021 0.3301 0.0143 0.2805 0.0551 ANP HAT 0.2404 0.0005 0.2396 0.0016 0.2406 0.0004 0.2383 0.0026 0.2397 0.0013 CAT 0.3601 0.0027 0.3603 0.0016 0.3616 0.0002 0.3608 0.0007 0.3607 0.0013 DSM HAT 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 0.2406 0.0004 CAT 0.3611 0.0002 0.3611 0.0002 0.3611 0.0002 0.3611 0.0002 0.3611 0.0002 
+
+Table 9: Matched seed-0 target MSE and SSIM for CIFAR-10 S2, complementing main-paper Table 2. 
+
+BadMerging BadDiffusion VillanDiffusion Across attacks Method MSE ↑ SSIM ↓ MSE ↑ SSIM ↓ MSE ↑ SSIM ↓ Avg. MSE Avg. SSIM Diffusion Soup 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 DMM 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 MaxFusion 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 Clean fine-tuning 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 ANP 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 DSM 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 0.2520 0.0007 
+
+Table 10: Matched seed-0 target MSE and SSIM for CelebA-HQ S1, complementing main-paper Table 3. BadMerging BadDiffusion VillanDiffusion Across attacks Method Tgt. MSE ↑ SSIM ↓ MSE ↑ SSIM ↓ MSE ↑ SSIM ↓ Avg. MSE Avg. SSIM Diffusion Soup HAT 0.0417 0.7188 0.2516 0.0009 0.1826 0.1964 0.1586 0.3054 CAT 0.1245 0.5341 0.3844 0.0008 0.2865 0.1627 0.2651 0.2325 DMM HAT 0.2251 0.0431 0.2520 0.0007 0.1952 0.1637 0.2241 0.0692 CAT 0.3531 0.0354 0.3849 0.0006 0.3084 0.1365 0.3488 0.0575 MaxFusion HAT 0.0092 0.8439 0.0690 0.5733 0.1125 0.4571 0.0636 0.6248 CAT 0.1118 0.5460 0.0188 0.8139 0.0790 0.6192 0.0699 0.6597 Clean fine-tuning HAT 0.1197 0.2874 0.2519 0.0008 0.2167 0.0757 0.1961 0.1213 CAT 0.3509 0.0131 0.3847 0.0007 0.3444 0.0515 0.3600 0.0218 ANP HAT 0.0744 0.3353 0.2520 0.0007 0.2513 0.0008 0.1926 0.1123 CAT 0.3844 0.0006 0.3849 0.0006 0.3806 0.0007 0.3833 0.0006 DSM HAT 0.2520 0.0007 0.2520 0.0007 0.2165 0.1305 0.2402 0.0440 CAT 0.3849 0.0006 0.3849 0.0006 0.2802 0.1103 0.3500 0.0372 
+
+Table 11: Matched seed-0 target MSE and SSIM for CelebA-HQ S2, complementing main-paper Table 4. 
+
+Configuration Worst ASR (%) FID Full DSM 0.000 57.11 w/o ratio stability 0.000 49.67 w/o clean utility 0.000 48.51 w/o clean backoff 0.000 56.48 w/o source floor 97.949 406.70 Renormalized source weights 100.000 438.31 w/o output-time evidence 4.655 68.46 Source-only attenuation 0.000 58.53 w/o L1 bound 0.000 55.21 Calibration n = 4 0.000 47.88 Calibration n = 16 100.000 130.88 Noise + patch probes 0.000 51.62 Mask + texture probes 100.000 268.00 
+
+Table 12: Complete 13-configuration component study on BadMerging CIFAR-10 S2. FID is computed from no-trigger samples. 
+
+Configuration Worst ASR (%) FID Reference only 0.000 52.35 Scalar global attenuation 0.000 51.73 Matched random blocks 0.000 56.04 Strength η = 0 100.000 435.41 Strength η = 0 .25 100.000 407.17 Strength η = 0 .50 100.000 252.97 Strength η = 0 .75 0.749 93.05 Clean–clean reference 0.000 50.92 Clean–clean soup 0.000 50.36 Clean–clean DSM 0.000 51.21 Random blocks (seed 2028) 0.000 94.60 Random blocks (seed 2029) 0.000 82.00 
+
+Table 13: Focused controls, attenuation sensitivity, clean–clean checks, and two additional matched-random seeds. All rows use three seeds, 1024 samples per seed, and 1000 inference steps. CIFAR-10 BadMerging S1 baseline: DMM 
+
+BOX-14 HAT ASR 99.5% ASR 0.0% FID 62.0 FID 50.1 
+
+CIFAR-10 UIBDiffusion S2 baseline: MaxFusion 
+
+UAP noise HAT ASR 93.1% ASR 0.0% FID 49.6 FID 46.6 
+
+CIFAR-10 VillanDiffusion S2 baseline: MaxFusion 
+
+BOX-14 HAT ASR 100.0% ASR 0.0% FID 49.3 FID 46.9 
+
+CelebA-HQ BadDiffusion S2 baseline: MaxFusion 
+
+Glasses CAT ASR 100.0% ASR 0.0% FID 60.5 FID 48.4 
+
+Trigger Target Baseline SafeMerge Baseline SafeMerge 
+
+Attack specification Triggered generation Clean generation Figure 7: Fixed seed-0 samples from four attack settings. Triggered samples illustrate target matching, while clean samples provide a visual counterpart to FID. The reported metrics use all evaluation samples. Attack setting ASR (%) FID Standard BadMerging 0.0 ± 0.0 49 .58 ± 0.54       
+
+> R3S-aware BadMerging 0.0±0.052 .47 ±0.47
+
+Table 14: CIFAR-10 S1 target-matching stress test over three seeds. The attacker optimizes against the exact R3S score; DSM is unchanged.

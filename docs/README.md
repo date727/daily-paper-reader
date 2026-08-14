@@ -6,79 +6,88 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-08-12
-- 运行时间：2026-08-12 21:24:56 UTC
+- 最新运行日期：2026-08-14
+- 运行时间：2026-08-14 21:16:34 UTC
 - 运行状态：成功
-- 本次总论文数：19
-- 精读区：7
+- 本次总论文数：22
+- 精读区：10
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精读与速读论文聚焦对抗攻击与AI应用创新  
-2) 高分论文揭示对抗攻击在模型安全与生成式AI中的新突破  
-3) 普通读者可优先关注对抗攻击机制及声音生成、图像编辑等前沿应用
-- 详情：[/202608/12/README](/202608/12/README)
+1) 今日精读10篇、速读12篇，聚焦生成模型与图像处理前沿成果  
+2) 高分论文《Robust-WAM》和《ReGraph》分别探讨了世界-动作模型的鲁棒性提升及食品图像到食谱图的生成技术  
+3) 建议对生成式AI或图像处理感兴趣的读者优先阅读精读篇目，或探索相关技术的实际应用场景
+- 详情：[/202608/14/README](/202608/14/README)
 
 ### 精读区论文标签
-1. [Eliciting Intrinsic Hallucinations in LLMs via Semantically Equivalent Adversarial Attacks](/202608/12/2608.04286v1-eliciting-intrinsic-hallucinations-in-llms-via-semantically-equivalent-adversarial-attacks)  
+1. [Robust-WAM: Bridging Generative Pretraining and Semantic Foresight in World-Action Models](/202608/14/2608.05903v1-robust-wam-bridging-generative-pretraining-and-semantic-foresight-in-world-action-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-2. [Corrupting Attention: Evasion-Based Adversarial Attacks on Encoder Attention in Detection Transformers](/202608/12/2608.06674v1-corrupting-attention-evasion-based-adversarial-attacks-on-encoder-attention-in-detection-transformers)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：针对检测变压器中的编码器注意力机制进行对抗攻击
-3. [HRDiT: Training-Free High-Resolution Image Generation with Off-the-Shelf Diffusion Transformer Models](/202608/12/2608.07003v1-hrdit-training-free-high-resolution-image-generation-with-off-the-shelf-diffusion-transformer-models)  
+   evidence：生成式图像对抗扰动鲁棒性
+2. [ReGraph: Learning to Generate Recipe Graphs from Food Images](/202608/14/2608.06917v1-regraph-learning-to-generate-recipe-graphs-from-food-images)  
    标签：评分：9.0/10、query:image-generation
-   evidence：扩散模型在图像生成中的研究
-4. [PE-Mamba: Bidirectional Selective Layer Aggregation for AI-Generated Image Detection](/202608/12/2608.07999v1-pe-mamba-bidirectional-selective-layer-aggregation-for-ai-generated-image-detection)  
+   evidence：使用生成对抗网络进行图像生成
+3. [LHSDet: High-Resolution AI-Generated Image Detection via Visual Question Answering](/202608/14/2608.07863v1-lhsdet-high-resolution-ai-generated-image-detection-via-visual-question-answering)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：提出对抗攻击检测方法
-5. [MarkNull: Model-Agnostic Watermark Removal in AI-Generated Images via On-Manifold Latent Manipulation](/202608/12/2608.10166v1-marknull-model-agnostic-watermark-removal-in-ai-generated-images-via-on-manifold-latent-manipulation)  
+   evidence：对抗攻击的图像防御策略相关
+4. [SC-Diff: Semantically Calibrated Diffusion for Visible-to-Infrared Image Translation](/202608/14/2608.08555v1-sc-diff-semantically-calibrated-diffusion-for-visible-to-infrared-image-translation)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：扩散模型在图像翻译中的应用
+5. [High-Quality Exposure Correction with Diffusion-Based Image Generation Priors](/202608/14/2608.08720v1-high-quality-exposure-correction-with-diffusion-based-image-generation-priors)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：使用扩散模型进行图像生成
+6. [Unveiling the Secret of AdaLN-Zero in Diffusion Transformer](/202608/14/2608.09438v1-unveiling-the-secret-of-adaln-zero-in-diffusion-transformer)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：研究扩散模型生成机制
+7. [DiffSafeMerge: Mitigating Backdoor Inheritance in Diffusion Model Merging](/202608/14/2608.09445v1-diffsafemerge-mitigating-backdoor-inheritance-in-diffusion-model-merging)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
-6. [A Convolutional Layer Activation Dimensionality Reduction for Out-of-Distribution and Adversarial Attack Detection Methods](/202608/12/2608.10203v1-a-convolutional-layer-activation-dimensionality-reduction-for-out-of-distribution-and-adversarial-attack-detection-methods)  
+   evidence：对抗攻击防御方法
+8. [Structured Local Differential Modeling for AI-Generated Image Detection](/202608/14/2608.12811v1-structured-local-differential-modeling-for-ai-generated-image-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：卷积层激活降维检测对抗攻击
-7. [NullEdit: Stealthy Image Protection via VLM Condition Redirection](/202608/12/2608.10870v1-nulledit-stealthy-image-protection-via-vlm-condition-redirection)  
+   evidence：生成图像检测方法
+9. [SPARED: Reasoning-Based AI-Generated Image Detection via Adversarially Edited Data](/202608/14/2608.12876v1-spared-reasoning-based-ai-generated-image-detection-via-adversarially-edited-data)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：图像保护与对抗扰动
+   evidence：基于对抗扰动的生成式图像保护
+10. [QuISE: Defense against Typographic Attacks on VLMs via Query-Irrelevant Semantic Editing](/202608/14/2608.13119v1-quise-defense-against-typographic-attacks-on-vlms-via-query-irrelevant-semantic-editing)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：与对抗攻击的防御策略相关
 
 ### 速读区论文标签
-1. [Scene2Sound: Auditory-Grounded Soundscape Generation for 3D Gaussian Worlds](/202608/12/2608.00463v1-scene2sound-auditory-grounded-soundscape-generation-for-3d-gaussian-worlds)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：研究生成对抗网络在图像生成中的应用
-2. [DrawAI: Agentic Benchmark and Workflow for Making Raster Images Editable](/202608/12/2608.00548v1-drawai-agentic-benchmark-and-workflow-for-making-raster-images-editable)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：图像生成模型的可编辑性研究
-3. [Mitigating Backdoors via Decoy Shortcuts and Knowledge Decoupling](/202608/12/2608.00732v1-mitigating-backdoors-via-decoy-shortcuts-and-knowledge-decoupling)  
+1. [Caliber: Cross-Architecture Extraction-Cost Control for Score-Returning APIs](/202608/14/2608.01023v1-caliber-cross-architecture-extraction-cost-control-for-score-returning-apis)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-4. [Entity-Faithful Repair of Synthetic Supervision for Zero-Shot Image Captioning](/202608/12/2608.00994v1-entity-faithful-repair-of-synthetic-supervision-for-zero-shot-image-captioning)  
+   evidence：对抗攻击防御技术
+2. [Decoy Images Amplify Caption-Mediated Defenses Against Encoded Jailbreaks](/202608/14/2608.01043v1-decoy-images-amplify-caption-mediated-defenses-against-encoded-jailbreaks)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：提出对抗扰动下的图像模型保护方法
-5. [Keep the Needle, Prune the Haystack: Defect-Preserving Token Pruning for Efficient Zero-Shot Anomaly Detection](/202608/12/2608.03681v2-keep-the-needle-prune-the-haystack-defect-preserving-token-pruning-for-efficient-zero-shot-anomaly-detection)  
+   evidence：研究对抗攻击对图像生成模型的影响
+3. [Generative Adversarial Reconstruction with Adaptive Thresholding for Obstructed Targets in Computational Microwave Imaging](/202608/14/2608.01177v1-generative-adversarial-reconstruction-with-adaptive-thresholding-for-obstructed-targets-in-computational-microwave-imaging)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：生成对抗扰动
+4. [Detail Continuation over a Trustworthy Coarse Scale for Autoregressive Super-Resolution](/202608/14/2608.01823v2-detail-continuation-over-a-trustworthy-coarse-scale-for-autoregressive-super-resolution)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：生成对抗扰动与图像生成模型的鲁棒性
+5. [Robust-WAM: Bridging Generative Pretraining and Semantic Foresight in World-Action Models](/202608/14/2608.05903v2-robust-wam-bridging-generative-pretraining-and-semantic-foresight-in-world-action-models)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-6. [Robustness Emerges Early in Training Dynamics, but Is Not Preserved](/202608/12/2608.04442v1-robustness-emerges-early-in-training-dynamics-but-is-not-preserved)  
+   evidence：图像对抗扰动生成技术
+6. [Degradation-Aware Prompt Learning with Cross-Modal Compensation for Adverse Weather Removal](/202608/14/2608.06939v2-degradation-aware-prompt-learning-with-cross-modal-compensation-for-adverse-weather-removal)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：训练动态中的鲁棒性问题
-7. [CARGO-VL: Counterfactual Arbitration with Risk-Constrained Group Optimization for Vision-Language Models](/202608/12/2608.04509v1-cargo-vl-counterfactual-arbitration-with-risk-constrained-group-optimization-for-vision-language-models)  
+   evidence：图像对抗攻击防御技术
+7. [CANIS: Generation-Assisted 3D Canonicalization via an Image-Semantic Bridge](/202608/14/2608.07256v1-canis-generation-assisted-3d-canonicalization-via-an-image-semantic-bridge)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-8. [ColorFD: A Finite-Difference Guided Black-Box Physical Adversarial Attack for Remote Sensing Object Detection](/202608/12/2608.04559v2-colorfd-a-finite-difference-guided-black-box-physical-adversarial-attack-for-remote-sensing-object-detection)  
+   evidence：对抗扰动用于3D对象标准化
+8. [No Unique Minimizer, No Problem: On the Consistency of Robust Neural Classifiers](/202608/14/2608.08489v1-no-unique-minimizer-no-problem-on-the-consistency-of-robust-neural-classifiers)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：研究对抗扰动对图像篡改的影响
-9. [Self-Supervised Representation-Guided Generative Dataset Distillation](/202608/12/2608.03218v1-self-supervised-representation-guided-generative-dataset-distillation)  
+   evidence：对抗攻击下的图像模型保护
+9. [IFlowNets: Extending Generative Samplers to Learn Strategies in Incomplete Information Games](/202608/14/2608.05422v1-iflownets-extending-generative-samplers-to-learn-strategies-in-incomplete-information-games)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
-10. [Can Text-to-Image Models Draw from the Right Frame of Reference?](/202608/12/2608.03357v1-can-text-to-image-models-draw-from-the-right-frame-of-reference)  
+   evidence：生成对抗网络在不完全信息游戏中的应用
+10. [ConceptADapt: Concept-guided Adaptive Feature Reconstruction with Dynamic Attention for Few-Shot Industrial Anomaly Detection](/202608/14/2608.05743v1-conceptadapt-concept-guided-adaptive-feature-reconstruction-with-dynamic-attention-for-few-shot-industrial-anomaly-detection)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：文本到图像对抗参考框架
-11. [Keep the Needle, Prune the Haystack: Defect-Preserving Token Pruning for Efficient Zero-Shot Anomaly Detection](/202608/12/2608.03681v3-keep-the-needle-prune-the-haystack-defect-preserving-token-pruning-for-efficient-zero-shot-anomaly-detection)  
+   evidence：与生成式图像对抗扰动相关
+11. [Energy-Guided Flow Matching](/202608/14/2608.05811v1-energy-guided-flow-matching)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
-12. [LiveEvalBench: Toward Open-World Evaluation for Web Generation](/202608/12/2608.03689v1-liveevalbench-toward-open-world-evaluation-for-web-generation)  
+   evidence：对抗扰动生成方法
+12. [RRC: Unlocking Generative Reward Models in LLM Reinforcement Learning via Ranking-Based Reward Construction](/202608/14/2608.06310v1-rrc-unlocking-generative-reward-models-in-llm-reinforcement-learning-via-ranking-based-reward-construction)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
+   evidence：生成奖励模型
 
 
 ### ⚡ 这个站点能做什么
