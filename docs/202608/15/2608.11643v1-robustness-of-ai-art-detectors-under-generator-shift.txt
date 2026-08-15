@@ -1,0 +1,2792 @@
+Robustness of AI-Art Detectors under Generator Shift
+Shivank Singh Thakur∗Meien Li∗Mark Stamp∗†
+August 13, 2026
+Abstract
+Text-to-image generative models have advanced rapidly, with modern Diffusion
+Transformer architectures producing images that are increasingly difficult to dis-
+tinguish from human-created artwork. This development has raised significant con-
+cerns regarding copyright protection, misinformation, fraud, impersonation, and the
+authenticity of digital content. Most AI-art detectors are trained and evaluated on
+the same generator family, leaving robustness to newer architectures underexplored.
+In this chapter, we analyze generator shift based on a Stable Diffusion 3.5 Medium
+(SD3.5m) artwork dataset spanning ten art styles through reverse prompting of
+held-out human artwork samples. Five detectors are trained on U-Net-based la-
+tent diffusion artwork and evaluated in a zero-shot cross-generator setting on the
+SD3.5m dataset.
+Deep learning models perform strongly in-distribution but de-
+grade under generator shift, misclassifying many SD3.5m images as human while
+human false positives remain low. The CLIP ViT-L/14 model performs best over-
+all, while Grad-CAM analysis reveals weaker and more diffuse activation on false
+negatives. These findings highlight a generalization gap in current AI-art detectors
+and motivate the development of detectors as one component of a layered defense
+that remains reliable across rapidly evolving generative architectures.
+Keywords: AI-Art Detection · Stable Diffusion · CLIP ViT · ResNet · EfficientNet
+· ConvNeXt · Grad-CAM
+1
+Introduction
+Text-to-image generative models have greatly improved in their ability to synthesize
+high-quality artwork from natural language descriptions. Given a text prompt, these
+models iteratively denoise random noise into a high-resolution image that matches
+the requested content and style. As architectures, training datasets, and compute
+budgets have scaled up, modern systems such as DALL·E, Midjourney, and Stable
+Diffusion now produce images that are often difficult to distinguish from human-
+created artwork [42, 44]. Newer versions, such as Stable Diffusion 3.5 and its variants
+∗Department of Computer Science, San Jose State University
+†mark.stamp@sjsu.edu
+1
+arXiv:2608.11643v1  [cs.CV]  12 Aug 2026
+
+
+including Medium, Large, and Turbo, further reduce visible artifacts and generate
+more coherent textures and fine details than earlier models [13].
+This rapid improvement creates a security and trust problem. AI-generated art
+can be used for misinformation, fraud, and impersonation, especially when there is
+no reliable metadata about how the image was created. In many real-world scenarios
+(social media, messaging apps, reposted or edited content), cryptographic signatures
+or provenance tags may be missing or unreliable. This motivates continued interest
+in image-based detection as an important layer of defense for estimating whether
+an artwork is human-created or AI-generated.
+A central challenge in this setting is generator shift. Most existing AI-image
+detection studies train and evaluate detectors on images from the same generator
+family or from closely related generators (for example, Latent Diffusion models or
+GANs) [15, 44, 52]. As a result, detectors may perform well on controlled bench-
+mark datasets, but their reliability in real deployment is far more uncertain. The
+images encountered after deployment may come from newer generative models that
+were not included during training. This chapter considers such a setting by asking
+whether detectors trained on artwork from earlier U-Net-based diffusion models re-
+main reliable when evaluated on Stable Diffusion 3.5 Medium (SD3.5m), a newer
+Diffusion Transformer-based model [13].
+We model this deployment setting as an emerging-generator threat model. We
+assume that the defender operates an image-based detector as a screening compo-
+nent at a social media platform, a news verification desk, or a content-moderation
+pipeline. The detector uses a fixed operating threshold and has no access to labeled
+images from future generators. The opposing role is a synthetic-media producer
+who generates images using tools that were not available during detector train-
+ing. Importantly, this setting does not require a sophisticated adversary who crafts
+adversarial perturbations or optimizes directly against the detector. The producer
+can simply adopt a newer publicly available generator as stronger generative models
+continue to emerge and become widely accessible. This creates a dynamic similar to
+malware detection, where new malware families may appear after a classifier has al-
+ready been deployed. The threat distribution changes whereas the defensive model
+remains fixed and the resulting reliability gap can silently grow over time. The main
+operational risk is therefore a false negative, where AI-generated content is passed
+as human-created. This leads to an evasion-like failure mode in which the detector
+appears reliable on known generators but misses a substantial fraction of synthetic
+images from the newer generator. The formal threat model and evaluation scope
+are defined in Section 3.1.
+In this chapter, we investigate detector robustness under generator shift using
+a prompt-aligned SD3.5m dataset. The dataset is constructed across 10 art styles
+from held-out human artwork samples via reverse prompting. Five deep detector
+backbones are considered (two ResNet models [17], EfficientNet-B0 [51], ConvNeXt-
+Base [29], and CLIP ViT-L/14 [39]). These models are trained on in-distribution
+(ID) artwork from Latent Diffusion (LDM) and Stable Diffusion 2.1 (SD2.1), then
+evaluated under a shared protocol on both ID and out-of-distribution (OOD) data.
+This design makes it possible to assess overall OOD degradation while also exam-
+2
+
+
+ining how the performance varies across styles and source generators.
+The main contributions of this work are the following.
+1. A prompt-aligned Stable Diffusion 3.5 Medium dataset of 10,000 images across
+ten art styles, constructed through reverse prompting of human artwork.
+2. A systematic evaluation of five deep learning detectors under generator shift,
+measuring both in-distribution and out-of-distribution performance.
+3. A qualitative failure analysis of the case where detection fails on the newer
+generator, with an emphasis on how such failure varies across art styles.
+4. A security-oriented analysis of generator shift as an emerging synthetic-media
+threat, including the implications of false-negative failures for defensive content-
+screening and authenticity workflows.
+The remainder of this chapter is organized as follows. Section 2 reviews back-
+ground on image generation architectures, prompt engineering, detection method-
+ologies, and relevant datasets. Section 3 describes dataset construction and detector
+implementation. Section 4 presents our experimental results and analysis. Finally,
+Section 5 concludes this study and outlines possible directions for future work.
+2
+Background and Related Work
+Artificial intelligence has become a major force in visual art and image synthesis.
+What began as experimental algorithmic graphics has turned into an industrial-scale
+capability where generative models can produce images that are often indistinguish-
+able from human-created artwork. This shift has driven parallel advances in forensic
+methods and computational models of aesthetics. Modern AI systems can generate,
+analyze, critique, and imitate artistic styles. This raises practical questions about
+originality, content provenance, and even the reliability of visual evidence.
+2.1
+Computational Aesthetics: Can AI Understand Art?
+In addition to producing pixels, modern systems can evaluate images, describe them,
+and optimize toward aesthetic preferences. Early computer vision systems focused
+on low-level features like color histograms, edges and textures. Modern Multimodal
+Large Language Models (MLLMs) go much further, as they can perform structured
+art analysis (composition, style, mood) and often agree with human judgments
+about what looks “good” or “beautiful” [21].
+By mapping images and text into a shared representation space, models such
+as CLIP (Contrastive Language-Image Pre-training) can retrieve and classify art-
+work by abstract concepts like “melancholy” or “sublime” and also detect concrete
+objects. This enables aesthetic reward models that steer generation toward human-
+preferred styles [21].
+However, such model “understanding” is statistical and not experiential. The
+model learns correlations in a high-dimensional latent space. For example, a model
+can recognize Impressionist brushwork or Renaissance composition patterns, but it
+3
+
+
+does not experience emotion or meaning the way human viewers do [8]. Recent work
+adding chain-of-thought-style reasoning to MLLMs narrows this gap by having the
+model explicitly explain its judgments, which makes it appear to be more like an
+art critic [21].
+2.2
+Evolution of Image Generation Architectures
+Modern AI art has gone through three main phases: early visualization methods,
+generative adversarial networks (GANs) and diffusion models. Each phase improved
+fidelity, diversity, and controllability, and each left different forensic traces.
+2.2.1
+Pre-Generative Era: DeepDream and Style Transfer (2015-
+2017)
+Google’s DeepDream (2015) is often cited as a starting point for modern AI art [32].
+DeepDream used convolutional neural networks (CNNs) trained for image classifica-
+tion and inverted them: instead of predicting labels from an image, it optimized the
+input image to strongly activate specific neurons or layers. This produced surreal,
+hallucination-like images dominated by patterns the network had learned (e.g., dog
+faces, eyes). DeepDream was deterministic and limited by the features learned for
+classification.
+Neural Style Transfer (NST) separated content (the structure of a scene) from
+style (texture and color statistics). It allowed users to apply the style of artists such
+as Van Gogh or Picasso to a photograph, making AI-generated art widely accessible
+as a filter. However, since NST is an image-to-image translation method rather
+than a fully generative model, it stylizes existing content instead of creating new
+content from scratch [14].
+2.2.2
+Adversarial Era: GANs (2017-2021)
+Generative Adversarial Networks (GANs) introduced adversarial training as a pow-
+erful framework for image generation [15]. In this setup, a generator network creates
+synthetic images from latent noise, while a discriminator tries to distinguish gener-
+ated images from real images. Training proceeds as a two-player game in which the
+generator improves by learning to fool the discriminator.
+Key developments include the following.
+• StyleGAN and BigGAN delivered high-fidelity, high-resolution images. Style-
+GAN in particular allowed control over the style at different spatial scales
+(coarse, medium, fine), enabling realistic control over attributes like pose,
+lighting, or facial features [6, 24].
+• GAN-based models trained on artwork datasets such as WikiArt [33] could
+produce novel paintings that resembled established art movements. The auc-
+tion of the GAN-generated Portrait of Edmond de Belamy symbolized the
+growing cultural and commercial visibility of AI-generated art [9].
+4
+
+
+Despite their success, GANs have several limitations.
+One common problem
+is mode collapse, where the generator produces a limited diversity of images that
+still fool the discriminator. GAN-generated images may also contain characteristic
+spatial or high-frequency artifacts, including checkerboard-like patterns often asso-
+ciated with upsampling operations. These artifacts can provide useful signals for
+forensic detection [58].
+2.2.3
+Diffusion Era:
+Midjourney, DALL·E and Stable Diffusion
+(2021-Present)
+Diffusion models use a probabilistic iterative denoising approach. They are trained
+to reverse a gradual noising process. Starting from a noisy image, they learn to
+denoise it step by step. At inference time, generation begins from random noise and
+proceeds through multiple denoising steps.
+Latent Diffusion Models (LDM) achieve a balance between computational effi-
+ciency and high-fidelity generation by operating in a compressed latent space rather
+than pixel space [56]. Advantages of diffusion models include better training sta-
+bility and wider coverage of the data distribution as compared to GANs, as well
+as strong controllability when conditioned on text embeddings (for example, from
+models like CLIP or T5). This enables more detailed and precise prompt adher-
+ence [40].
+2.3
+Misuse of AI-Generated Artwork
+Generative artificial intelligence (GenAI) has become increasingly widespread, sub-
+stantially lowering the technical barriers to digital art creation and making creative
+tools more accessible to the general public. For example, text-to-image generative
+models such as Stable Diffusion became publicly available through online APIs and
+open-source repositories in mid-to-late 2022. By 2024, these models had attracted
+tens of millions of users [59]. Many researchers have emphasized the efficiency and
+potential of this technology for educational and academic applications. However,
+alongside these benefits, the misuse of GenAI has raised growing concerns, partic-
+ularly regarding the unethical use and exploitation of copyrighted materials.
+The harms associated with GenAI models have not yet been effectively addressed
+from a regulatory perspective. This is due to a combination of policy-related chal-
+lenges, including inadequate regulation of social media platforms, unresolved ethical
+concerns, legal uncertainty, and the rapid pace of technological development.
+For example, many artists have adopted various methods to prevent their work
+from being incorporated into GenAI training datasets, such as applying watermarks
+or using other protective measures [48]. However, these approaches do not fully deter
+malicious actors who continue to develop increasingly sophisticated techniques for
+reproducing or imitating distinctive artistic styles.
+At the same time, high-quality AI-generated artwork can be used to make dis-
+information more persuasive and difficult to detect. Consequently, preserving the
+authenticity of visual content has become increasingly challenging. This erosion of
+5
+
+
+trust in digital media may undermine public confidence and make it more difficult
+for individuals to distinguish genuine content from fabricated information.
+2.3.1
+Copyright Concerns
+With the widespread adoption of the Internet, digitization of traditional artwork,
+online publication, and sharing of digital art have become common practices. Dig-
+ital platforms provide artists with practical ways to preserve copies of their work,
+promote their creations, and reach broader audiences. In sharing their work online,
+artists often rely on copyright protection policies and the expectation that their
+work will not be used without authorization.
+Over many years, the collective creative output of artists has contributed to the
+development of vast online image collections. These collections have subsequently
+provided the foundation for the large datasets required to train generative AI mod-
+els. However, artists often have limited opportunities to refuse or prevent the unau-
+thorized inclusion of their work in such datasets. Moreover, AI-generated artwork
+can blur the boundaries of ownership and authorship, particularly because relevant
+legal frameworks remain incomplete or insufficiently developed [5, 45]. This legal
+ambiguity poses significant risks to the protection of artists’ intellectual property
+rights.
+2.3.2
+Misinformation
+The rapid development of GenAI, particularly diffusion-based image-generation
+models, has enabled the fast and convincing imitation of artists’ styles. It has also
+increased the realism and persuasiveness of fabricated identities and visual content,
+potentially contributing to social disruption [45].
+An artist’s body of work and distinctive style are integral components of their
+artistic identity. However, these characteristics can be easily exploited through gen-
+erative technologies. For example, an artist’s style may be imitated to appropriate
+its commercial value, while the artist’s identity may be misrepresented to dissem-
+inate misinformation, rumors, or harmful content. Such misuse may damage the
+artist’s reputation and weaken public trust in visual media. More broadly, the in-
+creasing prevalence of convincing fabricated content may contribute to widespread
+distrust and make reliable information more difficult to identify [35].
+2.4
+Prompt Engineering and Inversion
+The emergence of GenAI systems has altered the landscape of digital art. Unlike
+the traditional image generation models, current GenAI systems are capable of
+producing high-quality images that closely mimic the styles of human artists, which
+has introduced a critical threat to the intellectual property rights of human artists.
+A particular type of threat involves an adversary passing an artist’s original artwork
+through a vision-language model to obtain a natural language description, to later
+feed into a GenAI model to produce a stylistically similar image. Because no pixel
+6
+
+
+is directly reproduced, such attacks are challenging and difficult to detect. Since
+these attacks rely on textual descriptions to transfer stylistic information from an
+original artwork to a generative model, understanding the role of prompts becomes
+essential.
+2.4.1
+Image Captioning as Prompt
+Prompt engineering is the practice of crafting text inputs that steer the model
+toward a desired style, composition, or mood. This often relies on modifiers i.e.,
+keywords that the model has learned to associate with specific visual attributes,
+such as “unreal engine”, “octane render”, or “volumetric lighting”.
+Image captioning models like BLIP [25] or LLaVA [28] can generate prompts
+from reference images helping automate prompt creation. However, generic captions
+usually describe objects and actions and often miss fine-grained stylistic details
+(brushwork, camera model, rendering engine) needed to reproduce an artwork’s
+look.
+2.4.2
+Reverse Prompt Engineering and Prompt Inversion
+Reverse prompt engineering (RPE) aims to reconstruct a prompt that could possibly
+have generated a given image. Common methods include the following.
+• PEZ (Hard Prompts made EaZy) uses gradient-based optimization on discrete
+tokens to minimize CLIP loss between the prompt and target image. It often
+discovers trigger tokens that work numerically but do not have a human-
+readable meaning (for example, “horse cat 8k!!”) [54].
+• CLIP Interrogator combines a captioning model with a large database of
+style tags, then searches for tags that maximize CLIP similarity. This pro-
+duces human-readable prompts like “digital art by [Artist], trending
+on ArtStation” but performance is limited by the tag library [38].
+• ARPO (Automatic Reverse Prompt Optimization) iteratively generates im-
+ages from candidate prompts, compares them to the target and updates the
+prompt. It can find high-fidelity prompts that are easy to edit, but is compu-
+tationally expensive because it requires many generation steps [43].
+These methods converge on prompts that are semantically close to the original,
+effectively reconstructing a textual specification of the generation process that can
+be used for attribution, reproducibility or further analysis.
+2.5
+Methodologies for Detecting AI-Generated Artwork
+As generative models have improved, detection has moved from obvious visual
+glitches to more subtle statistical, semantic, and model-based cues. Current meth-
+ods can be grouped into artifact analysis, generative fingerprinting and semantic
+reasoning.
+7
+
+
+2.5.1
+Artifact Analysis: Frequency and Spatial Domains
+Frequency-domain analysis uses techniques like the Fast Fourier Transform (FFT)
+to study the spectrum of an image. GANs with transposed convolutions can leave
+periodic patterns that show up as spikes or checkerboard structures in the frequency
+domain.
+Similar but more subtle artifacts can sometimes be found in diffusion
+images due to their deconvolution modules [10].
+Spatial-domain analysis focuses directly on pixel patterns, such as texture in-
+consistencies or unusual local noise structures. These signals are fragile and com-
+mon post-processing operations (like JPEG compression, blurring and resizing) can
+weaken or remove them, which makes pure artifact-based detectors vulnerable [7].
+2.5.2
+Generative Fingerprinting: Diffusion Reconstruction Error
+DIRE (Diffusion Reconstruction Error) uses a diffusion model as a detector instead
+of only as a generator [53]. The method assumes that if an image was created by a
+given diffusion model, it lies close to that model’s image manifold. In practice, the
+image is first inverted into a noisy latent using the same model, then reconstructed
+by running the diffusion process forward and finally an error is computed between
+the original and reconstructed images.
+Synthetic images that match the model
+tend to reconstruct with low error, while real images or out-of-distribution images
+generally reconstruct with higher error because important details are lost in the
+inversion–reconstruction cycle. DIRE is effective even for unseen diffusion models
+because it exploits properties of the diffusion process itself rather than specific visual
+artifacts. Its main drawback is computational cost due to repeated denoising steps.
+2.5.3
+Human Perception and Semantics
+Human judgment is still important even with strong automatic detectors. Recent
+work that compares human and machine performance on real versus AI-generated
+images shows that people are unreliable at this task, as they tend to rely more
+on semantic and physical cues than on low-level artifacts. Typical signals include
+lighting and shadows (e.g., inconsistent shadow directions, incorrect reflections, or
+specular highlights that do not match the scene’s light sources) and anatomy and
+geometry (e.g., subtle deformations in hands, faces, or object boundaries, or phys-
+ically impossible arrangements such as floating objects) [23]. Benchmarks such as
+AnomReason [50] explicitly test whether models can detect these kinds of semantic
+and physics-based anomalies rather than only exploiting texture statistics.
+Empirical studies report that human participants misclassify a large fraction
+of images (real versus AI), while the best automatic models achieve substantially
+lower error rates on clean, in-distribution data [16]. However, automatic detectors
+can be fragile under adversarial perturbations, meaning small and carefully designed
+changes to pixels can drastically reduce their accuracy, even when the images still
+look the same to humans. For artwork, large-scale studies with crowdworkers and
+expert artists show a similar pattern. Experts tend to outperform non-experts and
+are better at noticing semantic and physical inconsistencies, but they also exhibit
+8
+
+
+a “skepticism bias”, i.e., they label unusual or abstract human art as AI-generated,
+which can lead to a high false-positive rate [16].
+Overall, these results suggest that humans and models make different kinds of
+errors. Humans are more robust to small pixel changes and better at reasoning
+about semantics and physical errors, but are biased and overly-suspicious especially
+for atypical styles. Models are more consistent and sensitive to subtle statistical
+patterns, but can be fooled by low-level perturbations and shifts in distribution and
+often struggle with semantic anomaly detection.
+2.6
+Deep Learning for Detection
+Deep learning architectures for visual recognition have evolved rapidly, progressing
+from early convolutional networks through residual learning, efficient scaling, and
+modernized CNN designs, to transformer-based models that capture global spatial
+dependencies. This section reviews the key architectural developments most relevant
+to image classification and representation learning. Table 1 provides a summary
+comparison of the models used in this study.
+Table 1: Summary of deep learning backbone architectures
+Model
+Architecture
+Parameters
+Year
+Pretraining
+ResNet-18 [17]
+Residual CNN
+11.7M
+2016
+ImageNet-1K
+ResNet-50 [17]
+Residual CNN
+25.6M
+2016
+ImageNet-1K
+EfficientNet-B0 [51]
+Compound-scaled CNN
+5.3M
+2019
+ImageNet-1K
+CLIP ViT-L/14 [39]
+Vision Transformer
+307.4M
+2021
+400M image-text pairs
+ConvNeXt-Base [29]
+Modernized CNN
+88.6M
+2022
+ImageNet-1K
+2.6.1
+Residual Networks
+Training very deep convolutional networks is hindered by the degradation problem,
+where adding more layers increases training error, suggesting an optimization diffi-
+culty rather than overfitting. Residual learning addresses this by introducing skip
+connections that add the block input directly to its output, so the network learns
+residual mappings rather than full unreferenced mappings, allowing gradients to
+propagate effectively through very deep architectures. The resulting ResNet fam-
+ily, spanning 18 to over 150 layers, achieved state-of-the-art results on ImageNet
+and became a foundational backbone architecture widely adopted across detection,
+segmentation, and representation learning tasks [17, 46].
+2.6.2
+EfficientNet
+Scaling network depth, width, and input resolution independently yields subopti-
+mal results, as these dimensions are interdependent. Compound scaling addresses
+this by uniformly scaling all three dimensions simultaneously using a fixed coeffi-
+cient derived from a constrained grid search, producing models that achieve sig-
+nificantly better accuracy while using fewer parameters and less computation than
+9
+
+
+many earlier models. The EfficientNet family showed that scaling strategy is just
+as important as choosing the model design itself [51].
+2.6.3
+Vision Transformers and CLIP
+Transformer architectures were adapted to image recognition by splitting images
+into fixed-size patches, projecting each patch into a token embedding, and applying
+multi-head self-attention across the full sequence [11]. Unlike convolutional net-
+works, this approach captures global spatial relationships from the first layer with-
+out locality constraints, and achieves strong performance when pretrained on suffi-
+ciently large datasets. This was extended further by training a Vision Transformer
+(ViT) through contrastive learning on 400 million image-text pairs, aligning visual
+and textual representations in a shared embedding space [39]. This Contrastive
+Language-Image Pretraining (CLIP) objective produces semantic, transferable rep-
+resentations that generalize broadly across tasks without task-specific fine-tuning,
+and has become one of the most widely used backbones for zero-shot and transfer
+learning applications.
+2.6.4
+ConvNeXt
+As ViT gained traction, the convolutional design space was revisited by system-
+atically applying transformer-inspired choices (larger depthwise kernels, inverted
+bottleneck blocks, layer normalization, and GELU activations [18]) to a standard
+ResNet backbone. The resulting ConvNeXt family matches ViT performance on
+standard benchmarks while retaining the computational efficiency of convolutional
+architectures, demonstrating that the CNN-transformer performance gap was largely
+attributable to training procedures and design choices rather than a fundamental
+limitation of convolutions [29].
+2.7
+Public Datasets for AI Artwork Detection
+A variety of public datasets are available for AI-image and AI-artwork detection
+covering different domains, generators, and threat models. Some are large, general-
+purpose benchmarks designed to learn broad, model-agnostic forensic features, while
+others focus specifically on artistic styles or robustness to real-world degradations
+and adversarial perturbations.
+Table 2 summarizes key properties of representative datasets, including total
+size, real/fake composition, real-image sources, underlying generators, and primary
+use cases. Robust AI-artwork detectors are usually trained and evaluated using a
+combination of resources, including large general datasets for broad coverage, art-
+focused datasets for style awareness, and robustness-oriented datasets to stress-test
+models under realistic noise, compression, and attack settings.
+Recent research shows a shift from GAN-based image generation to modern
+diffusion and transformer-based systems. Detection methods have expanded from
+low-level artifact analysis to feature-based and semantically informed deep learning
+10
+
+
+Table 2: Summary of public AI-generated image and art detection datasets
+Dataset
+Total
+Real/Fake
+Real
+Generators
+Primary
+images
+split
+sources
+use case
+ArtiFact [41]
+∼2.5M
+Balanced
+COCO, LSUN,
+GANs,
+Social-media
+FFHQ, AFHQ
+diffusion
+robustness
+GenImage [60]
+∼2.7M
+ImageNet
+1000 classes
+Midjourney, SD,
+Forensics,
+GLIDE, etc.
+cross-generation
+ArtBench-10 [27]
+60k
+All real
+WikiArt
+—
+Style-aware
+(10 styles)
+benchmarks
+AI-ArtBench [49]
+∼185k
+60k real
+ArtBench-10
+Latent Diffusion,
+Human vs.
+125k fake
+(real)
+SD
+AI art styles
+Human-Art [22]
+50k
+Mixed real
+Natural photos
+Various
+Detection
+and stylized
+plus WikiArt
+across styles
+CIFAKE [4]
+120k
+60k real
+CIFAR-10
+SD v1.4
+Edge
+60k fake
+benchmarking
+COCO-Fake [1]
+∼1.2M
+Paired fakes
+MS-COCO
+SD v1.4, v2.0
+Caption–image
+consistency
+RAID [12]
+∼72k
+Balanced
+Subset of
+SD variants
+Adversarial
+LAION-400M
+robustness
+approaches. Artwork-specific detection studies have also explored human-versus-
+AI classification using classical machine learning and deep learning models, show-
+ing that strong performance is possible under controlled style and generator set-
+tings [26]. However, current benchmarks still provide limited coverage of prompt-
+aligned, art-specific generator shift, especially for newer models such as Stable Diffu-
+sion 3.5. This gap motivates the present study, which evaluates five deep backbone
+detectors under a common experimental protocol and tests their ability to gener-
+alize from earlier generators to a new prompt-aligned Stable Diffusion 3.5 Medium
+dataset.
+3
+Dataset and Implementation
+This section describes the construction of the datasets used for training and out-of-
+distribution (OOD) evaluation, and the design and training of the binary detectors
+that we evaluate as defensive screening components. We also describe our detec-
+tor architecture, training procedure, threshold selection strategy, and evaluation
+protocol.
+3.1
+Threat Model and Evaluation Scope
+We consider a post-deployment generator-shift scenario in which an image-based de-
+tector is used as a defensive screening component to distinguish human-created art-
+work from AI-generated artwork. The defender may represent a content-moderation
+11
+
+
+platform, media-verification service, digital-art marketplace, or another organiza-
+tion that reviews the claimed origin of visual content. We assume that the detector
+has been trained using images from known generator families, deployed with a fixed
+decision threshold, and has no access to labeled samples from generators that emerge
+after deployment.
+The opposing role is a synthetic-media producer who uses a newer, publicly
+available image generator that was not represented during detector training. The
+producer is not assumed to have access to the detector’s parameters, gradients,
+training data, or internal confidence scores, and does not construct adversarial
+pixel perturbations.
+Instead, the relevant evasion mechanism is the adoption of
+a generator whose architecture and learned visual characteristics differ from those
+represented in the training data. The primary failure of interest is therefore a false
+negative, in which an AI-generated image is classified as human-created to pass
+the screening mechanism and evade the detector. False positives are also impor-
+tant because incorrectly labeling human-created artwork as AI-generated can cause
+attribution errors and reputational harm to artists, while also undermining public
+trust in detection systems.
+This threat model is operationalized by training detectors on artwork generated
+by Latent Diffusion and Stable Diffusion 2.1 and evaluating them, without retrain-
+ing or threshold adjustment, on artwork generated by Stable Diffusion 3.5 Medium.
+The SD3.5m images are produced from prompts derived from held-out human art-
+work so that semantic content and artistic-style coverage remain comparable while
+the underlying generator changes. The scope of this study is limited to image-level
+human-versus-AI artwork detection. It does not directly evaluate metadata ma-
+nipulation, watermark removal, account compromise, adversarial perturbations or
+the intent of the content producer. Detector predictions should therefore be inter-
+preted as screening signals for further verification rather than as definitive proof of
+authenticity or malicious use.
+3.2
+Experimental Setup
+Table 3 lists the hardware configuration used for the experiments. All deep learning
+workloads used PyTorch and torchvision, with CUDA 12.8 as the compute back-
+end [36]. Image generation was performed with the HuggingFace diffusers library,
+and pretrained CLIP and BLIP model weights are loaded via HuggingFace trans-
+formers [55].
+Table 3: Hardware configuration used for all experiments
+Component
+Details
+Compute platform
+Google Colab Pro
+GPU
+NVIDIA A100-SXM4-80GB
+CPU
+Intel(R) Xeon(R) CPU @ 2.20GHz
+System RAM
+167 GB (high-memory instance)
+Storage
+Google Drive, Colab Disk
+12
+
+
+All large image directories are archived as zip files on Google Drive and extracted
+to the Colab instance’s local disk at the start of each session using the zipfile module.
+This reduced dataset loading time from several hours of cloud-based file access to a
+single bulk extraction step completed in only a few minutes.
+3.3
+Artwork ID Dataset
+AI-ArtBench is used as the primary in-distribution (ID) dataset in this study [49].
+It is an art-focused benchmark for detecting and attributing AI-generated artwork,
+containing approximately 185,000 images across 10 artistic styles: Art Nouveau,
+Baroque, Expressionism, Impressionism, Post-Impressionism, Realism, Renaissance,
+Romanticism, Surrealism, and Ukiyo-e. It includes 60,000 human artwork samples
+and 125,015 AI-generated images produced by Latent Diffusion (LDM) and Stable
+Diffusion 2.1 (SD2.1) models. Its human subset is derived from ArtBench-10, a
+standardized and class-balanced dataset of 60,000 artwork images across the ten
+styles [27].
+AI-ArtBench includes three source categories namely human, LDM, and SD2.1.
+In this chapter, we consider a binary human-versus-AI setting by merging the two
+synthetic classes. The final in-distribution splits used in the experiments consist
+of 105,000 training samples, 15,000 validation samples, and 30,000 test samples.
+This benchmark provides the core data foundation for training and evaluating the
+detector in a style-diverse artwork setting.
+Figure 1: Samples from the AI-ArtBench dataset: human artwork (top row), LDM-
+generated artwork (middle row), and SD2.1-generated artwork (bottom row) across
+10 art styles, shown left to right: Art Nouveau, Baroque, Expressionism, Impres-
+sionism, Post-Impressionism, Realism, Renaissance, Romanticism, Surrealism, and
+Ukiyo-e
+3.4
+Stable Diffusion OOD Dataset
+The main challenge that we address is whether a detector trained on images from
+LDM and SD2.1 can remain reliable when an adversary switches to a newer and
+architecturally different generator as defined in Section 3.1. To study this, a dataset
+of 10,000 images was constructed using Stable Diffusion 3.5 Medium (SD3.5m) [13].
+13
+
+
+SD3.5m was selected because it is a newer member of the Stable Diffusion family
+which Stability AI describes as offering improved prompt adherence, image quality,
+and practical use on accessible hardware. Unlike the training U-Net generators,
+SD3.5m is built on the Diffusion Transformer (DiT) architecture rather than a
+convolutional U-Net.
+DiT supports richer text-to-image conditioning through a
+multi-encoder text pipeline [37]. These architectural differences make SD3.5m a
+challenging and realistic test of cross-generator generalization.
+In this study, we use the dataset for out-of-distribution evaluation. All SD3.5m
+images are generated using prompts derived from human artwork samples through
+a reverse prompting pipeline. This helps make the OOD images semantically com-
+parable to the human artwork samples and reduces content mismatch. Essentially
+this prompt-aligned construction means that any decrease in detector performance
+is more likely to be caused by the change in generator rather than by differences in
+image content or style distribution.
+The pipeline illustrated in Figure 2 consists of four stages: human artwork selec-
+tion, reverse prompting via CLIP Interrogator, prompt augmentation and controlled
+image generation with SD3.5m.
+Figure 2: Overview of the prompt-aligned SD3.5m dataset construction pipeline
+3.4.1
+Held-Out Human Reference Set
+The source images for the reverse prompting pipeline are a separate set of 10,000
+human artwork samples selected from the broader artwork corpus and reserved as
+a held-out subset. These images were sampled across the 10 art styles used in this
+study, with 1,000 artwork samples per style, so that the extension would preserve
+stylistic coverage consistent with the rest of the dataset.
+The held-out artwork
+samples were excluded from the in-distribution training, validation, and test splits
+to prevent data leakage.
+These images serve as input to the reverse prompting
+pipeline and as the human-class reference set in the final OOD test set.
+3.4.2
+Image-to-Text via Image Captioning
+We used CLIP Interrogator to generate content-aware and style-consistent text
+prompts from human artwork [38]. This is a reverse prompt engineering tool that
+combines a visual captioning model with a large database of style, artist, and aes-
+thetic tags ranked by CLIP similarity to the input image [39].
+The system was configured with the BLIP-Large captioning model and the CLIP
+ViT-L/14 vision encoder [25]. The chunk size and flavor intermediate count were
+14
+
+
+both set to 2,048, which is the recommended value for the ViT-L/14 backbone to
+accommodate its higher-dimensional embedding space. In classic mode, CLIP Inter-
+rogator first generates a BLIP caption describing the image content, then appends
+the highest-scoring style, artist, and flavor tags from its curated databases. This
+produces human-readable prompts such as
+a painting of a family with a bird on their shoulder, a painting by
+Jacob
+Jordaens, baroque, oil on canvas, Flemish baroque, Dutch golden age
+Each artwork image was processed individually, producing one prompt per image
+and saved to a CSV file along with the source filename. The CLIP Interrogator
+runs on the NVIDIA A100 GPU (see Section 3.2) at approximately 1.5 images per
+second.
+3.4.3
+Prompt Augmentation
+A prompt augmentation step is applied to captions before image generation to
+ensure the SD3.5m output reflects the target art style. The final prompt for each
+artwork is made by combining three components namely the target art style, the
+painting title parsed from the source image filename and the CLIP-based caption
+from the previous stage. This enriches the caption with explicit style information
+while preserving the semantic content extracted by CLIP Interrogator. The prompt
+template used for augmentation is
+{art style} style art titled {painting name}, {CLIP caption}
+3.4.4
+Text-to-Image Generation with Stable Diffusion
+For our OOD dataset, image generation was performed using the HuggingFace
+diffusers library with the stabilityai/stable-diffusion-3.5-medium check-
+point. Images were generated at a fixed resolution of 768 × 768 pixels using 28
+denoising steps and a classifier-free guidance scale of 4.5. This configuration pro-
+vides good adherence to the prompts without overly constraining the output. The
+FlowMatchEulerDiscreteScheduler is used as recommended for SD3.x models
+with bfloat16 precision to balance image quality and memory usage [13]. Memory-
+efficient attention (xFormers) was enabled to lower memory usage and support faster
+image generation (see Section 3.2 for environment specification). These configura-
+tion parameters are summarized in Table 4.
+The randomness is controlled through a combination of a global seed and a
+per-image seed derived deterministically from the input filename using a SHA-256
+hash, ensuring that each human artwork always maps to the same generated image.
+Output files are named to encode style, subject, and seed, for example
+ai-sd35m-<style> <painting> <seed>.jpg
+An audit log is saved for every image and includes the original image filename,
+injected style, parsed painting title, final prompt, seed, configuration parameters,
+15
+
+
+Table 4: Stable Diffusion 3.5 Medium generation configuration used to construct
+the OOD test set
+Parameter
+Value
+Model checkpoint
+stabilityai/stable-diffusion-3.5-medium
+Output resolution
+768 × 768 pixels
+Number of denoising steps
+28
+Classifier-free guidance scale
+4.5
+Scheduler
+FlowMatchEulerDiscreteScheduler
+Precision
+bfloat16
+Seeding strategy
+SHA-256 hash of source filename
+Average generation time
+3.2 seconds per image
+Average GPU utilization
+86%
+Average GPU power
+333 W
+Average GPU energy per image
+0.29 Wh
+output path, runtime, timestamp and status message. GPU telemetry (utilization,
+memory, power, temperature) was sampled at 500 ms intervals during each genera-
+tion call using NVIDIA NVML for resource monitoring.
+The complete SD3.5m AI dataset contains 10,000 images consisting of 1,000
+prompt-aligned SD3.5m images per style. Sample generated images alongside their
+source human artwork samples are shown in Figure 3. This dataset can test detector
+behavior under a realistic change in the generative model, and the pipeline is scalable
+for future experiments.
+Figure 3:
+Samples of human artwork (top row) and prompt-aligned SD3.5m-
+generated artwork samples (bottom row) across 10 art styles, shown left to right:
+Art Nouveau, Baroque, Expressionism, Impressionism, Post-Impressionism, Real-
+ism, Renaissance, Romanticism, Surrealism, and Ukiyo-e
+3.5
+Dataset Quality Evaluation
+The quality of the SD3.5m dataset extension was evaluated using a set of com-
+plementary metrics covering prompt alignment, distributional similarity, duplicate
+detection and visual diversity. A subset of the data was used for the evaluation which
+consists of 5,000 generated images (500 per style) and 5,000 corresponding human
+artwork samples. Four metrics are computed: CLIPScore [19], Fr´echet Inception
+Distance (FID) [20], Kernel Inception Distance (KID) [3] and Learned Perceptual
+Image Patch Similarity (LPIPS) perceptual diversity [57].
+16
+
+
+CLIPScore measures how well each generated image matches its generation
+prompt.
+All images and their corresponding prompts were passed through the
+CLIP ViT-L/14 model and CLIPScore was computed as the cosine similarity be-
+tween the projected image and text embeddings. A shuffled-prompt baseline was
+also computed by randomly reassigning prompts to images (five repetitions), provid-
+ing a lower bound that reflects what CLIP similarity looks like when image-prompt
+pairing is broken.
+FID and KID measure the statistical distance between the distribution of gener-
+ated images and the distribution of real human artwork samples for the same style,
+both computed in Inception feature space at 256×256 resolution. A human-versus-
+human (HvH) baseline was also computed by repeatedly splitting the human set
+into two random halves and measuring FID/KID between those halves, providing a
+lower bound that reflects the natural within-style variation among human artwork
+samples.
+LPIPS diversity measures the average perceptual distance between randomly
+sampled pairs of generated images within the same style, using an AlexNet back-
+bone. Higher values indicate that the generated images are visually diverse rather
+than collapsing into a small set of visual patterns. We compute the LPIPS diver-
+sity score for the generated dataset as the mean perceptual distance across 1,000
+randomly sampled intra-style image pairs.
+Duplicate analysis uses perceptual hashing (pHash) to detect duplicate candi-
+dates with identical pHash values and near-duplicates. For this metric, we consider
+Hamming distance less than or equal to 4.
+Table 5: Dataset quality metrics for the SD3.5m OOD dataset (5,000 images, 500
+per style; CLIP and CLIPshuf shown in units of ×10−2; KID and HvH KID shown
+in units of ×10−4)
+Style
+CLIP
+CLIPshuf
+FID
+HvH FID
+KID
+HvH KID
+LPIPS
+Art Nouveau
+28.52
+11.70
+119.67
+126.21
+214.0
+−0.46
+0.712
+Baroque
+28.14
+12.87
+110.10
+116.30
+226.0
+0.70
+0.660
+Expressionism
+27.32
+9.33
+130.60
+137.77
+215.0
+1.92
+0.740
+Impressionism
+27.91
+10.19
+120.43
+126.47
+256.0
+−3.72
+0.712
+Post-Impressionism
+27.63
+9.73
+124.95
+124.06
+266.0
+−0.66
+0.725
+Realism
+28.81
+10.31
+118.20
+130.44
+219.0
+−3.98
+0.706
+Renaissance
+26.37
+12.98
+104.76
+109.60
+213.0
+−2.63
+0.673
+Romanticism
+28.49
+10.79
+103.66
+118.24
+175.0
+0.17
+0.690
+Surrealism
+28.82
+11.86
+128.19
+148.35
+187.0
+−2.16
+0.736
+Ukiyo-e
+30.93
+22.55
+139.37
+83.14
+674.0
+−3.67
+0.681
+Overall
+28.29
+7.53
+43.84
+24.16
+180.0
+0.38
+0.724
+Table 5 reports the per-style and overall results.
+The overall FID, KID and
+shuffled-prompt CLIP baseline are computed on the pooled multi-style dataset and
+not as averages of the per-style rows. For the pooled dataset spanning all ten styles,
+the reported overall CLIPScore is 28.29, compared to a shuffled-prompt baseline
+of 7.53, yielding a margin of 20.76 in the reported table units. This large gap suggests
+that the generated images remain meaningfully aligned with their source prompts.
+17
+
+
+The overall FID is 43.84, compared to a human-versus-human baseline FID of 24.16,
+indicating that the SD3.5m images remain distributionally distinct from the human
+reference set. The reported overall KID is 180.0, corresponding to a raw KID value
+of 0.0180, whereas the corresponding human-versus-human KID baseline is 0.38 in
+the table units and therefore remains near zero. The trend is consistent with the
+FID scores and supports distributional separation when measured under the second
+metric.
+The average diversity by the LPIPS criterion is 0.72 and the style-wise
+LPIPS scores are all in the mid to high ranges, suggesting a good amount of visual
+diversity across the images. There were no duplicate images found by the pHash
+metric and no near duplicate pairs within each style.
+Ukiyo-e has the highest raw CLIPScore (30.93), but also a high shuffled baseline
+(22.55). This suggests the score partly reflects shared style features, not only ex-
+act image–prompt alignment. Ukiyo-e also has the largest FID score (139.37) and
+KID (674.0), making it a clear outlier. By comparison, Romanticism (103.66) and
+Renaissance (104.76) are associated with the smallest FID values among the ten
+styles.
+In general, we see that the SD3.5m dataset retains the style coverage and prompt
+relevance while remaining different from the human reference dataset. This makes
+it suitable for style-aware out-of-distribution evaluation under generator shift.
+3.6
+Detector Implementation
+Image detection is organized as a modular framework for evaluating multiple deep
+learning models on the task of binary human-versus-AI artwork detection.
+We
+consider several detector families, including ResNet, EfficientNet, ConvNeXt, and
+CLIP-ViT, all studied under a shared in-distribution and out-of-distribution evalu-
+ation protocol.
+3.6.1
+Architecture Overview
+All detectors follow a frozen-backbone, linear-probe design. A pretrained deep net-
+work serves as a fixed feature extractor, the final classification layer is removed and
+the penultimate feature vector is extracted for every input image. A lightweight
+linear classification head is then trained on top of these frozen features to per-
+form binary human-versus-AI classification. This approach has three main benefits.
+First, it reduces the risk of catastrophically fine-tuning a large pretrained model on
+a relatively small dataset. Second, feature extraction can be precomputed once for
+the entire dataset, making the head-training loop extremely fast. Third, the frozen
+representations provide a controlled comparison across backbone families without
+confounding effects from differences in fine-tuning schedules. This also models a
+realistic deployment scenario where the OOD performance reflects cross-generator
+transfer without adaptation to SD3.5m.
+The following five models are evaluated. Note that these models include both
+convolutional and transformer-based architectures.
+18
+
+
+1. ResNet-18 [17] is a lightweight 18-layer residual network, providing a low-
+capacity CNN baseline. Feature dimension: 512; pretrained on ImageNet-1K.
+2. ResNet-50 [17] is the 50-layer variant residual network, providing a medium-
+capacity CNN baseline. Feature dimension: 2,048; pretrained on ImageNet-
+1K.
+3. EfficientNet-B0 [51] is a compound-scaled CNN, optimized for efficiency.
+Feature dimension: 1,280; pretrained on ImageNet-1K.
+4. ConvNeXt-Base [29] is a modern CNN architecture incorporating design
+principles from Vision Transformers, serving as a bridge between pure CNN
+and transformer families. Feature dimension: 1,024; pretrained on ImageNet-
+1K.
+5. CLIP ViT-L/14 [39] is a large Vision Transformer trained on 400M image-
+text pairs with a contrastive language-image objective, and a feature dimen-
+sion of 768. This backbone is particularly relevant because its representations
+are sensitive to semantic and stylistic content rather than low-level texture
+statistics.
+3.6.2
+Dataset Splits, Pruning, and Preprocessing
+The AI-ArtBench dataset [49] is built on top of ArtBench-10 [27], which con-
+tains 6,000 images per art style (60,000 human artwork samples in total).
+AI-
+ArtBench splits the human portion into a train split of 5,000 images per style
+(50,000 total) and a test split of 1,000 images per style (10,000 total), adding AI-
+generated images from LDM and SD2.1 to each split. Table 6 reproduces the full
+dataset composition from the original paper [49]. The 30,000-image test split is
+used directly as the in-distribution (ID) test set in this study and is not used during
+training or validation.
+Table 6: Original AI-ArtBench dataset composition
+Source
+Styles
+Train
+Test
+Latent Diffusion (LDM)
+10
+52,092
+10,000
+Stable Diffusion 2.1 (SD2.1)
+10
+52,923
+10,000
+Human (WikiArt / ArtBench-10)
+10
+50,000
+10,000
+Total
+30
+155,015
+30,000
+The prompt-aligned SD3.5m OOD evaluation requires a held-out set of human
+artwork samples that share no overlap with training data. These images serve as
+both the source for reverse prompting (Section 3.4.2) and the human-class reference
+in the final OOD test set. To obtain this set, 1,000 human images per style (10,000
+in total) were extracted from the 50,000-image human training pool. The remaining
+human training pool contains exactly 4,000 images per style (40,000 total).
+After OOD extraction, the training pool consists of 40,000 human images, 52,092
+LDM images, and 52,923 SD2.1 images. The AI generator counts are substantially
+19
+
+
+larger than the human count and vary unevenly across styles: LDM per-style counts
+range from 4,844 to 5,504 and SD2.1 per-style counts range from 5,052 to 5,455.
+Table 7 shows the full per-style breakdown before and after pruning.
+Without
+pruning, the combined training set would contain 105,015 AI images against 40,000
+human images, a 2.6:1 binary-class imbalance that would bias detectors toward the
+majority AI class and conflate style-specific detection difficulty with class frequency
+effects.
+To remove the source-level and style-level frequency differences, exactly 4,000
+images per style were retained for each AI source class by random sampling with a
+fixed seed. This removed 12,092 excess LDM images and 12,923 excess SD2.1 images,
+totaling 25,015 pruned images.
+The resulting corpus contains 3 × 4,000 × 10 =
+120,000 images with equal representation across all style-source combinations.
+Table 7: Per-style image counts in the training pool before and after pruning
+Style
+Before pruning
+After pruning
+Human
+LDM
+SD2.1
+Total
+Human
+LDM
+SD2.1
+Total
+Art Nouveau
+4,000
+4,992
+5,384
+14,376
+4,000
+4,000
+4,000
+12,000
+Baroque
+4,000
+4,960
+5,052
+14,012
+4,000
+4,000
+4,000
+12,000
+Expressionism
+4,000
+5,116
+5,304
+14,420
+4,000
+4,000
+4,000
+12,000
+Impressionism
+4,000
+5,208
+5,388
+14,596
+4,000
+4,000
+4,000
+12,000
+Post-Impressionism
+4,000
+4,844
+5,360
+14,204
+4,000
+4,000
+4,000
+12,000
+Realism
+4,000
+5,232
+5,248
+14,480
+4,000
+4,000
+4,000
+12,000
+Renaissance
+4,000
+5,416
+5,060
+14,476
+4,000
+4,000
+4,000
+12,000
+Romanticism
+4,000
+5,436
+5,455
+14,891
+4,000
+4,000
+4,000
+12,000
+Surrealism
+4,000
+5,384
+5,364
+14,748
+4,000
+4,000
+4,000
+12,000
+Ukiyo-e
+4,000
+5,504
+5,308
+14,812
+4,000
+4,000
+4,000
+12,000
+Total
+40,000
+52,092
+52,923
+145,015
+40,000
+40,000
+40,000
+120,000
+The before-pruning column in Table 7 makes the imbalance concrete: the com-
+bined pre-pruning pool contains 105,015 AI images versus 40,000 human images.
+Within the AI classes, per-style variation is as high as 660 images for LDM (4,844
+in Post-Impressionism versus 5,504 in Ukiyo-e) and 403 images for SD2.1 (5,052 in
+Baroque versus 5,455 in Romanticism). Pruning equalizes the three source cate-
+gories and removes within-source style skew, ensuring that no style-source combi-
+nation contributes disproportionately to detector training.
+The 120,000-image balanced corpus was divided into a training split of 105,000
+images (3,500 per style per source class) and a validation split of 15,000 images
+(500 per style per source class), maintaining the source balance within each split.
+Images were assigned to each split using a fixed random seed. The validation split is
+used exclusively for epoch selection and threshold optimization and is not used for
+final evaluation. The complete dataset composition across all splits is summarized
+in Tables 8 and 9.
+Overall, the final in-distribution dataset was split into 70%
+training, 10% validation, and 20% ID test.
+All preprocessing performed is deterministic and no data augmentation is ap-
+plied at any stage. Each image is loaded using the Pillow Python imaging library
+(PIL), converted to RGB, and passed through the same deterministic backbone-
+specific preprocessing pipeline before feature extraction. For the four CNN back-
+20
+
+
+Table 8: In-distribution (ID) dataset composition across all splits
+Split
+Human
+LDM
+SD2.1
+Total
+Training
+35,000
+35,000
+35,000
+105,000
+Validation
+5,000
+5,000
+5,000
+15,000
+ID Test
+10,000
+10,000
+10,000
+30,000
+Total
+50,000
+50,000
+50,000
+150,000
+Table 9: Out-of-distribution (OOD) evaluation set composition
+Source
+Images
+Human (held-out)
+10,000
+AI (SD3.5m, generated)
+10,000
+Total
+20,000
+bones (ResNet-18, ResNet-50, EfficientNet-B0 and ConvNeXt-Base), images are
+resized to 224 × 224 pixels using bicubic interpolation, converted to tensors, and
+normalized using the ImageNet training set mean (𝜇= [0.485, 0.456, 0.406]) and
+standard deviation (𝜎= [0.229, 0.224, 0.225]) [46]. For CLIP ViT-L/14, the Hug-
+gingFace processor associated with
+openai/clip-vit-large-patch14
+is used to prepare images for feature extraction, applying the checkpoint’s default
+resize/crop and normalization pipeline. The same backbone-specific deterministic
+preprocessing is used for all splits including training, validation, ID test and OOD
+test.
+3.6.3
+Feature Extraction
+Each backbone is used as a frozen feature extractor: the final classification layer
+is removed so that a forward pass returns a fixed-length feature vector for each
+image.
+For CLIP ViT-L/14, the projected image embedding is used, consistent
+with the space in which CLIP was pretrained. Table 10 lists the pretrained weights
+and output feature dimension for each backbone. CNN backbones are loaded using
+torchvision and CLIP ViT-L/14 is loaded using HuggingFace Transformers.
+Features are extracted once per backbone per split and saved to disk. All sub-
+sequent head training reads directly from these cached feature files, reducing the
+per-epoch training cost to a single linear layer pass and allowing rapid iteration
+across training epochs.
+3.6.4
+Classification Head Training
+A single linear layer maps the frozen backbone feature vector x ∈R𝐷to a scalar
+logit according to
+𝑧= w⊤x + 𝑏, where w ∈R𝐷and 𝑏∈R
+(1)
+21
+
+
+Table 10: Pretrained weights and output feature dimension for each backbone
+Model
+Pretrained
+Feature
+weights
+dimension
+ResNet-18
+ImageNet-1K (V1)
+512
+ResNet-50
+ImageNet-1K (V2)
+2,048
+EfficientNet-B0
+ImageNet-1K (V1)
+1,280
+ConvNeXt-Base
+ImageNet-1K (V1)
+1,024
+CLIP ViT-L/14
+openai/clip-vit-large-patch14
+768
+At inference, the logit is converted to an AI probability score via the sigmoid func-
+tion
+𝑝AI = 𝜎(𝑧) =
+1
+1 + 𝑒−𝑧∈(0, 1)
+The head contains no hidden layers and no dropout. This linear probe design is
+intentional because the backbone is frozen, the trainable component is restricted
+to a lightweight classifier operating on a high-dimensional pretrained feature space.
+This keeps the training setup simple, reduces the risk of overfitting in the head, and
+makes comparisons across backbone families easier to interpret, since most of the
+discriminative capacity comes from the pretrained representation rather than from
+a more expressive task-specific head.
+The head is optimized using weighted binary cross-entropy with logits. For a
+mini-batch of 𝑁samples with logits {𝑧𝑖} and binary labels {𝑦𝑖} ∈{0, 1}, the loss is
+ℒ= −1
+𝑁
+𝑁
+∑︁
+𝑖=1
+𝑤𝑦𝑖
+[︁
+𝑦𝑖log 𝜎(𝑧𝑖) + (1 −𝑦𝑖) log(1 −𝜎(𝑧𝑖))
+]︁
+(2)
+where 𝑤0 and 𝑤1 are per-class weights computed from the training split as
+𝑤𝑐=
+𝑁
+2 · 𝑁𝑐
+, for 𝑐∈{0, 1}
+where 𝑁𝑐denotes the number of training samples in class 𝑐. This inverse-frequency
+weighting increases the contribution of the minority class and reduces bias to-
+ward the majority class. In the completed binary training split, the class counts
+are 35,000 human and 70,000 AI samples, which correspond to weights of 1.5 for
+the human class and 0.75 for the AI class. The loss is computed directly from log-
+its using F.binary cross entropy with logits, which combines the sigmoid and
+cross-entropy terms in a single numerically stable operation.
+AdamW [30] is used with a fixed learning rate of 1×10−3 and weight decay of 1×
+10−4. AdamW is preferred over standard Adam because it decouples weight decay
+from the gradient update, yielding more consistent regularization in the presence of
+adaptive learning rates. In this setting, weight decay acts as L2-style regularization
+on the head weights and helps limit overfitting in the linear classifier.
+Model training runs for a maximum of ten epochs. At the end of each epoch,
+the head is evaluated on the validation split using a fixed threshold of 0.5. The
+22
+
+
+checkpoint with the highest validation balanced accuracy is retained.
+Balanced
+accuracy is computed as
+Balanced Accuracy = 1
+2
+(︂
+TP
+TP + FN +
+TN
+TN + FP
+)︂
+and is used as the model-selection criterion rather than standard accuracy because
+it gives equal weight to the true positive rate and true negative rate. This is more
+informative than raw accuracy under class imbalance and better reflects the need
+to control both missed AI images and misclassified human artwork samples. The
+training configuration also includes patience-based early stopping with a patience of
+three epochs, although in runs that continued to improve, training proceeded to the
+full ten-epoch budget. After the best checkpoint is selected, a separate threshold
+sweep is performed on the validation predictions. These configuration parameters
+are summarized in Table 11.
+Table 11: Shared linear head training configuration
+Parameter
+Value
+Maximum epochs
+10
+Loss function
+Weighted binary cross-entropy with logits: equation (2)
+Optimizer
+AdamW
+Learning rate
+1 × 10−3
+Weight decay
+1 × 10−4
+Epoch selection criterion
+Best validation balanced accuracy
+Image resolution
+224 × 224
+Interpolation
+Bicubic
+Normalization
+ImageNet mean and standard deviation
+Backbone weights
+Frozen (no fine-tuning)
+Classification head
+Single linear layer, logit output: equation (1)
+Task
+Binary: human (𝑦= 0) versus AI (𝑦= 1)
+3.6.5
+Threshold Selection
+The sigmoid output 𝑝AI ∈[0, 1] must be mapped to a binary prediction using a
+threshold. While the standard choice of a threshold is 0.5, such a threshold would
+be suboptimal when the score distribution is not centered around 0.5 or when the
+relative impact of false positives and false negatives differs. To select an operating
+threshold for each model, a sweep over 99 linearly spaced candidate values from 0.01
+to 0.99 was performed on the validation set. For each candidate threshold, binary
+predictions were derived and validation balanced accuracy was computed, with F1
+score used as a tie-breaker.
+The threshold that maximized validation balanced
+accuracy was selected and locked for all subsequent evaluations on the ID test
+and OOD sets. This threshold is not adjusted after selection, preventing threshold
+overfitting and ensuring that the reported test and OOD metrics reflect realistic
+deployment conditions.
+23
+
+
+Selecting thresholds using validation balanced accuracy provides a consistent ba-
+sis for comparing the models under the assumption that AI-image recall and human-
+image specificity are equally important. However, the most appropriate operating
+threshold in practice may depend on the defensive context and the relative costs
+of false positives and false negatives. For example, a news-verification or high-risk
+fraud-screening workflow may prioritize recall and tolerate a higher false-positive
+rate so that fewer synthetic images escape review. In contrast, an art-attribution or
+authenticity-assessment system may require a very low false-positive rate to reduce
+the risk of incorrectly labeling human-created artwork as synthetic. The thresh-
+olds used in this study are therefore intended for controlled cross-model and cross-
+generator comparison rather than as universally optimal deployment thresholds.
+3.6.6
+Evaluation Protocol
+Detectors were evaluated on three disjoint sets: the validation set (used for epoch
+selection and threshold selection), the ID test set (drawn from the same generator
+distribution as training), and the OOD evaluation set (unseen SD3.5m dataset). For
+each model on each split, the following metrics were computed at the validation-
+selected threshold, with AI treated as the positive class: balanced accuracy, preci-
+sion, recall, F1 score, Matthews correlation coefficient (MCC) [2, 31], false positive
+rate (FPR), false negative rate (FNR), ROC-AUC, and PR-AUC. Here, recall cor-
+responds to the detector’s coverage of AI-generated images, FNR corresponds to
+the AI-image miss rate or evasion-like failure rate, and FPR corresponds to the
+false-alarm rate on human artwork. Style-wise breakdowns were also computed to
+identify which artistic styles contributed most strongly to model failures. In addi-
+tion, source-wise analyses were performed for the in-distribution setting.
+The main result of interest is detector performance on the OOD set, especially
+the false negative rate on SD3.5m images. An OOD AI image is classified as AI
+if 𝑝AI ≥𝒯val, where 𝒯val is the threshold selected on the validation set. The drop in
+balanced accuracy between the ID test set and OOD set is used to calculate how
+much each detector degrades under generator shift from the training generators
+(LDM and SD2.1) to SD3.5m. All experiments were run on the hardware described
+in Section 3.2, and the pipeline was designed to support reproducible evaluation
+through fixed random seeds, frozen backbone weights, deterministic preprocessing,
+and cached feature bundles.
+4
+Experimental Results and Analysis
+This section reports the experimental outcomes for AI-art detection and provides
+analysis of the results. Section 4.1 describes training dynamics and the selected
+classification thresholds. Section 4.2 reports in-distribution performance on the val-
+idation and ID test splits. Then in Section 4.3, we present cross-generator OOD
+evaluation on the prompt-aligned SD3.5m test set, including the ID-to-OOD per-
+formance gap. Section 4.4 provides a per-style breakdown of OOD performance,
+24
+
+
+Section 4.5 reports source-wise accuracy on the ID test set, and Section 4.6 ana-
+lyzes the results using Grad-CAM spatial attribution maps.
+Throughout our experiments, detector models are identified by their backbone
+name: ResNet-18, ResNet-50, EfficientNet-B0, ConvNeXt-Base, and CLIP ViT-
+L/14. The primary evaluation metric is balanced accuracy, which weights the true
+positive rate and true negative rate equally.
+When a single ranking is needed,
+balanced accuracy is used as the primary criterion, with F1 score, recall, and ROC-
+AUC provided for various experiments as secondary criteria.
+4.1
+Model Training and Threshold Selection
+The detectors were trained for ten epochs using the frozen-backbone, linear-head
+setup described in Section 3.6.4. Table 12 reports the validation F1 score and vali-
+dation balanced accuracy at the end of each epoch for every model. The best-epoch
+checkpoint for each model was selected based on the highest validation balanced
+accuracy achieved across all ten epochs.
+Table 12: Validation F1 score and balanced accuracy by epoch
+Epoch
+ResNet-18
+ResNet-50
+EffNet-B0
+ConvNeXt-Base
+CLIP ViT-L/14
+F1
+BalAcc
+F1
+BalAcc
+F1
+BalAcc
+F1
+BalAcc
+F1
+BalAcc
+1
+0.871
+0.835
+0.924
+0.897
+0.927
+0.903
+0.929
+0.904
+0.979
+0.973
+2
+0.907
+0.874
+0.948
+0.927
+0.945
+0.923
+0.956
+0.935
+0.991
+0.988
+3
+0.922
+0.892
+0.957
+0.940
+0.951
+0.932
+0.964
+0.948
+0.994
+0.992
+4
+0.927
+0.902
+0.962
+0.948
+0.956
+0.938
+0.968
+0.955
+0.996
+0.995
+5
+0.931
+0.908
+0.966
+0.954
+0.958
+0.943
+0.972
+0.960
+0.997
+0.996
+6
+0.936
+0.913
+0.970
+0.958
+0.961
+0.946
+0.975
+0.963
+0.997
+0.997
+7
+0.939
+0.917
+0.972
+0.961
+0.961
+0.948
+0.977
+0.967
+0.998
+0.997
+8
+0.940
+0.920
+0.973
+0.964
+0.962
+0.950
+0.978
+0.969
+0.998
+0.997
+9
+0.942
+0.922
+0.974
+0.965
+0.964
+0.952
+0.980
+0.972
+0.998
+0.998
+10
+0.945
+0.924
+0.976
+0.966
+0.966
+0.953
+0.981
+0.973
+0.998
+0.998
+CLIP ViT-L/14 converges faster than all CNN-based models by epoch 1 it al-
+ready achieves a validation F1 of 0.979 and a balanced accuracy of 0.973, whereas
+ResNet-18 does not reach these values by epoch 10.
+This suggests that the se-
+mantic representations learned by CLIP through contrastive language-image pre-
+training transfer more efficiently to the binary AI-art detection task than convolu-
+tional features pretrained on image classification alone. Among the CNN backbones,
+ConvNeXt-Base converges faster and to a higher plateau than the other three, re-
+flecting its larger capacity and modern architectural design. ResNet-18 shows the
+slowest convergence among the detectors. Figure 4 shows the validation balanced
+accuracy trajectory for the detector models across ten epochs.
+Following training, the optimal decision threshold was selected for each model
+as described in Section 3.6.5.
+Table 13 reports the selected threshold for each
+model. These values range from 0.50 for CLIP ViT-L/14 to 0.58 for EfficientNet-
+B0. The CLIP threshold of 0.50 indicates the default midpoint is already optimal.
+In contrast, EfficientNet-B0’s higher threshold of 0.58 suggests its raw probabilities
+25
+
+
+Figure 4: Validation balanced accuracy as a function of training epoch
+are slightly compressed near the center, requiring a shift toward the AI side to
+maximize the balanced accuracy.
+Table 13: Decision threshold selected and corresponding validation and ID test
+balanced accuracy at the threshold
+Model
+Threshold
+Balanced accuracy
+Validation
+ID Test
+CLIP ViT-L/14
+0.50
+0.9980
+0.9969
+ConvNeXt-Base
+0.53
+0.9745
+0.9727
+ResNet-50
+0.55
+0.9672
+0.9637
+EfficientNet-B0
+0.58
+0.9538
+0.9524
+ResNet-18
+0.53
+0.9246
+0.9260
+Figure 5 illustrates the threshold sweep for ConvNeXt-Base, showing how vali-
+dation balanced accuracy varies across the 99 candidate threshold values and con-
+firming that the selected value of 0.53 is indeed at the peak.
+4.2
+In-Distribution Performance
+Table 14 reports evaluation results for the detectors on the validation and ID test
+splits, using the thresholds selected from the validation set. In-distribution perfor-
+mance measures how well each detector identifies images from the same generator
+families used during training.
+All models perform well on the in-distribution test set, the ranking generally
+follows the strength and capacity of the various models. CLIP ViT-L/14 is the best
+in-distribution detector, as it achieves an ID test balanced accuracy of 0.9969, an F1
+score of 0.9977, and a ROC-AUC of 0.9999. Its false positive rate and false negative
+rate are both 0.003, which implies that CLIP ViT-L/14 makes fewer than 100 errors
+across the 30,000 ID test images. ConvNeXt-Base is the second best model with an
+ID test balanced accuracy of 0.9727. The other CNN models perform close to each
+26
+
+
+Figure 5: Validation threshold sweep for ConvNeXt-Base
+Table 14: In-distribution performance on the validation split (Val) and ID test
+split (IDT); here Bal = balanced accuracy, Prec = precision, Rec = recall,
+F1 = F1 score, FNR = false negative rate, FPR = false positive rate, MCC =
+Matthews correlation coefficient, AUC = ROC-AUC, PR = PR-AUC, and all
+metrics computed at the validation-selected threshold as per Table 13
+Model
+Split
+Bal
+Prec
+Rec
+F1
+FNR
+FPR
+MCC
+AUC
+PR
+CLIP ViT-L/14
+Val
+0.9980
+0.9992
+0.9975
+0.9983
+0.0025
+0.0016
+0.9951
+1.0000
+1.0000
+IDT
+0.9969
+0.9984
+0.9971
+0.9977
+0.0030
+0.0032
+0.9932
+0.9999
+1.0000
+ConvNeXt-Base
+Val
+0.9745
+0.9870
+0.9745
+0.9807
+0.0255
+0.0256
+0.9431
+0.9962
+0.9980
+IDT
+0.9727
+0.9863
+0.9726
+0.9794
+0.0275
+0.0271
+0.9391
+0.9962
+0.9980
+ResNet-50
+Val
+0.9672
+0.9847
+0.9645
+0.9745
+0.0355
+0.0300
+0.9254
+0.9940
+0.9968
+IDT
+0.9637
+0.9821
+0.9624
+0.9721
+0.0377
+0.0350
+0.9185
+0.9939
+0.9968
+EfficientNet-B0
+Val
+0.9538
+0.9795
+0.9472
+0.9631
+0.0528
+0.0396
+0.8939
+0.9901
+0.9946
+IDT
+0.9524
+0.9776
+0.9482
+0.9627
+0.0518
+0.0435
+0.8922
+0.9900
+0.9949
+ResNet-18
+Val
+0.9246
+0.9595
+0.9274
+0.9432
+0.0726
+0.0782
+0.8362
+0.9767
+0.9868
+IDT
+0.9260
+0.9603
+0.9289
+0.9443
+0.0712
+0.0768
+0.8393
+0.9777
+0.9874
+other: ResNet-50 reaches 0.9637, EfficientNet-B0 achieves 0.9524, and ResNet-18 is
+at 0.9260. The validation and ID test results are also very consistent for all models,
+indicating that the threshold selection did not overfit to the validation split.
+Figure 6 shows the ID test confusion matrices for CLIP ViT-L/14 and ConvNeXt-
+Base. Figure 7 overlays the ID test ROC curves for each of the five models.
+Figure 8 shows the ID test probability histograms for CLIP ViT-L/14 and
+ConvNeXt-Base. For both models, human images are mostly grouped near 𝑝AI = 0,
+while AI images are mostly grouped near 𝑝AI = 1, and there is little overlap around
+the threshold selected from the validation set. This clear separation indicates that
+both models can distinguish human and AI images very well on the in-distribution
+test set.
+Table 15 reports per-style ID test balanced accuracy for CLIP ViT-L/14 and
+ConvNeXt-Base. All per-style accuracies are above 0.94 for ConvNeXt-Base, and
+27
+
+
+Human
+AI
+Human
+AI
+9,968
+32
+59
+19,941
+0
+5,000
+10,000
+15,000
+20,000
+Human
+AI
+Human
+AI
+9,729
+271
+549
+19,451
+0
+5,000
+10,000
+15,000
+20,000
+(a) CLIP ViT-L/14
+(b) ConvNeXt-Base
+Figure 6: ID test confusion matrices
+Figure 7: ID test ROC curves for all detectors
+(a) CLIP ViT-L/14
+(b) ConvNeXt-Base
+Figure 8: ID test predicted-probability histograms
+above 0.994 for CLIP ViT-L/14. Surrealism is the most challenging style for both
+models. Ukiyo-e is the easiest style for ConvNeXt-Base, while all styles are near-
+uniformly easy for CLIP ViT-L/14.
+28
+
+
+Table 15: Per-style ID test balanced accuracy for CLIP ViT-L/14 and ConvNeXt-
+Base
+Style
+CLIP ViT-L/14
+ConvNeXt-Base
+Art Nouveau
+0.9978
+0.9860
+Baroque
+0.9978
+0.9818
+Expressionism
+0.9955
+0.9725
+Impressionism
+1.0000
+0.9870
+Post-Impressionism
+0.9953
+0.9770
+Realism
+0.9968
+0.9523
+Renaissance
+0.9958
+0.9713
+Romanticism
+0.9968
+0.9658
+Surrealism
+0.9948
+0.9420
+Ukiyo-e
+0.9995
+0.9918
+4.3
+OOD Cross-Generator Evaluation
+The main question in our OOD experiment is whether detectors trained on LDM
+and SD2.1 artwork can still work reliably on prompt-aligned SD3.5m images that
+were not seen during training. Table 16 reports the full OOD evaluation results for
+all models on the 20,000-image SD3.5m test set.
+Table 16: OOD performance on the SD3.5m test set (column definitions are the
+same as Table 14, and all metrics are computed at the validation-selected threshold
+as per Table 13)
+Model
+Bal
+Prec
+Rec
+F1
+FNR
+FPR
+MCC
+AUC
+PR
+CLIP ViT-L/14
+0.7829
+0.9967
+0.5676
+0.7233
+0.4324
+0.0019
+0.6268
+0.9658
+0.9703
+ConvNeXt-Base
+0.7643
+0.9537
+0.5556
+0.7021
+0.4444
+0.0270
+0.5817
+0.9256
+0.9252
+EfficientNet-B0
+0.7156
+0.9164
+0.4745
+0.6252
+0.5255
+0.0433
+0.4922
+0.8799
+0.8782
+ResNet-50
+0.7125
+0.9258
+0.4619
+0.6163
+0.5381
+0.0370
+0.4910
+0.8779
+0.8811
+ResNet-18
+0.6688
+0.8369
+0.4193
+0.5587
+0.5807
+0.0817
+0.3896
+0.7955
+0.7927
+Table 17 quantifies the performance drop in terms of the absolute balanced
+accuracy gap (ΔBal) and absolute recall gap (ΔRec) between the ID test set and the
+OOD set. Figures 9 and 10 visualize the OOD balanced accuracy ranking and the
+ID-to-OOD drop across all models.
+Every model suffers a substantial performance drop on the OOD test set. ResNet-
+18 experiences the largest decrease, losing 25.7 percentage points of balanced ac-
+curacy and 51.0 percentage points of AI recall. Even the strongest model, CLIP
+ViT-L/14, loses 21.4 percentage points of balanced accuracy.
+Critically, the failure mode is asymmetric. False negative rates increase sharply
+on the OOD set while false positive rates remain comparatively low: CLIP ViT-L/14
+maintains an OOD FPR of just 0.0019, and ConvNeXt-Base maintains an OOD
+FPR of 0.0270. This implies that the detectors remain conservative in assigning
+the AI label. They rarely misclassify human paintings as AI-generated, but fail to
+recognize a large fraction of SD3.5m images. At the validation-selected thresholds,
+29
+
+
+Table 17: ID-to-OOD performance gap (ΔBal is OOD minus ID balanced accuracy;
+ΔRec is OOD minus ID recall)
+Model
+Balanced accuracy
+ΔBal
+ΔRec
+ID
+OOD
+ResNet-18
+0.9260
+0.6688
+−0.257
+−0.510
+ResNet-50
+0.9637
+0.7125
+−0.251
+−0.501
+EfficientNet-B0
+0.9524
+0.7156
+−0.237
+−0.474
+CLIP ViT-L/14
+0.9969
+0.7829
+−0.214
+−0.430
+ConvNeXt-Base
+0.9727
+0.7643
+−0.208
+−0.417
+CLIP ViT-L/14
+ConvNeXt-Base
+EfficientNet-B0
+ResNet-50
+ResNet-18
+0.00
+0.20
+0.40
+0.60
+0.80
+1.00
+0.783
+0.764
+0.716
+0.712
+0.669
+OOD balanced accuracy
+Figure 9: OOD balanced accuracy across detectors
+CLIP ViT-L/14
+ConvNeXt-Base
+EfficientNet-B0
+ResNet-50
+ResNet-18
+0.00
+0.20
+0.40
+0.60
+0.80
+1.00
+0.997
+0.973
+0.952
+0.964
+0.926
+0.783
+0.764
+0.716
+0.712
+0.669
+Balanced accuracy
+ID test
+OOD
+Figure 10: ID-test and OOD balanced accuracy
+30
+
+
+the five detectors miss approximately 4,300 to 5,800 of the 10,000 SD3.5m images.
+From a defensive perspective, these false negatives represent synthetic images that
+would pass the screening mechanism as human-created. In an operational workflow,
+such failures could allow synthetic content to bypass checks used for misinforma-
+tion triage, marketplace fraud review, impersonation assessment or content-origin
+verification.
+Among the five models, ConvNeXt-Base is the strongest CNN-based detector
+on the OOD test set, achieving a balanced accuracy of 0.764 and a ROC-AUC
+of 0.926, while CLIP ViT-L/14 performs best overall with a balanced accuracy
+of 0.783 and a ROC-AUC of 0.966. ResNet-50 and EfficientNet-B0 show very sim-
+ilar OOD performance (0.712 and 0.716 balanced accuracy, respectively), although
+their in-distribution results differ more noticeably. This suggests that improvements
+in standard in-distribution performance do not necessarily translate into propor-
+tional gains in cross-generator generalization. More broadly, the results show that
+strong performance on known generators may create a misleading impression of se-
+curity when a deployed detector is not regularly evaluated against newly emerging
+generation systems [34].
+Figure 11 presents the OOD confusion matrices for CLIP ViT-L/14 and ConvNeXt-
+Base. The matrices show that OOD degradation is driven primarily by false neg-
+atives, with many SD3.5m AI images predicted as human, while false positives on
+human artwork samples remain relatively uncommon. This directly illustrates the
+asymmetric error pattern underlying the OOD performance drop.
+Human
+AI
+Human
+AI
+9,981
+19
+4,324
+5,676
+0
+2,500
+5,000
+7,500
+10,000
+Human
+AI
+Human
+AI
+9,730
+270
+4,444
+5,556
+0
+2,500
+5,000
+7,500
+10,000
+(a) CLIP ViT-L/14
+(b) ConvNeXt-Base
+Figure 11: OOD confusion matrices
+Figure 12 shows the OOD ROC curves for all five models overlaid. Unlike the
+tightly clustered ID ROC curves in Figure 7, the OOD curves spread out visibly,
+reflecting the divergence in model generalization.
+The probability histograms in Figure 13 emphasize the OOD failure mode. On
+the ID test set, human and AI scores are strongly separated, with human images
+concentrated near 𝑝AI = 0 and AI images near 𝑝AI = 1. In contrast, for the OOD
+SD3.5m dataset, this separation weakens substantially, as the AI-score distribution
+becomes much more spread out and shifts toward lower values, with many SD3.5m
+images falling below the selected threshold. As a result, a large number of OOD AI
+images are misclassified as human.
+Next, we consider t-SNE plots, which provide qualitative visualizations of the
+feature-space structure. For these visualizations, a random subset of 2,000 images
+was sampled from each evaluated split. Frozen backbone features were first reduced
+31
+
+
+Figure 12: OOD ROC curves across detectors
+(a) CLIP ViT-L/14
+(b) ConvNeXt-Base
+Figure 13: OOD predicted probability histograms
+to 50 dimensions using PCA. Then t-SNE was run with perplexity 30, PCA initial-
+ization, and automatic learning rate selection. Figure 14 shows the resulting t-SNE
+projections of the OOD feature space for CLIP ViT-L/14 and ConvNeXt-Base, with
+human and SD3.5m AI images colored differently. The substantial overlap between
+the two classes suggests that the decision boundary learned from the ID data does
+not transfer cleanly to the OOD distribution.
+4.4
+Style-wise OOD Performance
+The overall OOD metrics reported in Section 4.3 provide a useful summary of de-
+tector performance across all ten art styles. A style-wise analysis complements this
+view by showing how generator shift manifests within individual artistic movements.
+Different styles have distinct visual vocabularies: for example, Ukiyo-e is character-
+ized by flat color areas and bold outlines, whereas Realism emphasizes naturalistic
+textures and photographic plausibility. SD3.5m may preserve these stylistic proper-
+ties to different degrees across styles. Examining per-style OOD performance helps
+32
+
+
+(a) CLIP ViT-L/14
+(b) ConvNeXt-Base
+Figure 14: t-SNE projections of the OOD feature space
+identify which styles remain more robust under generator shift, which styles are more
+challenging, and whether these patterns are consistent across all five backbones or
+vary by architecture.
+Table 18 reports style-wise OOD balanced accuracy for all five detectors. Each
+cell corresponds to the 2,000-image OOD subset for that style (1,000 human and 1,000
+SD3.5m AI), and the rightmost column gives the mean across all five models.
+Figure 15 visualizes the same style-by-model matrix as a heatmap, making the over-
+all difficulty pattern across detector backbones easier to compare. Ukiyo-e (bottom
+row) is consistently the easiest style for all models, whereas Realism (top row) is
+the hardest, with no model exceeding a balanced accuracy of 0.694 for Realism.
+Table 18: OOD balanced accuracy per style for all five detectors
+Style
+RN18
+RN50
+ENB0
+CNX
+CLIP
+Mean
+Realism
+0.631
+0.647
+0.661
+0.666
+0.694
+0.660
+Romanticism
+0.636
+0.673
+0.675
+0.702
+0.740
+0.685
+Impressionism
+0.659
+0.693
+0.686
+0.708
+0.752
+0.700
+Post-Impressionism
+0.655
+0.684
+0.681
+0.743
+0.754
+0.703
+Expressionism
+0.655
+0.678
+0.707
+0.746
+0.751
+0.707
+Art Nouveau
+0.692
+0.723
+0.717
+0.840
+0.709
+0.736
+Surrealism
+0.654
+0.687
+0.725
+0.782
+0.837
+0.737
+Baroque
+0.668
+0.737
+0.715
+0.738
+0.833
+0.738
+Renaissance
+0.708
+0.743
+0.726
+0.776
+0.795
+0.750
+Ukiyo-e
+0.733
+0.862
+0.865
+0.943
+0.966
+0.874
+Average
+0.669
+0.712
+0.716
+0.764
+0.783
+0.729
+Recall is particularly important in the OOD setting because it measures the
+detector’s ability to correctly identify SD3.5m AI images as AI. Style-wise, recall
+provides a useful complement to balanced accuracy by showing which styles most
+often lead to missed AI detections. Figure 16 presents this recall-based view and
+highlights which styles are prone to false negatives under generator shift.
+33
+
+
+CLIP ViT-L/14
+ConvNeXt-Base
+EfficientNet-B0
+ResNet-50
+ResNet-18
+Realism
+Romanticism
+Impressionism
+Post-Impressionism
+Expressionism
+Art Nouveau
+Surrealism
+Baroque
+Renaissance
+Ukiyo e
+0.694
+0.665
+0.661
+0.647
+0.630
+0.740
+0.702
+0.674
+0.673
+0.636
+0.752
+0.708
+0.685
+0.693
+0.658
+0.754
+0.743
+0.680
+0.684
+0.655
+0.750
+0.746
+0.707
+0.678
+0.654
+0.709
+0.839
+0.717
+0.722
+0.692
+0.837
+0.782
+0.725
+0.687
+0.654
+0.833
+0.738
+0.715
+0.736
+0.668
+0.794
+0.776
+0.726
+0.742
+0.708
+0.966
+0.943
+0.865
+0.861
+0.732
+0.6
+0.7
+0.8
+0.9
+1.0
+Figure 15: Heatmap of OOD balanced accuracy across art styles and detectors
+Realism
+Romanticism
+Impressionism
+Post-Impressionism
+Expressionism
+Art Nouveau
+Surrealism
+Baroque
+Renaissance
+Ukiyo e
+0.00
+0.20
+0.40
+0.60
+0.80
+1.00
+0.337
+0.403
+0.427
+0.436
+0.474
+0.509
+0.510
+0.535
+0.568
+0.758
+Mean OOD recall
+Figure 16: Mean OOD AI recall across all detectors per style
+The styles are ordered from hardest to easiest by mean OOD AI recall, giving
+a model-agnostic view of style-level difficulty under generator shift.
+Realism is
+the hardest style at 0.337. Ukiyo-e is the easiest at 0.758, while all other styles
+fall below 0.57. Ukiyo-e stands out because its visual structure (flat color regions,
+bold outlines and clear linework) remains distinctive in the SD3.5m output, making
+these images easier for detectors to separate from human artwork samples. Realism
+is the most difficult style as the detectors miss about two thirds of SD3.5m images
+34
+
+
+in this category. Romanticism, Impressionism, and Post-Impressionism form the
+next hardest group, each with recall below 0.44, suggesting that SD3.5m images
+in these styles are more visually similar to authentic human paintings in color and
+composition.
+4.5
+Source-wise In-Distribution Performance
+The in-distribution data consists of images from three source classes: human artwork
+samples, LDM-generated images, and SD2.1-generated images. Although the binary
+task merges LDM and SD2.1 into a single AI class, examining performance by source
+reveals whether detectors treat both generators similarly or whether one is easier to
+identify than the other. This also provides a useful baseline for understanding how
+each model distributes its errors between false positives on human images and false
+negatives on each AI generator, which in turn helps contextualize the OOD results.
+Table 19 reports source-wise performance for all models. These results show how
+errors are distributed between false positives on human artwork samples and false
+negatives for both AI generators.
+Table 19: Source-wise performance on ID test set
+Model
+FPRhuman
+RecallLDM
+RecallSD2.1
+CLIP ViT-L/14
+0.003
+0.995
+0.999
+ConvNeXt-Base
+0.027
+0.960
+0.985
+ResNet-50
+0.035
+0.949
+0.976
+EfficientNet-B0
+0.044
+0.928
+0.968
+ResNet-18
+0.077
+0.918
+0.939
+Across all five models, SD2.1 images are consistently detected at a higher rate
+than LDM images, with SD2.1 recall exceeding LDM recall by up to four percentage
+points, depending on the backbone. One possible explanation is that SD2.1, with
+its default sampling configuration, introduces slightly more distinctive statistical
+patterns at the resolutions used here, though a definitive attribution would require
+further investigation. The distribution of errors on human images also varies with
+model capacity: ResNet-18 produces a human false positive rate of 0.077, whereas
+CLIP ViT-L/14 reduces this to 0.003, consistent with higher-capacity backbones
+learning more selective decision boundaries. On the ID test set, every model achieves
+recall above 0.91 for both LDM and SD2.1, whereas on the OOD set, every model
+falls below 0.57 recall on SD3.5m images. This contrast suggests that the perfor-
+mance drop is linked to the specific characteristics of the new generator rather than
+a general degradation of detector performance.
+Figure 17 shows the ID test t-SNE colored by source class. These results show
+that LDM and SD2.1 images form distinguishable sub-clusters within the broader
+AI region.
+35
+
+
+(a) CLIP ViT-L/14
+(b) ConvNeXt-Base
+Figure 17: t-SNE projections of ID test feature space colored by source class
+4.6
+Explainability and Failure Analysis
+Previous sections measured the OOD performance drop caused by generator shift.
+This section adds a qualitative perspective by examining where the detector focuses
+when making correct and incorrect predictions. We apply Grad-CAM to ConvNeXt-
+Base, which is the best performing of the CNN-based detectors considered in this
+study.
+The final feature map of the ConvNeXt-Base backbone was used as the
+target layer and the AI class was used as the target output [47]. Since the classifier
+produces a single AI logit 𝑧, the human-target attribution was computed using the
+complementary score −𝑧, while the AI-target attribution was computed using 𝑧.
+Three cases are examined including correctly detected ID AI images, OOD false
+negatives, and OOD false positives. These attribution maps help show which im-
+age regions support successful detection and how the model’s focus changes when
+it fails under generator shift. The Grad-CAM maps are used only as qualitative
+visualizations of model behavior and not as complete explanations of the model’s
+decision process.
+4.6.1
+Detection Success: ID True Positives
+Figure 18 shows Grad-CAM overlays for one confidently detected AI (LDM or
+SD2.1) image per style. Specifically, the image selected is that which is assigned
+the highest AI probability for each style on the ID test set.
+For ID true positives, the activation maps are usually focused on specific parts
+of the image rather than spread across the full canvas. In portrait-like styles such as
+Baroque, Realism, Renaissance and Romanticism, the strongest responses appear
+around faces, neck regions, upper body outlines and sometimes near frame bound-
+aries. In Expressionism, Impressionism and Post-Impressionism, the activation is
+concentrated near the main subject and nearby high contrast or strongly textured
+regions. Surrealism and Ukiyo-e show a similar pattern, but the activated regions
+are spread across distinctive parts of the composition rather than one small ob-
+ject. Overall, these maps suggest that the detector uses local visual cues to identify
+in-distribution AI-generated images instead of looking at the image holistically.
+36
+
+
+Figure 18: Grad-CAM attribution maps for ID true positives with ConvNeXt-Base
+4.6.2
+Detection Fails: OOD False Negatives
+Figure 19 shows Grad-CAM overlays for the OOD false negatives, one SD3.5m image
+per style selected as the most convincingly human-like miss (i.e., lowest predicted AI
+probability) for each style. The contrast between Figures 18 and 19 offers a visual
+perspective on the difference between successful ID detection and OOD failure.
+Figure 19: Grad-CAM attribution maps for OOD false negatives with ConvNeXt-
+Base
+For OOD false negatives, the Grad-CAM maps are weaker and less clear than
+the maps for correct ID AI detections. The model does not focus strongly on the
+main subject or other important parts of the image.
+Instead, it looks at small
+areas near the image edges, frame-like regions or isolated texture details. In some
+cases, the activation appears in only one or two small spots.
+These weak and
+peripheral attribution patterns are associated with a lower predicted AI scores.
+These observations are consistent with the OOD results and indicate that SD3.5m
+does not produce the same AI-related cues that the detector learned from LDM and
+SD2.1 images.
+37
+
+
+Figure 20 shows a representative OOD false negative analyzed with both AI-
+target and human-target Grad-CAM. In this example, the AI-target map is weak
+and concentrated near a peripheral lower-image region, while the human-target map
+is stronger and more focused on the dog and surrounding foreground. This suggests
+that the highlighted regions provide stronger evidence against the AI classification
+than evidence supporting it, pushing the model toward a human prediction.
+Figure 20: Grad-CAM for an OOD false negative sample with ConvNeXt-Base
+4.6.3
+False Alarms: OOD False Positives
+Figure 21 shows Grad-CAM overlays for OOD false positives. It includes one human
+artwork from each style that was incorrectly classified as AI. For each style, the
+selected example is the human artwork with the highest predicted AI probability.
+Figure 21: Grad-CAM attribution maps for OOD false positives with ConvNeXt-
+Base
+For OOD false positives, the Grad-CAM maps appear more organized than the
+maps for OOD false negatives. In many cases, the model focuses on faces, facial
+outlines, frame boundaries or other clear local regions instead of spreading attention
+across the whole image. This suggests that false positives are caused by specific
+visual patterns that the detector connects with the AI class, although the image is
+38
+
+
+actually human-made. These mistakes are not very common, since the overall OOD
+false positive rate is low, at roughly 0.2% to 8.2% across models. But when these
+errors do occur, the Grad-CAM maps show that the model is usually reacting to
+certain parts of the image rather than the full image as a whole.
+4.6.4
+Qualitative Summary
+Overall, the Grad-CAM results provide qualitative evidence consistent with the
+OOD performance drop.
+For in-distribution images, ConvNeXt-Base focuses on
+clear local regions that appear useful for detecting LDM and SD2.1 images. These
+cues allow the linear classifier to separate AI-generated images from human artwork
+samples.
+For the SD3.5m OOD set, these cues are weaker and less consistent.
+Many
+false negatives show only small or poorly placed activation regions that suggest
+the detector did not find the same AI-related evidence in SD3.5m images. This
+supports the quantitative results, where the main OOD failure comes from missed
+AI detections.
+The style-wise patterns also match the Grad-CAM results. Realism and Ro-
+manticism show weaker activation which is consistent with their lower OOD recall.
+In contrast, Ukiyo-e shows more structured activation around distinctive visual el-
+ements such as flat color regions, bold outlines and calligraphic markings. This is
+consistent with Ukiyo-e being the easiest OOD style.
+CLIP ViT-L/14 shows the same general failure pattern with low false positives
+but many missed SD3.5m images. Nevertheless, it performs the best overall, sug-
+gesting that its broader semantic features are more robust under generator shift.
+5
+Conclusion
+In this chapter, we focused on whether AI-art detectors trained on earlier diffu-
+sion generators remain viable when applied to images produced by a newer, archi-
+tecturally different model. To study this question, a prompt-aligned Stable Diffu-
+sion 3.5 Medium (SD3.5m) dataset was constructed across 10 art styles and used for
+out-of-distribution evaluation alongside a held-out human reference set. Five frozen-
+backbone detectors, namely, ResNet-18, ResNet-50, EfficientNet-B0, ConvNeXt-
+Base, and CLIP ViT-L/14, were then trained on in-distribution artwork from LDM
+and SD2.1 and evaluated under a common experimental setup.
+The results reveal a consistent pattern.
+All five detectors achieve strong in-
+distribution performance, indicating that the frozen-backbone, linear-probe design
+is effective when training and test data come from the same generator family. How-
+ever, under generator shift to SD3.5m, every model experiences a substantial drop
+in performance. The degradation is strongly asymmetric with false positive rates on
+human artwork samples remaining low while recall on SD3.5m images falls sharply.
+This means the primary failure is not an increase in false alarms on human artwork,
+but a substantial increase in missed detections of images produced by the newer
+39
+
+
+generator. Among the five models, CLIP ViT-L/14 achieves the strongest OOD per-
+formance overall, while ConvNeXt-Base is the best performing CNN-based model.
+Style-wise analysis further shows that generator shift does not affect all artistic
+movements equally, with Ukiyo-e remaining comparatively easy and Realism being
+the most difficult style under OOD evaluation.
+The qualitative analysis also supports these findings. Grad-CAM maps for in-
+distribution true positives show more focused and structured activation, whereas
+OOD false negatives often produce weaker and more fragmented responses. This
+suggests that the visual cues learned from LDM and SD2.1 do not transfer cleanly
+to SD3.5m. Overall, the results indicate that strong in-distribution accuracy is not
+sufficient evidence of detector robustness when the underlying generator changes.
+More broadly, they highlight a practical limitation of current AI-art detectors: sys-
+tems that perform well on known generators may generalize poorly to newer models
+with different synthesis mechanisms.
+This limitation has direct cybersecurity implications and demonstrates why AI-
+art detectors should not be treated as static or standalone mechanisms for content-
+authenticity verification. A detector that performs almost perfectly on known gener-
+ators may still allow a substantial fraction of images from an emerging generator to
+pass as human-created. Such false negatives could weaken screening workflows that
+support misinformation review, the investigation of fraudulent authenticity claims,
+impersonation assessment, and content-origin verification. The risk is particularly
+important because it does not require a sophisticated or adaptive adversary. Simply
+switching to a newer generator may be sufficient to reduce detector reliability, creat-
+ing a low barrier evasion pathway that does not require direct access or manipulation
+of the detector. Image-based detection should therefore be used as one signal within
+a layered defensive process that also considers provenance metadata, watermark or
+content-credential verification, source analysis, drift monitoring, periodic evaluation
+against newly released generators and human review.
+The findings of this study point to several directions for future work. First,
+the detectors are evaluated in a frozen-backbone, linear-probe setting, which en-
+ables controlled comparison across architectures. However, future work could test
+whether backbone fine-tuning or parameter-efficient adaptation can improve cross-
+generator robustness. Second, the OOD evaluation uses only Stable Diffusion 3.5
+Medium as the new generator, so testing across additional recent image genera-
+tion models would help determine whether the same failure pattern appears more
+broadly. Also, even though the SD3.5m dataset is prompt aligned with human art-
+works, there may still be some prompt distribution shift. This is because the SD3.5m
+images are generated using reverse prompted and title augmented prompts rather
+than the original AI-ArtBench prompt pipeline. Third, all detectors operate on
+resized inputs, which may suppress fine-scale forensic cues available at higher reso-
+lutions, suggesting that multi-scale or frequency-aware approaches could be valuable
+extensions. At the same time, extending the framework from binary human-versus-
+AI detection to multi-generator attribution would provide a more detailed view of
+how different synthesis pipelines leave detectable traces.
+Overall, the prompt-aligned dataset construction and OOD evaluation performed
+40
+
+
+in this chapter provide a practical foundation for future studies and broader research
+on robustness in AI-art detection and its application in cybersecurity workflows.
+References
+[1] Roberto Amoroso, Davide Morelli, Marcella Cornia, et al. Parents and chil-
+dren: Distinguishing multimodal deepfakes from natural images. ACM Trans-
+actions on Multimedia Computing, Communications and Applications, 21(1):1–
+23, 2024.
+[2] Pierre Baldi, Søren Brunak, Yves Chauvin, et al. Assessing the accuracy of pre-
+diction algorithms for classification: an overview. Bioinformatics, 16(5):412–
+424, 2000.
+[3] M Bi´nkowski, Danica J Sutherland, Michael Arbel, et al. Demystifying MMD
+GANs. https://arxiv.org/abs/1801.01401, 2018.
+[4] Jordan J. Bird and Ahmad Lotfi. CIFAKE: Image classification and explainable
+identification of AI-generated synthetic images. IEEE Access, 12:15642–15650,
+2024.
+[5] Aras Bozkurt. GenAI et al. cocreation, authorship, ownership, academic ethics
+and integrity in a time of generative ai. Open Praxis, 16(1):1–10, 2024.
+[6] Andrew Brock, Jeff Donahue, and Karen Simonyan. Large scale GAN train-
+ing for high fidelity natural image synthesis. https://arxiv.org/abs/1809.
+11096, 2018.
+[7] Hongfei Cai, Chi Liu, Sheng Shen, et al. Robust AI-synthesized image detec-
+tion via multi-feature frequency-aware learning. In International Conference
+on Knowledge Science, Engineering and Management, KSEM, pages 157–171,
+2025.
+[8] Eva Cetinic and James She. Understanding and creating art with AI: Review
+and outlook. ACM Transactions on Multimedia Computing, Communications,
+and Applications, 18(2):1–22, 2022.
+[9] Christie’s.
+Obvious
+and
+the
+interface
+between
+art
+and
+artifi-
+cial
+intelligence.
+https://www.christies.com/en/stories/a-
+collaboration-between-two-artists-one-human-one-a-machine-
+0cd01f4e232f4279a525a446d60d4cd1.
+[10] Vito Nicola Convertini, Donato Impedovo, Ugo Lopez, et al. Discrete Fourier
+transform in unmasking deepfake images: A comparative study of StyleGAN
+creations. Information, 15(11):711, 2024.
+[11] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, et al. An image is
+worth 16 × 16 words: Transformers for image recognition at scale. In Interna-
+tional Conference on Learning Representations, ICLR, 2021.
+[12] Hicham Eddoubi, Jonas Ricker, Federico Cocchi, et al. RAID: A dataset for
+testing the adversarial robustness of AI-generated image detectors.
+https:
+//arxiv.org/abs/2506.03988, 2025.
+41
+
+
+[13] Patrick Esser, Sumith Kulal, Andreas Blattmann, et al. Scaling rectified flow
+transformers for high-resolution image synthesis. In Forty-First International
+Conference on Machine Learning, ICML, 2024.
+[14] Leon A. Gatys, Alexander S. Ecker, and Matthias Bethge. Image style transfer
+using convolutional neural networks. In 2016 IEEE Conference on Computer
+Vision and Pattern Recognition, CVPR, pages 2414–2423, 2016.
+[15] Ian J Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, et al. Generative adver-
+sarial nets. Advances in Neural Information Processing Systems, pages 2672–
+2680, 2014.
+[16] Anna Yoo Jeong Ha, Josephine Passananti, Ronik Bhaskar, et al. Organic or
+diffused: Can we distinguish human art from AI-generated images? In Proceed-
+ings of the 2024 ACM SIGSAC Conference on Computer and Communications
+Security, pages 4822–4836, 2024.
+[17] Kaiming He, Xiangyu Zhang, Shaoqing Ren, et al. Deep residual learning for
+image recognition. In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition, CVPR, pages 770–778, 2016.
+[18] Dan Hendrycks and Kevin Gimpel.
+Gaussian error linear units (GELUs).
+https://arxiv.org/abs/1606.08415, 2016.
+[19] Jack Hessel, Ari Holtzman, Maxwell Forbes, et al. CLIPscore: A reference-free
+evaluation metric for image captioning. In Proceedings of the 2021 Conference
+on Empirical Methods in Natural Language Processing, EMNLP, pages 7514–
+7528, 2021.
+[20] Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, et al. GANs trained by
+a two time-scale update rule converge to a local Nash equilibrium. In Advances
+in Neural Information Processing Systems, NeurIPS, pages 6627–6638, 2017.
+[21] Ruixiang Jiang and Chang Wen Chen. Multimodal LLMs can reason about aes-
+thetics in zero-shot. In Proceedings of the 33rd ACM International Conference
+on Multimedia, MM ’25, pages 6634–6643, 2025.
+[22] Xuan Ju, Ailing Zeng, Jianan Wang, et al. Human-art: A versatile human-
+centric dataset bridging natural and artificial scenes.
+In Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern Recognition, CPVR,
+pages 618–629, 2023.
+[23] Negar Kamali, Karyn Nakamura, Aakriti Kumar, et al. Characterizing pho-
+torealism and artifacts in diffusion model-generated images. In Proceedings of
+the 2025 CHI Conference on Human Factors in Computing Systems, CHI ’25,
+pages 1–26, 2025.
+[24] Tero Karras, Samuli Laine, and Timo Aila. A style-based generator architecture
+for generative adversarial networks. In Proceedings of the IEEE/CVF Confer-
+ence on Computer Vision and Pattern Recognition, CVPR, pages 4401–4410,
+2019.
+[25] Junnan Li, Dongxu Li, Caiming Xiong, et al. BLIP: Bootstrapping language-
+image pre-training for unified vision-language understanding and generation.
+42
+
+
+In International Conference on Machine Learning, ICML, pages 12888–12900,
+2022.
+[26] Meien Li and Mark Stamp. Detecting AI-generated artwork. In Proceedings
+of the Fifth Annual Computer Science Conference for CSU Undergraduates,
+CSCSU, 2025. https://arxiv.org/abs/2504.07078.
+[27] Peiyuan Liao, Xiuyu Li, Xihui Liu, et al. The artbench dataset: Benchmarking
+generative models with artworks. https://arxiv.org/abs/2206.11404, 2022.
+[28] Haotian Liu, Chunyuan Li, Qingyang Wu, et al. Visual instruction tuning.
+Advances in Neural Information Processing Systems, 36:34892–34916, 2023.
+[29] Zhuang Liu, Hanzi Mao, Chao-Yuan Wu, et al. A ConvNet for the 2020s. In
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, CVPR, pages 11976–11986, 2022.
+[30] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In
+7th International Conference on Learning Representations, ICLR, 2019. https:
+//arxiv.org/abs/1711.05101.
+[31] Brian W. Matthews.
+Comparison of the predicted and observed secondary
+structure of T4 phage lysozyme. Biochimica et Biophysica Acta (BBA)-Protein
+Structure, 405(2):442–451, 1975.
+[32] Alexander Mordvintsev, Christopher Olah, and Mike Tyka.
+Inception-
+ism: Going deeper into neural networks. https://research.google/blog/
+inceptionism-going-deeper-into-neural-networks/.
+[33] Stefano Morelli.
+WikiArt.
+https://www.kaggle.com/datasets/steubk/
+wikiart.
+[34] NIST. Artificial intelligence risk management framework (AI RMF 1.0). https:
+//nvlpubs.nist.gov/nistpubs/ai/nist.ai.100-1.pdf, 2023.
+[35] Seyeon Park and Xiaoli Nan. Generative ai and misinformation: a scoping
+review of the role of generative AI in the generation, detection, mitigation, and
+impact of misinformation. AI & SOCIETY, 41(2):1501–1515, 2026.
+[36] Adam Paszke, Sam Gross, Francisco Massa, et al. PyTorch: An imperative
+style, high-performance deep learning library. In Advances in Neural Informa-
+tion Processing Systems, NeurIPS, 2019.
+[37] William Peebles and Saining Xie. Scalable diffusion models with transform-
+ers. In Proceedings of the IEEE/CVF International Conference on Computer
+Vision, ICCV, pages 4195–4205, 2023.
+[38] pharmapsychotic et al. pharmapsychotic/clip-interrogator. https://github.
+com/pharmapsychotic/clip-interrogator, 2023.
+[39] Alec Radford, Jong Wook Kim, Chris Hallacy, et al. Learning transferable
+visual models from natural language supervision. In Proceedings of the 38th
+International Conference on Machine Learning, ICML, pages 8748–8763, 2021.
+43
+
+
+[40] Colin Raffel, Noam Shazeer, Adam Roberts, et al.
+Exploring the limits of
+transfer learning with a unified text-to-text transformer. Journal of Machine
+Learning Research, 21(140):1–67, 2020.
+[41] Md Awsafur Rahman, Bishmoy Paul, Najibul Haque Sarker, et al. Artifact:
+A large-scale dataset with artificial and factual images for generalizable and
+robust synthetic image detection. In 2023 IEEE International Conference on
+Image Processing, ICIP, pages 2200–2204, 2023.
+[42] Aditya Ramesh, Mikhail Pavlov, Gabriel Goh, et al. Zero-shot text-to-image
+generation. In International Conference on Machine Learning, ICML, pages
+8821–8831, 2021.
+[43] Zhiyao Ren, Yibing Zhan, Baosheng Yu, et al. Reverse prompt: Cracking the
+recipe inside text-to-image generation. https://arxiv.org/abs/2503.19937,
+2025.
+[44] Robin Rombach, Andreas Blattmann, Dominik Lorenz, et al. High-resolution
+image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition, CVPR, pages 10684–
+10695, 2022.
+[45] Sudhir K Routray. Ethical considerations and implications of generative AI
+in computer graphics. IEEE Computer Graphics and Applications, 45:78–89,
+2025.
+[46] Olga Russakovsky, Jia Deng, Hao Su, et al. Imagenet large scale visual recog-
+nition challenge. International Journal of Computer Vision, 115(3):211–252,
+2015.
+[47] Ramprasaath R Selvaraju, Michael Cogswell, Abhishek Das, et al. Grad-CAM:
+Visual explanations from deep networks via gradient-based localization.
+In
+Proceedings of the IEEE International Conference on Computer Vision, ICCV,
+pages 618–626, 2017.
+[48] Shawn Shan, Jenna Cryan, Emily Wenger, et al.
+Glaze: Protecting artists
+from style mimicry by {Text-to-Image} models.
+In 32nd USENIX Security
+Symposium, USENIX Security, pages 2187–2204, 2023.
+[49] Ravidu Suien Rammuni Silva, Ahmad Lotfi, Isibor Kennedy Ihianle, et al.
+ArtBrain: An explainable end-to-end toolkit for classification and attribution
+of AI-generated art and style. https://arxiv.org/abs/2412.01512, 2024.
+[50] Chuangchuang Tan, Xiang Ming, Jinglu Wang, et al. Semantic visual anomaly
+detection and reasoning in AI-generated images. In International Conference
+on Learning Representations, ICLR, 2026. https://openreview.net/forum?
+id=0iN4UKZwgn.
+[51] Mingxing Tan and Quoc Le. EfficientNet: Rethinking model scaling for convo-
+lutional neural networks. In Proceedings of the 36th International Conference
+on Machine Learning, ICML, pages 6105–6114, 2019.
+[52] Sheng-Yu Wang, Oliver Wang, Richard Zhang, et al. CNN-generated images
+are surprisingly easy to spot . . . for now. In Proceedings of the IEEE/CVF
+44
+
+
+Conference on Computer Vision and Pattern Recognition, CVPR, pages 8695–
+8704, 2020.
+[53] Zhendong Wang, Jianmin Bao, Wengang Zhou, et al.
+DIRE for diffusion-
+generated image detection.
+In Proceedings of the IEEE/CVF International
+Conference on Computer Vision, ICCV, pages 22445–22455, 2023.
+[54] Yuxin Wen, Neel Jain, John Kirchenbauer, et al. Hard prompts made easy:
+Gradient-based discrete optimization for prompt tuning and discovery.
+In
+Advances in Neural Information Processing Systems, NeurIPS, pages 51008–
+51025, 2023.
+[55] Thomas Wolf, Lysandre Debut, Victor Sanh, et al. Transformers: State-of-
+the-art natural language processing. In Proceedings of the 2020 Conference on
+Empirical Methods in Natural Language Processing: System Demonstrations,
+EMNLP, pages 38–45, 2020.
+[56] Ling Yang, Zhilong Zhang, Yang Song, et al. Diffusion models: A comprehen-
+sive survey of methods and applications. ACM Computing Surveys, 56(4):1–39,
+2023.
+[57] Richard Zhang, Phillip Isola, Alexei A Efros, et al. The unreasonable effec-
+tiveness of deep features as a perceptual metric. In Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition, CVPR, pages 586–
+595, 2018.
+[58] Xu Zhang, Svebor Karaman, and Shih-Fu Chang. Detecting and Simulating
+Artifacts in GAN Fake Images.
+In 2019 IEEE International Workshop on
+Information Forensics and Security, WIFS, pages 1–6, 2019.
+[59] Eric Zhou and Dokyun Lee. Generative artificial intelligence, human creativity,
+and art. PNAS Nexus, 3(3):pgae052, 2024.
+[60] Mingjian Zhu, Hanting Chen, Qiangyu Yan, et al. Genimage: A million-scale
+benchmark for detecting AI-generated image. Advances in Neural Information
+Processing Systems, pages 77771–77782, 2023.
+45

@@ -1,0 +1,957 @@
+Representation-driven Endoscopic Visual
+Embedding Alignment for Latent Generation
+Francisco Caetano1 , Tim J.M. Jaspers1 , Haiko Middeljans1, Martijn R.
+Jong2 , Rixta A.H. van Eijck van Heslinga2, Floor Slooter2, Albert J. de
+Groof2, Jacques J. Bergman2, Peter H.N. De With1, and Fons van der
+Sommen1
+1 Department of Electrical Engineering, ARIA Lab, Eindhoven University of
+Technology, Eindhoven, The Netherlands
+{f.caetano}@tue.nl
+2 Department of Gastroenterology and Hepatology, Amsterdam University Medical
+Centers, University of Amsterdam, Amsterdam, The Netherlands
+Abstract. Developing foundation generative models for endoscopy is
+limited by the gap between natural and clinical images and the compu-
+tational cost of training large Diffusion Transformers. Although repre-
+sentation alignment has improved efficiency in general computer vision,
+its role within the highly specialized endoscopic image space remains
+unclear. We introduce REVEAL (Representation-driven Endoscopic Vi-
+sual Embedding Alignment), the largest generative foundation model for
+endoscopy to date, trained on GastroNet-5M (GN-5M), a multicenter
+dataset of 5 million endoscopic frames. Instead of depending on out-of-
+domain priors, REVEAL employs encoders pretrained directly on the
+endoscopic distribution to align diffusion latents with domain-specific
+visual features, preserving fine textures and intricate anatomical struc-
+tures. Beyond image generation, REVEAL also serves as a powerful fea-
+ture extractor; in multiple benchmarks, it delivers performance that is
+competitive with, and in several cases exceeds, endoscopic foundation
+models such as EndoViT and Endo-FM, specifically tuned for classifi-
+cation tasks, while demonstrating strong representation robustness un-
+der realistic imaging corruptions. REVEAL produces high-fidelity images
+and maintains robust structural coherence in latent-space edits such as
+inpainting and outpainting. This high-capacity backbone lowers the com-
+putational threshold for building specialized clinical tools, offering an
+open, versatile foundation for conditional synthesis, segmentation, and
+out-of-distribution detection in future intelligent gastroenterology sys-
+tems. The code and weights are available at caetas.github.io/reveal.html.
+Keywords: Endoscopy · Flow Matching · Foundation Generative Model
+· Representation Alignment
+1
+Introduction
+High-fidelity synthetic image generation offers a direct route to addressing per-
+sistent challenges in endoscopy, including limited data diversity and bias, patient
+arXiv:2608.07176v1  [cs.CV]  7 Aug 2026
+
+
+2
+F. Caetano et al.
+privacy constraints on data sharing, and severe class imbalance for rare patholo-
+gies. Representation alignment has emerged as a crucial technique for enhancing
+the training efficiency and convergence of Diffusion Transformers (DiTs) [25].
+By aligning internal latent representations with pretrained self-supervised visual
+encoders, recent generative frameworks have achieved significant gains in both
+sampling quality and data efficiency [38]. Recent work has identified that these
+improvements are driven not only by global semantic information, often proxied
+by ImageNet-1K [6] performance, but also by the preservation of complex spatial
+structures [20,32] and token-level relationships during the generative process.
+This distinction is vital in the context of endoscopic imaging. Endoscopic
+scenes are characterized by subtle mucosal textures, specular reflections, and
+intricate anatomical morphologies, in which global semantic labels provide in-
+sufficient signal. Prevailing alignment strategies that rely on general-purpose
+vision encoders assume that semantic richness is the primary driver of synthesis
+quality. We argue that for medical foundation models, this reliance on out-of-
+domain semantic proxies may lead to suboptimal morphological fidelity and a
+failure to capture the clinical nuances of the endoscopic manifold.
+In this paper, we introduce REVEAL, Representation-driven Endoscopic
+Visual Embedding Alignment, a foundation generative model for endoscopy. To
+ground the model in domain-specific features, we leverage GastroNet-5M [16],
+a curated dataset of 5 million endoscopic frames. REVEAL utilizes encoders
+pretrained directly on this large-scale endoscopic distribution, ensuring that the
+target representations are inherently aligned with the unique visual character-
+istics of endoscopic data [2]. By performing representation alignment on this
+distribution, REVEAL learns to synthesize high-fidelity gastrointestinal land-
+scapes that adhere to the spatial constraints of the endoscopic environment.
+This paper provides the following specific contributions: (a) an extensive
+benchmark of representation alignment design elements, evaluating the influ-
+ence of target representations and alignment strategies on the morphological
+fidelity and convergence of DiTs; (b) an evaluation of model features across mul-
+tiple independent endoscopic datasets, including a corrupted robustness bench-
+mark with realistic imaging artifacts, demonstrating generalization beyond the
+training distribution while maintaining anatomical integrity; and (c) the intro-
+duction of the largest foundation generative model for endoscopy to date, a
+high-capacity backbone trained on GN-5M that simultaneously serves as a com-
+petitive feature extractor, exceeding established endoscopic foundation models
+such as EndoViT [1] and Endo-FM [35], and enables immediate application to
+downstream tasks such as inpainting, outpainting, and specialized conditional
+generation.
+2
+Related Work
+2.1
+Endoscopy Image Synthesis
+Current endoscopic image synthesis remains heavily reliant on conventional ar-
+chitectures such as Generative Adversarial Networks (GANs) and Variational
+
+
+REVEAL
+3
+Autoencoders (VAEs), primarily for data augmentation and overcoming clinical
+label scarcity. Recent frameworks like MSVQ-VAE [8] and TIDE [7] continue
+to utilize these methods to simulate capsule endoscopy and intestinal environ-
+ments; however, these models frequently struggle with training instability and
+preserving high-frequency mucosal textures [5, 39]. While the field has recently
+transitioned toward more advanced diffusion-based frameworks, a prominent line
+of work has focused narrowly on polyp image synthesis for segmentation and
+detection augmentation [9, 23, 26], addressing a single lesion type rather than
+the broader endoscopic manifold. Beyond polyp-specific generation, significant
+diffusion-based efforts are largely confined to the temporal domain for surgical
+video simulation [21] and depend on out-of-domain priors from models like Sta-
+ble Diffusion [17,30] or small-scale datasets for training [15]. Since these models
+are typically pretrained on natural imagery, they lack an inherent understanding
+of the endoscopic manifold, resulting in a persistent domain gap that necessitates
+the development of generative backbones trained directly on large-scale clinical
+distributions.
+2.2
+Endoscopy Foundation Models
+While foundation models perform strongly across a wide range of computer vi-
+sion tasks [27,31], domain mismatch limits their effectiveness in medical applica-
+tions [2]. Consequently, several endoscopy-specific foundation models have been
+developed to better capture the unique, domain-specific characteristics of endo-
+scopic data. Notable endoscopy foundation models such as Endo-FM [35] and En-
+doViT [1], which adapt masked image modeling pretraining to endoscopic data,
+demonstrate clear advantages over general-purpose encoders on downstream
+clinical tasks. More recently, EndoMamba [33] proposed a Mamba-based back-
+bone with hierarchical self-supervised pretraining on endoscopic video sequences,
+achieving strong performance across spatiotemporal tasks such as surgical phase
+recognition and localization. EndoFM-LV [36] similarly targets long-sequence
+video pretraining, extending Endo-FM to minute-level clips. GN-5M [16] has
+further enabled the development of models that surpass general-purpose foun-
+dation models with substantially less compute. Despite these advances, limited
+diversity in medical data continues to be a major bottleneck, constraining the
+development of more robust and generalizable models. Critically, all existing en-
+doscopy foundation models are purely discriminative; no prior work has explored
+large-scale generative pretraining as a path toward clinical visual representations,
+which is the gap REVEAL addresses.
+2.3
+Representation Alignment for Generative Models
+Representation alignment (REPA) has emerged as a powerful paradigm for ac-
+celerating the training of diffusion and flow-matching transformers. REPA [38]
+pioneered this direction by aligning the noisy hidden states of a denoising net-
+work with clean-image features from a frozen self-supervised encoder (e.g., DI-
+NOv2), yielding over 17× training speedup on ImageNet generation. Subsequent
+
+
+4
+F. Caetano et al.
+VAE
+Encoder
+Pretrained
+Encoder
+Input Image
+Noisy Latent
+Projector
+Alignment
+Objective
+Denoising
+Objective
+SiT Blocks
+Training
+Noisy
+Input
+SiT Blocks
+VAE
+Decoder
+Generated Image
+Input Image
+VAE
+Encoder
+SiT Blocks
+Sampling
+Feature Extraction
+Patch
+Features
+Latent
+Fig. 1: The REVEAL framework. Training (top) optimizes SiT blocks using joint
+denoising and feature alignment objectives. Feature extraction (bottom) yields high-
+dimensional patch descriptors for downstream analysis. Sampling (right) synthesizes
+images by traversing the learned reverse SiT trajectory.
+work has extended this idea in several directions: REPA-E [20] unlocks end-to-
+end joint training of the VAE and diffusion model via the alignment loss, while
+VA-VAE [37] applies vision-foundation-model alignment directly to the VAE la-
+tent space. Recently, iREPA [32] further showed that spatial structure, rather
+than global semantic quality, is the key property of the teacher representation
+that drives generation performance. Our generative model builds on iREPA, ex-
+tending representation alignment to the endoscopy domain with domain-adapted
+vision encoders.
+3
+REVEAL
+As illustrated in Fig. 1, REVEAL is a latent generative model that synthesizes
+high-fidelity medical images by aligning the feature space of a Scalable Inter-
+polant Transformer (SiT) [25] with a specialized, pretrained vision encoder. The
+architecture operates within a compressed latent space, where an input image
+x is mapped to z = E(x) via a pretrained VAE encoder E. The generative
+backbone is trained to reverse a stochastic interpolation process, while a Rep-
+resentation Alignment [38] strategy injects domain-specific knowledge into the
+student model. REPA achieves this by maximizing the cosine similarity between
+the pretrained teacher representation y∗and the student’s hidden states ht,
+which results in
+
+
+REVEAL
+5
+  \mathc al { L}_{\te
+x
+t
+ 
+{
+R
+EPA
+}}(\thet
+a , \phi 
+) :
+=
+ -\mathbb {E}_{x, \epsilon , t} \left [ \frac {1}{N} \sum _{n=1}^{N} \text {sim}(y_*^{[n]}, h_\phi (h_t^{[n]})) \right ], 
+(1)
+where t denotes the timestep, ϵ is the added noise, N corresponds to the number
+of patch tokens, n indexes individual tokens, θ parametrizes the SiT backbone
+and ϕ the projection head.
+To maximize the transfer of anatomical detail, we adopt the iREPA [32] strat-
+egy, which introduces two architectural refinements to the standard alignment
+recipe. First, we replace the conventional Multilayer Perceptron (MLP) projec-
+tion with a lightweight convolutional layer. This modification introduces a local
+inductive bias that preserves the spatial relationships between adjacent patch
+tokens, preventing the loss of high-frequency detail often observed in point-wise
+projections. Following observations that global components can diminish local
+feature contrast, we apply a spatial normalization layer [34] to the original target
+representations so that
+  {
+y _ *} = 
+\
+frac { y -
+ \gamma \mathbb {E}[y]}{\sqrt {\text {Var}[y] + \epsilon _s}}, 
+(2)
+where y is the raw teacher patch embedding, γ is a learnable scale, and ϵs is
+a numerical stability constant. This enhancement increases the signal-to-noise
+ratio of local anatomical structures by sacrificing global information to improve
+spatial contrast, ensuring the model focuses on distinct structural signals rather
+than global variance.
+The full training objective, combining the denoising loss with the alignment
+term, can be written as
+  \mathcal { L } = \mathcal {L}_{\text {Denoising}} + \lambda \cdot \mathcal {L}_{\text {REPA}}, 
+(3)
+where λ is the projection coefficient that balances the two objectives. Follow-
+ing the iREPA implementation, λ was set to 1. By minimizing this objective,
+the framework encourages SiT hidden states to match the teacher’s patch-level
+feature geometry, effectively distilling semantic priors that support learning com-
+plex anatomical structures.
+The integrated framework supports two primary operational inference-time
+modes, as depicted in Fig. 1. During training, the model optimizes joint denois-
+ing and feature alignment objectives to refine the generative trajectory. Once
+trained, the system enables high-fidelity sampling by traversing the learned re-
+verse SiT trajectory to synthesize images from noise through the VAE decoder.
+Furthermore, the frozen SiT blocks serve as a robust feature extractor, yielding
+high-dimensional patch descriptors extracted from intermediate transformer lay-
+ers at t=0. These features capture the aligned semantic properties of the teacher,
+making them suitable for downstream clinical tasks (e.g., classification). The im-
+plementation details are provided in Section 4.2 and in the publicly released code
+repository.
+
+
+6
+F. Caetano et al.
+(a) Samples from the GN-5M dataset.
+(b) Samples from the POLAR dataset.
+(c) Samples from the BE dataset.
+(d) Samples from the corrupted BE dataset.
+Fig. 2: Examples of images from the various datasets used in this study: (a) unlabeled
+GN-5M images employed for training, illustrating the diversity of the data; (b) polyp
+images from the POLAR dataset; (c) sample images from the private BE dataset;
+(d) examples of corrupted BE images.
+4
+Methodology
+4.1
+Datasets
+Pretraining Dataset. We use the GN-5M dataset [16] to pretrain our spe-
+cialized vision encoders and to train our generative models. GN-5M is a large,
+multicenter dataset of 4,820,653 unlabeled endoscopic images collected from
+eight Dutch hospitals, across multiple endoscopic procedures (colonoscopy, gas-
+troscopy, capsule endoscopy) and imaging modalities (white light, narrow-band,
+blue light, and linked color imaging), with representative samples illustrated in
+Fig. 2a. For component analysis, we rely on a representative subset of roughly
+250,000 images, and for training the final high-capacity models, we use the full
+set.
+
+
+REVEAL
+7
+Classification Datasets. To assess the semantic quality of the learned features,
+we use the publicly available POLyp Artificial Recognition (POLAR) bench-
+mark [13], with sample images shown in Fig. 2b. The dataset is divided into a
+neoplastic group (NEO), containing adenomas and sessile serrated lesions, and
+a non-neoplastic group (non-NEO), consisting of hyperplastic polyps. The com-
+bined training set comprises 511 NEO patients (1,109 polyps; 2,194 images) and
+166 non-NEO patients (230 polyps; 443 images); the test set contains 206 NEO
+patients (489 images) and 67 non-NEO patients (99 images).
+Performance is further assessed on a private Barrett’s Esophagus neopla-
+sia (BE) dataset. The combined training set comprises 273 NEO patients (696
+images) and 44 non-NEO patients (457 images), and the test set includes 35
+NEO patients (102 images) and 43 non-NEO patients (171 images). The test set
+is enriched with subtle cases of early BE neoplasia, providing a more challenging
+and clinically relevant evaluation of model performance. Some samples of this
+dataset are available in Fig. 2c.
+Robustness Dataset. To assess model robustness under realistic imaging arti-
+facts, we additionally construct a corrupted variant of the BE test set, BE-C, by
+applying synthetically introduced perturbations to each test image. We consider
+eight corruption types commonly encountered in clinical endoscopy practice: mo-
+tion blur, defocus blur, overexposure, hue shift, saturation, contrast, sharpness,
+and brightness distortion. Following previous work [14], for each test image,
+three corrupted copies are generated, each with a randomly sampled number of
+simultaneous corruptions (1–5) and independently sampled severity levels (1–5
+per corruption), yielding a total of 819 corrupted images that form a diverse and
+progressively challenging robustness benchmark, as demonstrated in Fig. 2d.
+4.2
+Implementation Details
+All experiments were conducted on a server equipped with four NVIDIA H100
+GPUs (94 GB VRAM each), an AMD EPYC 9334 CPU, and 768 GB of system
+memory. All models were trained with mixed precision using bfloat16.
+Vision Encoders. We employ several pretrained vision encoders as feature
+backbones, namely SAM2 [28], DINOv2 [27], DINOv3 [31], and a DINOv2 check-
+point pretrained on GN-5M [16]. To complete this set, we trained an additional
+DINOv3 ViT-B/16 on GN-5M via a two-stage curriculum. In the first stage, the
+model is initialized from a DINOv3 checkpoint pretrained on LVD-1689M [31]
+and continued for 115,000 iterations using AdamW with an initial learning rate
+of 1×10−4, cosine decay to 1×10−5, a 4-epoch linear warmup, and weight decay
+annealed from 0.02 to 0.1. Augmentation is kept conservative, with 6 local crops
+and an iBOT masking ratio of [0.1, 0.4] at a mask probability of 0.3, to pro-
+mote stable adaptation to the endoscopic domain. In the second stage, training
+resumes from the first stage checkpoint for a further 115,000 iterations at a re-
+duced learning rate of 5×10−5 without warmup, while the number of DINO and
+
+
+8
+F. Caetano et al.
+iBOT prototypes is increased to 16,384, local crops to 8, and the masking ratio
+extended to [0.1, 0.5], encouraging richer and more diverse gastroscopy-specific
+representations. Both stages employ RoPE positional embeddings, Sinkhorn–
+Knopp centering, an effective batch size of 832 across 4 GPUs, and normalization
+statistics computed from GN-5M.
+Generative Backbone. For the generative model, we use a base learning rate
+of 2×10−4 with a linear warmup over 18,000 iterations, followed by cosine decay
+to a final learning rate of 5 × 10−5, an effective batch size of 1,024, and an EMA
+decay of 0.9996. The iREPA alignment module uses a convolutional projection
+layer with kernel size 3. Following previous work [22,25], we adopt a logit-normal
+distribution over the noise level t during training: logit(t) ∼N(µ, σ2). Con-
+cretely, we sample s ∼N(µ, σ2) and set t = sigmoid(s), with µ = σ = 0.8. All
+images are processed at a resolution of 256 × 256 pixels. The remaining hyper-
+parameters and configurations are provided alongside the publicly released code
+repository.
+4.3
+Experiments
+Component Analysis. The study on architectural choices is structured into
+four primary axes: (i) selection of the latent space through various VAE backends,
+namely Stable Diffusion 2 (SD2) [29], Stable Diffusion 3 (SD3) [10], FLUX.1-
+dev [18], FLUX.2-dev [19], and JiT [22] as a pixel-space alternative; (ii) evalu-
+ation of different target representations for alignment; (iii) architectural scaling
+from SiT-S to SiT-L; and (iv) the effect of dataset size and training duration.
+Synthesis quality is quantified using FID, while representation quality is as-
+sessed through linear probing on the BE and POLAR benchmarks. For classifi-
+cation, features are extracted from the 8th layer of the SiT backbone at t = 0,
+with results reported as the mean accuracy across five-fold cross-validation. FID
+scores are computed from samples generated using the Euler solver with 50 func-
+tion evaluations (NFEs).
+Classification Performance. To assess the semantic richness of the learned
+representations, we apply a linear probing protocol on the POLAR and BE
+benchmarks. Features from the REVEAL backbone are benchmarked against a
+broad set of encoders, including general-purpose models SAM2 [28], DINOv2 [27],
+and DINOv3 [31]; DINO variants pretrained on GN-5M [16]; and endoscopy-
+specific foundation models such as EndoViT [1] and Endo-FM [35]. We evaluate
+on the test sets of both benchmarks with five-fold cross-validation and report
+the mean AUC and AUPRC over all folds.
+Robustness Performance. We follow the same linear probing protocol and
+encoder benchmarking as above, reporting the mean AUC and AUPRC over all
+folds of a five-fold cross-validation. However, we evaluate exclusively on BE-C,
+the corrupted variant of the BE test set described in Section 4.1.
+
+
+REVEAL
+9
+Table 1: Ablation of architectural components. We evaluate the impact of latent
+spaces, target representations, and scaling factors on image fidelity and linear probing
+accuracy on BE and POLAR. Legend: ∗Trained on the full set of 5M images.
+VAE
+Target Rep.
+Arch.
+Iters.
+FID
+BE
+POLAR
+—
+—
+JiT-B/16
+150k
+28.10
+—
+—
+SD2
+—
+SiT-B/2
+150k
+13.55
+0.853
+0.646
+SD3
+—
+SiT-B/2
+150k
+14.22
+0.871
+0.646
+FLUX.1-dev
+—
+SiT-B/2
+150k
+28.88
+0.841
+0.642
+FLUX.2-dev
+—
+SiT-B/2
+150k
+14.46
+0.824
+0.638
+SD2
+SAM2
+SiT-B/2
+150k
+10.98
+0.855
+0.623
+SD2
+DINOv2-B
+SiT-B/2
+150k
+10.51
+0.872
+0.638
+SD2
+DINOv3-B
+SiT-B/2
+150k
+10.78
+0.855
+0.629
+SD2
+DINOv2-B (GN-5M)
+SiT-B/2
+150k
+10.71
+0.860
+0.653
+SD2
+DINOv3-B (GN-5M)
+SiT-B/2
+150k
+10.18
+0.865
+0.682
+SD2
+DINOv3-B (GN-5M)
+SiT-S/2
+150k
+13.07
+0.863
+0.682
+SD2
+DINOv3-B (GN-5M)
+SiT-L/2
+150k
+9.33
+0.881
+0.684
+SD2
+DINOv3-B (GN-5M)
+SiT-L/2
+150k∗
+5.43
+0.905
+0.763
+SD2
+DINOv3-B (GN-5M)
+SiT-L/2
+200k∗
+5.37
+0.906
+0.768
+SD2
+DINOv3-B (GN-5M)
+SiT-L/2
+250k∗
+5.32
+0.904
+0.773
+Qualitative results. We provide a qualitative assessment of the images synthe-
+sized by REVEAL to evaluate visual fidelity and anatomical coherence. Samples
+are generated using the Heun solver with 50 NFEs. Beyond unconditional gener-
+ation, we conduct inpainting and outpainting experiments as spatial robustness
+probes, assessing whether the learned distribution respects the geometric and
+textural constraints of the gastrointestinal manifold. Following RePaint [24],
+inpainting and outpainting are performed by resampling the known image re-
+gions from the forward process at each denoising step and harmonizing them
+with the generated unknown regions, requiring no architectural modifications or
+task-specific finetuning.
+5
+Results & Discussion
+5.1
+Component Analysis
+Table 1 systematically evaluates the REVEAL architecture by disentangling the
+influence of latent space design, teacher representations, and model scaling on
+both generative and discriminative performance. These ablations establish a ro-
+bust baseline for foundation endoscopic synthesis.
+VAE Latent Space. The findings indicate that SD2 provides the optimal
+balance for endoscopic synthesis. While alternative models like SD3 and FLUX
+offer higher-dimensional representations, the compact 4-channel bottleneck of
+SD2 is more easily modulated by the SiT backbone, leading to superior image
+
+
+10
+F. Caetano et al.
+Table 2: Linear probing performance on downstream clinical benchmarks.
+Model
+Arch.
+Resolution
+BE
+POLAR
+AUC
+AUPRC
+AUC
+AUPRC
+SAM2
+ViT-B/16
+1024 × 1024
+0.583
+0.463
+0.684
+0.913
+DINOv2
+ViT-B/14
+518 × 518
+0.772
+0.673
+0.661
+0.898
+DINOv3
+ViT-B/16
+256 × 256
+0.765
+0.695
+0.737
+0.926
+EndoViT
+ViT-B/16
+224 × 224
+0.629
+0.475
+0.632
+0.892
+Endo-FM
+ViT-B/16
+224 × 224
+0.764
+0.689
+0.683
+0.908
+DINOv2 (GN-5M)
+ViT-B/14
+336 × 336
+0.818
+0.779
+0.790
+0.948
+DINOv3 (GN-5M)
+ViT-B/16
+256 × 256
+0.835
+0.790
+0.808
+0.947
+REVEAL
+SiT-L/2
+256 × 256
+0.786
+0.728
+0.758
+0.935
+fidelity and competitive linear probing performance. This efficiency enables high-
+quality textural reconstruction without excessive computational overhead. Given
+the substantially inferior generation quality of the pixel-space JiT baseline, and
+the additional implementation effort required to support feature extraction in
+pixel space, we exclude it from further evaluation.
+Target Representation. The results demonstrate that representation align-
+ment consistently improves generative performance over unguided methods. While
+general-purpose teachers provide competitive priors, the domain-specific DINOv3-
+B (GN-5M) outperforms all alternatives in FID and POLAR. DINOv2-B achieves
+a marginally higher BE accuracy, likely attributable to its finer patch size and
+higher operating resolution; however, this advantage does not transfer to gen-
+eration fidelity. We hypothesize that the resolution shift required by DINOv2-
+B (GN-5M) during alignment results in this observed degraded generative per-
+formance. Consequently, the architectural compatibility and semantic richness
+of the DINOv3-B (GN-5M) teacher make it the superior choice for capturing the
+complex endoscopic morphologies.
+Architecture Scaling. Scaling the SiT backbone from Small to Large yields
+a substantial improvement in image fidelity. While representation quality also
+increases, the gain is more tempered because we extract features early at the
+8th layer, which favors architectural efficiency. The most significant impact of
+increased parameter capacity is observed in the sharp reduction of FID.
+Training Scaling.
+Transitioning from the 250k subset to the full GN-5M
+dataset yields immediate and drastic improvements across all metrics. Even
+at an equivalent number of training iterations, expansion to the full dataset
+significantly enhances image fidelity and linear probing results. The increased
+data diversity allows the model to cover the underlying clinical distribution bet-
+ter and learn more robust semantic features. Continued training yields further
+gains, though with diminishing returns beyond 200k iterations, suggesting the
+model approaches convergence on this distribution.
+
+
+REVEAL
+11
+5.2
+Classification Performance
+The semantic utility of REVEAL is evaluated through linear probing on the
+POLAR and BE benchmarks, as detailed in Table 2. Baseline models lack-
+ing domain-specific features demonstrate significantly lower performance, con-
+firming that out-of-domain priors are insufficient for resolving subtle mucosal
+transitions. DINOv3 (GN-5M) emerges as the strongest discriminative encoder
+overall, likely benefiting from its domain-specific pretraining combined with its
+expressive self-supervised objective. Notably, EndoViT underperforms general-
+purpose encoders DINOv2 and DINOv3 on both benchmarks, suggesting that
+domain specificity alone is insufficient without adequate pretraining scale and
+objective expressiveness. Remarkably, despite being a generative model not ex-
+plicitly optimized for discriminative tasks, REVEAL achieves these results us-
+ing only the first 8 layers of the transformer backbone. Operating on a latent
+space compressed by a frozen, general-purpose SD2 VAE, which inherently lim-
+its the preservation of high-frequency textural detail, REVEAL still convincingly
+outperforms specialized models like EndoViT and Endo-FM, and surpasses all
+general-purpose encoders on both benchmarks, despite the fundamental differ-
+ences in training objective and architecture.
+5.3
+Robustness Performance
+Under corrupted imaging conditions, REVEAL demonstrates strong robustness
+relative to its clean-image performance, maintaining competitive representations
+despite the added perturbations. REVEAL once again outperforms all general-
+purpose encoders, including SAM2, DINOv2, and DINOv3. It further surpasses
+the endoscopy-specific models EndoViT and Endo-FM by a substantial margin,
+confirming that its representations encode clinically meaningful structure. Re-
+markably, EndoViT degrades catastrophically under corruption, suggesting that
+its representations are highly sensitive to low-level imaging artifacts despite being
+domain-specific. Under corrupted conditions, DINOv3 (GN-5M) again achieves
+the highest overall performance, with DINOv2 (GN-5M) remaining closely com-
+petitive, underscoring the robustness advantage conferred by domain-adapted
+pretraining. We note that REVEAL operates on features extracted from a frozen
+SD2 VAE encoder, a general-purpose model not designed for robustness to low-
+level imaging artifacts, which may introduce additional sensitivity to certain cor-
+ruption types. Furthermore, REVEAL is evaluated at the standard noise level
+t = 0; intermediate diffusion timesteps, which naturally denoise corrupted in-
+puts, could be expected to yield further gains and represent a promising direction
+for improving robustness without any retraining.
+5.4
+Qualitative Analysis
+Figure 3 presents a visual assessment of images generated by REVEAL (SiT-
+L/2), focusing on anatomical consistency and textural realism. The samples are
+produced with a Heun solver using 50 NFEs. Unconditional generation reveals
+
+
+12
+F. Caetano et al.
+Table 3: Linear probing performance on downstream clinical robustness benchmarks.
+Model
+Architecture
+Resolution
+BE-C
+AUC
+AUPRC
+SAM2
+ViT-B/16
+1024 × 1024
+0.524
+0.385
+DINOv2
+ViT-B/14
+518 × 518
+0.724
+0.609
+DINOv3
+ViT-B/16
+256 × 256
+0.744
+0.663
+EndoViT
+ViT-B/16
+224 × 224
+0.524
+0.400
+Endo-FM
+ViT-B/16
+224 × 224
+0.692
+0.588
+DINOv2 (GN-5M)
+ViT-B/14
+336 × 336
+0.810
+0.774
+DINOv3 (GN-5M)
+ViT-B/16
+256 × 256
+0.814
+0.771
+REVEAL
+SiT-L/2
+256 × 256
+0.754
+0.679
+that the model can synthesize plausible endoscopic scenes, capturing the intricate
+light reflections and mucosal textures typical of the GN-5M distribution, with
+diversity across anatomical regions, lesion morphologies, and imaging conditions
+reflecting the breadth of the pretraining data shown in Fig. 2a. To assess spatial
+robustness, we conduct inpainting and outpainting experiments. Rather than
+serving as clinical benchmarks, these tasks probe whether the learned distribu-
+tion respects the geometric and textural constraints of the gastrointestinal man-
+ifold. REVEAL accurately reconstructs missing anatomical regions and enlarges
+the visible area while preserving structural continuity, indicating that aligning la-
+tent representations with a specialized teacher effectively models gastrointestinal
+morphology beyond the pixel level. While effective, our resampling-based strat-
+egy is known to occasionally produce harmonization artifacts at mask bound-
+aries; more sophisticated training-free approaches, such as gradient-guided [12]
+or Langevin-corrected [41] sampling, could further improve boundary consistency
+for inpainting and outpainting without sacrificing the simplicity of our current
+pipeline.
+6
+Scaling & Future Work
+The alignment of generative features with specialized clinical priors opens sev-
+eral avenues for further exploration. REVEAL serves as a foundation generative
+model in endoscopy, trained on a massive multicenter scale that is typically in-
+accessible to most research groups. Future iterations can leverage the pretrained
+weights to expand this architecture beyond its current state.
+Scaling. The current architecture can be scaled along two natural axes: reso-
+lution and model capacity. As the SD2 VAE natively supports higher-resolution
+inputs, scaling to finer spatial detail is a straightforward extension that would
+better preserve high-frequency mucosal textures. Larger transformer backbones,
+analogous to the scaling laws observed in natural image generation, are equally
+
+
+REVEAL
+13
+(a) Unconditional samples exhibit realistic mucosal texture and specular highlights.
+(b) Inpainting reconstructs masked regions.
+(c) Outpainting extends the visible field of view.
+Fig. 3: Qualitative results from REVEAL, generated with a Heun solver using 50
+NFEs. The samples demonstrate high-fidelity synthesis of diverse endoscopic scenes.
+
+
+14
+F. Caetano et al.
+promising, as the results in Table 1 demonstrate; at greater model capacity,
+the alternative VAE architectures explored in this work may also prove more
+suitable, and domain finetuning of any of them could yield additional gains. The
+publicly released weights provide a strong initialization point for both directions.
+Future Work. The primary value of high-fidelity unconditional pretraining at
+this scale lies in its utility as a generative backbone for a broad set of clinically
+relevant downstream applications. Concretely, we envision finetuning on labeled
+subsets for conditional synthesis, enabling targeted pathology generation, rare
+lesion augmentation, and segmentation via generative features or Symmetrical
+Flow Matching [4]. The aligned latent space further offers a pathway toward
+generative classifiers [3,11] for diagnostic tasks, and coupling the backbone with
+text encoders or semantic masks enables precise conditional synthesis to address
+the long-tail distribution of clinical findings [40]. Beyond generation, likelihood
+estimation over the learned distribution enables rigorous dataset coverage anal-
+ysis and out-of-distribution detection, with rare pathological cases identifiable
+and synthesizable through targeted feature manipulation. Robustness validation
+across devices and centers, and segmentation benchmarks, complete our near-
+term roadmap. Releasing weights publicly allows the community to pursue these
+directions immediately.
+7
+Conclusion
+We present REVEAL, a foundation generative model for gastrointestinal en-
+doscopy trained on nearly five million clinical images from GN-5M. Through
+systematic ablation, we establish that representation alignment with domain-
+adapted visual priors is the primary driver of synthesis fidelity: in-domain en-
+coders consistently outperform general-purpose alternatives, and scaling to the
+full clinical distribution yields the largest single gain across all metrics. The
+resulting backbone simultaneously advances generative and discriminative per-
+formance: despite carrying no supervised signal, REVEAL surpasses dedicated
+endoscopy foundation models such as EndoViT and Endo-FM under both clean
+and corrupted imaging conditions.
+These results position large-scale generative pretraining as a viable and com-
+plementary path to masked image modeling for building clinical visual repre-
+sentations. The aligned latent space is a natural substrate for a broad range of
+downstream applications, such as conditional synthesis for targeted pathology
+generation, rare lesion augmentation, segmentation via generative features, and
+out-of-distribution detection through likelihood estimation. By releasing model
+weights publicly, we provide the community with a strong initialization for these
+directions, and invite further exploration of scaling, higher-resolution training,
+and conditional finetuning on labeled clinical subsets.
+
+
+REVEAL
+15
+Acknowledgements
+This work used the Dutch national e-infrastructure with the support of the SURF
+Cooperative using grant no. EINF-13640. This publication is part of the project
+“You won’t find what you don’t image: Exposing blind spots in endoscopic cancer
+screening” (project number: 19091) of the research program Talentprogramma
+Veni-TTW which is financed by the Dutch Research Council (NWO).
+References
+1. Batić, D., Holm, F., Özsoy, E., Czempiel, T., Navab, N.: Endovit: pretraining vision
+transformers on a large collection of endoscopic images. International Journal of
+Computer Assisted Radiology and Surgery 19(6), 1085–1091 (2024)
+2. Boers, T.G., Fockens, K.N., van der Putten, J.A., Jaspers, T.J., Kusters, C.H.,
+Jukema, J.B., Jong, M.R., Struyvenberg, M.R., de Groof, J., Bergman, J.J., et al.:
+Foundation models in gastrointestinal endoscopic ai: Impact of architecture, pre-
+training approach and data efficiency. Medical Image Analysis 98, 103298 (2024)
+3. Caetano, F., Abdi, L., Viviers, C., Valiuddin, A., van der Sommen, F.: Medsymm-
+flow: Bridging generative modeling and classification in medical imaging through
+symmetrical flow matching. In: MICCAI Workshop on Deep Generative Models.
+pp. 35–45. Springer (2025)
+4. Caetano, F., Viviers, C., With, P.H.d., Van der Sommen, F.: Symmetrical flow
+matching: Unified image generation, segmentation, and classification with score-
+based generative models. Proceedings of the AAAI Conference on Artificial Intel-
+ligence 40(4), 2498–2506 (Mar 2026). https://doi.org/10.1609/aaai.v40i4.
+37236, http://dx.doi.org/10.1609/aaai.v40i4.37236
+5. Chu, C., Minami, K., Fukumizu, K.: Smoothness and stability in gans. arXiv
+preprint arXiv:2002.04185 (2020)
+6. Deng, J., Dong, W., Socher, R., Li, L.J., Li, K., Fei-Fei, L.: Imagenet: A large-
+scale hierarchical image database. In: 2009 IEEE conference on computer vision
+and pattern recognition. pp. 248–255. Ieee (2009)
+7. Diamantis, D.E., Gatoula, P., Koulaouzidis, A., Iakovidis, D.K.: This intestine does
+not exist: Multiscale residual variational autoencoder for realistic wireless capsule
+endoscopy image generation. IEEE Access 12, 25668–25683 (2024)
+8. Diamantis, D.E., Iakovidis, D.K.: Multiscale vector-quantized variational autoen-
+coder for endoscopic image synthesis. In: 2025 IEEE International Conference on
+Imaging Systems and Techniques (IST). pp. 1–6. IEEE (2025)
+9. Dorjsembe, Z., Pao, H.K., Xiao, F.: Polyp-ddpm: Diffusion-based semantic polyp
+synthesis for enhanced segmentation. In: 2024 46th Annual International Confer-
+ence of the IEEE Engineering in Medicine and Biology Society (EMBC). pp. 1–7.
+IEEE (2024)
+10. Esser, P., Kulal, S., Blattmann, A., Entezari, R., Müller, J., Saini, H., Levi, Y.,
+Lorenz, D., Sauer, A., Boesel, F., et al.: Scaling rectified flow transformers for
+high-resolution image synthesis. In: Forty-first international conference on machine
+learning (2024)
+11. Favero, G.M., Saremi, P., Kaczmarek, E., Nichyporuk, B., Arbel, T.: Conditional
+diffusion models are medical image classifiers that provide explainability and un-
+certainty for free. arXiv preprint arXiv:2502.03687 (2025)
+
+
+16
+F. Caetano et al.
+12. Grechka, A., Couairon, G., Cord, M.: Gradpaint: Gradient-guided inpainting with
+diffusion models. Computer Vision and Image Understanding 240, 103928 (2024)
+13. Houwen, B.B., Hazewinkel, Y., Giotis, I., Vleugels, J.L., Mostafavi, N.S., van Put-
+ten, P., Fockens, P., Dekker, E., Group, P.S., et al.: Computer-aided diagnosis for
+optical diagnosis of diminutive colorectal polyps including sessile serrated lesions:
+a real-time comparison with screening endoscopists. Endoscopy 55(08), 756–765
+(2023)
+14. Jaspers, T.J., Boers, T.G., Kusters, C.H., Jong, M.R., Jukema, J.B., De Groof,
+A.J., Bergman, J.J., de With, P.H., van der Sommen, F.: Robustness evaluation
+of deep neural networks for endoscopic image analysis: Insights and strategies.
+Medical Image Analysis 94, 103157 (2024)
+15. Jaspers, T.J., Caetano, F., Claessens, C.H., Kusters, C.H., Middeljans, H., Jong,
+M.R., van Eijck van Heslinga, R.A., Slooter, F., de Groof, A.J., Bergman, J.J.,
+et al.: Robust early detection of barrett’s neoplasia: Addressing low-prevalence
+challenges with generative modeling. In: MICCAI Workshop on Data Engineering
+in Medical Imaging. pp. 168–179. Springer (2025)
+16. Jong, M.R., Boers, T.G., Fockens, K.N., Jukema, J.B., Kusters, C.H., Jaspers,
+T.J., van Heslinga, R.v.E., Slooter, F.C., Struyvenberg, M.R., Bisschops, R., et al.:
+Gastronet-5m: A multicenter dataset for developing foundation models in gastroin-
+testinal endoscopy. Gastroenterology (2025)
+17. Kaleta, J., Dall’Alba, D., Płotka, S., Korzeniowski, P.: Minimal data requirement
+for realistic endoscopic image generation with stable diffusion. International journal
+of computer assisted radiology and surgery 19(3), 531–539 (2024)
+18. Labs, B.F.: Announcing black forest labs. https://bfl.ai/blog/24-08-01-bfl
+(2024), accessed: 2026-02-06
+19. Labs, B.F.: Flux.2: Frontier visual intelligence. https://bfl.ai/blog/flux-2
+(2025), accessed: 2026-02-06
+20. Leng, X., Singh, J., Hou, Y., Xing, Z., Xie, S., Zheng, L.: Repa-e: Unlocking
+vae for end-to-end tuning of latent diffusion transformers. In: Proceedings of the
+IEEE/CVF International Conference on Computer Vision. pp. 18262–18272 (2025)
+21. Li, C., Liu, H., Liu, Y., Feng, B.Y., Li, W., Liu, X., Chen, Z., Shao, J., Yuan,
+Y.: Endora: Video generation models as endoscopy simulators. In: International
+conference on medical image computing and computer-assisted intervention. pp.
+230–240. Springer (2024)
+22. Li, T., He, K.: Back to basics: Let denoising generative models denoise. arXiv
+preprint arXiv:2511.13720 (2025)
+23. Liu, S., Chen, Z., Yang, Q., Yu, W., Dong, D., Hu, J., Yuan, Y.: Polyp-gen: Realistic
+and diverse polyp image generation for endoscopic dataset expansion. In: 2025
+IEEE International Conference on Robotics and Automation (ICRA). pp. 15776–
+15782. IEEE (2025)
+24. Lugmayr, A., Danelljan, M., Romero, A., Yu, F., Timofte, R., Van Gool, L.: Re-
+paint: Inpainting using denoising diffusion probabilistic models. In: Proceedings of
+the IEEE/CVF conference on computer vision and pattern recognition. pp. 11461–
+11471 (2022)
+25. Ma, N., Goldstein, M., Albergo, M.S., Boffi, N.M., Vanden-Eijnden, E., Xie, S.:
+Sit: Exploring flow and diffusion-based generative models with scalable interpolant
+transformers. In: European Conference on Computer Vision. pp. 23–40. Springer
+(2024)
+26. Macháček, R., Mozaffari, L., Sepasdar, Z., Parasa, S., Halvorsen, P., Riegler, M.A.,
+Thambawita, V.: Mask-conditioned latent diffusion for generating gastrointestinal
+
+
+REVEAL
+17
+polyp images. In: Proceedings of the 4th ACM Workshop on Intelligent Cross-Data
+Analysis and Retrieval. pp. 1–9 (2023)
+27. Oquab, M., Darcet, T., Moutakanni, T., Vo, H., Szafraniec, M., Khalidov, V.,
+Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., et al.: Dinov2: Learning robust
+visual features without supervision. arXiv preprint arXiv:2304.07193 (2023)
+28. Ravi, N., Gabeur, V., Hu, Y.T., Hu, R., Ryali, C., Ma, T., Khedr, H., Rädle, R.,
+Rolland, C., Gustafson, L., et al.: Sam 2: Segment anything in images and videos.
+arXiv preprint arXiv:2408.00714 (2024)
+29. Rombach, R., Blattmann, A., Lorenz, D., Esser, P., Ommer, B.: High-resolution
+image synthesis with latent diffusion models. In: Proceedings of the IEEE/CVF
+conference on computer vision and pattern recognition. pp. 10684–10695 (2022)
+30. Sharma, V., Kumar, A., Jha, D., Bhuyan, M.K., Das, P.K., Bagci, U.: Con-
+trolpolypnet: towards controlled colon polyp synthesis for improved polyp segmen-
+tation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition. pp. 2325–2334 (2024)
+31. Siméoni, O., Vo, H.V., Seitzer, M., Baldassarre, F., Oquab, M., Jose, C., Khali-
+dov, V., Szafraniec, M., Yi, S., Ramamonjisoa, M., et al.: Dinov3. arXiv preprint
+arXiv:2508.10104 (2025)
+32. Singh, J., Leng, X., Wu, Z., Zheng, L., Zhang, R., Shechtman, E., Xie, S.: What
+matters for representation alignment: Global information or spatial structure?
+arXiv preprint arXiv:2512.10794 (2025)
+33. Tian, Q., Liao, H., Huang, X., Yang, B., Lei, D., Ourselin, S., Liu, H.: Endomamba:
+an efficient foundation model for endoscopic videos via hierarchical pre-training.
+In: International Conference on Medical Image Computing and Computer-Assisted
+Intervention. pp. 224–234. Springer (2025)
+34. Ulyanov, D., Vedaldi, A., Lempitsky, V.: Instance normalization: The missing in-
+gredient for fast stylization. arXiv preprint arXiv:1607.08022 (2016)
+35. Wang, Z., Liu, C., Zhang, S., Dou, Q.: Foundation model for endoscopy video anal-
+ysis via large-scale self-supervised pre-train. In: International conference on medical
+image computing and computer-assisted intervention. pp. 101–111. Springer (2023)
+36. Wang, Z., Liu, C., Zhu, L., Wang, T., Zhang, S., Dou, Q.: Improving foundation
+model for endoscopy video analysis via representation learning on long sequences.
+IEEE Journal of Biomedical and Health Informatics 29(5), 3526–3536 (2025)
+37. Yao, J., Yang, B., Wang, X.: Reconstruction vs. generation: Taming optimization
+dilemma in latent diffusion models. In: Proceedings of the Computer Vision and
+Pattern Recognition Conference. pp. 15703–15712 (2025)
+38. Yu, S., Kwak, S., Jang, H., Jeong, J., Huang, J., Shin, J., Xie, S.: Representation
+alignment for generation: Training diffusion transformers is easier than you think.
+In: The Thirteenth International Conference on Learning Representations (2025)
+39. Zhang, J., Shen, Y., Chen, G., Song, L., Xing, E.P.: Dimensional collapse in vq-
+vaes: Evidence and remedies. In: The Thirty-ninth Annual Conference on Neural
+Information Processing Systems (2025)
+40. Zhao, C., Guo, P., Yang, D., Tang, Y., He, Y., Simon, B., Belue, M., Harmon,
+S., Turkbey, B., Xu, D.: Maisi-v2: Accelerated 3d high-resolution medical image
+synthesis with rectified flow and region-specific contrastive loss. arXiv preprint
+arXiv:2508.05772 (2025)
+41. Zheng,
+C.,
+Lan,
+Y.,
+Wang,
+Y.:
+Lanpaint:
+Training-free
+diffusion
+inpaint-
+ing with asymptotically exact and fast conditional sampling. arXiv preprint
+arXiv:2502.03491 (2025)
