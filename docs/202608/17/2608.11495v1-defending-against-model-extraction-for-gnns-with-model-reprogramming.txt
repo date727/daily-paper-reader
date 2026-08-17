@@ -1,0 +1,777 @@
+Title: Defending against Model Extraction for GNNs with Model Reprogramming
+
+URL Source: https://arxiv.org/pdf/2608.11495v1
+
+Published Time: Thu, 13 Aug 2026 00:16:28 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Defending against Model Extraction for GNNs with Model Reprogramming 
+
+# Yan Wen 
+
+University of Maryland, College Park Department of Computer Science College Park, MD, USA ywen1@umd.edu 
+
+# Zhenyi Wang 
+
+University of Central Florida Department of Computer Science and Institute of Artificial Intelligence Orlando, FL, USA zhenyi.wang@ucf.edu 
+
+# Heng Huang 
+
+University of Maryland, College Park Department of Computer Science College Park, MD, USA heng@umd.edu 
+
+## Abstract 
+
+Graph Neural Networks (GNNs) serve as the backbone for high-stakes applications in Machine-Learning-as-a-Service (MLaaS). Still, their black-box deployment exposes them to Model Extraction (ME) attacks, in which adversaries steal intellectual property by querying APIs. Existing defenses suffer from a critical “Euclidean bias”: they transfer image-based strategies (e.g., random noise) to graphs, ignor-ing the complex topological dependencies between nodes, which often results in severe utility degradation. Passive methods like watermarking also fail to prevent theft in real time. To bridge this gap, we propose GraphRP (Graph R eprogramming Protection), a proactive defense framework that repurposes Model Reprogram-ming for security. Unlike static perturbations, GraphRP introduces a Structure-Aware Gating Mechanism driven by learnable topolog-ical prototypes. This creates a dynamic “structural firewall” that selectively modulates the model’s decision boundary: it preserves fidelity for benign queries residing on the training manifold, while maximizing the Fisher Information along the perturbation direction for adversarial queries. Under standard assumptions (bounded loss, optimal attacker, and local second-order approximation), we prove a lower bound on the attacker’s estimation error that increases with the structural sensitivity of the reprogramming noise. Extensive ex-periments on both hard-label and soft-label ME attacks demonstrate that GraphRP significantly degrades attack effectiveness while pre-serving benign utility. 
+
+## CCS Concepts 
+
+• Security and privacy → Software and application security ;• Computing methodologies → Machine learning .
+
+## Keywords 
+
+Model Extraction; Graph Neural Networks; Model Reprogramming; Adversarial Defense; Trustworthy AI 
+
+ACM Reference Format: 
+
+Yan Wen, Zhenyi Wang, and Heng Huang. 2026. Defending against Model Extraction for GNNs with Model Reprogramming. In Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 (KDD ’26), August 09–13, 2026, Jeju Island, Republic of Korea. ACM, New York, NY, USA, 12 pages. https://doi.org/10.1145/3770855.3817983 
+
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> KDD ’26, Jeju Island, Republic of Korea
+> © 2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2259-2/2026/08 https://doi.org/10.1145/3770855.3817983
+
+## 1 Introduction 
+
+Graph Neural Networks (GNNs) [12, 21, 39] have emerged as the de facto standard for modeling non-Euclidean data, serving as the back-bone for high-stakes applications in recommendation systems [46], financial fraud detection [23], and social network analysis [22]. Given the high costs associated with data collection and model training, these proprietary models are increasingly deployed as cloud-based API services, a paradigm known as Machine-Learning-as-a-Service (MLaaS) [24, 25]. However, this black-box access ex-poses them to Model Extraction (ME) attacks , where an adver-sary systematically queries the API to train a surrogate model that replicates the victim’s functionality [35, 45, 50]. Unlike attacks on in-dependent and identically distributed (i.i.d.) image data, ME attacks on GNNs exploit the complex topological dependencies between nodes, allowing attackers to infer global graph properties from lim-ited queries. This renders GNNs uniquely vulnerable to intellectual property (IP) theft and subsequent adversarial exploitation [7]. While prior work has made progress in defending against model extraction, existing solutions have critical limitations when applied to GNNs. First, passive defenses , such as watermarking [9, 15], focus on ownership verification rather than prevention. These meth-ods can only identify a stolen model after the theft has occurred, by which time the intellectual property is already compromised. Second, active defenses transferred from the image domain fail to account for the specific properties of graph data. Most existing ac-tive methods attempt to confuse attackers by adding random noise or performing complex calculations during inference [20, 27, 32, 44]. However, these approaches face two major problems with graphs: (1) Utility Degradation : Unlike pixels in an image, nodes in a graph are connected. Adding indiscriminate noise to a single node prop-agates errors to its neighbors during message passing, severely harming the model’s accuracy for benign users. (2) High Latency :Many defense methods require expensive optimization steps for every query. For real-world web applications like recommendation systems, this extra delay is unacceptable. These challenges lead us to the central research question of this work: RQ: How can we design an active defense for GNNs that effectively prevents model extraction without hurting the accuracy for benign users, while keeping inference fast? 
+
+To address this, we propose GraphRP (Graph R eprogramming 
+
+Protection), a novel active defense mechanism based on Model Reprogramming [3, 17]. While reprogramming is traditionally used to adapt pre-trained models to new tasks, we repurpose it for security. Our key insight is to treat defense as a "conditional task": the model should behave normally for benign queries but arXiv:2608.11495v1 [cs.LG] 11 Aug 2026 KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Yan Wen, Zhenyi Wang, and Heng Huang 
+
+essentially "malfunction" for adversarial ones. Unlike random noise injection, GraphRP optimizes a set of learnable, layer-wise per-turbations that act as a "structural firewall." Crucially, we introduce a Structure-Aware Gating Mechanism that dynamically mod-ulates these perturbations based on the topological signature of the input graph. By learning "benign structural prototypes," our method ensures that defensive noise is only activated when the query distribution deviates from the benign distribution (OOD), thereby preserving utility for benign users. In summary, our main contributions are fourfold: 
+
+• Framework: We propose GraphRP, the first defense frame-work that leverages model reprogramming to protect GNNs against model extraction, avoiding the need for full model retraining. 
+
+• Structure-Awareness: We introduce a prototype-based gat-ing mechanism that exploits graph topological invariants (e.g., spectral features) to distinguish benign queries from extraction attacks, solving the utility-defense trade-off. 
+
+• Theoretical Guarantee: Under standard assumptions (bounded loss, an optimal attacker, and a local second-order approxi-mation), we show that our method maximizes a lower bound on the attacker’s estimation error by exploiting the Fisher Information of the target GNN. 
+
+• Empirical Effectiveness: Extensive experiments on diverse benchmarks demonstrate that GraphRP reduces clone model accuracy by up to 17% compared to state-of-the-art baselines while maintaining high utility and low inference latency. 
+
+## 2 Related Work 2.1 Model Extraction 
+
+Model Extraction (ME) , also referred to as model stealing , denotes the adversarial process of replicating the functionality of a target model by extracting its parameters or approximating its decision boundary [30, 31, 33, 38]. Attackers may target exact parameters [34], hyperparameters [41], or neural architectures [29]; this work, however, focuses on behavioral cloning —training a surrogate that mimics the target’s outputs without accessing its internals [7]. ME attacks are conventionally categorized based on the data available to the adversary. Data-Based Model Extraction (DBME) 
+
+[5, 18, 33] assumes the attacker possesses a dataset distributionally similar to the victim’s training data. By querying the target model with these inputs, the attacker collects labeled pairs to train the surrogate in a supervised manner. Conversely, Data-Free Model Extraction (DFME) [18, 38] represents a more sophisticated threat where no real data is available. In this scenario, the attacker must generate synthetic queries to simultaneously explore the high-dimensional input space and learn the model’s behavior, often utilizing generative models to maximize query efficiency. The difficulty of extraction is further dictated by the granularity of the API’s output. In soft-label attacks , the victim returns a full probability distribution (logits), providing rich information about the decision boundary [13]. In contrast, hard-label attacks return only the top-1 class prediction. This setting significantly restricts the information gain per query, forcing attackers to rely on label-only learning techniques that are typically less sample-efficient and harder to optimize. Recent research has demonstrated that GNNs are uniquely vul-nerable to these attacks due to the leakage of structural information [7, 35, 45, 50]. Unlike image models, GNN extraction reconstructs not only node labels but also the underlying graph topology. Wu et al. [45] proposed using discrete graph structure learning to infer a substitute graph from node attributes, while Shen et al. [35] utilized k-Nearest Neighbors (kNN) to initialize surrogate structures. More recently, Zhuang et al. [50] proposed StealGNN, a data-free extrac-tion attack for GNNs that leverages a generative model to synthesize queries without access to any real graph data, demonstrating that structural information leaks even under strict black-box constraints. Furthermore, as the field moves toward large-scale pre-training, Xu et al. [47] have shown that even Graph Foundation Models are susceptible to extraction, emphasizing the urgent need for robust defense mechanisms in the graph domain. 
+
+## 2.2 Model Extraction Defense 
+
+Existing defenses against model extraction can be broadly catego-rized into passive and active strategies, depending on whether they attempt to detect the attack or prevent it entirely. 
+
+Passive Defenses focus on monitoring and detecting extraction attempts without modifying the model’s inference behavior [15, 26, 37]. These methods typically analyze query patterns, distribution shifts, and timing to identify suspicious activities distinct from normal user behavior. Standard techniques involve sophisticated logging and anomaly detection pipelines. In the specific context of GNNs, recent approaches, such as those by Downer et al. [9], have proposed embedding watermarks directly into GNN explanations to verify ownership. While they provide evidence for legal recourse after the fact, they fail to prevent intellectual property theft in the first place. 
+
+Active Defenses , in contrast, aim to prevent model extraction (ME) attacks by proactively modifying the model’s responses or access mechanisms [19, 20, 27, 32, 44]. Primary strategies include 
+
+Prediction Obfuscation [32], which alters output logits to reduce the information gain per query, and Perturbation Techniques [19, 20, 44], which introduce stochastic noise to degrade the fidelity of the extracted surrogate. Other approaches, such as Query Limitation 
+
+[27], restrict the rate of queries or dynamically adjust responses based on behavior analysis [44, 50]. Despite these advancements, designing defenses for GNNs presents unique challenges that existing methods fail to address. We term this failure mode the Euclidean bias . Graph data is non-Euclidean, containing complex dependencies between node features and topo-logical structures. Most existing active defenses are designed for independent and identically distributed (i.i.d.) image data; when applied to graphs, they often disrupt the message-passing mech-anism, leading to severe utility degradation for benign users. A recent work, ADAGE [48], takes a step toward GNN-specific active defense by monitoring the diversity of incoming queries across sessions and reactively blocking requests that exhibit extraction-like patterns. However, ADAGE operates in a stateful manner, re-quiring persistent query-log monitoring across multiple API calls, which introduces significant infrastructure overhead and makes it inapplicable in truly stateless black-box deployments. Furthermore, its reactive blocking strategy depends on accumulating sufficient Defending against Model Extraction for GNNs with Model Reprogramming KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+query history before a defense is triggered, leaving an exploitable window for early-stage attacks. In contrast, GraphRP is entirely 
+
+stateless : it requires no query logging or cross-session state, and proactively poisons every OOD query at inference time based solely on the structural signature of the current input. These fundamen-tal architectural differences make direct experimental comparison between ADAGE and GraphRP infeasible, as they operate under incompatible deployment assumptions. Our work bridges this gap by proposing a novel defense pipeline that emphasizes graph-structure sensitivity. We introduce adaptive, layer-wise perturbations that exploit the unique construction of graph-based models. Unlike prior works, we leverage Model Re-programming as an active defense mechanism. To the best of our knowledge, this is the first study to explore Model Reprogramming specifically to defend against GNN model extraction, offering a proactive solution that reduces surrogate fidelity while preserving benign utility. 
+
+## 2.3 Model Reprogramming 
+
+Model Reprogramming (MR) is a parameter-efficient learning paradigm that repurposes pre-trained machine learning models for target tasks in different domains without modifying the original model weights [3]. Initially introduced in the context of adversar-ial machine learning [11], MR demonstrates that a fixed model can be "steered" to perform a new function simply by learning a transformation function (or perturbation mask) applied to the in-put data. This approach has since evolved into a powerful tool for cross-domain adaptation, offering a resource-efficient alternative to traditional transfer learning, where full model fine-tuning is computationally prohibitive. In the graph domain, MR has gained significant traction under the umbrella of "Graph Prompting" and "Deep Graph Reprogram-ming." Jing et al. [17] proposed Deep Graph Reprogramming , which aligns pre-trained GNNs with novel downstream tasks by opti-mizing a set of learnable structural perturbations. Similarly, Sun et al. [36] demonstrated that reprogramming-based prompting can unify multi-task learning on graphs by modifying the input graph topology and features rather than the model architecture. Our work introduces a paradigm shift in the application of MR. While prior works [17, 36] introduce reprogramming to enhance model utility for new tasks, we leverage it as a defensive mechanism. We reprogram the victim GNN to maintain utility for the original task (benign users) while simultaneously degrading utility for the specific task of "model extraction" (adversaries), effectively turning the model’s plasticity into a security feature. 
+
+Distinction from Watermarking. It is crucial to distinguish GraphRP from watermarking techniques [15]. Watermarking is a 
+
+passive, post-hoc mechanism that embeds a signature into the model to verify ownership after theft has occurred. It does not prevent the attacker from using the stolen model. In contrast, GraphRP is an active, real-time defense. It fundamentally degrades the quality of the extracted model, rendering the stolen copy useless. While watermarking seeks legal recourse, GraphRP seeks to render the surrogate functionally obsolete. 
+
+## 3 Preliminaries 3.1 Notations and Problem Setup 
+
+Graph Notation. Let 𝐺 = (𝑉 , 𝐸 ) denote a graph, where 𝑉 is the set of 𝑛 nodes (vertices) and 𝐸 is the set of edges. A graph sample can be represented as a tuple 𝑥 = (𝐴, 𝑋 ), where 𝐴 ∈ { 0, 1}𝑛 ×𝑛 is the adjacency matrix representing the graph structure, and 𝑋 ∈ R𝑛 ×𝑑 
+
+is the node feature matrix, with 𝑑 denoting the feature dimension. 
+
+Data Distributions. We consider a graph classification task where data is sampled from a ground-truth distribution D. A dataset is denoted as 𝐷 = {( 𝑥 𝑖 , 𝑦 𝑖 )} 𝑁 𝑖 =1, where 𝑦 𝑖 ∈ 𝑌 is the label. Crucially for Model Extraction (ME) defense, we distinguish between two data regimes: 
+
+• In-Distribution (ID): The private distribution D𝑖𝑑 on which the victim model is trained and expected to perform well. The defender possesses a private dataset 𝐷 𝑡𝑟𝑎𝑖𝑛 ∼ D 𝑖𝑑 .
+
+• Out-of-Distribution (OOD): The public or synthetic distri-bution D𝑜𝑜𝑑 used by the attacker to query the model. This includes surrogate datasets (in Data-Based ME) or synthetic graphs generated by a generator (in Data-Free ME). In our setting, we assume the query data 𝑥 𝑞 comes from D𝑜𝑜𝑑 , such that D𝑖𝑑 ∩ D 𝑜𝑜𝑑 = ∅ in terms of exact samples, though they may share feature semantics. 
+
+## 3.2 Model Framework 
+
+Victim Model (Target). The defender deploys a pre-trained Graph Neural Network, denoted as 𝑇 : G → Y , parameterized by 𝜃 𝑇 . This model maps an input graph 𝑥 ∈ G to a probability distribution over classes 𝑌 . We assume 𝑇 is well-trained on the private distribution 
+
+D𝑖𝑑 and serves as an oracle O accessible via an API. 
+
+Surrogate Model (Clone). The attacker aims to train a surrogate model 𝐶 : G → Y , parameterized by 𝜃 𝐶 . The architecture of 𝐶 is generally unknown to the defender and may differ significantly from 𝑇 . The attacker’s objective is to estimate 𝜃 𝐶 such that 𝐶 (𝑥 ) ≈ 
+
+𝑇 (𝑥 ) for all 𝑥 in the domain of interest with similar functionality. 
+
+Query Generator. In the Data-Free Model Extraction (DFME) setting, the attacker utilizes a generator 𝑓 𝑔𝑒𝑛 : Z → G 𝑜𝑜𝑑 to synthe-size query graphs. Here, Z represents a latent space (e.g., Gaussian noise), and 𝑓 𝑔𝑒𝑛 constructs node features and adjacency matrices that are structurally valid but distributionally distinct from the private data D𝑖𝑑 .
+
+## 3.3 Attacker’s Goal and Knowledge 
+
+Attacker’s Knowledge. We assume a black-box setting where the attacker has no access to the victim model’s parameters 𝜃 𝑇 ,gradients, or the private training data D𝑖𝑑 . The attacker can only query the API with inputs 𝑥 𝑞 ∼ D 𝑜𝑜𝑑 and observe the output 𝑦 𝑞 , as illustrated in Figure 1. In the soft-label setting, 𝑦 𝑞 is a full probability vector; in the hard-label setting, 𝑦 𝑞 is the top-1 predicted class. 
+
+Optimization Objective. The attacker aims to train a surrogate model 𝐶 (· ; 𝜃 𝐶 ) that mimics the behavior of the target model 𝑇 . Since the attacker lacks access to D𝑖𝑑 , they minimize the divergence be-tween the two models over the available query distribution D𝑜𝑜𝑑 .KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Yan Wen, Zhenyi Wang, and Heng Huang 
+
+Benign Query 
+
+(𝑥, 𝑦 ) ∼ D 𝑖𝑑 
+
+Standard GNN 
+
+Attack Query 
+
+(𝑥, 𝑦 ) ∼ D 𝑜𝑜𝑑 
+
+Standard GNN 
+
+> High Confidence!
+
+Benign Query 
+
+> Struct. Check
+
+(𝑥, 𝑦 ) ∼ D 𝑖𝑑 
+
+𝛼 ≈0 Reprogram Layer 
+
+Noise ×0
+
+Attack Query 
+
+(𝑥, 𝑦 ) ∼ D 𝑜𝑜𝑑  
+
+> Struct. Check
+
+𝛼 ≈1 Reprogram Layer 
+
+> Uniform Dist.
+
+Noise ×1
+
+Figure 1: Overview of the Proposed Defense Framework. Comparison between a standard GNN pipeline and our approach. While the standard GNN pipeline (left) leaks high-confidence information for both benign and attack queries, GraphRP (right) dynamically modulates the output based on structural legitimacy. The top row shows utility preservation for benign users (orange bars), while the bottom row demonstrates defense activation for OOD attackers (grey/flat bars). 
+
+Formally, the attacker minimizes the Kullback-Leibler (KL) diver-gence: min 
+
+> 𝜃 𝐶
+
+E𝑥 ∼D 𝑜𝑜𝑑 [𝐷 KL (𝑇 (𝑥 ; 𝜃 𝑇 ) ∥ 𝐶 (𝑥 ; 𝜃 𝐶 ))] , (1) where 𝑇 (𝑥 ; 𝜃 𝑇 ) represents the soft labels returned by the victim (or approximated from hard labels). By minimizing this loss, the surrogate learns to replicate the decision boundary of the victim on the query set. 
+
+Ultimate Goal. While the optimization occurs on D𝑜𝑜𝑑 , the at-tacker’s ultimate goal is to obtain a model that generalizes well to the private task. That is, the surrogate 𝐶 should achieve high accuracy on the private test set 𝐷 𝑡𝑒𝑠𝑡 𝑖𝑑 .
+
+## 3.4 Defender’s Goal and Knowledge 
+
+Defender’s Knowledge. The defender has full white-box access to the target model 𝑇 and the private training set 𝐷 𝑖𝑑 . Crucially, we assume the defender knows that attack queries are likely to be out-of-distribution (OOD) relative to the private data [43, 44]. This assumption allows the defender to leverage an auxiliary OOD dataset D𝑑𝑒 𝑓 𝑜𝑜𝑑 (different from the attacker’s queries) to calibrate the defense. 
+
+Defense Objectives. The defender has three competing objectives: (1) Utility Preservation: The target model must maintain high accuracy for benign users (ID queries), therefore, 
+
+E(𝑥,𝑦 )∼D 𝑖𝑑 [I(arg max 𝑇 (𝑥 ) = 𝑦 )] is maximized. (2) (2) Extraction Prevention: The target model should provide uninformative outputs for attack queries (OOD) to prevent the surrogate from learning the true decision boundary. (3) Efficiency: The defense mechanism must be computation-ally lightweight, avoiding expensive test-time optimization that would increase latency for real-time services. 
+
+## 4 Methodology 
+
+We propose GraphRP (Graph R eprogramming Protection), a proactive defense framework that leverages model reprogramming to secure GNNs against ME attacks. The core intuition is to embed a dormant "security protocol" within the model’s layers that activates only when it detects suspicious, OOD query patterns characteristic of extraction attempts. 
+
+## 4.1 Overview of Pipeline 
+
+The overall architecture of GraphRP is illustrated in Figure 2. Stan-dard GNNs (left) process all inputs identically, making them vul-nerable to attackers who query the model with synthetic or OOD graphs to approximate the decision boundary. In contrast, GraphRP (right) introduces two key components into the standard message-passing backbone: (1) Layer-Wise Reprogramming (Sec. 4.2): A mechanism to inject learnable, task-specific perturbations into the latent node embeddings. This allows us to manipulate the model’s output distribution without retraining the original weights. (2) Structure-Aware Gating (Sec. 4.3): A dynamic control module that assesses the structural legitimacy of an input graph. It computes a gating factor 𝛼 ∈ [ 0, 1] to modulate the reprogramming intensity. The pipeline operates in two modes: 
+
+• Benign Mode ( 𝛼 → 0): For inputs matching the training distribution (ID), the reprogramming noise is suppressed. The model functions as a standard GNN, preserving high utility. 
+
+• Defense Mode ( 𝛼 → 1): For suspicious inputs (OOD), the gating mechanism activates the reprogramming layers. The model outputs are subtly distorted to maximize the diver-gence from the true decision boundary, effectively poisoning the attacker’s surrogate training data. Defending against Model Extraction for GNNs with Model Reprogramming KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+Input Graph 
+
+𝐺 = (𝐴, 𝑋 )
+
+Structure Extractor Φ(𝐺 )
+
+Eig (L), deg (𝑣 ), clus (𝑣 )
+
+Prototype Matching 
+
+𝑑 = min 𝑘 ∥z − c𝑘 ∥2
+
+c𝑘 z
+
+𝛼 
+
+Sim. 
+
+GNN Layer 𝑙 
+
+H(𝑙 ) = 𝜎 ( ˆ𝐴 H(𝑙 −1)𝑊 ) + Reprogrammed Output ˜H(𝑙 )
+
+× Learnable Perturbation 
+
+𝜹 (𝑙 ) ∈ R𝑑 
+
+Task Loss min L𝐶𝐸 
+
+Defense Loss max 𝐷 𝐾𝐿 
+
+Module 1: Structure-Aware Gating Module 2: Reprogramming Backbone 
+
+Figure 2: Architecture of the GraphRP Framework. The system operates via two coupled pathways. The Structure Branch 
+
+(Top) computes a gating factor 𝛼 by matching the input graph against learned benign prototypes. The Reprogramming Branch 
+
+(Bottom) performs standard message passing but injects an effective bounded perturbation ˜𝜹 (𝑙 ) at each layer. The injection is modulated by 𝛼 , effectively switching the defense ON for OOD queries and OFF for benign queries .
+
+## 4.2 Layer-Wise Reprogramming 
+
+The first challenge is to alter the behavior of a GNN without de-grading its original performance. We adopt a Model Reprogramming 
+
+approach [3], treating the defense as a secondary task learned along-side the primary classification task. Consider a standard GNN layer 
+
+𝑙 defined by the message passing operation: 
+
+H(𝑙 ) = 𝜎 
+
+ ˆAH (𝑙 −1) W(𝑙 ) 
+
+, (3) where H(𝑙 ) ∈ R𝑛 ×𝑑 𝑙 are the node embeddings and ˆ A is the normal-ized adjacency matrix. A learnable perturbation P(𝑙 ) is injected into the latent space for defensive flexibility. However, applying a static noise matrix is insufficient as graph sizes vary. Instead, we define a 
+
+Universal Reprogramming Prototype 𝜹 (𝑙 ) ∈ R𝑑 𝑙 for each layer, which is broadcasted to all nodes. The reprogrammed layer output ˜ H(𝑙 ) is formulated as: ˜H(𝑙 ) = H(𝑙 ) + 𝜆 · Tanh (𝜹 (𝑙 ) )
+
+| {z }
+
+> Bounded Perturbation
+
+, (4) where 𝜹 (𝑙 ) are the learnable parameters of the defense. The Tanh (·) 
+
+function ensures the perturbation remains bounded, preventing numerical instability. Crucially, 𝜹 (𝑙 ) captures the direction in the latent space that is most disruptive to an attacker’s learning process. If we optimized 𝜹 (𝑙 ) solely to maximize prediction error, it would destroy utility. Thus, the magnitude of this perturbation must be controlled by the graph structure, which we detail next. 
+
+## 4.3 Structure-Aware Prototype Gating 
+
+A naive application of the perturbation in Eq. (4) treats benign and malicious queries equally. To distinguish them, we propose a 
+
+Structure-Aware Prototype Gating mechanism. Instead of re-lying on simple heuristics (like average degree), we learn a set of "Benign Structural Prototypes" in the embedding space. 
+
+1. Structural Projection. We first map the input graph 𝐺 to a permutation-invariant structural embedding z𝐺 . We utilize a light-weight Readout function Φ(·) that aggregates node degrees, cluster-ing coefficients, and spectral features (top-𝑘 Laplacian eigenvalues): 
+
+z𝐺 = Φ(𝐺 ) =
+
+"
+
+MLP  ∑︁  
+
+> 𝑣 ∈𝑉
+
+[deg (𝑣 ) ∥ 𝐶 (𝑣 )] 
+
+!
+
+; Eig (L)
+
+#
+
+. (5) Here, 𝐶 (𝑣 ) denotes the local clustering coefficient of node 𝑣 , ∥ rep-resents feature concatenation, [· ; ·] denotes vector concatenation, and Eig (L) extracts the top-𝑘 eigenvalues of the normalized Lapla-cian [4, 8]. This projection captures the topological "signature" of the graph. 
+
+2. Benign Prototypes. During training, we maintain a set of 
+
+𝐾 centroids {c𝑘 }𝐾 𝑘 =1 initialized via K-Means on D𝑖𝑑 to represent the structural clusters of the private in-distribution data. The pro-totypes are refined in a dedicated structural update step (indepen-dently of Θ𝑟𝑒𝑝 ) and are explicitly excluded from the reprogramming gradient updates in Step 4 of Algorithm 1. 
+
+3. Gating Factor Calculation. For a new query 𝐺 𝑞 , we calculate its distance to the nearest benign prototype. The gating factor 𝛼 (𝐺 𝑞 )
+
+is derived using a soft-thresholding function: 
+
+𝑑 𝑚𝑖𝑛 = min  
+
+> 𝑘
+
+∥z𝐺 𝑞 − c𝑘 ∥22, (6) 
+
+𝛼 (𝐺 𝑞 ) = Sigmoid (𝛾 · ( 𝑑 𝑚𝑖𝑛 − 𝜏 )) , (7) where 𝜏 is a learnable distance threshold and 𝛾 is a sharpness param-eter. If 𝑑 𝑚𝑖𝑛 < 𝜏 (structurally similar to private data), then 𝛼 → 0. If 𝑑 𝑚𝑖𝑛 > 𝜏 (structurally anomalous/OOD), then 𝛼 → 1. 
+
+Final Reprogramming Equation. Combining Eq. (4) and the gating factor, the final operation at layer 𝑙 becomes: ˜H(𝑙 ) = H(𝑙 ) + 𝛼 (𝐺 ) · 𝜆 · Tanh (𝜹 (𝑙 ) ). (8) This ensures that the defensive noise is strictly conditional on the structural "foreignness" of the query, effectively creating a graph-structure-sensitive firewall. 
+
+Robustness against Structural Spoofing. A natural question may arise: Can an adaptive attacker forge graph queries to bypass this gating mechanism? Unlike adding Gaussian noise to images, generating synthetic graphs that match the complex topological KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Yan Wen, Zhenyi Wang, and Heng Huang 
+
+signature (e.g., Laplacian spectrum and clustering coefficients) of a private distribution is a non-trivial inverse problem [49]. Without access to the benign training set, the attacker cannot easily estimate the centroid prototypes c𝑘 . Thus, our spectral gating effectively acts as a “structural firewall,” forcing the attacker to query OOD samples that trigger the defense. 
+
+## 4.4 Defensive Optimization and Algorithm 
+
+Having defined the structure-aware reprogramming mechanism, we now formulate the defensive training as an optimization prob-lem. The defender’s goal is to learn the optimal reprogramming parameters Θ𝑟𝑒𝑝 = {𝜹 (𝑙 ) , 𝜏 }𝑙 that selectively degrade the fidelity of the attacker’s surrogate model without compromising benign accuracy. Note that the prototypes {c𝑘 } are maintained separately and excluded from Θ𝑟𝑒𝑝 .
+
+4.4.1 Loss Function Formulation. The total objective function L
+
+is a weighted combination of three terms: the utility preservation loss, the extraction defense loss, and a structural compactness loss. 
+
+1. Utility Preservation ( Ltask ). For in-distribution (ID) data, the reprogramming layer should have minimal impact. We minimize the standard Cross-Entropy loss on the private training set D𝑖𝑑 :
+
+Ltask = E(𝑥,𝑦 )∼D 𝑖𝑑 
+
+𝑙 CE (𝑇 (𝑥 ; 𝜃 𝑇 , Θ𝑟𝑒𝑝 ), 𝑦 ) . (9) Since the gating factor 𝛼 (𝑥 ) → 0 for ID data, this term ensures the perturbations remain dormant for benign users. 
+
+2. Extraction Defense ( Ldefense ). For out-of-distribution (OOD) queries—which act as a proxy for attack queries—we explicitly max-imize the divergence between the reprogrammed model’s output and the original model’s output. This "poisons" the information re-trieved by the attacker. We utilize the Kullback-Leibler divergence: 
+
+Ldefense = E𝑥 ∼D 𝑜𝑜𝑑 
+
+max (0, 𝜇 − 𝐷 KL (𝑇 (𝑥 ; 𝜃 𝑇 ) ∥ 𝑇 (𝑥 ; 𝜃 𝑇 , Θ𝑟𝑒𝑝 )))  .
+
+(10) Here, we employ a hinge loss formulation with margin 𝜇 . This encourages the reprogrammed output to deviate from the original prediction by at least margin 𝜇 , effectively obfuscating the true decision boundary for OOD inputs. By minimizing this hinge loss, the optimization encourages a large KL divergence between the target and reprogrammed dis-tributions, which serves a dual purpose. Beyond simple output distortion, it implicitly maximizes the Fisher Information (FI) 
+
+distance along the direction of the perturbation 𝜹 . As we will prove in Theorem 5.1, maximizing this term forces the attacker’s surro-gate model to optimize in the region of highest curvature in the loss landscape, thereby maximizing the estimation error for the stolen model parameters. 
+
+3. Structural Compactness ( Lstruct ). To ensure the "Benign Prototypes" c𝑘 accurately represent the ID distribution, we add a regularization term that minimizes the distance between ID samples and their nearest prototype: 
+
+Lstruct = E𝑥 ∼D 𝑖𝑑 
+
+
+
+min  
+
+> 𝑘
+
+∥Φ(𝑥 ) − c𝑘 ∥22
+
+
+
+. (11) This creates tighter clusters for the benign data, improving the sensitivity of the gating mechanism 𝛼 (𝑥 ).
+
+Algorithm 1: Defensive Training for GraphRP . 
+
+> 1:
+
+Input: Pre-trained Victim Model 𝑇 (· ; 𝜃 𝑇 ), Private Data D𝑖𝑑 ,Auxiliary OOD Data D𝑑𝑒 𝑓 𝑜𝑜𝑑 . 
+
+> 2:
+
+Hyperparameters: Margins 𝜇 , weights 𝛽 1, 𝛽 2, learning rate 𝜂 . 
+
+> 3:
+
+Initialize: Reprogramming noise 𝜹 (𝑙 ) ∼ N ( 0, 𝜖 ), Prototypes 
+
+{c𝑘 } via K-Means on D𝑖𝑑 (updated in Step 2 only; excluded from Θ𝑟𝑒𝑝 gradient updates) , Distance threshold 𝜏 . 
+
+> 4:
+
+while not converged do  
+
+> 5:
+
+Step 1: Data Sampling  
+
+> 6:
+
+Sample benign batch B𝑖𝑑 = {( 𝑥, 𝑦 )} ∼ D 𝑖𝑑 . 
+
+> 7:
+
+Sample OOD batch B𝑜𝑜𝑑 = {𝑥 ′ } ∼ D 𝑑𝑒 𝑓 𝑜𝑜𝑑 . 
+
+> 8:
+
+Step 2: Structural Update  
+
+> 9:
+
+Compute embeddings 𝑍 = Φ(B 𝑖𝑑 ). 
+
+> 10:
+
+Update {c𝑘 } to minimize Lstruct with Eq. (11) (independent of Θ𝑟𝑒𝑝 gradient) . 
+
+> 11:
+
+Step 3: Gating & Forward Pass  
+
+> 12:
+
+Calculate gates 𝛼 (𝑥 ) for 𝑥 ∈ B 𝑖𝑑 ∪ B 𝑜𝑜𝑑 with Eq. (7).  
+
+> 13:
+
+Compute reprogrammed outputs ˜ 𝑦 = 𝑇 (𝑥 ; 𝜃 𝑇 , Θ𝑟𝑒𝑝 ). 
+
+> 14:
+
+Compute original outputs 𝑦 𝑜𝑟𝑖𝑔 = 𝑇 (𝑥 ; 𝜃 𝑇 ) (for KL).  
+
+> 15:
+
+Step 4: Reprogramming Update  
+
+> 16:
+
+Calculate Ltask on B𝑖𝑑 with Eq. (9).  
+
+> 17:
+
+Calculate Ldefense on B𝑜𝑜𝑑 with Eq. (10).  
+
+> 18:
+
+Compute Total Loss L with Eq. (12).  
+
+> 19:
+
+Update Θ𝑟𝑒𝑝 ← Θ𝑟𝑒𝑝 − 𝜂 ∇Θ𝑟𝑒𝑝 L. 
+
+> 20:
+
+end while  
+
+> 21:
+
+Return: Protected Model 𝑇 𝑝𝑟𝑜𝑡𝑒𝑐𝑡𝑒𝑑 (·) = 𝑇 (· ; 𝜃 𝑇 , Θ∗ 
+
+> 𝑟𝑒𝑝
+
+).The final optimization problem is to find Θ∗ 
+
+> 𝑟𝑒𝑝
+
+such that: 
+
+Θ∗ 
+
+> 𝑟𝑒𝑝
+
+= arg min 
+
+> Θ𝑟𝑒𝑝
+
+(L task + 𝛽 1 · L defense + 𝛽 2 · L struct ) , (12) where 𝛽 1 and 𝛽 2 are hyperparameters controlling the defense strength and structural clustering, respectively. Note that we freeze the orig-inal model parameters 𝜃 𝑇 to ensure parameter efficiency. 
+
+4.4.2 Training Algorithm. The complete training procedure for GraphRP is summarized in Algorithm 1. We use an alternating update strategy: first minimizing the structural loss to refine the gating boundary, and then optimizing the reprogramming noise to enforce the defense. 
+
+Complexity Analysis. The proposed defense is highly efficient. The structural extraction Φ(𝑥 ) relies on simple statistics (degree, eigenvalues) computable in 𝑂 (| 𝐸 | + 𝑛 3) or approximated in lin-ear time. The reprogramming layer involves only element-wise addition, adding negligible cost to the 𝑂 (| 𝐸 |𝑑 ) GNN inference. Im-portantly, since 𝜃 𝑇 is frozen, the number of trainable parameters is extremely small ( |Θ𝑟𝑒𝑝 | ≪ | 𝜃 𝑇 |), ensuring rapid convergence. 
+
+## 5 Theoretical Analysis 
+
+In this section, we provide a theoretical analysis for the effectiveness of GraphRP. We consider the worst-case scenario where the attacker has infinite query budget and capacity, aiming to learn a clone 𝐶 
+
+that properly mimics the reprogrammed victim 𝑇 𝑅 . We measure the defense success by the Loss Disparity 𝑄 (𝐶 ∗,𝑇 ) ≜ L𝑖𝑑 (𝐶 ∗) − L 𝑖𝑑 (𝑇 )
+
+on the benign distribution G𝑖𝑑 . Here G𝑖𝑑 and G𝑜𝑜𝑑 denote the graph distributions induced by D𝑖𝑑 and D𝑜𝑜𝑑 , respectively. Defending against Model Extraction for GNNs with Model Reprogramming KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+Let ˜𝜹 (𝑙 ) := 𝜆 · Tanh (𝜹 (𝑙 ) ) denote the effective bounded pertur-bation at layer 𝑙 , which satisfies ∥ ˜𝜹 (𝑙 ) ∥ ≤ 𝜆 by construction. Our analysis assumes: (A1) the loss ℓ is bounded by constant 𝑀 ; (A2) the attacker is optimal, i.e., 𝐶 ∗ perfectly mimics 𝑇 𝑅 on G𝑜𝑜𝑑 ; and (A3) the KL divergence admits a local second-order (Fisher Infor-mation) approximation in the bounded perturbation regime, where 
+
+∥𝛼 (𝐺 ) · ˜𝜹 ∥ ≤ 𝜆 · 𝛼 (𝐺 ) ≤ 𝜆 by construction. Theorem 5.1 (Structural Defense Bound). Let 𝐶 ∗ be the opti-mal clone model trained on OOD queries 𝐺 ∼ G 𝑜𝑜𝑑 reprogrammed by GraphRP. Under the cross-entropy loss, the performance gap between the clone and the victim on benign tasks is lower-bounded by: 
+
+𝑄 (𝐶 ∗,𝑇 ) ≥ E𝐺 ∼G 𝑜𝑜𝑑 
+
+ 12 𝛼 (𝐺 )2 · ˜𝜹 ⊤Ih (𝐺 ) ˜𝜹 
+
+| {z }
+
+> Structural Sensitivity Term
+
+− 2𝑀 · TV (G 𝑖𝑑 , G𝑜𝑜𝑑 )
+
+| {z }
+
+> Distribution Shift Term
+
+,
+
+(13) 
+
+where 𝛼 (𝐺 ) is the structure-aware gating factor, ˜𝜹 = 𝜆 ·Tanh (𝜹 ) is the effective bounded perturbation, and Ih (𝐺 ) is the Fisher Information Matrix of the victim GNN with respect to the latent representation h.
+
+Remark. The term ˜𝜹 ⊤Ih (𝐺 ) ˜𝜹 captures the structural sensitiv-ity of the GNN, which is largest when the reprogramming noise aligns with high-curvature directions of the model. Because ˜𝜹 
+
+is bounded, the analysis remains in the local regime where the second-order approximation in (A3) applies. For attack queries with 
+
+𝛼 (𝐺 ) ≈ 1, GraphRP drives the learned surrogate boundary away from the benign boundary in proportion to this sensitivity. The full proof is given in Appendix A; the bound holds under assumptions (A1)–(A3) and should not be interpreted as unconditional. 
+
+## 6 Experiments 
+
+In this section, we empirically validate GraphRP. We aim to answer three key questions: (1) Defense Effectiveness: Does GraphRP significantly degrade the performance of surrogate models compared to state-of-the-art baselines? (2) Utility Preservation: Does the defensive reprogram-ming maintain the utility of the target model for benign users? (3) 
+
+Scalability & Robustness: Is the method effective on large-scale graph benchmarks and robust against adaptive attackers? 
+
+## 6.1 Experimental Setup 
+
+Datasets. We evaluate on a diverse set of graph classification bench-marks [28], ranging from biochemical molecules to social networks. To demonstrate scalability, we include NCI1 [40] (4k+ graphs) and 
+
+OGB-MolHIV [14] (41k+ graphs), alongside standard baselines 
+
+MUTAG [6], ENZYMES [2], and PROTEINS [2]. Note that this work focuses on graph-level classification , the dominant MLaaS deployment setting for GNNs. 
+
+Baselines. We compare GraphRP against five defense strate-gies: (1) RandP (Random Perturbation) [32], (2) P-Poison [32], (3) 
+
+GRAD (Gradient Redirection) [27], (4) AM (Adaptive Misinforma-tion) [20], and (5) MeCo [44], a recent contrastive defense. These baselines represent the full spectrum of active defense strategies: output obfuscation (RandP, P-Poison), gradient redirection (GRAD), adaptive misinformation (AM), and contrastive learning (MeCo), all applicable to the black-box graph classification setting.      
+
+> MUTAG-Soft MUTAG-Hard ENZ-Soft ENZ-Hard
+> 0.40.60.81
+> 0.77 0.74 0.56 0.49 0.71 0.61 0.48 0.43 0.60.57 0.36 0.34
+> Clone Accuracy ( ↓)
+> No Defense MeCo GraphRP (Ours)
+
+Figure 3: Attack Success Rate comparison. Clone model ac-curacy (lower is better) on MUTAG and ENZYMES. GraphRP outperforms the best baseline (MeCo) and the undefended setting, reducing clone accuracy by up to ∼ 15% compared to the undefended model. Attack Configuration. We employ KnockoffNet [31] as the query strategy. The attacker trains surrogate models (GraphSAGE [12], Graph Isomorphism U-Net (GIUNET) [1], Gaussian-Induced Con-volution (GIC) [16]) using either soft-label (probability vector) or 
+
+hard-label (top-1) supervision from the victim. Our evaluation col-lectively covers soft-label attacks, hard-label attacks, adaptive gray-box attacks (Section 6.3), data leakage scenarios, and varying query budgets, providing comprehensive coverage of realistic ME threat models. Detailed hyperparameters and architecture settings are provided in Appendix C. 
+
+## 6.2 Defense Performance (RQ1 & RQ2) 
+
+6.2.1 Reducing Clone Model Accuracy. The primary goal of the defender is to maximize the error of the attacker’s clone model. The detailed numbers are shown in Table 1, Table A1 (MUTAG & ENZYMES) and Table A2 (NCI1 & PROTEINS). Figure 3 summarizes the performance on MUTAG and ENZYMES. We can observe that GraphRP consistently achieves the lowest clone accuracy across all scenarios. For instance, on MUTAG under soft-label attack, our method reduces the clone accuracy from 76 .5% (Undefended) to 60 .3%, significantly outperforming the best baseline (MeCo at 71 .2%). 
+
+6.2.2 Utility-Defense Trade-off. A robust defense must not degrade the experience for benign users, as shown in Table 2. We analyze the trade-off between Utility Loss and Defense Suc-cess . As shown in Figure 4, GraphRP achieves the strongest defense while incurring less than 2% utility loss, whereas baseline methods suffer a substantially larger utility-defense trade-off. This advan-tage stems from the Structure-Aware Gating mechanism, which effectively distinguishes benign from adversarial queries (AUROC 
+
+> 0.91, FPR < 0.06), enabling selective activation of the defense. 
+
+Computational Efficiency. A potential concern with spectral methods is the cost of eigendecomposition. However, GraphRP mitigates this by computing only the top-𝑘 eigenvalues (where 
+
+𝑘 ≪ 𝑛 ) using efficient iterative methods like the Lanczos algorithm. Furthermore, feature extraction is performed at the graph level , not the node level, meaning the overhead scales linearly with the batch KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Yan Wen, Zhenyi Wang, and Heng Huang 
+
+Table 1: Main Defense Performance. Clone model accuracy (lower is better) under Model Extraction attacks. GraphRP consis-tently outperforms state-of-the-art baselines across diverse datasets.                                                                           
+
+> Defense Method MUTAG ENZYMES NCI1
+> G-SAGE GIUNET GIC G-SAGE GIUNET GIC G-SAGE GIUNET GIC Undefended 0.765 0.934 0.904 0.561 0.685 0.609 0.635 0.787 0.820 RandP [32] 0.734 0.852 0.835 0.527 0.632 0.572 0.603 0.762 0.799 P-Poison [32] 0.742 0.884 0.875 0.522 0.641 0.581 0.603 0.765 0.802 GRAD [27] 0.735 0.872 0.823 0.520 0.626 0.573 0.595 0.753 0.791 AM [20] 0.722 0.866 0.882 0.514 0.633 0.551 0.610 0.757 0.798 MeCo [44] 0.712 0.823 0.813 0.482 0.619 0.552 0.586 0.683 0.736
+> GraphRP (Ours) 0.603 0.782 0.750 0.364 0.575 0.545 0.521 0.656 0.682
+
+Table 2: Target model utility (test accuracy) and ℓ1 norm of the output difference.                                                                                
+
+> Defense MUTAG ENZYMES NCI1 PROTEINS
+> Accuracy ↑ℓ1norm ↓Accuracy ↑ℓ1norm ↓Accuracy ↑ℓ1norm ↓Accuracy ↑ℓ1norm ↓
+> Undefended 0.9452 0.0 0.6629 0.0 0.8453 0.0 0.8012 0.0 RandP 0.9250 1.0 0.6451 1.0 0.8115 1.0 0.7864 1.0 P-Poison 0.9324 1.0 0.6324 1.0 0.8134 1.0 0.7823 1.0 GRAD 0.9276 1.0 0.6467 1.0 0.8072 1.0 0.7825 1.0 AM 0.9335 1.0 0.6352 1.0 0.8025 1.0 0.7924 1.0 MeCo 0.9297 0.3572 0.6327 0.0649 0.8107 0.1240 0.7871 0.1956
+> GraphRP (Ours) 0.9319 0.2351 0.6467 0.0567 0.8155 0.0762 0.7885 0.1320
+
+size rather than the number of nodes. As shown in Table A4, the additional latency is marginal ( ≈ 7%) compared to the heavy matrix multiplications in the GNN backbone, ensuring GraphRP remains suitable for real-time MLaaS latency constraints. 
+
+## 6.3 Robustness and Scalability Analysis (RQ3) 
+
+To validate the resilience of GraphRP in hostile environments, we conducted two stress tests (detailed results in Appendix D). 
+
+Defending against Adaptive Attackers. We simulated a so-phisticated "gray-box" attacker who is aware of the GraphRP de-fense mechanism. This adaptive adversary employs a Structural Generator (based on GraphGAN [42]) explicitly trained to generate queries that mimic the topological statistics of the benign dataset, attempting to bypass our Structure-Aware Gating. As shown in Table 3, GraphRP largely remains effective even against this adaptive strategy, confirming that spectral eigenvalues serve as a “structural fingerprint” that is mathematically difficult to spoof without access to the private training manifold. Furthermore, GraphRP outperforms simpler OOD-based strategies—query rejec-tion (OOD-Reject) and uniform-confidence return (Low-Conf)— achieving strictly lower clone accuracy and higher benign accuracy simultaneously, while returning outputs in a confidence range sim-ilar to genuine predictions. Finally, Table 4 shows that GraphRP maintains robustness even when the attacker gains access to a portion of the private training data: with 10% ID data leaked, clone accuracy increases by only 3.2% (vs. 5 .2% for Undefended), confirming resilience to partial distribution shift.        
+
+> 01234010 20
+> RandP MeCo
+> GraphRP
+> ↑Defense ←Utility
+> Utility Drop on Benign Data ( %, Lower is better) Clone Accuracy Reduction ( %, Higher is better)
+
+Figure 4: Utility vs. Defense Trade-off on NCI1. The y-axis rep-resents the reduction in attacker accuracy (Benefit), and the x-axis represents the drop in benign accuracy (Cost). GraphRP provides the best protection-to-cost ratio. Scalability (Large-Scale Graphs). Table 5 reports defense per-formance on two large-scale benchmarks: OGB-MolHIV (41k molecular graphs) and COLLAB (dense social network). GraphRP achieves the lowest clone accuracy on both datasets while maintain-ing high benign utility, demonstrating that our spectral structural prototypes generalize effectively to large and topologically diverse graph manifolds. 
+
+Impact of Query Budget. Standard active defenses often fail under unlimited query budgets, as noise eventually averages out. As shown in Figure 5, while the Undefended model’s clone accuracy Defending against Model Extraction for GNNs with Model Reprogramming KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 0.5x 1x 2x 3x 4x 5x      
+
+> 0.50.60.70.80.9
+> Attacker Query Budget ( ×Size of |𝐷 𝑡𝑟𝑎𝑖𝑛 |)Clone Model Accuracy Undefended RandP GraphRP
+
+Figure 5: Effect of Query Budget on Attack Success (NCI1). As the attacker increases the query budget, the clone accuracy of the undefended model rises steadily. In contrast, GraphRP effectively saturates the attacker’s learning, keeping accu-racy low ( ≈ 55% ) regardless of the budget. Table 3: Adaptive Defense Robustness (MUTAG). Clone accu-racy under Standard & Adaptive attacks. GraphRP remains effective even when attacker mimics benign graph structure. 
+
+Defense Standard Attack Adaptive Attack 
+
+soft-label hard-label soft-label hard-label Undefended 0.765 0.735 0.781 0.752 RandP 0.734 0.701 0.762 0.738 
+
+GraphRP 0.603 0.572 0.615 0.588 
+
+Table 4: Robustness against Data Leakage (MUTAG). Clone ac-curacy when attacker mixes 10% private ID data into queries. GraphRP remains robust under partial distribution shift. 
+
+Defense Standard (OOD Only) Adaptive (10% ID Leak) 
+
+Undefended 0.7651 0.8174 RandP 0.7341 0.7763 P-Poison 0.7426 0.7695 AM 0.7223 0.7570 
+
+GraphRP 0.6032 0.6358 
+
+increases steadily with budget (0 .5×–5 ×), GraphRP saturates at a low level ( ≈ 55% on NCI1), indicating that reprogramming noise fundamentally poisons the decision boundary, rendering additional queries uninformative. 
+
+Defense Transferability against Complex Surrogates. Arealistic risk is that an attacker employs a more powerful archi-tecture than the victim to extract the model. We tested the fol-lowing scenario: the victim uses the standard G-Inception target, while the attacker uses a powerful Graph Transformer [10]. As de-tailed in Appendix D.2, GraphRP successfully degrades the Graph Transformer’s performance from 82 .4% to 64 .1%. This confirms that GraphRP’s layer-wise reprogramming distorts the underlying data 
+
+Table 5: Large-Scale Defense Performance. Clone accuracy (↓) and test accuracy ( ↑) on OGB-MolHIV and COLLAB. 
+
+Defense OGB-MolHIV COLLAB 
+
+Clone Acc ↓ Test Acc ↑ Clone Acc ↓ Test Acc ↑
+
+Undefended 0.7924 0.7150 0.6978 0.6987 RandP 0.7645 0.6840 0.6742 0.6389 P-Poison 0.7420 0.6910 0.6523 0.6420 AM 0.7210 0.6980 0.6426 0.6524 
+
+GraphRP 0.5840 0.7125 0.6245 0.6972     
+
+> Full Method w/o Degree w/o Clustering w/o Spectral
+> 0.40.50.60.70.8
+> 0.60.62 0.64 0.69
+> Clone Accuracy (Lower is Better)
+
+Figure 6: Feature Importance Ablation (MUTAG). Removing spectral features causes the sharpest accuracy rise, confirm-ing they are the most critical component for OOD detection. 
+
+manifold itself, making the poisoned labels effective regardless of the attacker’s model capacity. 
+
+Ablation. To understand which features drive our Gating Mecha-nism, we ablate Node Degrees, Clustering Coefficients, and Spectral Eigenvalues. As shown in Figure 6, Spectral Features are the most critical: removing them increases clone accuracy from 0.603 to 0.685, indicating a substantially weaker defense, while removing degree statistics has only a minor impact, validating that global spectral properties are the hardest for attackers to mimic. 
+
+## 7 Conclusion 
+
+In this work, we presented GraphRP , a dynamic defense against GNN model extraction. GraphRP combines model reprogramming with structure-aware gating to selectively poison surrogate training while preserving benign utility. Under the stated assumptions, our analysis provides a lower bound on the attacker’s estimation error, and experiments show that GraphRP scales effectively to large graph datasets. 
+
+Future Directions. Future work will extend GraphRP to node-level tasks through localized ego-graph prototypes and adapt it to heterogeneous and dynamic graphs, where evolving topology requires continuous prototype calibration. 
+
+## Acknowledgments 
+
+This work was partially supported by NSF IIS-2347592, IIS-2348169, DBI-2405416, CCF-2348306, CNS-2347617, and RISE-2536663. KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Yan Wen, Zhenyi Wang, and Heng Huang 
+
+## References 
+
+[1] Alireza Amouzad, Zahra Dehghanian, Saeed Saravani, Maryam Amirmazlaghani, and Behnam Roshanfekr. 2024. Graph isomorphism U-Net. Expert Systems with Applications 236 (2024), 121280. [2] Karsten M Borgwardt, Cheng Soon Ong, Stefan Schönauer, SVN Vishwanathan, Alex J Smola, and Hans-Peter Kriegel. 2005. Protein function prediction via graph kernels. Bioinformatics 21, suppl_1 (2005), i47–i56. [3] Pin-Yu Chen. 2024. Model reprogramming: Resource-efficient cross-domain machine learning. In Proceedings of the AAAI Conference on Artificial Intelligence ,Vol. 38. 22584–22591. [4] Fan RK Chung. 1997. Spectral graph theory . Vol. 92. American Mathematical Soc. [5] Jacson Rodrigues Correia-Silva, Rodrigo F Berriel, Claudine Badue, Alberto F De Souza, and Thiago Oliveira-Santos. 2018. Copycat cnn: Stealing knowledge by persuading confession with random non-labeled data. In 2018 International joint conference on neural networks (IJCNN) . IEEE, 1–8. [6] Asim Kumar Debnath, Rosa L Lopez de Compadre, Gargi Debnath, Alan J Shus-terman, and Corwin Hansch. 1991. Structure-activity relationship of mutagenic aromatic and heteroaromatic nitro compounds. correlation with molecular or-bital energies and hydrophobicity. Journal of medicinal chemistry 34, 2 (1991), 786–797. [7] David DeFazio and Arti Ramesh. 2019. Adversarial model extraction on graph neural networks. arXiv preprint arXiv:1912.07721 (2019). [8] Michaël Defferrard, Xavier Bresson, and Pierre Vandergheynst. 2016. Convolu-tional neural networks on graphs with fast localized spectral filtering. In Advances in Neural Information Processing Systems (NeurIPS) , Vol. 29. 3844–3852. [9] Jane Downer, Ren Wang, and Binghui Wang. 2025. Watermarking Graph Neural Networks via Explanations for Ownership Protection. arXiv preprint arXiv:2501.05614 (2025). [10] Vijay Prakash Dwivedi and Xavier Bresson. 2020. A generalization of transformer networks to graphs. arXiv preprint arXiv:2012.09699 (2020). [11] Gamaleldin F Elsayed, Ian Goodfellow, and Jascha Sohl-Dickstein. 2018. Ad-versarial reprogramming of neural networks. arXiv preprint arXiv:1806.11146 
+
+(2018). [12] Will Hamilton, Zhitao Ying, and Jure Leskovec. 2017. Inductive representation learning on large graphs. Advances in neural information processing systems 30 (2017). [13] Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. 2015. Distilling the knowledge in a neural network. arXiv preprint arXiv:1503.02531 (2015). [14] Weihua Hu, Matthias Fey, Marinka Zitnik, Yuxiao Dong, Hongyu Ren, Bowen Liu, Michele Catasta, and Jure Leskovec. 2020. Open Graph Benchmark: Datasets for Machine Learning on Graphs. In Advances in Neural Information Processing Systems (NeurIPS) , Vol. 33. 22118–22133. [15] Hengrui Jia, Christopher A Choquette-Choo, Varun Chandrasekaran, and Nicolas Papernot. 2021. Entangled watermarks as a defense against model extraction. In 
+
+30th USENIX security symposium (USENIX Security 21) . 1937–1954. [16] Jiatao Jiang, Zhen Cui, Chunyan Xu, and Jian Yang. 2019. Gaussian-induced con-volution for graphs. In Proceedings of the AAAI conference on artificial intelligence ,Vol. 33. 4007–4014. [17] Yongcheng Jing, Chongbin Yuan, Li Ju, Yiding Yang, Xinchao Wang, and Dacheng Tao. 2023. Deep graph reprogramming. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 24345–24354. [18] Sanjay Kariyappa, Atul Prakash, and Moinuddin K Qureshi. 2021. Maze: Data-free model stealing attack using zeroth-order gradient estimation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 13814–13823. [19] Sanjay Kariyappa, Atul Prakash, and Moinuddin K Qureshi. 2021. Protecting dnns from theft using an ensemble of diverse models. In International Conference on Learning Representations .[20] Sanjay Kariyappa and Moinuddin K Qureshi. 2020. Defending against model stealing attacks with adaptive misinformation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 770–778. [21] Thomas N. Kipf and Max Welling. 2017. Semi-Supervised Classification with Graph Convolutional Networks. In International Conference on Learning Repre-sentations .[22] Xiao Li, Li Sun, Mengjie Ling, and Yan Peng. 2023. A survey of graph neural network based recommendation in social networks. Neurocomputing 549 (2023), 126441. [23] Yang Liu, Xiang Ao, Zidi Qin, Jianfeng Chi, Jinghua Feng, Hao Yang, and Qing He. 2021. Pick and choose: a GNN-based imbalanced learning approach for fraud detection. In Proceedings of the web conference 2021 . 3168–3177. [24] Yixin Liu, Chenrui Fan, Pan Zhou, and Lichao Sun. 2023. Unlearnable graph: Protecting graphs from unauthorized exploitation. arXiv preprint arXiv:2303.02568 
+
+(2023). [25] Yahui Long, Min Wu, Yong Liu, Yuan Fang, Chee Keong Kwoh, Jinmiao Chen, Jiawei Luo, and Xiaoli Li. 2022. Pre-training graph neural networks for link prediction in biomedical networks. Bioinformatics 38, 8 (2022), 2254–2262. [26] Pratyush Maini, Mohammad Yaghini, and Nicolas Papernot. 2021. Dataset infer-ence: Ownership resolution in machine learning. arXiv preprint arXiv:2104.10706 
+
+(2021). [27] Mantas Mazeika, Bo Li, and David Forsyth. 2022. How to steer your adversary: Targeted and efficient model stealing defenses with gradient redirection. In 
+
+International Conference on Machine Learning . PMLR, 15241–15254. [28] Christopher Morris, Nils M Kriege, Franka Bause, Kristian Kersting, Petra Mutzel, and Marion Neumann. 2020. Tudataset: A collection of benchmark datasets for learning with graphs. arXiv preprint arXiv:2007.08663 (2020). [29] Seong Joon Oh, Bernt Schiele, and Mario Fritz. 2019. Towards reverse-engineering black-box neural networks. Explainable AI: interpreting, explaining and visualizing deep learning (2019), 121–144. [30] Daryna Oliynyk, Rudolf Mayer, and Andreas Rauber. 2023. I know what you trained last summer: A survey on stealing machine learning models and defences. 
+
+Comput. Surveys 55, 14s (2023), 1–41. [31] Tribhuvanesh Orekondy, Bernt Schiele, and Mario Fritz. 2019. Knockoff nets: Stealing functionality of black-box models. In Proceedings of the IEEE/CVF confer-ence on computer vision and pattern recognition . 4954–4963. [32] Tribhuvanesh Orekondy, Bernt Schiele, and Mario Fritz. 2020. Prediction Poi-soning: Towards Defenses Against DNN Model Stealing Attacks. In International Conference on Learning Representations .[33] Nicolas Papernot, Patrick McDaniel, Ian Goodfellow, Somesh Jha, Z Berkay Celik, and Ananthram Swami. 2017. Practical black-box attacks against machine learning. In Proceedings of the 2017 ACM on Asia conference on computer and communications security . 506–519. [34] Robert Nikolai Reith, Thomas Schneider, and Oleksandr Tkachenko. 2019. Effi-ciently stealing your machine learning models. In Proceedings of the 18th ACM Workshop on Privacy in the Electronic Society . 198–210. [35] Yun Shen, Xinlei He, Yufei Han, and Yang Zhang. 2022. Model stealing attacks against inductive graph neural networks. In 2022 IEEE Symposium on Security and Privacy (SP) . IEEE, 1175–1192. [36] Xiangguo Sun et al. 2023. All in One: Multi-Task Prompting for Graph Neural Networks. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining . 2120–2131. [37] Sebastian Szyller, Buse Gul Atli, Samuel Marchal, and N Asokan. 2021. Dawn: Dynamic adversarial watermarking of neural networks. In Proceedings of the 29th ACM International Conference on Multimedia . 4417–4425. [38] Jean-Baptiste Truong, Pratyush Maini, Robert J Walls, and Nicolas Papernot. 2021. Data-free model extraction. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 4771–4780. [39] Petar Veličković, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Liò, and Yoshua Bengio. 2018. Graph Attention Networks. In International Con-ference on Learning Representations .[40] Nikil Wale, Ian A Watson, and George Karypis. 2008. Comparison of descrip-tor spaces for chemical compound retrieval and classification. Knowledge and Information Systems 14 (2008), 347–375. [41] Binghui Wang and Neil Zhenqiang Gong. 2018. Stealing hyperparameters in machine learning. In 2018 IEEE symposium on security and privacy (SP) . IEEE, 36–52. [42] Hongwei Wang, Jia Wang, Jialin Wang, Miao Zhao, Weinan Zhang, Fuzheng Zhang, Xing Xie, and Minyi Guo. 2018. Graphgan: Graph representation learning with generative adversarial nets. In Proceedings of the AAAI conference on artificial intelligence , Vol. 32. [43] Zi Wang. 2021. Zero-shot knowledge distillation from a decision-based black-box model. In International conference on machine learning . PMLR, 10675–10685. [44] Zhenyi Wang, Li Shen, Tongliang Liu, Tiehang Duan, Yanjun Zhu, Donglin Zhan, David Doermann, and Mingchen Gao. 2023. Defending against Data-Free Model Extraction by Distributionally Robust Defensive Training. Advances in Neural Information Processing Systems 36 (2023). [45] Bang Wu, Xiangwen Yang, Shirui Pan, and Xingliang Yuan. 2022. Model extraction attacks on graph neural networks: Taxonomy and realisation. In Proceedings of the 2022 ACM on Asia Conference on Computer and Communications Security .337–350. [46] Shiwen Wu, Fei Sun, Wentao Zhang, Xu Xie, and Bin Cui. 2022. Graph neural networks in recommender systems: a survey. Comput. Surveys 55, 5 (2022), 1–37. [47] Haoyan Xu, Ruizhi Qian, Jiate Li, Yushun Dong, Minghao Lin, Hanson Yan, Zhengtao Yao, Qinghua Liu, Junhao Dong, Ruopeng Huang, et al. 2025. A Sys-tematic Study of Model Extraction Attacks on Graph Foundation Models. arXiv preprint arXiv:2511.11912 (2025). [48] Jing Xu, Franziska Boenisch, and Adam Dziedzic. 2025. ADAGE: Active Defenses Against GNN Extraction. arXiv preprint arXiv:2503.00065 (2025). [49] Zhitao Ying, Jiaxuan You, Christopher Morris, Xiang Ren, William L Hamilton, and Jure Leskovec. 2018. Hierarchical Graph Representation Learning with Differentiable Pooling. In Advances in Neural Information Processing Systems (NeurIPS) , Vol. 31. [50] Yuanxin Zhuang, Chuan Shi, Mengmei Zhang, Jinghui Chen, Lingjuan Lyu, Pan Zhou, and Lichao Sun. 2024. Unveiling the Secrets without Data: Can Graph Neural Networks Be Exploited through Data-Free Model Extraction Attacks?. In 
+
+33rd USENIX Security Symposium (USENIX Security 24) . USENIX Association. Defending against Model Extraction for GNNs with Model Reprogramming KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+## A Details of Theoretical Analysis 
+
+Here, we provide the rigorous derivation of Theorem 5.1. 
+
+## A.1 Preliminaries 
+
+Let G𝑖𝑑 and G𝑜𝑜𝑑 denote the benign and adversarial graph distri-butions. Let ˜𝜹 (𝑙 ) := 𝜆 · Tanh (𝜹 (𝑙 ) ) denote the effective bounded perturbation at layer 𝑙 , satisfying ∥ ˜𝜹 (𝑙 ) ∥ ≤ 𝜆 by construction. The victim model output is 𝑇 (𝐺 ), and the reprogrammed victim is 
+
+𝑇 𝑅 (𝐺 ) = 𝑇 (H(𝑙 ) + 𝛼 (𝐺 ) ˜𝜹 ) for the 𝑙 -th layer. The attacker min-imizes the expected risk on the query distribution: L𝑜𝑜𝑑 (𝐶 ) =
+
+E𝐺 ∼G 𝑜𝑜𝑑 [ℓ (𝐶 (𝐺 ),𝑇 𝑅 (𝐺 ))] . We assume the loss function ℓ is bounded by constant 𝑀 .
+
+## A.2 Proof of Theorem 5.1 
+
+Proof. Step 1: Relating ID and OOD Performance. We aim to lower-bound 𝑄 (𝐶 ∗,𝑇 ) = L𝑖𝑑 (𝐶 ∗) − L 𝑖𝑑 (𝑇 ). For any bounded function 𝑓 with bound 𝑀 , the difference in expected loss across distributions satisfies |E𝑃 [𝑓 ] − E𝑄 [𝑓 ]| ≤ 𝑀 · ∥ 𝑃 −𝑄 ∥1, which gives: 
+
+|L 𝑖𝑑 (𝐶 ∗) − L 𝑜𝑜𝑑 (𝐶 ∗)| ≤ 2𝑀 · TV (G 𝑖𝑑 , G𝑜𝑜𝑑 ). (14) Since the victim 𝑇 is well-trained on D𝑖𝑑 (i.e., L𝑖𝑑 (𝑇 ) ≈ 0): 
+
+𝑄 (𝐶 ∗,𝑇 ) ≥ L 𝑜𝑜𝑑 (𝐶 ∗) − 2𝑀 · TV (G 𝑖𝑑 , G𝑜𝑜𝑑 ). (15) 
+
+Step 2: Optimal Attacker Assumption. Assume the attacker trains the clone 𝐶 ∗ to minimize the divergence from the observed query responses 𝑇 𝑅 (𝐺 ). Under the optimal attacker assumption, the clone perfectly learns the reprogrammed distribution, i.e., 𝐶 ∗ (𝐺 ) ≈ 
+
+𝑇 𝑅 (𝐺 ). We evaluate the clone’s error L𝑜𝑜𝑑 against the original 
+
+victim 𝑇 using Cross-Entropy. By decomposing Cross-Entropy into Entropy ( 𝐻 ) and KL-Divergence ( 𝐷 KL ), and noting that 𝐻 (𝑇 (𝐺 )) ≥ 
+
+0, we obtain the lower bound: 
+
+L𝑜𝑜𝑑 (𝐶 ∗) = E𝐺 ∼G 𝑜𝑜𝑑 [𝐻 (𝑇 (𝐺 )) + 𝐷 KL (𝑇 (𝐺 ) ∥ 𝐶 ∗ (𝐺 ))] ≥ E𝐺 ∼G 𝑜𝑜𝑑 [𝐷 KL (𝑇 (𝐺 ) ∥ 𝑇 𝑅 (𝐺 ))] . (16) 
+
+Step 3: Taylor Expansion via Fisher Information. Let 𝑃 (𝑌 |h)
+
+be the victim’s output distribution parameterized by graph embed-ding h, so 𝑇 𝑅 (𝐺 ) corresponds to 𝑃 (𝑌 |h + 𝜖 ) with 𝜖 = 𝛼 (𝐺 ) · ˜𝜹 .Since ˜𝜹 = 𝜆 · Tanh (𝜹 ), the effective perturbation satisfies ∥𝜖 ∥ ≤ 
+
+𝜆 · 𝛼 (𝐺 ) ≤ 𝜆 , which ensures the perturbation remains in the local regime where the following Taylor expansion is applicable. Since 
+
+𝐷 KL (𝑃 ∥𝑃 ) = 0 and the first-order term vanishes, a second-order Taylor expansion gives: 
+
+𝐷 KL (𝑃 (𝑌 |h) ∥ 𝑃 (𝑌 |h + 𝜖 )) ≈ 12 𝜖 ⊤Ih (𝐺 )𝜖 + 𝑂 (∥ 𝜖 ∥3), (17) where Ih (𝐺 ) = E𝑦 ∼𝑃 (𝑌 |h) [∇ h log 𝑃 (𝑦 |h)∇ h log 𝑃 (𝑦 |h)⊤] is the Fisher Information Matrix (FIM). 
+
+Step 4: Combining Terms. Substituting 𝜖 = 𝛼 (𝐺 ) · ˜𝜹 :
+
+𝐷 KL (𝑇 (𝐺 ) ∥ 𝑇 𝑅 (𝐺 )) ≈ 12 𝛼 (𝐺 )2 ˜𝜹 ⊤Ih (𝐺 ) ˜𝜹 . (18) Substituting this back into the bounds from Steps 1 and 2 yields the final bound: 
+
+𝑄 (𝐶 ∗,𝑇 ) ≥ E𝐺 ∼G 𝑜𝑜𝑑 
+
+ 12 𝛼 (𝐺 )2 ˜𝜹 ⊤Ih (𝐺 ) ˜𝜹 
+
+
+
+− 2𝑀 · TV (G 𝑖𝑑 , G𝑜𝑜𝑑 ).
+
+(19) 
+
+□
+
+## B Implementation Details of GraphRP B.1 Structure Extractor Φ(𝐺 )
+
+The structural embedding z𝐺 = Φ(𝐺 ) concatenates three permutation-invariant feature groups: (1) Spectral Features — top-𝑘 sorted eigenvalues of the normalized Laplacian L = I − D−1/2AD −1/2, with zero-padding for small graphs ( 𝑛 < 50) and truncation for large ones ( 𝑘 = 8 for molecular datasets); (2) Degree Statistics — a 4-dimensional vector of [min , max , mean , std ] of node degrees; (3) 
+
+Global Properties — graph diameter, average clustering coefficient, and density. The final vector is ℓ2-normalized: z𝐺 ← z𝐺 /∥ z𝐺 ∥2.
+
+## B.2 Prototype Learning 
+
+Prototypes {c𝑘 }𝐾 𝑘 =1 are initialized via K-Means ( 𝐾 = 5) on D𝑡𝑟𝑎𝑖𝑛 𝑖𝑑 
+
+and updated exclusively via Lstruct in Step 2 of Algorithm 1, inde-pendently of Θ𝑟𝑒𝑝 . The gating factor is: 
+
+𝛼 (𝐺 ) = Sigmoid 
+
+
+
+𝛾 ·
+
+
+
+min  
+
+> 𝑘
+
+∥Φ(𝐺 ) − c𝑘 ∥22 − 𝜏 
+
+ 
+
+, (20) where 𝛾 = 10 and 𝜏 is a trainable threshold initialized at the 95 th 
+
+percentile of benign distances. 
+
+## C Extended Experimental Settings C.1 Hardware and Hyperparameters 
+
+All models are implemented in PyTorch ≥ 1.12 with PyTorch Geo-metric. Experiments were conducted on a cluster with NVIDIA RTX A5000 (24GB VRAM) and RTX 6000 Ada (48GB) GPUs. We use G-Inception (3 layers, 128 dimensional hidden layers) as the target model for biochemical datasets and GraphSAGE (3 layers) for social datasets. All models are optimized using Adam, with the reprogramming noise 𝜹 trained at learning rate 1 × 10 −3
+
+and weight decay 5 ×10 −4. The query budget is set to 20 × the size of the benign training set for hard-label attacks and 10 × for soft-label attacks. The code for our experiments can be accessed at https://github. com/overwenyan/GraphRP-KDD2026/. 
+
+## C.2 Inference Latency Analysis 
+
+A critical requirement for MLaaS defense is low latency. As shown in Table A4, GraphRP incurs a marginal overhead of only ≈ 7.9% compared to the Undefended model (56.42s vs. 52.31s). This slight increase is primarily due to the spectral decomposition in Φ(𝐺 ),which is computed once per graph. In contrast, optimization-based methods like P-Poison are computationally prohibitive, requiring iterative gradient steps at test time that make them over 8 × slower (432.17s) than the baseline. GraphRP’s efficient forward-pass design ensures it remains compatible with real-time applications. 
+
+## D Extended Robustness and Transferability D.1 Adaptive Attack and Data Leakage 
+
+Defending against Adaptive Attackers. As shown in Tables 3 and A3, GraphRP remains robust against a gray-box attacker (using GraphGAN to mimic benign topology [42]), limiting clone accuracy to 61 .5% (soft-label) and 58 .8% (hard-label)—a negligible increase KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Yan Wen, Zhenyi Wang, and Heng Huang 
+
+Table A1: Hard-label defense performance on MUTAG & ENZYMES. Soft-label results are in Table 1. 
+
+Defense MUTAG Clone Model Architecture ENZYMES Clone Model Architecture GraphSAGE GIUNET GIC GraphSAGE GIUNET GIC Undefended ↓ 0.7346 0.8835 0.8657 0.4874 0.6557 0.5880 RandP ↓ 0.7012 0.8087 0.7564 0.4475 0.5821 0.5517 P-Poison ↓ 0.7089 0.8231 0.8054 0.4682 0.5967 0.5458 GRAD ↓ 0.7120 0.8193 0.7901 0.4626 0.5919 0.5530 AM ↓ 0.6957 0.8125 0.7627 0.4587 0.5830 0.5462 MeCo ↓ 0.6135 0.7974 0.7456 0.4251 0.5724 0.5407 
+
+GraphRP (Ours) ↓ 0.5721 0.7531 0.7238 0.3421 0.5447 0.5223 
+
+Table A2: Hard-label defense performance on NCI1 & PROTEINS. Soft-label results are in Table 1. 
+
+Defense NCI1 Clone Model Architecture PROTEINS Clone Model Architecture GraphSAGE GIUNET GIC GraphSAGE GIUNET GIC Undefended ↓ 0.6073 0.7425 0.7824 0.6951 0.7164 0.7135 RandP ↓ 0.5735 0.7144 0.7459 0.6592 0.6455 0.6820 P-Poison ↓ 0.5752 0.7120 0.7634 0.6536 0.6837 0.6852 GRAD ↓ 0.5731 0.7146 0.7661 0.6492 0.6902 0.6813 AM ↓ 0.5675 0.7235 0.7653 0.6473 0.6923 0.6793 MeCo ↓ 0.5435 0.6946 0.6837 0.5864 0.6771 0.6527 
+
+GraphRP (Ours) ↓ 0.5024 0.6137 0.6547 0.5003 0.6287 0.6325 
+
+Table A3: Clone model accuracy after applying adaptive attack on MUTAG with G_Inception as target model. 
+
+Attack Defense Clone Model Architecture 
+
+GraphSAGE GIUNET GIC Hard-label Attack Undefended ↓ 0.7651 0.9342 0.9043 
+
+GraphRP ↓ 0.6032 0.7829 0.7506 
+
+GraphRP, Adaptive, unknown architecture ↓ 0.5220 0.6334 0.6101 GraphRP, Adaptive, known architecture ↓ 0.5725 0.6672 0.6502 Soft-label Attack Undefended ↓ 0.7346 0.8835 0.8657 
+
+GraphRP ↓ 0.5721 0.7531 0.7238 
+
+GraphRP, Adaptive, unknown architecture ↓ 0.5023 0.5942 0.5731 GraphRP, Adaptive, known architecture ↓ 0.5495 0.6247 0.5986 
+
+Table A5: Defense Transferability (MUTAG). Clone accuracy across attacker architectures. GraphRP’s poisoning effect holds even against Graph Transformers. 
+
+Victim: G-Inception Attacker Architecture 
+
+Defense Method GraphSAGE GAT Graph Transformer Undefended 0.765 0.789 0.824 RandP (Baseline) 0.734 0.751 0.792 
+
+GraphRP (Ours) 0.603 0.612 0.641 
+
+Table A4: Inference Time Comparison. 
+
+Defense Method Inference Time (s) 
+
+Undefended 52.31 RandP 54.72 P-Poison 432.17 AM 115.57 
+
+GraphRP (Ours) 56.42 
+
+(< 1.5%) over the standard attack. Notably, even when the attacker knows the defended architecture, clone accuracy stays below 65%. 
+
+## D.2 Cross-Architecture Transferability 
+
+As shown in Table A5, GraphRP is architecture-agnostic: layer-wise reprogramming distorts the data manifold regardless of surrogate capacity, reducing extraction accuracy by over 18% even against a powerful Graph Transformer [10].
