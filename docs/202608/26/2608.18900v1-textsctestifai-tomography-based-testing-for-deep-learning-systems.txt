@@ -1,0 +1,652 @@
+Title: TestifAI: Tomography-Based Testing for Deep Learning Systems
+
+URL Source: https://arxiv.org/pdf/2608.18900v1
+
+Published Time: Thu, 20 Aug 2026 00:59:34 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# TestifAI: Tomography-Based Testing for Deep Learning Systems 
+
+# Arooj Arif 
+
+Northeastern University London London, United Kingdom arooj.arif@nulondon.ac.uk 
+
+# Tobias Hartung 
+
+Northeastern University London London, United Kingdom tobias.hartung@nulondon.ac.uk 
+
+# Elena Botoeva 
+
+University of Kent Canterbury, United Kingdom e.botoeva@kent.ac.uk 
+
+# Alexandros Koliousis 
+
+Northeastern University London London, United Kingdom alexandros.koliousis@nulondon.ac.uk 
+
+## Abstract 
+
+As AI systems are increasingly deployed in safety-critical applica-tion domains (e.g., autonomous driving), associated risks increase too. Deep learning models underlying modern AI systems, therefore, must undergo thorough testing to ensure their correct behaviour. A single robustness test involves thousands of inferences to empir-ically verify if a model’s outputs remain stable under a bounded perturbation of its inputs. However, existing testing frameworks lack the means to systematically explore and summarise robustness across a combinatorial space of perturbations. We propose TestifAI, a deep learning testing framework for ef-ficient and accurate estimation of robustness against combinations of perturbations. TestifAI enables users to specify operational con-ditions as structured spaces of semantic input perturbations (e.g., image blur, brightness and zoom) and discrete severity levels (e.g., low, medium and high). Users can query model robustness for any combination (e.g., “low blur, high brightness, and medium zoom”). To achieve efficiency and accuracy, TestifAI introduces partial model tomography , a novel approach to reconstructing model be-haviour in a multi-perturbation space from tests that apply only a small number of perturbations (lower-order projections). To es-timate robustness against at least three perturbations, TestifAI trains an auxiliary model on the results of tests involving up to two perturbations only, avoiding execution of an exponential number of tests. Our experiments on five image and language classification tasks show that TestifAI can predict higher-order (3 and 4 per-turbations) test outcomes from low-order (1 and 2 perturbations) observations with an aggregate robustness estimation error of less than 7%, while reducing the number of inferences by 60–80%. 
+
+## CCS Concepts 
+
+• Software and its engineering → Software testing and debug-ging ; • Computing methodologies → Machine learning .
+
+## Keywords 
+
+Deep learning testing, Model robustness, AI safety, Combinatorial testing, Input perturbations 
+
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> ICSE ’26, Rio de Janeiro, Brazil
+> © 2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2025-3/2026/04 https://doi.org/10.1145/3744916.3787842
+
+ACM Reference Format: 
+
+Arooj Arif, Tobias Hartung, Elena Botoeva, and Alexandros Koliousis. 2026. TestifAI: Tomography-Based Testing for Deep Learning Systems. In 2026 IEEE/ACM 48th International Conference on Software Engineering (ICSE ’26), April 12–18, 2026, Rio de Janeiro, Brazil. ACM, New York, NY, USA, 13 pages. https://doi.org/10.1145/3744916.3787842 
+
+## 1 Introduction 
+
+Deep learning models are now integral to many modern software systems, building on their success in computer vision and language understanding. tasks. They are increasingly deployed in high-stakes settings, powering autonomous vehicles (e.g., for traffic sign classi-fication [55] and lane detection [9]), AI chatbots (e.g., for transla-tion [2], question answering [71], and mental health support [24]) and other real-world applications. Deep learning models are notoriously sensitive (i.e., not robust) to input perturbations [21, 30, 47]. For example, vision models often misclassify images when exposed to changes in lighting, geometric distortions, or adverse weather conditions [30]. Similarly, language models are vulnerable to misspellings [57], character flips [15], or paraphrases [50]. Failures are not limited to “in vitro” benchmarks: perception systems in self-driving cars have failed to identify lane markings in poor weather, contributing to accidents [60]; and chat-bots have been manipulated into producing harmful or inappropri-ate responses through subtle prompt variations [24]. As with any software, deep learning models must be thoroughly tested under their intended operating conditions. This includes testing assumptions about the training data—e.g., is the input distri-bution 𝑃 (𝑋 ) informative of the classification task 𝑃 (𝑌 |𝑋 )?—as well as inductive biases of the model architecture—e.g., robustness to small image translations in convolutional models and to word per-mutations in attention-based models [22]. In practice, this means checking whether a model maintains correct predictions under input perturbations. The simplest robustness test applies a single semantic transformation (e.g., blurring images with a Gaussian ker-nel of radius 3, or substituting two words in sentences) and verifies that predictions remain stable across all examples. However, such tests are inherently local: they evaluate one axis of variation at a time. Model performance, however, is often affected in new ways by multiple, interacting perturbations, whose combined effects can-not be inferred from independent tests [8, 31, 51]. What is needed is a systematic method to explore and summarise robustness in combinatorially rich perturbation spaces. arXiv:2608.18900v1 [cs.AI] 19 Aug 2026 ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil Arooj Arif, Tobias Hartung, Elena Botoeva, and Alexandros Koliousis 
+
+Existing deep learning testing techniques either overlook inter-action effects, or lack mechanisms to explore them. They can be broadly grouped into four categories: (i) Static robustness benchmarks define a fixed suite of semantic perturbations that simulate realistic deployment conditions (e.g., CIFAR-10-C [30] and TextFlint [72]). They typically discretise the perturbation intensity into severity levels (e.g., low, medium, high). However, perturbations—whether simple (e.g., “blur”) or complex (e.g., “fog”)—are treated as atomic units. As a result, users lack con-trol over how perturbations interact, and cannot inspect or adjust their compositional structure. ( ii ) Test prioritisation methods use uncertainty or diversity estimates to select inputs that are more likely to trigger model failures [16, 17, 46]. They can accelerate robustness evaluation by focusing on inputs that are most infor-mative, especially when testing worst-case rather than average model behaviour. But they operate on a single-perturbation set-ting (i.e., one test) and do not reason about interactions across perturbations. ( iii ) Neuron coverage methods attempt to quantify test adequacy using internal model representations, such as acti-vation patterns across neurons [45, 56, 77], or generate new test examples by perturbing inputs in the latent space [13]. However, coverage metrics do not align with semantically meaningful pertur-bations, nor do they account for compositional interactions between them. ( iv ) Combinatorial methods compose input perturbations, ei-ther stochastically [31] or exhaustively [8], to improve or evaluate model robustness. However, they provide no systematic way to assess robustness across the full perturbation space. In this paper, we introduce TestifAI, a test framework for deep learning models that enables exploration of their robustness across multi-perturbation scenarios. The key contribution is partial model tomography . Rather than exhaustively evaluating all combinations of multiple perturbations and severity levels, TestifAI executes only a subset of tests—specifically, those involving one or two perturbations at a time—and learns to predict the rest. In other words, it estimates higher-order robustness by reconstructing the full perturbation space from its lower-order projections. We demonstrate the efficacy of TestifAI by training a random forest on sampled first- and second-order tests, and use it to ap-proximate the robustness for untested, higher-order configurations. We use five realistic benchmarks—four vision and one language classification tasks—to evaluate it and show that TestifAI can esti-mate robustness across the full test space, including all 3-way and 4-way combinations, with minimal approximation error. TestifAI is a complete test framework and makes two further contributions: ( i) it supports interactive analysis through a Boolean query interface, allowing users to query robustness over perturba-tion types and severity levels; ( ii ) its implementation includes an adaptive sampling strategy with early stopping that reduces the number of inferences required per test by detecting convergence. 
+
+## 2 Testing Deep Learning Models 
+
+Deep learning classifiers—the focus of our work—implicitly learn decision boundaries from data, namely input features 𝑋 and their corresponding labels 𝑌 , by modelling the conditional distribution 
+
+𝑃 (𝑌 | 𝑋 ). Testing evaluates a model’s statistical behavior when the input distribution 𝑃 (𝑋 ) shifts due to one or more perturbations: we apply controlled changes to inputs 𝑥 ∈ 𝑋 that are expected to preserve their true label 𝑦 ∈ 𝑌 . A robust classifier should maintain consistent predictions for perturbed versions of the same example 
+
+(𝑥, 𝑦 ). However, perturbations can also expose cases that change the model’s approximation of 𝑃 (𝑌 | 𝑋 ), revealing the brittleness of the classifier’s learned decision boundary. 
+
+## 2.1 Metamorphic tests 
+
+We interpret perturbations as instances of metamorphic relations —expected invariances under small, label-preserving transforma-tions [69]. We consider a deep learning model M, a labelled test set D = {( 𝑥 1, 𝑦 1), . . . , (𝑥 𝑛 , 𝑦 𝑛 )} , and a set of parameterised pertur-bations P = {𝑝 1, . . . , 𝑝 𝑛 }, where each 𝑝 𝑖 is a perturbation function (e.g., image rotation). We further define the corresponding severity level sets 𝑆 1, . . . , 𝑆 𝑛 (e.g., 𝑆 𝑖 = {0, 1, 2, 3, 4, 5}, where 0 denotes no ro-tation, 1 rotation up to 10 ◦, etc.) and the set of severity combinations 
+
+S = 𝑆 1 × 𝑆 2 × · · · × 𝑆 𝑛 .Definition 1 (Robustness). Let 𝝈 ∈ S denote a configuration of perturbations (e.g., 𝝈 = (0, 4, 2) or 𝝈 = (1, 2, 5) for 𝑛 = 3), and let 𝜋 𝝈 (𝑥 ) be the composite perturbation of input 𝑥 induced by 𝝈 .The robustness score r 𝝈 is the fraction of inputs in D on which M
+
+remains correct under 𝝈 :r𝝈 = 1
+
+|D| 
+
+> | D |
+
+∑︁ 
+
+> 𝑖 =1
+
+1M  𝜋 𝝈 (𝑥 𝑖 ) = 𝑦 𝑖 
+
+ . (1) Here 1[·] is an indicator function that returns 1 if the condition in the brackets is satisfied and 0 otherwise. We view Equation 1 as a 
+
+system-level metamorphic test , or simply a test . We may refer to a test by its configuration 𝝈 or by its result r 𝝈 .Definition 2 (Aggregate Robustness). Given a suite Θ of 𝑁 
+
+tests, Θ = {𝝈 𝑖 }𝑁 𝑖 =1, the aggregate robustness score R (Θ) of Θ is the average of the robustness scores of all tests in Θ:R(Θ) = 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+r𝝈 𝑖 . (2) A high aggregate robustness score R (Θ) indicates that, on average, 
+
+M has high accuracy across the entire set of tested perturbations. 
+
+## 2.2 Test spaces 
+
+Deep learning models deployed in real-world environments must remain robust under a wide range of perturbations. For example, vision models in modern cars must handle varied lighting condi-tions (e.g., driving through tunnels), adverse weather (e.g., rain or snow), and unpredictable human behaviour [3, 20]. Similarly, language models must cope with word substitutions, negations, and typographic errors [61, 72]. Several benchmarks simulate real-world perturbations for spe-cific application domains. MNIST-C [51], for example, defines fifteen perturbation types for hand-written digit recognition ( ô.). Simi-larly, {CIFAR-10 , ImageNet }-C [30], DeepTest [68], CURE-TSD [67], and CheckList [61] define perturbations for image classification (ì), self-driving scenarios ( ), traffic sign recognition ( -), and question answering ( 6), respectively. Besides realism, these benchmarks share another desirable prop-erty: most assign discrete severity levels—typically from 1 to 5—to TestifAI: Tomography-Based Testing for Deep Learning Systems ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil 
+
+each perturbation, making them suitable for systematic testing. Some perturbations are relatively atomic , applying simple transfor-mations to inputs (e.g., brightness or blur), while others represent more complex scenarios that combine multiple effects (e.g., fog or glare). Although benchmarks may define composite perturbations manually, it is infeasible to anticipate all combinations in advance. A lane-detection model, for instance, may behave correctly under fog or motion blur individually, but fail when both are present. We must therefore move beyond isolated transformations and consider how perturbations interact [7, 12, 18, 31, 32, 42, 48, 80]. 
+
+Why combine more than two perturbations? Real-world image and text inputs rarely vary along only a single axis. For example, Multi-Weather City [53] combines three or more weather effects to model realistic conditions, and ReCode [74] defines over thirty semantic-preserving text transformations that commonly co-occur in mixed natural language-code inputs. Higher-order perturbations also arise in training (e.g., AugMix [31] augments images with mul-tiple ImageNet-C corruptions) and in neural architecture design (e.g., spatial transformers [33] apply compound geometric shifts). These examples motivate testing higher-order perturbation combi-nations rather than isolated transformations. We further discuss the validity of composite perturbations in §6. 
+
+The challenge is to define a test space that enables the exploration of structured combinations of perturbations. 
+
+## 2.3 Combinatorial testing 
+
+While testing combinations of perturbations is essential, it intro-duces a classic challenge— combinatorial explosion . Even for modest settings, the number of possible tests grows exponentially with the number of perturbations, making exhaustive testing infeasible. 
+
+Combinatorial Interaction Testing (CIT) [5, 8, 39, 43] is a princi-pled approach to address the combinatorial explosion problem. In-stead of testing all combinations of 𝑘 perturbations, CIT constructs a minimal set of tests—a covering array —that guarantees 𝑡 -way coverage of all interactions among any 𝑡 < 𝑘 perturbations. For example, a 2-way covering array over three perturbations ensures that all severity-level combinations across any pair of perturbations will be tested, leaving the remaining perturbations unconstrained. Higher 𝑡 increases coverage but also the computational cost [8]. CIT assumes that most failures are triggered by low-order in-teractions (i.e., involving only a small number of perturbations) and seeks to expose them through systematic coverage. In deep learning, CIT has been used to generate diverse test inputs, either by sampling 2-way combinations of real-world perturbations [8] or by perturbing latent representations to generate new inputs [13]. However, these methods focus on diversity and coverage, not on modelling or predicting how interactions affect model behaviour. 
+
+The challenge is to predict model behaviour under higher-order (i.e., multi-perturbation) combinations. 
+
+## 3 Partial Model Tomography 
+
+The main idea behind TestifAI is to prioritise tests to generate a relevant approximate model tomography—we term this partial model tomography . Our three key assumptions are: ( i) input data can undergo atomic semantic perturbations (e.g., scale an image, blur it, or add contrast to it; see Figures 1b–1e); ( ii ) each perturbation has discrete severity levels (e.g., a scale from 0 to 5, where 0 is negligible and 5 the most severe level); and, finally, ( iii ) multiple perturbations can be performed in combination (e.g., transform an image by applying scale, blur and contrast; see Figures 1a and 1e). 
+
+Full model tomography requires an exponential number of tests stemming from all possible combinations of perturbations and their severity levels. When the order of perturbation application does not matter, each unique combination of severity levels defines a test. If there are 𝑛 perturbations and each perturbation 𝑝 𝑗 has |𝑆 𝑗 |
+
+severity levels, then there are Î𝑛 𝑗 =1 |𝑆 𝑗 | tests. If perturbation order matters, this number grows by a factor of 𝑘 ! for each test with 𝑘 
+
+perturbations at non-zero severity. For instance, given three per-turbations with six severity levels each, as in Figure 1a, there are 63 = 216 unordered and 1 + 15 + 2! · 75 + 3! · 125 = 916 ordered tests. To address this combinatorial bottleneck, we propose predicting the robustness score of higher-order tests from low-order tests. A 
+
+𝑘 -order test involves exactly 𝑘 distinct perturbations with non-zero severity. For example, using Figure 1a and ignoring order, there is one zero-order test (scale, contrast and blur at severity 0); 15 first-order tests with exactly one perturbation at non-zero severity (e.g., 
+
+scale > 0); 75 second-order tests with exactly two perturbations at non-zero severity level; and 125 third-order tests where all three perturbations are applied with non-zero severity. Each test provides robustness information r 𝜎 1,...,𝜎 𝑘 , representing the probability that the model correctly classifies an input when each perturbation 𝑝 𝑗 is applied at severity level 𝜎 𝑗 . If perturba-tions act independently, first-order robustness values can be used to predict higher-order ones. For example, in the 3-dimensional perturbation space of Figure 1a, suppose r 2,0,0 = 0.9, r 0,4,0 = 0.8, and r0,0,2 = 0.7. Under independence, we expect r 2,4,0 = 0.9 × 0.8 = 0.72 and r 2,4,2 = 0.9×0.8×0.7 = 0.504. In other words, if perturbations be-have independently, partial tomography based solely on first-order tests would suffice to reconstruct the full model tomography. Unfortunately, we do not know a priori whether perturbations act independently or not. However, we can empirically test for indepen-dence by comparing first-order tomography results against second-order ones. If the observed second-order values align with predic-tions derived from first-order data—within a statistical margin—we can treat the corresponding tests as independent and assume this independence holds for higher-order combinations as well. Return-ing to Figure 1a, we could execute the 90 first- and second-order tests (15 and 75, respectively) and compare the 75 second-order results against predictions derived from the 15 first-order ones. If they behave independently, then we could predict the remaining 125 third-order tests without executing them. Independence testing can be achieved with a standard 𝜒 2-test. Proposition 1. For a fixed perturbation configuration 𝝈 =
+
+(𝜎 1, . . . , 𝜎 𝑘 ), let r 𝝈 denote the true success probability of a test at severity levels 𝜎 1, . . . , 𝜎 𝑘 , and let ˆ r𝝈 denote the empirical success rate over 𝑁 samples. Under the assumption that perturbations act independently, the statistic 
+
+𝜒 2 :=∑︁  
+
+> 𝝈 ∈ S
+
+(ˆr𝝈 − r𝝈 )2
+
+r𝝈 (1 − r𝝈 )/ 𝑁 
+
+is approximately 𝜒 2-distributed with |S| degrees of freedom, where 
+
+S denotes the set of evaluated severity configurations. ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil Arooj Arif, Tobias Hartung, Elena Botoeva, and Alexandros Koliousis 012345Contrast 0 1 2 3 4 5Scale 012345Blur           
+
+> (a) 𝝈 =(2,4,2)(b) Original image (c) Contrasted (d) Scaled (e) Blurred (f) Combined
+
+Figure 1: Composite perturbations combine the effects of individual perturbations. ( a) A test with configuration 𝝈 = (2, 4, 2),indicating contrast , scale , and blur at severity levels 2, 4 and 2, respectively. ( b) Original input image. ( c–e) Effects of exactly one perturbation at the specified severity level. ( f ) Combined effect of the composite perturbation. 
+
+Proof. For any fixed perturbation configuration 𝝈 = (𝜎 1, . . . , 𝜎 𝑘 ),the outcome of a test over 𝑁 samples follows a binomial distribu-tion: 
+
+𝑋 𝝈 ∼ Binomial (𝑁 , r𝝈 ), and ˆr𝝈 := 𝑋 𝝈 
+
+𝑁 .
+
+When 𝑁 is sufficiently large, the binomial distribution is well-approximated by a normal distribution ˆr𝝈 ≈ N 
+
+
+
+r𝝈 , r𝝈 (1 − r𝝈 )
+
+𝑁 
+
+
+
+and we can define the standardised residual 
+
+𝑍 𝝈 := ˆr𝝈 − r𝝈 √︁ 
+
+r𝝈 (1 − r𝝈 )/ 𝑁 .
+
+Under the null hypothesis of independence (i.e., that r 𝝈 is accu-rately predicted from lower-order data), each 𝑍 𝝈 is approximately standard normal. Therefore, the sum: 
+
+𝜒 2 :=∑︁  
+
+> 𝝈 ∈ S
+
+𝑍 2
+
+> 𝝈
+
+is approximately 𝜒 2-distributed with |S| degrees of freedom. To en-sure the normal approximation is valid, the Berry–Esseen theorem implies that 𝑁 should satisfy: 
+
+𝑁 > 9 · max 
+
+ 1 − r𝝈 
+
+r𝝈 
+
+, r𝝈 
+
+1 − r𝝈 
+
+
+
+.
+
+Under this condition, the 𝜒 2-test provides a statistically justified method to evaluate the independence assumption. □
+
+Once dependent and independent perturbations have been iden-tified, the number of required higher-order tests can be significantly reduced. In the ideal case where all first-order perturbations are independent, all third-order tests—125 in our example, 58% of the total—can be estimated from first-order tests rather than executed. If only some perturbations are independent, then higher-order tests can be checked against mutual independence of all constituents. For example, if blur and scale , scale and contrast , and contrast and 
+
+blur are all found pairwise independent, then the triplet blur-scale-contrast is likely independent as well under realistic scenarios. Thus, any higher order test that only depends on pairwise independent perturbations can be directly estimated as the product of first-order tests. A higher-order test that has some independent and some dependent perturbations can similarly be estimated by multiplying the independent first-order tests with a set of remaining dependent tests which are lower order, thus reducing the computational cost. More generally, however, lower-order results can be used to train predictive models that account for dependencies when estimating higher-order outcomes. This approach dramatically reduces the computational cost of tomography while maintaining accuracy in user-specified test environments. We demonstrate this in §4.3, where we train a random forest on first- and second-order test results to predict third-order outcomes and beyond. 
+
+## 4 TestifAI 
+
+We describe TestifAI, a test framework for deep learning models that performs partial tomography. We begin with an overview of the framework’s architecture, followed by a description of how users interact with it (§4.1), how lower-order tests are executed efficiently (§4.2), and how higher-order tests are predicted using a learned model (§4.3). A test session with TestifAI comprises four stages: ( i) users specify a test environment for their model by selecting perturba-tions and their severity levels that best characterise the application domain; ( ii ) TestifAI automatically generates and executes all first-and second-order tests within that test environment; ( iii ) based on these results, TestifAI trains an auxiliary predictive model—in our case, a random forest—to approximate the model’s full tomography space; ( iv ) users can then query TestifAI to estimate robustness over regions of the test environment. For illustrative purposes, we focus on 3D tomography , where the test environment consists of three perturbations. In §5.3, we further explore the generality of our approach to 4D tomography. 
+
+## 4.1 Specifying tests 
+
+Users can customise testing both before and after tomography. While TestifAI supports a wide range of perturbations and sever-ity levels, users may choose to setup a customised test environment for their model—filtering specific perturbations, severity levels, or both. For example, the use of the zoom perturbation might be con-strained by a camera’s focal range. After TestifAI estimates the full tomography space, users may interactively query specific regions to assess model robustness or refine their setup—for instance, to determine whether a given severity level meaningfully impacts model robustness or not. 
+
+4.1.1 Test Setup. Users begin with a trained model M (e.g., ResNet-32 [11]) and an evaluation data set D (e.g., the 10,000 test images TestifAI: Tomography-Based Testing for Deep Learning Systems ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil 
+
+of CIFAR-10 [40]). Having assessed standard accuracy, they now aim to evaluate the model’s robustness. During setup, TestifAI enables users to select 𝑘 perturbations 
+
+𝑝 1, . . . , 𝑝 𝑘 from a predefined set, along with their associated severity levels, to define a test environment. For example, CIFAR-10-C [29] includes 15 well-defined perturbations, each with 6 severity levels. Alternatively, users may provide custom perturbation functions tailored to their application or data domain. TestifAI defines the full tomography space as the set of all possible severity configurations across the selected perturbations: 
+
+Θ = 𝑆 1 × · · · × 𝑆 𝑘 ,
+
+where 𝑆 𝑗 is the set of selected severity levels for perturbation 𝑝 𝑗 .Each element 𝝈 = (𝜎 1, . . . , 𝜎 𝑘 ) ∈ Θ represents a single test —a complete assignment of severity levels across all 𝑘 perturbations that must be either executed or predicted. 
+
+4.1.2 Querying Θ. After TestifAI learns robustness estimates across the space Θ, users can express a robustness query as a Boolean expression over perturbation severities: 
+
+𝑄 :: = (𝑝 𝑗 op 𝜎 𝑗 ) 𝑄 ∧ 𝑄 𝑄 ∨ 𝑄, 
+
+where (𝑝 𝑗 op 𝜎 𝑗 ) is an atomic constraint defining the considered range of values for perturbation 𝑝 𝑗 , where op is a comparison operator op ∈ { <, ⩽, =, ⩾, >} and 𝜎 𝑗 ∈ 𝑆 𝑗 a severity level (e.g., “blur > 2”). The compound expressions 𝑄 ∧ 𝑄 and 𝑄 ∨ 𝑄 denote the logical conjunction and disjunction of two subqueries, respectively. For example, 𝑄 = (zoom > 2) ∨ (brightness = 5 ∧ blur = 1)
+
+selects all tests where the zoom severity exceeds 2, or where both brightness is set to 5 and blur is set to 1. A query 𝑄 represents a subset of the tomography space Θ. We denote by J𝑄 K the set of tests 𝝈 ∈ Θ that satisfy the query ex-pression 𝑄 . Since the robustness r 𝝈 is known—either measured or predicted—for every test, TestifAI computes the aggregate robust-ness of 𝑄 using Equation 2: R (𝑄 ) := R(J𝑄 K).
+
+## 4.2 Executing tests 
+
+TestifAI evaluates all first- and second-order tests and uses these results to predict robustness of third-order tests and beyond. We partition the full tomography space Θ by the number of active perturbations. We define the 𝑡 -th order subset Θ𝑡 , for 𝑡 ⩽ 𝑘 , as: 
+
+Θ𝑡 = 𝝈 = (𝜎 1, . . . , 𝜎 𝑘 ) ∈ Θ 𝝈 has exactly 𝑡 non-zero 𝜎 𝑖 -values .
+
+In other words, Θ𝑡 consists of all tests where exactly 𝑡 perturbations are applied with non-zero severity. For example, in 3D tomography (𝑘 = 3), the tomography space is partitioned into Θ0, Θ1, Θ2, and 
+
+Θ3, corresponding to zeroth-, first-, second-, and third-order tests, respectively. Θ0 only contains the “no-perturbations at all” case, i.e., it is merely the base model accuracy. TestifAI evaluates the robustness of all tests in the set Θ⩽2 =
+
+Θ0 ∪ Θ1 ∪ Θ2 by applying each perturbation configuration 𝝈 ∈ Θ⩽2
+
+to inputs from the dataset D, running the model to infer the label of each perturbed input, and recording success or failure based on label correctness (Algorithm 1). With 𝑘 perturbations and 𝑚 severity levels per perturbation, |Θ1 | = 𝑘𝑚 and |Θ2 | =  𝑘 
+
+> 2
+
+𝑚 2. So the total number of tests executed is 𝑂 (𝑘 2𝑚 2), eliminating the exponential 
+
+𝑂 (𝑚 𝑘 ) cost of full tomography. 
+
+Algorithm 1 Constructing the training dataset for partial tomog-raphy by selecting and evaluating tests from Θ⩽2, the space of first-and second-order perturbation combinations.                                                                                                     
+
+> 1: Inputs: Trained model M; dataset D; tests Θ≤2; batch size 𝑏 ; threshold
+> 𝛿 ; window size 𝑤
+> 2: Output: Training set T
+> 3: T ← ∅
+> 4: for all 𝝈 ∈Θ≤2do
+> 5: Partition Dinto batches B={𝐵 1, 𝐵 2, . . . , 𝐵 𝑛 }of size 𝑏
+> 6: 𝔥 𝝈 ← [ 0]𝑛 ⊲Reset history
+> 7: 𝑖 ←1
+> 8: for all 𝐵 ∈Bdo
+> 9: ˜𝐵 ← { ( 𝜋 𝝈 (𝑥 ), 𝑦 ) | ( 𝑥, 𝑦 ) ∈ 𝐵 }⊲Apply perturbation
+> 10: T ← T ∪ {  𝝈 ,1[ M ( ˜𝑥 )=𝑦 ]| ( ˜𝑥, 𝑦 ) ∈ ˜𝐵 }⊲Coll. tr. data
+> 11: 𝔥 (𝑖 )
+> 𝝈 ←1
+> 𝑏 ∑︁
+> (˜𝑥,𝑦 ) ∈ ˜𝐵
+> 1M ( ˜𝑥 )=𝑦 ⊲Store partial result
+> 12: if 𝑖 ⩾𝑤 and 𝑖
+> max
+> 𝑗 =𝑖 −𝑤 +1𝔥 (𝑗 )
+> 𝝈 −𝔥 (𝑗 −1)
+> 𝝈 <𝛿 then
+> 13: break
+> 14: end if
+> 15: 𝑖 ←𝑖 +1
+> 16: end for
+> 17: end for
+
+However, inferring the label of every perturbed input is often unnecessary to compute a good estimation of r 𝝈 . TestifAI employs an early-stopping strategy to avoid superfluous model inferences (see Algorithm 1). The idea is to estimate r 𝝈 incrementally. First, TestifAI partitions the dataset into small batches of size 𝑏 (ℓ. 5). It then iteratively computes and stores a per-batch robustness es-timate ( ℓ. 11). TestifAI will assess convergence using a window of the last 𝑤 partial estimates. Computation stops when the vari-ation in the window falls below a predefined threshold 𝛿 (ℓ. 12). We empirically found that 𝑏 = 100, 𝛿 = 0.005 and 𝑤 = 3 gives a good, unbiased estimate of r 𝝈 in our experiments. The time cost of each test comprises the cost of transforming data samples ( ℓ. 9) and the cost of performing model inference on them ( ℓ. 10). Early stop-ping reduces both components by limiting the number of samples processed. We discuss the computational savings and the relative contributions of transformation and inference time in §5.3. All binary prediction outcomes observed prior to early stopping are stored in a set T (ℓ. 10), which is then used for training our predictive model. 
+
+## 4.3 Predicting tests 
+
+TestifAI learns to predict the robustness of higher-order tests in 
+
+Θ⩾3 based on empirical observations from the lower-order tests 
+
+Θ⩽2. Given a perturbation configuration 𝝈 ∈ Θ, our predictive model O returns a predicted robustness score ˆ r𝝈 = O( 𝝈 ).
+
+Training. Algorithm 1 returns a training data set 
+
+T =    𝝈 , 1[M ( 𝜋 𝝈 (𝑥 )) = 𝑦 ] 𝝈 ∈ Θ⩽2, (𝑥, 𝑦 ) ∈ D 𝝈 ,
+
+where D𝝈 ⊆ D is the subset of the inputs—possibly partial, since we employ early stopping in Algorithm 1—used to estimate the robustness of the model under perturbation configuration 𝝈 . The size of the training set |T | = Í𝝈 ∈Θ⩽2 |D 𝝈 | is the total number of perturbed inputs evaluated across all configurations. Each element ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil Arooj Arif, Tobias Hartung, Elena Botoeva, and Alexandros Koliousis 
+
+of T pairs a configuration 𝝈 with a binary outcome indicating whether the model correctly classified a given perturbed input or not. We treat each element of T as a training example consisting of a perturbation configuration and its corresponding binary out-come. By projecting T , we construct a feature matrix 𝑋 O ∈ R| T | × 𝑘 
+
+containing all configurations and a label vector yO ∈ { 0, 1}| T | con-taining all outcomes. These are then used to train our model. Our model O is a random forest classifier. After tuning, we selected the following configuration: (1) The model consists of 100 trees, balancing computational and statistical performance. (2) Bootstrap sampling is disabled, allowing each tree to train on the full dataset. (3) There is no restriction on the number of features considered at each split, enabling trees to explore the full feature space and capture richer interactions among perturbation types. (4) It uses the log-loss splitting criterion, optimizing for splits that reduce the cross-entropy between predicted and true labels. This encourages probability estimates of robustness that are more reliable and easier to interpret. This configuration was selected based on the lowest mean squared error (MSE) observed on a held-out validation set of actual Θ3 test results. We further evaluate our model’s generalization performance on Θ3 and Θ4 in §5.3. An analogous surrogate model can be trained to estimate per-turbation validity (e.g., estimate KID [4] and BERTScore [82] for perturbed images and text, respectively) from low-order observa-tions, enabling users to exclude low-quality regions of Θ (see §6). 
+
+Why random forests? Random forests are non-parametric ensem-ble methods that approximate structured conditional distributions without explicit structure specification—unlike Bayesian networks or factor graphs. Also, in our preliminary experiments, random forests had the best sample efficiency among other architectures (gradient-boosted trees, multilayer perceptrons, and Bayesian net-works) that achieved comparable accuracy. This was an important factor since we train O on a limited number of empirical robust-ness measurements. Note, however, that the choice of the best architecture for O is not a focus of this work. 
+
+## 5 Evaluation 
+
+We structure our evaluation around three key research questions: (i) How accurate are TestifAI ’s robustness predictions? (§5.2); (ii ) Is partial tomography an effective strategy for approximating the robustness space Θ? (§5.3); and ( iii ) How sample-efficient is TestifAI in estimating robustness? (§5.4). 
+
+## 5.1 Experimental setup 
+
+We implemented TestifAI in Python 3.9, using the scikit-learn 
+
+library to train our random forest model, and sympy to parse and evaluate Boolean query expressions. Experiments were conducted on a high-performance GPU cluster at the Massachusetts Green High Performance Computing Center (MGHPCC), using an NVIDIA Tesla T4 GPU with CUDA 12.3. 
+
+5.1.1 Benchmarks. We evaluate TestifAI on five benchmarks: four vision and one language classification tasks. For each task, we 
+
+Table 1: Summary of the benchmarks and evaluated models.                            
+
+> Task Dataset Size Perturbations Model Acc.
+> ô.MNIST 10,000 brightness, zoom, motion-blur, shear LeNet-5 98.4%
+> ìCIFAR-10 10,000 shot-noise, brightness, jpeg-compression, contrast WRN-28-10 94.7%
+> Roboflow 1,000 translate, scale, contrast, brightness YOLOv11 82.2%
+> -GTSRB 12,630 darken, codec-error, gaus-sian-blur, exposure CNN-SE 97.6%
+> 6QQP 1,000 synonym, typos, contrac-tion, punctuation RoBERTa 91.2%
+
+found a publicly available pre-trained classification model and its associated data set. Table 1 summarises our benchmarks: the dataset name, size and the considered perturbations, as well as the model name and its classification accuracy. 
+
+Hand-written digit recognition ( ô.) is a classic computer vision classification task. We test the robustness of the LeNet-5 model [79] on perturbed grayscale images of hand-written digits from the 
+
+MNIST test dataset [41]. We assess model robustness to brightness ,
+
+zoom , motion blur and shear —four common digit-image corrup-tions [6, 38, 49, 51, 64] that mimic lighting changes, scale variations, camera motion, and geometric distortions, respectively. Perturba-tions were implemented using the MNIST-C library [52]. 
+
+Image classification ( ì) is another classic vision task. We test the robustness of WideResNet-28-10 [11, 81] on perturbed images of the CIFAR-10 test dataset [40]. We assess model robustness to shot noise , brightness , jpeg compression , and contrast [7, 30–32] that simulate sensor imperfections, illumination changes, compression artefacts, and visibility variations, respectively. Perturbations were implemented using RobustBench [11]. 
+
+Object detection in self-driving Cars ( ) is part of the Udac-ity challenge—the task is to detect objects in urban driving im-ages [63]. We select 1000 images to test the robustness of the 
+
+YOLOv11s model [35, 58] against scale , contrast , translation , and 
+
+brightness , four common driving scene corruptions [8, 9, 68] that mimic distance variations, lighting conditions, camera movements, and illumination changes, respectively. Perturbations were imple-mented using DeepTest [68]. We selected five (out of the ten) sever-ity levels, setting scale (𝑠 𝑥 , 𝑠 𝑦 ) ∈ {( 1.5, 1.5), (2.6, 2.6), (3.7, 3.7),
+
+(4.8, 4.8), (6.0, 6.0)} , contrast 𝛼 ∈ { 1.2, 1.6, 2.1, 2.5, 3.0}, transla-tion (𝑡 𝑥 , 𝑡 𝑦 ) ∈ {( 20 , 20 ), (40 , 40 ), (60 , 60 ), (80 , 80 ), (100 , 100 )} , and brightness 𝛽 ∈ { 20 , 40 , 60 , 80 , 100 }.
+
+Traffic sign recognition ( -) is an essential task for autonomous driving systems. We test the robustness of the CNN-SE model [54] on the German Traffic Sign Recognition Benchmark (GTSRB) [65]. The dataset contains 12630 test images of 43 signs. We test darken-ing , codec-error , gaussian blur , and exposure —four perturbations that simulate challenges in traffic sign perception: nighttime or shadowed viewing conditions, video transmission artifacts, imper-fect camera focus, and overexposed imaging, respectively [1, 66, 78]. Perturbations were implemented using CURE-TSD [55]. 
+
+Quora question-answering ( 6) is a semantic similarity task for natural language understanding [71]. We test the robustness of the TestifAI: Tomography-Based Testing for Deep Learning Systems ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil Θ1 Θ2 Θ3 Θ4            
+
+> 0.00.51.0
+> Γσ
+> ô. Θ1Θ2Θ3Θ4
+> 0.00.51.0
+> Γσ
+> ìΘ1Θ2Θ3Θ4
+> 0.00.51.0
+> Γσ
+> Θ1Θ2Θ3Θ4
+> 0.00.51.0
+> Γσ
+> -Θ1Θ2Θ3Θ4
+> 0.00.51.0
+> Γσ
+> 6
+
+Figure 2: Distribution of ground-truth robustness scores r𝝈 across Θ1–Θ4 for each benchmark. Higher orders show wider, downward-shifted distributions, indicating increased accuracy degradation and robustness variability. ô. ì  - 6
+
+> −0.4
+> −0.20.00.20.4
+> Estimation Error
+
+Figure 3: r𝝈 estimation er-rors for 3D tomography. 05     
+
+> MSE  ×10 −3
+> ô.ì-6
+> 024
+> # samples (10 6)
+> 2.2m 2.2m 216K 2.7m 108K 900K 900K 90K 1.1m 45K 600K 845K 58K 458K 45K
+> Baseline TestifAI TestifAI δ
+
+Figure 4: Sample efficiency for 3D tomography. 012345   
+
+> P1
+> 0 1 2 3 4 5
+> P2
+> 012345
+> P3
+> m= 15 `= 12
+
+𝑄 3           
+
+> 𝑃 1≤2∧𝑃 2≥3∧𝑃 3≤2012345
+> P1
+> 0 1 2 3 4 5
+> P2
+> 012345
+> P3
+> m= 0 `= 27
+
+𝑄 8           
+
+> 𝑃 1≥3∧𝑃 2≥3∧𝑃 3≥3012345
+> P1
+> 0 1 2 3 4 5
+> P2
+> 012345
+> P3
+> m= 91 `= 125
+
+𝑄 12         
+
+> 𝑃 1≤5∧𝑃 2≤5∧𝑃 3≤5
+
+Figure 5: 3D voxel visualisation of 𝑄 3, 𝑄 8 and 𝑄 12 .
+
+RoBERTa base [34] model. For our test dataset, we choose 1000 ques-tion pairs from the Quora Question Pairs (QQP) dataset, each pair having a binary label indicating semantic equivalence. We assess model robustness to synonym replacement , typos , contractions , and 
+
+punctuation [19, 61, 72, 76]—four perturbations that preserve mean-ing while introducing lexical, orthographic, stylistic, and structural variations, respectively. Perturbations were implemented using Tex-tAttack [50]. Each severity level—1 through 5–directly corresponds to the number of edits applied to a sentence: at level 1 we make one edit, level 2 two edits, and so on, up to level 5. 
+
+5.1.2 Ground Truth. We evaluate the accuracy of TestifAI by comparing its predictions against full model tomography. This baseline exhaustively computes the true robustness score r 𝝈 or every test 𝝈 in the selected perturbation space. In other words, for each benchmark, we apply every perturbation configuration to every input in the evaluation dataset to obtain exact values. Figure 2 presents the ground-truth distributions of r 𝝈 . Partial tomography relies on the statistical patterns of the Θ1 and Θ2 distributions to predict the Θ3 and Θ4 ones. 
+
+## 5.2 Robustness estimation errors 
+
+We evaluate the ability of our partial tomography model—namely, a random forest—to approximate 3D tomography. For each of our 
+
+Table 2: Summary of the number ( 𝑚 ) of tests measured for training the partial tomography model and the number ( ℓ)of tests whose robustness was inferred, for each query 𝑄 𝑖 .
+
+𝑖 1 2 3 4 5 6 7 8 9 10 11 12 
+
+𝑚 19 15 15 9 15 9 9 0 7 37 61 91 
+
+ℓ 8 12 12 18 12 18 18 27 1 27 64 125 
+
+five benchmarks, we consider the first three perturbations listed in Table 1, each discretised into six severity levels. This results in 216 unique tests per benchmark, corresponding to all possible combinations of three perturbations and their severity levels. We train our random forest following the setup described in §§4.2 and 4.3. The model is trained on data obtained from all first- and second-order tests (i.e., Θ⩽2), and is then used to predict robustness scores ˆ r𝝈 for all 𝝈 ∈ Θ, including the 126 third-order tests that were not seen during training. 
+
+5.2.1 Per-test errors. We assess how well the model predicts the robustness score for each test by comparing predicted scores ˆ r𝝈 with their ground truth values r 𝝈 . We define the robustness estimation error as the difference ˆ r𝝈 − r𝝈 . A positive error indicates that the model is pessimistic (i.e., it underestimates robustness), while a negative error indicates optimism (i.e., overestimation). Figure 3 shows a box-and-whiskers plot of robustness estima-tion errors across all 216 tests ( Θ) for 3D tomography. For each benchmark, the box indicates the median and interquartile range of the errors, while the whiskers show their full spread. Across all five benchmarks, most errors cluster tightly around zero, indicating high estimation accuracy. For ì and 6, all prediction errors fall within the range [− 0.05 , +0.05 ]. More broadly, over 90% of errors across the 216 tests lie within [− 0.1, +0.1]. Of the 216 tests, 90 were used during training, which explains why many exhibit near-zero error—these were directly learned by the model. However, the low error on the remaining 126 held-out tests demonstrates the model’s ability to generalize beyond the training set. For example, the mean prediction error for ì, , and 6 is close to zero. 
+
+5.2.2 Aggregate query errors. We evaluate our model’s ability to answer robustness queries that go beyond individual tests, using a predefined set of Boolean queries 𝑄 1–𝑄 12 . These queries cover the test space Θ in complementary ways: ( i) 𝑄 1–𝑄 8 are exclusive —they divide Θ into mutually non-overlapping regions. Each exclusive query covers exactly 12.5% of Θ (i.e., 27 individual tests). E.g., 
+
+𝑄 1 = 𝑃 1 ≤ 2 ∧ 𝑃 2 ≤ 2 ∧ 𝑃 3 ≤ 2 corresponds to the region with the ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil Arooj Arif, Tobias Hartung, Elena Botoeva, and Alexandros Koliousis -1.0 00Drop                                                        
+
+> ô.
+> Q1Q2Q3Q4Q5Q6Q7Q8Q9Q10 Q11 Q12
+> -0.1 00.1 Error
+> ì
+> Q1Q2Q3Q4Q5Q6Q7Q8Q9Q10 Q11 Q12
+> 
+> Q1Q2Q3Q4Q5Q6Q7Q8Q9Q10 Q11 Q12
+> -
+> Q1Q2Q3Q4Q5Q6Q7Q8Q9Q10 Q11 Q12
+> 6
+> Q1Q2Q3Q4Q5Q6Q7Q8Q9Q10 Q11 Q12
+
+Figure 6: Robustness estimation error (error) and predicted drop in M’s accuracy (drop) for aggregate queries 𝑄 1, . . . , 𝑄 12 . For a query 𝑄 , the error is ˆR(𝑄 ) − R(𝑄 ), and the drop is the predicted accuracy of M minus its original accuracy (as per Table 1). 
+
+lowest severity of perturbations, while 𝑄 8 = 𝑃 1 ≥ 3∧𝑃 2 ≥ 3∧𝑃 3 ≥ 3with the highest. These queries are designed to isolate specific fail-ure modes and reveal how robustness varies across distinct areas of the perturbation space. ( ii ) 𝑄 9–𝑄 12 are inclusive —each covers a progressively larger subset Θ, enabling fine-to-coarse analysis. For example, 𝑄 9 covers only 3.7% of the space (8 tests), while 𝑄 12 covers 100% of it (all 216 tests). These queries reflect realistic scenarios where users may wish to assess robustness under broader deploy-ment conditions. We visualise the perturbation space covered by some queries in Figure 5, and summarise in Table 2 the number of measured and of inferred tests for 𝑄 1–𝑄 12 .In Figure 6, for each query 𝑄 , we report the robustness estima-tion error as the difference between the predicted ˆ R(𝑄 ) and the actual R (𝑄 ). By evaluating twelve predefined query regions—each covering a distinct portion of the perturbation space—we assess whether our random forest trained solely on low-order tests can accurately estimate robustness degradation over increasingly com-plex subspaces, without relying on high-order test data. Figure 6 shows that estimation errors remain consistently low across all queries. 𝑄 8 is noteworthy because it contains only third-order tests, all unseen during training; yet, its maximum error is just 0 .109, demonstrating the model’s ability to generalize. 
+
+## 5.3 Effect of partial model tomography 
+
+Throughout the paper, we argue for using all tests in Θ⩽2 to train a model that estimates robustness for Θ⩾3. A natural question is why not sample the same number of tests uniformly at random from the entire perturbation space Θ. In this section, we compare these two training strategies and evaluate their effectiveness in accurate robustness estimation. We design an experiment parametrised by two factors: the train-ing set size and the strategy used to construct it. First, we vary the training set size from 10% to 100% of available tests in 10% incre-ments. For each percentage level, we compute the corresponding number of tests ( 𝑛 ) and select that many for training. Second, we vary how the 𝑛 tests are selected: (i) ordered sampling selects tests by increasing perturbations order (e.g., 1-way combinations, fol-lowed by 2-way, and so on); and (ii) random sampling selects tests uniformly at random from Θ.For each selected test 𝝈 , we apply its perturbation configura-tion to every input in the dataset, record the model’s success or failure, and use the results to construct the random forest train-ing set, as described in Section 4.2 and Algorithm 1. We evaluate the model’s predictions on the remaining |Θ| − 𝑛 tests, reporting the mean squared error (MSE) over predicted robustness scores. Each experiment is repeated 10 times to account for sampling and training variability, and we report the mean and standard deviation. We run this experiment in two settings: 3D tomography with 
+
+|Θ| = 216 (Figure 7), and 4D tomography with |Θ| = 1296 (Figure 8). Figures 7 and 8 show MSE as a function of training set size 𝑛 
+
+under ordered (blue) and random (gray) sampling. Each point is averaged over 10 runs, with shaded bands representing one standard deviation. The red vertical dashed line marks the point at which the ordered selection includes all second-order tests (i.e., Θ⩽2), while the green line marks inclusion of all third-order tests (i.e., Θ⩽3). Across both 3D and 4D settings, ordered sampling consistently outperforms random sampling, achieving lower MSE with sub-stantially less training data. Ordered sampling converges rapidly: for most benchmarks, robust generalization is achieved with only 20–30% of the perturbation space. In contrast, random sampling exhibits slower convergence and greater variance, especially at small sample sizes. Notably, although third-order data further im-proves MSE, the 4D average MSE achieved using only first- and second-order data is already comparable with the 3D cases. The results support our hypothesis that lower-order projections carry highly informative structure about the full perturbation space, and that partial model tomography provides a principled, sample-efficient alternative to random test selection. Comparing 3D and 4D results, the 4D setting consistently achieves lower MSE. At the same sampling percentage, the 4D model has access to significantly more training data—for example, 130 tests in 4D versus only 21 in 3D at 10% sampling. This increased data density leads to sharper early reductions in MSE across all benchmarks. When comparing benchmarks within each dimensional setting, we observe that  and 6 consistently yield lower MSE than ô. and 
+
+> ì
+
+, despite using far fewer perturbed inputs to train the predictive model (1000 vs. 10000 images per test). This suggests that robustness estimation quality is driven more by the stability and predictability of model responses to composite perturbations—some of which may have little or no effect—than by sample count alone. Figure 6 supports this argument: estimation error remains low for , ì,and 6, across 𝑄 1-𝑄 12 , whereas ô. and - exhibit higher and more variable errors even though their predictive model was trained with more samples. This is because the multiplicative effect of composite perturbations on accuracy becomes less predictable as perturbation complexity and severity increase. These results suggest that when perturbation effects degrade ac-curacy in a consistent and predictable manner, partial tomography can learn useful patterns from relatively few examples. This also explains the effectiveness of sequential testing for benchmarks with TestifAI: Tomography-Based Testing for Deep Learning Systems ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil 20 40 60 80 Percentage of tests 037MSE                  
+
+> ×10 −2ô.
+> Random TestifAI 2nd order 20 40 60 80 Percentage of tests 023MSE
+> ×10 −2ì
+> Random TestifAI 2nd order 20 40 60 80 Percentage of tests 012MSE
+> ×10 −2
+> Random TestifAI 2nd order 20 40 60 80 Percentage of tests 012MSE
+> ×10 −2-
+> Random TestifAI 2nd order 20 40 60 80 Percentage of tests 024MSE
+> ×10 −36
+> Random TestifAI 2nd order
+
+Figure 7: Efficiency of partial 3D model tomography. 20 40 60 80  
+
+> Percentage of tests
+> 012
+> MSE
+> ×10 −2ô.
+> Random TestifAI 2nd order 3rd order
+
+20 40 60 80  
+
+> Percentage of tests
+> 012
+> MSE
+> ×10 −2ì
+> Random TestifAI 2nd order 3rd order
+
+20 40 60 80  
+
+> Percentage of tests
+> 036
+> MSE
+> ×10 −3
+> Random TestifAI 2nd order 3rd order
+
+20 40 60 80  
+
+> Percentage of tests
+> 047
+> MSE
+> ×10 −3-
+> Random TestifAI 2nd order 3rd order
+
+20 40 60 80  
+
+> Percentage of tests
+> 037
+> MSE
+> ×10 −46
+> Random TestifAI 2nd order 3rd order
+
+Figure 8: Efficiency of partial 4D model tomography. 
+
+stable responses: early tests yield predictive signals that generalize well, even in higher-dimensional settings. 
+
+## 5.4 Partial tomography efficiency 
+
+In this experiment, we evaluate the execution efficiency of partial tomography—with and without our early stopping strategy—using the total number of inferences as a proxy metric. Since inference cost is stable for a given hardware setup, this metric provides a reliable estimate of total runtime. We focus on 3D tomography. Full tomography yields, of course, zero robustness estimation error, as it evaluates all tests in Θ exhaustively. However, this comes at the cost of |Θ| × |D| total inferences. For example, in the case of  
+
+> ô.
+
+or ì, this requires 2,160,000 inferences. Partial model tomog-raphy requires evaluating only up to |Θ⩽2 | × |D| inferences, which reduces the total number of inferences by at least 58%. Figure 4 presents the total number of inferences required to re-construct Θ under three configurations: ( i) full 3D tomography; (ii ) partial model tomography without early stopping; and ( iii ) par-tial tomography with early stopping. The 𝑥 -axis shows the bench-marks; and the 𝑦 -axis shows the total number of inferences required. Above each bar, we plot the MSE between the predicted and actual aggregate robustness scores for each of our random forests: one exhaustively applies Θ⩽2 configurations to all inputs; and one to a subset. Even with early stopping enabled, the MSE is small. Without early stopping, partial tomography reduces the total number of inferences by 58% for all benchmarks. Our early stopping strategy (see Algorithm 1) further lowers the inference cost down to 72.7% for ô., 61.6% for ì, 73.15% for  and 83% for - (no additional improvements were observed for 6). This has a direct effect to the total computation time: computing the full 3D tomog-raphy for 6 required approximately 47.3 hours, which was reduced significantly with partial model tomography. The transformation-to-inference-time ratios are 0 .09 for ì, 0 .20 for , 0 .30 for 6, 2 .3for -, and 76 .7 for ô.. Except for - and ô., inference time dom-inates. Because perturbations are model-agnostic preprocessing while inference scales with model size, we expect inference time to dominate even more for larger models. 
+
+## 6 On Validity & Quality Estimation 
+
+TestifAI assumes that domain experts specify perturbations and severity levels that reflect their deployment environment, following the practice of existing robustness benchmarks [29, 51, 55]. As such, TestifAI does not attempt to assess the semantic validity of higher-order perturbations, or, more generally, of the perturbation space 
+
+Θ within a model’s application domain. Nevertheless, it is informative to distinguish robustness failures under plausible perturbations from those caused by invalid or highly unrealistic ones. To this end, we use quality metrics as proxies for perturbation validity. Specifically, we can use the TestifAI framework to estimate the effect of higher-order perturbations on input quality, and then refine testing by augmenting user queries with constraints on these metrics. We next present a quantitative validity analysis of our five benchmarks and show how TestifAI can estimate higher-order validity from low-order observations in the same way it estimates robustness. For our four vision tasks, we use Kernel Inception Distance (KID) [4] to measure image realism, and for the language task, we use BERTScore [82] to measure semantic preservation. These met-rics quantify deviation from the distribution of unperturbed inputs and serve as proxies for perturbation validity. Although we also evaluated other quality metrics—including FID and SSIM for images and BLEU for text—we found that KID and BERTScore integrate best with partial tomography and early stopping; in particular, KID remains reliable under partial sampling of the input distribution. We collected the true quality score q 𝝈 for every test 𝝈 in the full 4D perturbation space (1296 in total). We then applied partial tomography to estimate higher-order quality scores from lower-order ones, leveraging the fact that partial tomography is agnostic 
+
+to the nature of the predicted score. We trained a random-forest 
+
+regressor on Θ⩽2, replacing robustness scores r 𝝈 with q 𝝈 . We used the same feature representation as for robustness prediction. Figure 9 shows quality (q 𝝈 ), predicted quality (ˆ q𝝈 ), and accu-racy drop as functions of the severity sum 𝜎 1 + · · · + 𝜎 𝑘 for 𝝈 =
+
+(𝜎 1, . . . , 𝜎 𝑘 )—that is, the ℓ1-norm of the perturbation severity vec-tor (a slice of the 4D perturbation space indexed by total severity). ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil Arooj Arif, Tobias Hartung, Elena Botoeva, and Alexandros Koliousis 0 5 10 15 20                 
+
+> Severity sum
+> 0.0 0.3 0.5
+> KID
+> ô.
+> Predicted Actual
+> -0.9 -0.4 0.0
+> Accuracy drop 0510 15 20
+> Severity sum
+> 0.0 0.2 0.4
+> KID
+> ì
+> Predicted Actual
+> -0.9 -0.4 0.0
+> Accuracy drop 0510 15 20
+> Severity sum
+> 0.0 0.1 0.2
+> KID
+> 
+> Predicted Actual
+> -0.9 -0.4 0.0
+> Accuracy drop 0510 15 20
+> Severity sum
+> 0.0 0.3 0.7
+> KID
+> -
+> Predicted Actual
+> -1.0 -0.5 0.0
+> Accuracy drop 0510 15 20
+> Severity sum
+> 0.8 0.9 1.0
+> BERT F1
+> 6
+> Predicted Actual
+> -0.3 -0.1 0.0
+> Accuracy drop
+
+Figure 9: Actual vs. predicted quality and accuracy drop under increasing perturbation severity. Blue solid lines show actual perceptual quality (KID for vision, BERT-F1 for NLP). Red dotted lines show predicted quality. Grey dashed lines (right axis) show accuracy drop. Error bars represent standard error across all combinations with the same severity sum. ô. ì - 6
+
+−0.20.00.2
+
+> Estimation Error
+
+Figure 10: q𝝈 estimation error for 4D tomography. (0, 0, 0, 0)   
+
+> KID = 0.044
+> (1, 1, 3, 5)
+> KID = 0.088
+> (1, 4, 5, 0)
+> (0, 0, 0, 0)
+> KID = 0.209
+> (3, 0, 0, 0)
+> KID = 0.146
+> (1, 1, 1, 1)
+> (0, 0, 0, 0)
+> KID = 0.209
+> (3, 0, 0, 0)
+> KID = 0.146
+> (1, 1, 1, 1)
+> Original Perturbed Perturbed
+> ìì
+
+Figure 11: Example perturbed images derived from different perturbation combinations. 
+
+A given severity sum can arise from either a few large perturba-tions or the compounding effects of many small ones. Figure 10 shows that across benchmarks the mean absolute estimation er-ror is approximately 0 .1 for ô. and -, and near zero for ì, ,and 6, indicating that validity, like robustness, is structured and predictable from low-order observations. A user concerned with application-level validity can integrate these scores directly into the TestifAI querying mechanism: given a threshold 𝜏 q on predicted input quality, TestifAI can exclude all tests with predicted (or measured) quality above 𝜏 q (or below, in the case of BERT F1). This enables queries of the form 𝑄 ∧ ˆq𝝈 ≤ 𝜏 q,
+
+where 𝑄 is any existing Boolean constraint (§4.1). The threshold further allows users to distinguish errors under plausible conditions (ˆ q𝝈 ≤ 𝜏 q) from those attributable to invalid inputs (ˆ q𝝈 > 𝜏 q). For example, the top row of Figure 11 shows two perturbed versions of the same image from  at severity sum 10. The fourth-order perturbation (1, 1, 3, 5) with KID 0 .043 is likely considered valid input, whereas the third-order one, with KID 0 .088, is likely considered invalid. By inspection, KID scores up to roughly 0 .06 appear generally valid for . Comparing this threshold with Fig-ure 9 indicates that similarly low KID scores can still occur even at severity sums as high as 14 for .Examples from ì in the bottom two rows of Fig. 11 show that equal KID scores can correspond to both plausible (identifiable) and invalid (unidentifiable) inputs. They also show that the compound-ing effects of different perturbations may differ from applying a single perturbation at higher severity, leading to cases where im-ages with larger KID scores are more identifiable than those with lower scores near the boundary of validity. The (im)plausibility of an input perturbation, therefore, depends on the data set, the chosen perturbations and their strengths, and the application domain. These examples illustrate how users can refine TestifAI using validity or other system-level metrics. Choosing appropriate thresh-olds requires domain expertise, ranging from manual inspection to deployment-specific analysis. Importantly, high severity sums do not necessarily imply invalid inputs: multiple perturbations often co-occur in practice (e.g., combined weather and sensor effects in vision [53], or surface-form perturbations in text [27, 74]). Accord-ingly, TestifAI does not discard severe cases a priori ; instead, it surfaces them with robustness and validity estimates, enabling users to judge whether they fall within acceptable operational bounds. 
+
+## 7 Discussion 
+
+TestifAI assumes a user-defined space Θ of semantic perturba-tions, each with a small discrete set of severity levels, making it queryable for partial tomography. Even when perturbations have continuous severity parameters or produce similar effects (e.g., fog and contrast), coarse binning often suffices to capture robustness trends. However, if no semantically meaningful discretization exists (e.g., gradient-based adversarial attacks [23, 70]), TestifAI does not apply; it is best used as an exploratory tool for refining a given perturbation family (e.g., weather corruptions in ImageNet-C [30] or paraphrasing in TextFlint [72]) rather than discovering them. TestifAI assumes that regions Θ⩾3 are sufficiently structured that robustness measurements in Θ⩽2 capture most interactions. When models exhibit higher-order effects that are not predictable from single or pairwise tests, TestifAI may misestimate robustness. Figure 8 shows that adding a modest number of Θ3 oracle evalua-tions improves prediction. When practitioners suspect higher-order coupling, allocating a small Θ3 budget can reduce misestimation. Automatically identifying such cases is future work. TestifAI: Tomography-Based Testing for Deep Learning Systems ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil 
+
+TestifAI enables multi-perturbation analysis across diverse model types and modalities. Partial tomography requires a dis-cretizable perturbation space and a system-level metamorphic test to access whether behaviour under perturbation remains accept-able. These requirements extend beyond classification tasks. E.g., §6 shows how partial tomography can apply to regression and gen-eration: KID and BERTScore serve as quality-based oracle signals for perturbed images and text; and similar principles enable testing of code-generation models [74] using CodeBLEU [59]. 
+
+## 8 Related Work 
+
+Prior work on testing deep learning models spans several directions, including training input generation (e.g., AugMix [31]) coverage-guided testing (e.g., DeepXplore [56]), test prioritisation (e.g., Deep-Gini [16]), and combinatorial testing (e.g., CIT4DNN [13]). While these methods provide valuable insights into model behaviour, they neither support systematic reasoning over structured multi-perturbation spaces, nor enable users to query robustness under diverse, interacting perturbations. 
+
+Benchmarks. MNIST-C [51], CIFAR-10-C and ImageNet-C [30], KITTI-C, nuScenes-C, and Waymo-C [14], and CURE-TSR [67] are benchmarks that define curated sets of meaningful perturba-tions to test the robustness of computer vision models. Similarly, CheckList [61] and TextFlint [72] provide linguistic perturbations for testing natural language models. These are complementary re-sources to TestifAI. Users can draw perturbations from them to systematically explore and test their combinations. 
+
+Data augmentation methods. CutMix [80], AugMix [31], and PixMix [32]) aim to improve the robustness of deep learning models applying stochastic combinations of perturbations during training. These augmentations expose models to inputs affected by multi-ple, simultaneously applied transformations (e.g., blur, contrast, rotation). TestifAI rather aims to systematically explore and esti-mate the aggregate robustness of a trained model under structured, multi-perturbation test environments. 
+
+Neuron coverage. DeepXplore [56], DeepGuage [45], DLFuzz [26] and DeepHunter [77] aim to uncover erroneous behaviours in deep learning models by generating test inputs that maximise neuron activation coverage. However, increased coverage does not nec-essarily correlate with a higher rate of error discovery, and often leads to the generation of less natural or semantically meaningful inputs [28, 62]. These methods typically produce new inputs by applying pixel-level perturbations to a small set of seed examples, which limits both the diversity and semantic fidelity of the result-ing test data [13]. In contrast, TestifAI generates test inputs by systematically combining interpretable semantic perturbations. 
+
+Test prioritization. Input prioritization techniques aim to identify test inputs that are more likely to reveal model errors, thereby accel-erating the discovery of misclassifications [25, 75]. DeepGini [16], for instance, prioritizes inputs on which the model exhibits low confidence (i.e., high uncertainty in softmax output). In contrast, TestifAI prioritises system-level metamorphic tests—structured combinations of semantic perturbations—rather than individual inputs. This enables efficient estimation of robustness across the entire perturbation space. Input-level prioritization is orthogonal to our work and could complement TestifAI’s early stopping strategy, particularly when users seek to identify worst-case robustness. 
+
+Combinatorial Interaction Testing (CIT). CIT has been applied to deep learning in several ways, differing along two axes: model access—whether white-box [10, 44] or black-box [8, 13]—and the type of interaction under test—neuron activations [10, 44], latent input features [13], or high-level semantic perturbations [8]). DeepCT [44], for example, is a white-box method that system-atically explores neuron combinations within a layer to maximise combinatorial activation coverage and, thus, uncover more faults— a test method aligned with neuron coverage methods discussed earlier. CIT4DNN [13], in contrast, is a black-box method: it learns a latent representation of the inputs, and then applies CIT on la-tent dimensions to generate rare or diverse inputs. Neither method guarantees that the generated test inputs can be interpreted as semantically meaningful perturbations. Chandrasekaran et al. [8] generate two-way combinations of common image perturbations (e.g., blur, brightness, and rotation) applied to a small, curated input set to produce synthetic driving scenes for robustness testing. TestifAI extends this idea beyond pairwise testing: it uses second-order tests to approximate higher-order robustness behaviour through 3D and 4D tomography. TestifAI departs from CIT in a fundamental way: it does not attempt to construct high-dimensional covering arrays, as done in prior work on classical software systems (e.g., ScalableCA [43]). Instead, it leverages second-order tests to train a predictive model that estimates robustness in multi-perturbation spaces. 
+
+Formal guarantees. TestifAI’s system-level metamorphic tests assess the extent to which a model is robust under some structured, semantic perturbations of a set of inputs. This differs from local robustness , where neural-network verifiers (e.g., αβ -CROWN [83]) check for all ℓ𝑝 -bounded perturbations of a given input. Likewise, TestifAI’s aggregate robustness is an empirical summary over a semantic region Θ, not a global robustness certificate that requires local robustness of all possible inputs (as in fairness [37] and global robustness certification [36, 73]). These perspectives are comple-mentary: TestifAI finds and ranks semantically meaningful regions for further analysis, while formal verification provides worst-case guarantees on selected subsets. 
+
+## 9 Conclusion 
+
+TestifAI reframes deep learning testing as a predictive modelling task, reasoning about how multiple perturbations interact, rather than a combinatorial coverage problem. It trains a surrogate model using lower-order test results—specifically, all combinations of up to two perturbations and their severity levels—to approximate ro-bustness over higher-order tests involving three or more perturba-tions. Experiments on five vision and language benchmarks show that TestifAI predicts third- and fourth-order test outcomes from second-order observations with less than 7% aggregate estima-tion error. TestifAI is a step towards test-oriented generalization ,enabling principled extrapolation of test results to unseen multi-perturbation scenarios. It helps users anticipate model behaviour under complex, high-dimensional perturbations beyond what pair-wise (2-way) testing can expose. ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil Arooj Arif, Tobias Hartung, Elena Botoeva, and Alexandros Koliousis 
+
+## References 
+
+[1] Ziyad N Aldoski and Csaba Koren. 2025. Traffic Sign Detection and Quality Assessment Using YOLOv8 in Daytime and Nighttime Conditions. Sensors (2025), 1027. https://doi.org/10.3390/s25041027 [2] Dzmitry Bahdanau, Kyunghyun Cho, and Yoshua Bengio. 2015. Neural Machine Translation by Jointly Learning to Align and Translate. In Proceedings of the International Conference on Learning Representations (ICLR) . http://arxiv.org/abs/ 1409.0473 [3] Shahriar Austin Beigi and Byungkyu Brian Park. 2025. Impact of Critical Situa-tions on Autonomous Vehicles and Strategies for Improvement. Future Trans-portation (2025), 1–39. https://doi.org/10.3390/futuretransp5020039 [4] Mikolaj Binkowski, Danica J. Sutherland, Michael Arbel, and Arthur Gretton. 2018. Demystifying MMD GANs. In Proceedings of the International Conference on Learning Representations (ICLR) . OpenReview.net. https://openreview.net/ forum?id=r1lUOzWCW [5] Andrea Bombarda and Angelo Gargantini. 2024. Design, Implementation, and Validation of a Benchmark Generator for Combinatorial Interaction Testing Tools. 
+
+Journal of Systems and Software (JSS) (2024), 111920. https://doi.org/10.1016/j. jss.2023.111920 [6] Wieland Brendel and Matthias Bethge. 2018. AI Still Fails on Robust Handwritten Digit Recognition (and How to Fix It). https://medium.com/bethgelab/ai-still-fails-on-robust-handwritten-digit-recognition-and-how-to-fix-it-a432d84ede18 Accessed: 2025-04-13. [7] Dan A Calian, Florian Stimberg, Olivia Wiles, Sylvestre-Alvise Rebuffi, An-dras Gyorgy, Timothy Mann, and Sven Gowal. 2021. Defending Against Im-age Corruptions Through Adversarial Augmentations. In Proceedings of the International Conference on Learning Representations (ICLR) . OpenReview.net. https://openreview.net/forum?id=jJOjjiZHy3h [8] Jaganmohan Chandrasekaran, Yu Lei, Raghu Kacker, and D. Richard Kuhn. 2021. A Combinatorial Approach to Testing Deep Neural Network-Based Autonomous Driving Systems. In Proceedings of the International Conference on Software Testing, Verification and Validation Workshops (ICSTW) . IEEE. https://doi.org/10.1109/ ICSTW52544.2021.00022 [9] Li Chen, Penghao Wu, Kashyap Chitta, Bernhard Jaeger, Andreas Geiger, and Hongyang Li. 2024. End-to-End Autonomous Driving: Challenges and Frontiers. 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence (TPAMI) (2024), 10164–10183. https://doi.org/10.1109/TPAMI.2024.3435937 [10] Yuchi Chen, Zhen Wang, Dong Wang, Cheng Fang, and Zhiqiu Chen. 2019. Vari-able Strength Combinatorial Testing for Deep Neural Networks. In Proceedings of the International Conference on Software Testing, Verification and Validation Workshops (ICSTW) . IEEE. https://doi.org/10.1109/ICSTW.2019.00066 [11] Francesco Croce and Matthias Hein. 2021. RobustBench: Benchmarking Neural Network Robustness. https://github.com/RobustBench/robustbench Accessed: [Accessed: July 2025]. [12] Yusuf Dalva, Hamza Pehlivan, Said Fahri Altındiş, and Aysegul Dundar. 2023. Benchmarking the Robustness of Instance Segmentation Models. IEEE Trans-actions on Neural Networks and Learning Systems (TNNLS) (2023), 17021–17035. https://doi.org/10.1109/TNNLS.2023.3310985 [13] Swaroopa Dola, Rory McDaniel, Matthew B. Dwyer, and Mary Lou Soffa. 2024. CIT4DNN: Generating Diverse and Rare Inputs for Neural Networks Using Latent Space Combinatorial Testing. In Proceedings of the International Conference on Software Engineering (ICSE) . ACM. https://doi.org/10.1145/3597503.3639106 [14] Yinpeng Dong, Caixin Kang, Jinlai Zhang, Zijian Zhu, Yikai Wang, Xiao Yang, Hang Su, Xingxing Wei, and Jun Zhu. 2023. Benchmarking Robustness of 3D Object Detection to Common Corruptions. In Proceedings of the Computer Vision and Pattern Recognition (CVPR) . IEEE. https://doi.org/10.1109/CVPR52729.2023. 00105 [15] Javid Ebrahimi, Anyi Rao, Daniel Lowd, and Dejing Dou. 2017. HotFlip: White-Box Adversarial Examples for NLP. arXiv preprint arXiv:1712.06751 (2017), 1–6. http://arxiv.org/abs/1712.06751 [16] Yang Feng, Qingkai Shi, Xinyu Gao, Jun Wan, Chunrong Fang, and Zhenyu Chen. 2020. DeepGini: Prioritizing Massive Tests to Enhance the Robustness of Deep Neural Networks. In Proceedings of the International Symposium on Software Testing and Analysis (ISSTA) . ACM. https://doi.org/10.1145/3395363.3397357 [17] Xinyu Gao, Yang Feng, Yining Yin, Zixi Liu, Zhenyu Chen, and Baowen Xu. 2022. Adaptive Test Selection for Deep Neural Networks. In Proceedings of the International Conference on Software Engineering (ICSE) . ACM. https://doi.org/ 10.1145/3510003.3510232 [18] Yuan Gao and Yiqiang Han. 2019. Automated Testing for Deep Learning Systems With Differential Behavior Criteria. (2019), 1–8. http://arxiv.org/abs/1912.13258 [19] Yixin Gao, Yichong Liu, Mo Yu, Chao Zhang, and Philip S. Yu. 2023. Revealing the Blind Spot of Sentence Encoder Evaluation by HEROS. In Proceedings of the Workshop on Representation Learning for NLP (RepL4NLP) . Association for Computational Linguistics. https://doi.org/10.18653/v1/2023.repl4nlp-1.24 [20] Andreas Geiger, Philip Lenz, Christoph Stiller, and Raquel Urtasun. 2013. Vision Meets Robotics: The KITTI Dataset. International Journal of Robotics Research (IJRR) (2013), 1231–1237. https://doi.org/10.1177/0278364913491297 [21] Ian J. Goodfellow, Jonathon Shlens, and Christian Szegedy. 2015. Explaining and Harnessing Adversarial Examples. In Proceedings of the International Conference on Learning Representations (ICLR) . http://arxiv.org/abs/1412.6572 [22] Anirudh Goyal and Yoshua Bengio. 2022. Inductive Biases for Deep Learning of Higher-Level Cognition. Proceedings of the Royal Society A (Proc. R. Soc. A) 
+
+(2022), 20210068. https://arxiv.org/abs/2011.15091 [23] Chuan Guo, Alexandre Sablayrolles, Hervé Jégou, and Douwe Kiela. 2021. Gradient-Based Adversarial Attacks Against Text Transformers. In Proceedings of the Empirical Methods in Natural Language Processing (EMNLP) . Association for Computational Linguistics. https://doi.org/10.18653/v1/2021.emnlp-main.464 [24] Eileen Guo. 2025. An AI Chatbot Told a User How to Kill Himself—But the Company Doesn’t Want to Censor It. https://www.technologyreview.com/2025/ 02/06/1111077/nomi-ai-chatbot-told-user-to-kill-himself/ Accessed: 2025-07-15. [25] Hongjing Guo, Chuanqi Tao, Zhiqiu Huang, and Weiqin Zou. 2025. Coverage-Guided Testing for Deep Learning Models: A Comprehensive Survey. arXiv preprint arXiv:2507.00496 (2025), 1–52. https://doi.org/10.48550/arXiv.2507.00496 [26] J. Guo, Y. Jiang, Y. Zhao, Q. Chen, and J. Sun. 2018. DLFuzz: Differential Fuzzing Testing of Deep Learning Systems. In Proceedings of the European Software Engi-neering Conference (ESEC) . ACM. https://doi.org/10.1145/3236024.3264835 [27] Xiaoshuai Hao, Mengchuan Wei, Yifan Yang, Haimei Zhao, Hui Zhang, Yi Zhou, Qiang Wang, Weiming Li, Lingdong Kong, and Jing Zhang. 2024. Is Your HD Map Constructor Reliable Under Sensor Corruptions? Advances in Neural Information Processing Systems (NeurIPS) (2024), 22441–22482. http://papers.nips. cc/paper_files/paper/2024/hash/281e0b9142763f2b6c944fedb8550ba9-Abstract-Datasets_and_Benchmarks_Track.html [28] F. Harel-Canada, L. Wang, M. A. Gulzar, Q. Gu, and M. Kim. 2020. Is Neu-ron Coverage a Meaningful Measure for Testing Deep Neural Networks?. In 
+
+Proceedings of the European Software Engineering Conference (ESEC) . ACM. https://doi.org/10.1145/3368089.3409754 [29] Dan Hendrycks. 2019. CIFAR-10-C and CIFAR-10-P. https://zenodo.org/records/ 2535967 Accessed: 2025-07-16. [30] Dan Hendrycks and Thomas G. Dietterich. 2019. Benchmarking Neural Network Robustness to Common Corruptions and Perturbations. In Proceedings of the International Conference on Learning Representations (ICLR) . OpenReview.net. https://openreview.net/forum?id=HJz6tiCqYm [31] Dan Hendrycks, Norman Mu, Ekin D. Cubuk, Barret Zoph, Justin Gilmer, and Balaji Lakshminarayanan. 2020. AugMix: A Simple Data Processing Method to Improve Robustness and Uncertainty. In Proceedings of the International Confer-ence on Learning Representations (ICLR) . OpenReview.net. https://openreview. net/forum?id=S1gmrxHFvB [32] Dan Hendrycks, Andy Zou, Mantas Mazeika, Leonard Tang, Bo Li, Dawn Song, and Jacob Steinhardt. 2022. PixMix: Dreamlike Pictures Comprehensively Im-prove Safety Measures. In Proceedings of the Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE. https://doi.org/10.1109/CVPR52688.2022.01628 [33] Max Jaderberg, Karen Simonyan, Andrew Zisserman, et al. 2015. Spatial Trans-former Networks. Advances in Neural Information Processing Systems (NeurIPS) 
+
+(2015), 2017–2025. [34] JeremiahZ. 2024. Roberta Base QQP. https://huggingface.co/JeremiahZ/roberta-base-qqp Accessed: 2025-04-08. [35] Glenn Jocher. 2023. Ultralytics YOLOv11 Documentation. https://docs.ultralytics. com/models/yolo11 Accessed: May 11, 2025. [36] Anan Kabaha and Dana Drachsler Cohen. 2024. Verification of Neural Networks’ Global Robustness. Proceedings of the ACM on Programming Languages (PACMPL) 
+
+(2024), 1010–1039. https://doi.org/10.1145/3649847 [37] Haitham Khedr and Yasser Shoukry. 2023. Certifair: A Framework for Certified Global Fairness of Neural Networks. In Proceedings of the Association for the Advancement of Artificial Intelligence (AAAI) . Association for Computational Linguistics. https://doi.org/10.18653/v1/2023.acl-long.773 [38] Aiym Kochkorova and Alexia Toumpa. 2025. Data Augmentation for Hand-written Digit Recognition. National High School Journal of Science (NHSJS) 
+
+(2025). https://nhsjs.com/wp-content/uploads/2025/01/Data-Augmentation-for-Handwritten-Digit-Recognitions.pdf [39] R Krishnan, S Murali Krishna, and P Siva Nandhan. 2007. Combinatorial Testing: Learnings from our Experience. ACM SIGSOFT Software Engineering Notes (SEN) 
+
+(2007), 1–8. https://doi.org/10.1145/1241572.1241582 [40] Alex Krizhevsky. 2009. CIFAR-10. https://www.cs.toronto.edu/~kriz/cifar.html Accessed: 2025-07-16. [41] Liu Ling, Wu Yanzhao, Wei Wenqi, Cao Wenqi, Sahin Semih, and Zhang Qi. 2018. The MNIST database of Handwritten Digits. https://git-disl.github.io/ GTDLBench/datasets/mnist_datasets Accessed: 10 April 2025. [42] Xiaoqiong Liu, Yunhe Feng, Shu Hu, Xiaohui Yuan, and Heng Fan. 2024. Bench-marking the Robustness of UAV Tracking against Common Corruptions. In 
+
+Proceedings of the International Conference on Multimedia Information Processing and Retrieval (MIPR) . IEEE. https://doi.org/10.1109/MIPR62202.2024.00079 [43] Chuan Luo, Shuangyu Lyu, Qiyuan Zhao, Wei Wu, Hongyu Zhang, and Chun-ming Hu. 2024. Beyond Pairwise Testing: Advancing 3-Wise Combinatorial Interaction Testing for Highly Configurable Systems. In Proceedings of the In-ternational Symposium on Software Testing and Analysis (ISSTA) . ACM. https: //doi.org/10.1145/3650212.3680309 TestifAI: Tomography-Based Testing for Deep Learning Systems ICSE ’26, April 12–18, 2026, Rio de Janeiro, Brazil 
+
+[44] Lei Ma, Felix Juefei-Xu, Minhui Xue, Bo Li, Li Li, Yang Liu, and Jianjun Zhao. 2019. DeepCT: Tomographic Combinatorial Testing for Deep Learning Systems. In Proceedings of the Software Analysis, Evolution and Reengineering (SANER) .IEEE. https://doi.org/10.1109/SANER.2019.8668044 [45] Lei Ma, Felix Juefei-Xu, Fuyuan Zhang, Jiyuan Sun, Minhui Xue, Bo Li, Chunyang Chen, Ting Su, Li Li, Yang Liu, et al. 2018. DeepGauge: Multi-Granularity Testing Criteria for Deep Learning Systems. In Proceedings of the International Conference on Automated Software Engineering (ASE) . ACM. https://doi.org/10.1145/3238147. 3238202 [46] Wei Ma, Mike Papadakis, Anestis Tsakmalis, Maxime Cordy, and Yves Le Traon. 2021. Test Selection for Deep Learning Systems. ACM Transactions on Software Engineering and Methodology (TOSEM) (2021), 1–22. https://dl.acm.org/doi/abs/ 10.1145/3417330 [47] Gabriel Resende Machado, Eugênio Silva, and Ronaldo Ribeiro Goldschmidt. 2023. Adversarial Machine Learning in Image Classification: A Survey Toward The Defender’s Perspective. ACM Computing Surveys (CSUR) (2023), 1–38. https: //doi.org/10.1145/3485133 [48] Eric Mintun, Alexander Kirillov, and Saining Xie. 2021. On Interaction Between Augmentations and Corruptions in Natural Corruption Robustness. Advances in Neural Information Processing Systems (NeurIPS) (2021), 3571–3583. https: //proceedings.neurips.cc/paper/2021/hash/1d49780520898fe37f0cd6b41c5311bf-Abstract.html [49] Kabeh Mohsenzadegan, Vahid Tavakkoli, and Kyandoghere Kyamakya. 2021. A Deep-Learning Based Visual Sensing Concept for a Robust Classification of Document Images Under Real-World Hard Conditions. Sensors (2021), 6763. https://doi.org/10.3390/s21206763 [50] John Morris, Eli Lifland, Jin Yong Yoo, Jake Grigsby, Di Jin, and Yanjun Qi. 2020. TextAttack: A Framework for Adversarial Attacks, Data Augmentation, and Ad-versarial Training in NLP. In Proceedings of the Empirical Methods in Natural Language Processing: System Demonstrations (EMNLP) . Association for Computa-tional Linguistics. https://doi.org/10.18653/v1/2020.emnlp-demos.16 [51] Norman Mu and Justin Gilmer. 2019. MNIST-C: A Robustness Benchmark for Computer Vision. (2019), 1–11. http://arxiv.org/abs/1906.02337 [52] Norman Mu and Gilmer Justin. 2019. MNIST-C. https://github.com/google-research/mnist-c/blob/master/corruptions.py Accessed: 10 April 2025. [53] Valentina Muşat, Ivan Fursa, Paul Newman, Fabio Cuzzolin, and Andrew Bradley. 2021. Multi-Weather City: Adverse Weather Stacking for Autonomous Driving. In Proceedings of the International Conference on Computer Vision (ICCV) . IEEE. https://doi.org/10.1109/ICCVW54120.2021.00325 [54] Neonithinar. 2021. GTSRB CNN classifier with custom Squeeze and Excitation Block. https://github.com/neonithinar/GTRSB/tree/main Accessed: 2025-04-08. [55] OlivesGatech. 2019. CURE-TSD. https://github.com/olivesgatech/CURE-TSD GitHub repository. Accessed: 10 April 2025. [56] Kexin Pei, Yinzhi Cao, Junfeng Yang, and Suman Jana. 2017. DeepXplore: Au-tomated Whitebox Testing of Deep Learning Systems. In Proceedings of the Symposium on Operating Systems Principles (SOSP) . ACM. https://doi.org/10. 1145/3361566 [57] Danish Pruthi, Bhuwan Dhingra, and Zachary C. Lipton. 2019. Combating Adversarial Misspellings with Robust Word Recognition. In Proceedings of the Association for Computational Linguistics (ACL) . Association for Computational Linguistics. https://arxiv.org/abs/1905.11268 [58] PyResearch. 2021. YOLO11-How to Train for Object Detection Self Driving-Car. https://github.com/pyresearch/YOLO11-How-to-Train-for-Object-Detection-Self-Driving-Car/tree/main Accessed: April 2025. [59] Shuo Ren, Daya Guo, Shuai Lu, Long Zhou, Shujie Liu, Duyu Tang, Neel Sundaresan, Ming Zhou, Ambrosio Blanco, and Shuai Ma. 2020. CodeBLEU: A Method for Automatic Evaluation of Code Synthesis. CoRR (2020), 1–8. https://arxiv.org/abs/2009.10297 [60] Reuters. 2024. NHTSA Opens Probe Into 2.4 Million Tesla Vehicles Over Full Self-Driving Collisions. https://www.reuters.com/business/autos-transportation/nhtsa-opens-probe-into-24-mln-tesla-vehicles-over-full-self-driving-collisions-2024-10-18 Accessed: 2025-07-14. [61] Marco Tulio Ribeiro, Tongshuang Wu, Carlos Guestrin, and Sameer Singh. 2020. Beyond Accuracy: Behavioral Testing of NLP Models With CheckList. In Proceed-ings of the International Joint Conference on Artificial Intelligence (IJCAI) . ijcai.org. https://doi.org/10.24963/ijcai.2021/659 [62] Vincenzo Riccio and Paolo Tonella. 2023. When and Why Test Generators for Deep Learning Produce Invalid Inputs: An Empirical Study. In Proceedings of the International Conference on Software Engineering (ICSE) . IEEE. https: //doi.org/10.1109/ICSE48619.2023.00104 [63] Roboflow. 2020. Udacity Self Driving Car Dataset. https://public.roboflow.com/ object-detection/self-driving-car Accessed: 2025-04-13. [64] Connor Shorten and Taghi M Khoshgoftaar. 2019. A Survey on Image Data Augmentation for Deep Learning. Journal of Big Data (JBD) (2019), 1–48. https: //doi.org/10.1186/s40537-019-0197-0 [65] Johannes Stallkamp, Marc Schlipsing, Jan Salmen, and Christian Igel. 2011. The German Traffic Sign Recognition Benchmark: A Multi-Class Classification Com-petition. In Proceedings of the International Joint Conference on Neural Networks (IJCNN) . IEEE. https://doi.org/10.1109/IJCNN.2011.6033395 [66] Dogancan Temel and Ghassan AlRegib. 2018. Traffic Signs in the Wild: Highlights From the IEEE Video and Image Processing Cup 2017 Student Competition [SP Competitions]. IEEE Signal Processing Magazine (SPM) (2018), 154–161. https://doi.org/10.1109/MSP.2017.2783449 [67] Dogancan Temel, Tariq Alshawi, Min-Hung Chen, and Ghassan AlRegib. 2017. CURE-TSR: Challenging Unreal and Real Environments for Traffic Sign Recogni-tion. (2017), 1–10. https://doi.org/10.21227/n4xw-cg56 [68] Yuchi Tian, Kexin Pei, Suman Jana, and Baishakhi Ray. 2018. DeepTest: Automated Testing of Deep-Neural-Network-Driven Autonomous Cars. In Proceedings of the International Conference on Software Engineering (ICSE) . ACM. https://doi.org/ 10.1145/3180155.3180220 [69] Said Togru, Youssef Sameh Mostafa, and Karim Lotfy. 2024. Enhancing Deep Learning Model Robustness Through Metamorphic Re-Training. arXiv preprint arXiv:2412.01958 (2024), 1–14. https://doi.org/10.48550/arXiv.2412.01958 [70] Chen Wan, Fangjun Huang, and Xianfeng Zhao. 2023. Average Gradient-Based Adversarial Attack. IEEE Transactions on Multimedia (TMM) (2023), 9572–9585. https://doi.org/10.1109/TMM.2023.3255742 [71] Alex Wang, Amanpreet Singh, Julian Michael, Felix Hill, Omer Levy, and Samuel R Bowman. 2018. GLUE: A Multi-Task Benchmark and Analysis Platform for Natural Language Understanding. In Proceedings of the International Conference on Learning Representations (ICLR) . OpenReview.net. https://openreview.net/ forum?id=rJ4km2R5t7 [72] Xiao Wang, Qin Liu, Tao Gui, Qi Zhang, et al. 2021. TextFlint: Unified Multilingual Robustness Evaluation Toolkit for Natural Language Processing. In Proceedings of the Association for Computational Linguistics and International Joint Conference on Natural Language Processing: System Demonstrations (ACL-IJCNLP Demo) .Association for Computational Linguistics. https://doi.org/10.18653/v1/2021.acl-demo.41 [73] Zhilu Wang, Chao Huang, and Qi Zhu. 2022. Efficient Global Robustness Certifica-tion of Neural Networks via Interleaving Twin-Network Encoding. In Proceedings of the International Joint Conference on Artificial Intelligence, (IJCAI) . ijcai.org. https://doi.org/10.24963/ijcai.2023/727 [74] Zhiruo Wang, Jiaxin Xu, Ziwei Li, Junying Zheng, Graham Neubig, Yuhao Zhou, and Zejian Yang. 2023. ReCode: Robustness Evaluation of Code Generation Models. In Proceedings of the Association for Computational Linguistics (ACL) .Association for Computational Linguistics. https://doi.org/10.18653/v1/2023.acl-long.773 [75] Michael Weiss and Paolo Tonella. 2022. Simple Techniques Work Surprisingly Well for Neural Network Test Prioritization and Active Learning (Replicability Study). In Proceedings of the International Symposium on Software Testing and Analysis (ISSTA) . ACM. https://doi.org/10.1145/3533767.3534375 [76] Tingyu Xia, Yue Wang, Yuan Tian, and Yi Chang. 2021. Using Prior Knowledge to Guide BERT’s Attention in Semantic Textual Matching Tasks. In Proceedings of the Web Conference 2021 (WWW) . ACM / IW3C2. https://doi.org/10.1145/ 3442381.3449988 [77] Xiaofei Xie, Lei Ma, Felix Juefei-Xu, Minhui Xue, Hongxu Chen, Yang Liu, Jianjun Zhao, Bo Li, Jianxiong Yin, and Simon See. 2019. DeepHunter: A Coverage-Guided Fuzz Testing Framework for Deep Neural Networks. In Proceedings of the International Symposium on Software Testing and Analysis (ISSTA) . ACM. https://doi.org/10.1145/3293882.3330579 [78] Yi Yan, Chao Deng, Junjie Ma, Youfu Wang, and Yanqi Li. 2023. A Traffic Sign Recognition Method Under Complex Illumination Conditions. IEEE Access (2023), 39185–39196. https://doi.org/10.1109/ACCESS.2023.3266825 [79] Liu Yue, Feng Lichao, Wang Xingya, and Zhang Shiyu. 2022. DeepBound-ary: A Coverage Testing Method of Deep Learning Software Based on De-cision Boundary Representation. In Proceedings of the International Confer-ence on Software Quality, Reliability, and Security Companion (QRS-C) . IEEE. https://doi.org/10.1109/QRS-C57518.2022.00032 [80] Sangdoo Yun, Dongyoon Han, Seong Joon Oh, Sanghyuk Chun, Junsuk Choe, and Youngjoon Yoo. 2019. CutMix: Regularization Strategy to Train Strong Classifiers with Localizable Features. In Proceedings of the International Conference on Computer Vision (ICCV) . IEEE. https://doi.org/10.1109/ICCV.2019.00612 [81] Sergey Zagoruyko and Nikos Komodakis. 2016. Wide Residual Networks. arXiv preprint arXiv:1605.07146 (2016), 1–15. https://arxiv.org/abs/1605.07146 [82] Tianyi Zhang, Varsha Kishore, Felix Wu, Kilian Q. Weinberger, and Yoav Artzi. 2020. BERTScore: Evaluating Text Generation with BERT. In Proceedings of the International Conference on Learning Representations (ICLR) . OpenReview.net. https://openreview.net/forum?id=SkeHuCVFDr [83] Duo Zhou, Christopher Brix, Grani A Hanasusanto, and Huan Zhang. 2024. Scalable Neural Network Verification With Branch-And-Bound Inferred Cutting Planes. Advances in Neural Information Processing Systems (NeurIPS) (2024), 29324–29353. https://doi.org/10.48550/arXiv.2501.00200
