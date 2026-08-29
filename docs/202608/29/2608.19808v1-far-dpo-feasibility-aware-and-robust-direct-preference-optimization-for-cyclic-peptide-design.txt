@@ -1,0 +1,896 @@
+Title: FAR-DPO: Feasibility-Aware and Robust Direct Preference Optimization for Cyclic Peptide Design
+
+URL Source: https://arxiv.org/pdf/2608.19808v1
+
+Published Time: Fri, 21 Aug 2026 00:44:01 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# FAR-DPO: Feasibility-Aware and Robust Direct Preference Optimization for Cyclic Peptide Design 
+
+# Guofeng Zhang ∗1,2 , Rong Han ∗3, Xiaoyu Wang 2, Zhiyun Li 1,2 ,Zongbo Han 1, Xiaohong Liu †2, Guangyu Wang †1
+
+> 1
+
+Beijing University of Posts and Telecommunications, Beijing, China 
+
+> 2
+
+Shenzhen University, Shenzhen, China 
+
+> 3
+
+Tsinghua University, Beijing, China Corresponding authors: xhliu17@gmail.com, guangyu.wang24@gmail.com 
+
+Abstract 
+
+Cyclic peptides are emerging as promising molecular scaf-folds in drug discovery due to their high binding affinity and structural stability. However, extending generative mod-els from linear to cyclic peptide design remains challeng-ing, as cyclization sharply restricts the feasible design space through coupled geometric and biophysical constraints. More-over, limited training data has led existing approaches to rely largely on zero-shot generation or post hoc filtering, result-ing in low yields of feasible designs and limited control over multi-objective trade-offs. To address these limitations, we propose FAR-DPO (Feasibility-Aware and Robust Direct Preference Optimization), an architecture-agnostic framework that steers generative models toward structurally and biophys-ically feasible cyclic peptide designs, particularly for chal-lenging targets. FAR-DPO integrates feasibility-aware pref-erence construction with difficulty-aware group-robust opti-mization. Specifically, it constructs within-target preference pairs through feasibility-gated multi-objective dominance and adaptively reweights predefined difficulty groups according to their current preference losses. On the CPSea LNR bench-mark, under a fixed generation budget, FAR-DPO increases overall success rate from 46.89% to 57.79% on PepGLAD and from 47.96% to 49.57% on PepFlow. These gains also extend to the hardest target quartile and are accompanied by more favorable best-per-target binding scores. Together, these results demonstrate FAR-DPO’s effectiveness in improving feasibility and target-wise robustness. 
+
+# 1 Introduction 
+
+Cyclic peptides are attracting notable interest as potential therapeutics, particularly due to their unique ability to mod-ulate protein-protein interactions that are often difficult to tar-get with conventional drugs (Dougherty, Sahni, and Pei 2019; Villar et al. 2014). By constraining the peptide backbone into a closed-ring architecture via terminal or side-chain co-valent linkages, cyclization significantly restricts conforma-tional flexibility. This rigidified structure stabilizes bioactive conformations, improves target-binding affinity, and signifi-cantly improves resistance to proteolytic degradation (Zorzi, Deyle, and Heinis 2017). Recent diffusion- and flow-based generative models can directly co-design peptide sequences and three-dimensional 
+
+> ∗
+
+These authors contributed equally. 
+
+> †
+
+Corresponding authors. 
+
+structures conditioned on a target structure (Kong et al. 2024; Li et al. 2024), opening new avenues for target-specific cyclic peptide design. However, the generative distributions learned by these models are not explicitly aligned with the coupled structural and biophysical requirements of cyclic peptides. A practically viable design must combine favorable binding with valid ring-closure geometry, correct stereochemistry, favorable interaction energetics, and reasonable steric ge-ometry (Bhardwaj et al. 2016; Hosseinzadeh et al. 2017; Yang et al. 2025). A candidate that performs well on an individual binding metric may therefore still be invalid or unfavorable along other essential dimensions. The central challenge is not merely to recover a few high-scoring can-didates through extensive sampling, but to shift the gen-erative distribution toward designs that are jointly feasible and favorable across multiple quality dimensions under a fixed generation budget. Existing approaches improve cyclic peptide design through architecture-specific modeling and multi-stage computational filtering (Rettie et al. 2025a,b), while recent training-time alignment methods primarily tar-get specific geometric constraints such as ring closure (Zhang et al. 2026a). Despite these advances, a general approach for aligning target-conditioned generators with multiple struc-tural and biophysical objectives while maintaining robust performance across heterogeneous targets remains underex-plored. To mitigate this bottleneck, recent efforts have largely followed two distinct paradigms. One line of research in-corporates cyclization requirements into generation through specialized architectures or geometric conditioning (Rettie et al. 2025a,b; Jiang et al. 2025). Another line of research uses inference-time guidance, property optimization, or post hoc filtering to improve candidate quality (Tang, Zhang, and Chatterjee 2025; Wang et al. 2025; Zhang et al. 2026a). Although these approaches have advanced cyclic peptide generation, they are often tied to a particular generative ar-chitecture or cyclization mechanism and primarily optimize individual properties or specific structural constraints. When cyclization feasibility, structural quality, and target binding must all be satisfied, an improvement in any single metric does not necessarily translate into a higher yield of jointly feasible candidates (Jin, Barzilay, and Jaakkola 2020; Ren, He, and Zhang 2025). Moreover, the design difficulty varies substantially across targets, so better aggregate performance arXiv:2608.19808v1 [cs.LG] 20 Aug 2026 does not guarantee consistent gains across targets (Duchi and Namkoong 2021; Sagawa et al. 2020). Training-time alignment methods, including reward-based fine-tuning and direct preference optimization, offer a complementary way to reshape the generative distribution using scalar rewards or pairwise preferences (Olivecrona et al. 2017; Rafailov et al. 2023; Wallace et al. 2024). Nevertheless, a systematic solution is still lacking for aligning a model with multiple fea-sibility requirements while maintaining robust performance across heterogeneous targets, without relying on a particular generative architecture. To this end, we propose FAR-DPO, a Feasibility-Aware and Robust Direct Preference Optimization algo-rithm. Through training-time preference alignment, FAR-DPO shifts a model’s generative distribution toward cyclic peptides that combine structural feasibility with better bind-ing affinity. Our main contributions are as follows: 
+
+• Feasibility-aware preference data construction strat-egy for cyclic peptides. From the same balanced set of 12,000 CPCore pockets, the frozen CPSea-trained PepGLAD and PepFlow base models each generate 16 candidates per pocket, yielding 192,000 candidates per backbone. Using structural feasibility screening and within-pocket multi-objective comparison, we construct 90,408 and 92,099 preference pairs for PepGLAD and PepFlow, respectively (Appendix A). 
+
+• Difficulty-aware robust preference optimization. For each backbone, we further estimate pocket difficulty from its own frozen reference-model generations and assign fixed difficulty-group labels to the resulting preference pairs. We then introduce a group-robust objective into di-rect preference optimization. The objective dynamically adjusts the optimization weights of difficulty groups ac-cording to their current preference losses, placing greater emphasis on high-loss groups to reduce the risk that ag-gregate objectives obscure performance disparities across targets. 
+
+• Validity across generative backbones. We evaluate FAR-DPO across two cyclic peptide design backbones, PepGLAD and PepFlow. Under a fixed generation budget, FAR-DPO increases feasible-candidate outcome across both methods while improving binding quality, support-ing its applicability across distinct generative architec-tures. 
+
+# 2 Related Work 
+
+2.1 Cyclic Peptide Generation 
+
+Physics-based sampling and design enabled stable con-strained peptides before deep generative models (Bhard-waj et al. 2016; Hosseinzadeh et al. 2017). Recently, PepGLAD (Kong et al. 2024), PepFlow (Li et al. 2024), and PPFlow (Lin et al. 2024) have generated target-conditioned peptide sequences and structures using geometric diffu-sion or flow matching for linear peptide generation. Af-CycDesign (Rettie et al. 2025a) instead adapts positional encodings, whereas RFpeptides (Rettie et al. 2025b) and CPSDE (Zhou et al. 2025) generate full-atom macrocycles. DiffPepBuilder (Wang et al. 2024) adds disulfide bonds after generation, CP-Composer (Jiang et al. 2025) composes geo-metric constraints, and APCyc (Zhao, Qin, and Chen 2026) selects cyclization types and sites. CYC_BUILDER (Wang et al. 2025) uses search and reinforcement learning for frag-ment assembly, whereas GeoCycler (Zhang et al. 2026a) uses reward-based fine-tuning for closure constraints. FAR-DPO also leaves the generator unchanged, but uses preference-based post-training to increase the number of candidates that jointly satisfy structural and biophysical requirements. 
+
+2.2 Preference Alignment for Generative Models 
+
+Likelihood-based training does not guarantee specific de-sign objectives, motivating reinforcement learning, multi-objective search, and guided generation (Olivecrona et al. 2017; Jin, Barzilay, and Jaakkola 2020; Tang, Zhang, and Chatterjee 2025). These approaches often require explicit rewards, property predictors, or online sampling. Instead, Direct Preference Optimization (DPO) learns from relative comparisons without a separate reward model (Rafailov et al. 2023). Diffusion-DPO and Linear-DPO extend this prin-ciple to diffusion and flow-matching generators (Wallace et al. 2024; Li et al. 2026). Preference alignment has also been applied to antibodies (Zhou et al. 2024; Ren, He, and Zhang 2025), structure-based drug design (Cheng et al. 2025; Huang and Zhang 2025), and peptides (Tang, Zhang, and Chatterjee 2025; Zhang et al. 2026b). Most such methods target a particular representation, model family, or prop-erty. FAR-DPO instead combines feasibility-gated, multi-objective preferences pairs within each pocket and employs a difficulty-aware objective for optimization across targets. 
+
+2.3 Group-Robust Optimization 
+
+Average-loss training can mask persistent errors in difficult groups. DRO optimizes risk under an adversarial distribution (Duchi and Namkoong 2021); Group DRO dynamically em-phasizes high-loss predefined groups (Sagawa et al. 2020), while TERM uses exponential tilting to balance average and tail performance (Li et al. 2021). These methods have been studied mainly in supervised learning. In contrast, FAR-DPO defines groups by pocket difficulty and applies group-robust weighting during preference-based post-training for target-conditioned generation. 
+
+# 3 Method 
+
+3.1 Problem Formulation and Method Overview 
+
+Given a protein binding pocket P , a pretrained pocket-conditioned reference generator πref (x | P ) generates cyclic peptide candidates x, each comprising a peptide sequence and its full-atom structure. Without modifying the underly-ing generative architecture, FAR-DPO post-trains the model using offline preference pairs to obtain a policy πθ (x | P )
+
+that favors preferred candidates over dispreferred ones rela-tive to the frozen reference model. As illustrated in Figure 1, FAR-DPO consists of three stages. First, we apply eligibility filters to the offline can-didates generated from the reference generators for each pocket and construct multi-objective preference pairs within Figure 1: Overview of FAR-DPO. (A) Feasibility gates filter generated candidates to form an offline feasible pool. Within each pocket, tolerance-aware dominance is used to construct preference pairs, and frozen pocket-difficulty groups provide their group labels. (B) FAR-DPO is trained on these pairs using group-balanced sampling, reference-relative pair scoring with preferred-candidate anchoring, and loss-adaptive group reweighting. (C) Under identical pockets, sampling budget, and feasibility criteria, the aligned policy increases jointly feasible yield across target-difficulty groups. that pocket. Second, we define pocket difficulty from the reference model’s generation performance and assign each preference pair a fixed difficulty-group label. Third, we con-strain policy updates with the frozen πref and dynamically adjust training weights according to the current preference loss of each difficulty group. The resulting preference dataset is Dpref = {(Pi, x + 
+
+> i
+
+, x − 
+
+> i
+
+, g i)}Ni=1 , where x+ 
+
+> i
+
+and x− 
+
+> i
+
+denote the preferred and dispreferred candidates, respectively, and 
+
+gi is the difficulty group of their pocket. 
+
+3.2 Feasibility-Aware Preference Construction 
+
+Offline candidates and feasibility gating. To construct offline data for preference-based post-training, we indepen-dently sample K candidates for each protein binding pocket 
+
+P from the frozen reference model πref and denote the re-sulting set by CP . The candidate pool spans 12,000 pockets, with K = 16 , and contains 192,000 candidate complexes in total. Details of the pocket sources, generation settings, and data-processing pipeline are provided in Appendix A. Before defining preferences among candidates, we apply three eligibility gates covering cyclization geometry, residue chirality, and interaction energy. Candidates passing all three gates form the feasible set 
+
+FP = {x ∈ C P : Gcyc (x)Gchir (x)Gene (x) = 1 } . (1) Here, Gcyc , Gchir , and Gene are binary indicators for cy-clization geometry, residue chirality, and interaction energy, respectively. Following the CPSea evaluation protocol (Yang et al. 2025), we use whether the Cβ –Cβ distance between the N- and C-terminal residues lies in [3 , 8] Å as a proxy for cy-clization geometry, while the chirality gate requires every residue to have the correct chirality. The energy gate requires Rosetta ∆G < 0 (Alford et al. 2017). 
+
+Interface-quality evaluation. For each x ∈ F P , we char-acterize interface quality using the Vina docking score v(x),interface non-nativeness j(x), and atomic clashes normal-ized by peptide length c(x):
+
+m(x) =  v(x), j (x), c (x). (2) The Vina score is computed using AutoDock Vina (Trott and Olson 2010). Hydrophobic contacts, hydrogen bonds, and salt bridges at each candidate interface are identified using PLIP (Salentin et al. 2015), and the interface non-nativeness score j(x) is the Jensen–Shannon distance be-tween the candidate’s interface-interaction composition and a fixed natural-reference composition, as detailed in Appendix B (Lin 1991). All three metrics are minimized: lower v(x),
+
+j(x), and c(x) indicate more favorable binding, an interac-tion composition closer to the natural reference, and fewer atomic clashes per peptide residue, respectively. Preferences are defined only among candidates in FP using m(x).
+
+Scale-aware within-pocket dominance. The three met-rics have different units and numerical ranges, so compar-isons based directly on raw differences would make prefer-ences depend on metric scale. Let F = S 
+
+> P
+
+FP . We estimate a robust global scale for the k-th metric from all feasible can-didates: 
+
+σk = 1 .4826 median  
+
+> x∈F
+
+mk(x) − median  
+
+> x′∈F
+
+mk(x′) . (3) Here, mk(x) is the k-th component of m(x). The factor 
+
+1.4826 makes the median absolute deviation a robust scale estimate consistent with the standard deviation under a Gaus-sian distribution (Rousseeuw and Croux 1993). Following the Pareto dominance principle in multi-objective optimiza-tion (Deb et al. 2002), we use σk to define a tolerance-aware dominance relation within pocket P :
+
+x+ ≻P x− ⇐⇒ ∀k : mk(x+) − mk(x−) ≤ κσ k
+
+
+
+∧ ∃k : mk(x+) − mk(x−) < −κσ k
+
+ .
+
+(4) We set κ = 0 .5. Thus, x+ cannot be worse than x− by more than the tolerance on any metric and must outperform it by more than the tolerance on at least one metric. All comparisons are restricted to the same pocket, preventing differences in pocket-level difficulty from being mistaken for differences in candidate quality. We rank pairs satisfying Eq. (4) by their standardized advantage beyond the tolerance and retain up to eight of the highest-ranked preference pairs per pocket. 
+
+3.3 Difficulty-Aware Pocket Grouping 
+
+Pocket-level difficulty features. Pockets vary in design difficulty for the reference model. To construct fixed group labels for group-robust training, we estimate the difficulty of each pocket from offline generations of the frozen reference model. For every pocket P that admits at least one preference pair, we compute pocket-level features describing structural feasibility, binding affinity, and steric clashes. Specifically, 
+
+r(P ) is the fraction of candidates in CP that satisfy both the cyclization-geometry and residue-chirality gates, while 
+
+¯v(P ) and ¯c(P ) are the mean Vina score and normalized clash count, respectively, over FP .
+
+Robust standardization and difficulty aggregation. The three features have different numerical scales. For f ∈{− r, ¯v, ¯c}, we apply MAD-based robust standardization across all pockets that admit preference pairs (Rousseeuw and Croux 1993): 
+
+zf (P ) = clip 
+
+ f (P ) − median P ′ f (P ′)1.4826 MAD P ′ (f (P ′)) , −4, 4
+
+
+
+. (5) Here, P ′ ranges over all pockets that admit preference pairs. Clipping to [−4, 4] limits the influence of extreme pockets on the difficulty score. We then aggregate the standardized features into a pocket-difficulty score: 
+
+D(P ) = 0 .2 z−r (P ) + 0 .6 z¯v (P ) + 0 .2 z¯c(P ). (6) 
+
+Difficulty-group assignment. A larger D(P ) indicates greater pocket design difficulty. We partition pockets by quartiles of D(P ) into four predefined difficulty groups, 
+
+g(P ) ∈ { 0, 1, 2, 3}, where groups 0 and 3 correspond to the easiest and hardest quartiles, respectively. All preference pairs from the same pocket share the same g(P ). Difficulty groups are fixed in advance from the offline candidate pool and remain unchanged throughout training. In the evalua-tion, Q1–Q4 denote analogous easiest-to-hardest quartiles constructed and frozen separately for each generator. After assigning difficulty groups, we split each backbone-specific dataset into training and validation sets by pocket, ensuring that no pocket appears in both splits. The resulting datasets contain 90,408 preference pairs for PepGLAD and 92,099 preference pairs for PepFlow. 
+
+3.4 Group-Robust Direct Preference Optimization 
+
+Error surrogate and reference-relative change. The dif-fusion and flow-matching generators considered here do not provide tractable conditional log-likelihoods in the form re-quired by standard DPO. Following Diffusion-DPO, FAR-DPO therefore constructs a preference-optimization surro-gate from the native prediction error of each generative back-bone (Wallace et al. 2024). Let eθ (x; ξ) and eref (x; ξ) de-note the prediction errors of the policy and frozen reference model, respectively, for candidate x under stochastic training variables ξ, which include the timestep and random noise. The precise form of the error is backbone-specific and is provided in Appendix C. We define the policy’s reference-relative error change as 
+
+∆θ (x; ξ) = eθ (x; ξ) − eref (x; ξ). (7) For a given candidate, the policy and reference model share the same ξ. The coupling of stochastic variables between the two candidates is backbone-specific, as detailed in Appendix C. A negative ∆θ (x; ξ) indicates that the policy reduces the candidate’s prediction error relative to the reference model. 
+
+Pairwise preference and anchoring. For preference pair 
+
+i = ( x+ 
+
+> i
+
+, x − 
+
+> i
+
+), let ξ+ 
+
+> i
+
+and ξ− 
+
+> i
+
+denote the stochastic training variables associated with its two candidates. The pairwise preference loss is 
+
+δi = ∆ θ (x+ 
+
+> i
+
+; ξ+ 
+
+> i
+
+) − ∆θ (x− 
+
+> i
+
+; ξ− 
+
+> i
+
+),
+
+L(i)pref = − log sigmoid( −βδ i). (8) where β controls the strength of the pairwise preference sig-nal. To prevent the relative margin from improving by allow-ing x+ 
+
+> i
+
+itself to deteriorate relative to the reference model, let 
+
+∆anc  
+
+> θ
+
+denote the reference-relative change in the backbone-specific anchoring error. We augment the preference loss with 
+
+ℓi = L(i)pref + λa ReLU  ∆anc  
+
+> θ
+
+(x+ 
+
+> i
+
+; ξ+ 
+
+> i
+
+) , (9) where λa controls the anchoring strength. The backbone-specific anchoring errors are detailed in Appendix C. Group Metric CP-C DPB PF FAR-PF PG FAR-PG Success Cyclization (%) ↑ 70.34 92.54 93.71 94.04 81.50 90.23 Chirality (%) ↑ 64.32 74.60 78.37 79.60 81.44 85.49                                                                                                               
+
+> Energy pass (%) ↑49.72 75.07 63.20 64.81 70.35 74.38 Final Success (%) ↑24.16 52.21 47.96 49.57 46.89 57.79
+> Affinity Rosetta dG best/target ↓-18.50 -23.30 -20.71 -21.07 -23.01 -23.26 Vina best/target ↓-5.10 -5.90 -6.77 -6.82 -6.30 -6.74 Interface Interface JS ↓0.1842 0.1662 0.1812 0.1777 0.1596 0.1425
+> Clash/residue ↓0.3943 0.3418 0.2770 0.2637 0.3420 0.2592
+> Rama. Allowed (%) ↑73.8 86.9 83.4 83.1 72.6 71.5 Favored (%) ↑41.6 65.4 58.9 58.4 40.7 40.1 scRMSD Mainchain (Å) ↓2.78 2.31 2.37 2.38 2.68 2.75 Disulfide (Å) ↓2.60 2.34 2.74 2.73 2.63 2.59 Physicochem. GRAVY <0(%) ↑57.8 83.9 60.8 61.3 78.7 75.3 logP >−6(%) ↑55.3 92.3 46.8 46.0 67.5 68.0 Distribution Diversity ↑0.759 0.337 0.573 0.565 0.596 0.607 Novelty ↑0.122 0.120 0.137 0.140 0.121 0.127
+
+Table 1: Overall performance on the 56-target LNR benchmark. CP-C: CP-Composer (head-to-tail); DPB: DiffPepBuilder; PF: PepFlow; FAR-PF: FAR-DPO–PepFlow; PG: PepGLAD; FAR-PG: FAR-DPO–PepGLAD. 
+
+Difficulty-group losses and dynamic weighting. Moti-vated by the emphasis on high-loss groups in Group DRO (Sagawa et al. 2020), each mini-batch is constructed by bal-anced sampling across the four difficulty groups. Let Bg
+
+denote the preference pairs from difficulty group g in the current batch. Their mean group loss is 
+
+Lg (θ) = 1
+
+|B g |
+
+X
+
+> i∈B g
+
+ℓi. (10) To reduce mini-batch variance, we maintain an exponential moving average of each group loss with decay coefficient ρ:
+
+¯Lg ← ρ ¯Lg + (1 − ρ)Lg . (11) We then solve for a KL-regularized adversarial group distri-bution based on ¯Lg (Duchi and Namkoong 2021): 
+
+q⋆ = arg max 
+
+> q∈∆4
+
+" 3X
+
+> g=0
+
+qg ¯Lg − 1
+
+τ KL( q ∥ u)
+
+#
+
+,q⋆g = exp( τ ¯Lg )
+
+P3 
+
+> h=0
+
+exp( τ ¯Lh) .
+
+(12) Here, ∆4 is the probability simplex over the four difficulty groups, u = (1 /4, . . . , 1/4) is the uniform prior, and τ con-trols how strongly the group weights concentrate. The final training objective aggregates the current group losses using these dynamic weights: 
+
+LFAR -DPO (θ) = 
+
+> 3
+
+X
+
+> g=0
+
+q⋆g Lg (θ). (13) 
+
+# 4 Experiments 
+
+We evaluate FAR-DPO with PepGLAD and PepFlow to de-termine whether it improves feasible-candidate amount, the yield of jointly qualified candidates, performance on chal-lenging targets, and performance under low sampling bud-gets. We further analyze the contribution of different opti-mization choices. 
+
+4.1 Experimental Setup 
+
+Data and baselines. We follow the LNR benchmark and standard evaluation protocol of CPSea (Yang et al. 2025). For each method, we evaluate 100 candidates for each of 56 protein targets, designing 5,600 candidates per method. We apply FAR-DPO separately to PepGLAD (Kong et al. 2024) and PepFlow (Li et al. 2024), and primarily compare each base model with its FAR-DPO counterpart. DiffPep-Builder (Wang et al. 2024) and CP-Composer (Jiang et al. 2025) are included as baselines. For CP-Composer, we evalu-ate its head-to-tail cyclization condition with a classifier-free guidance weight of w = 5 .0, because this mode is directly compatible with the terminal-geometry-based CPSea post-processing protocol. Its stapled, disulfide, and bicycle con-ditions would require topology-specific validation and are outside the scope of this matched-budget comparison. 
+
+Evaluation metrics. We use the standard CPSea metrics and additionally report Interface JS, Clash/residue, JQ/MAD yield, Q4 Final, and Raw@10 performance. A jointly qual-ified (JQ) candidate must pass the Final screen, have Vina and Interface JS values no higher than the corresponding base medians for the same backbone and target, and ex-hibit no inter-chain heavy-atom clashes. A MAD-qualified candidate improves at least one of Vina, Interface JS, and Clash/residue beyond tolerance without degrading another beyond tolerance. Hits/target are per-target means; rates in Final are pooled over the respective evaluable Final pools. Q4 Final is hardest-quartile Final Success, and Raw@10 is the conditional expected-best score under 10 raw generations. Metric PF FAR-PF PG FAR-PG JQ hits/target ↑ 10.29 11.00 8.70 16.54                
+
+> Joint-qualified rate in Final (%) ↑21.46 22.22 18.61 28.73
+> MAD hits/target ↑14.27 15.43 13.95 24.54
+> MAD rate in Final (%) ↑29.8 31.2 29.8 42.6
+
+Table 2: Jointly qualified yield and MAD robustness. PF: PepFlow; FAR-PF: FAR-DPO–PepFlow; PG: PepGLAD; FAR-PG: FAR-DPO–PepGLAD. Full definitions are provided in Appendix B. 
+
+Grouping and statistics. Q1–Q4 are constructed sepa-rately for each base generator from its cyclization, chirality, Vina, and clash performance and then held fixed; each con-tains 14 targets, with Q4 hardest. Pass@ K is the probability of at least one Final candidate within K samples. Affinity, interface, Q4, Pass@ K, Raw@10, and hits/target are target-macro; stage and candidate-quality metrics are pooled; di-versity and novelty are global; and JQ/MAD rates are pooled over evaluable Final candidates. Confidence intervals use target-level bootstrap resampling (Efron 1979). Details are provided in Appendix C. 
+
+4.2 Overall Performance and Joint Quality 
+
+To determine whether FAR-DPO improves feasible-candidate yield across generative backbones and to examine its effects on other quality dimensions, we compare the base models with their FAR-DPO counterparts, as shown in Ta-ble 1. FAR-DPO–PepGLAD increases Final Success from 
+
+46 .89% to 57 .79% , while FAR-DPO–PepFlow increases it from 47 .96% to 49 .57% . Cyclization, chirality, and energy pass rates improve for both backbones. Vina best/target im-proves from −6.30 and −6.77 to −6.74 and −6.82 , respec-tively, and Rosetta dG also improves further. In addition, FAR-DPO reduces Interface JS and Clash/residue for both backbones, while changes in conformational, physicochemi-cal, and generative-distribution metrics are generally modest. These results demonstrate that FAR-DPO improves feasible-candidate yield and binding quality across different genera-tive backbones under a fixed generation budget, with limited trade-offs in several secondary quality dimensions. To further determine whether the increase in Final Success translates into higher joint quality, we evaluate both qualified-candidate yield and multi-objective quality (Table 2). FAR-DPO–PepGLAD increases JQ hits/target from 8.70 to 16 .54 ,JQ rate in Final from 18 .61% to 28 .73% , MAD hits/target from 13 .95 to 24 .54 , and MAD rate in Final from 29 .8% 
+
+to 42 .6% . FAR-DPO–PepFlow likewise improves these four metrics from 10 .29 , 21 .46% , 14 .27 , and 29 .8% to 11 .00 ,
+
+22 .22% , 15 .43 , and 31 .2% , respectively. Thus, FAR-DPO raises both counts and pooled rates in the Final pools. 
+
+4.3 Target Difficulty and Low-Budget Sampling 
+
+To determine whether the overall gains extend across target difficulty, particularly to the hardest targets, we compare Fi-nal Success across the four frozen difficulty groups defined 
+
+Figure 2: Final Success across frozen difficulty groups. The panels use PepGLAD- (top) and PepFlow-defined (bottom) groups; Bars show target-macro results over 14 targets per group, with 95% bootstrap confidence intervals. separately for the two generative backbones (Figure 2). FAR-DPO improves Final Success in all four difficulty groups for both generators. In Q4, FAR-DPO–PepGLAD improves Final Success from 40.00% to 50.36%, while FAR-DPO– PepFlow improves it from 44.14% to 46.29%. These results show that the gains span the full difficulty range and extend to the most challenging targets for both models. Because practical design campaigns often operate under limited generation budgets, we further examine the prob-ability of obtaining at least one Final candidate at dif-ferent sampling budgets (Figure 3). The Pass@ K curves shift upward for both generative backbones. FAR-DPO– PepGLAD increases Pass@1 from 46.89% to 57.79% and Pass@5 from 91.52% to 94.92%; FAR-DPO–PepFlow in-creases Pass@1 from 47.96% to 49.57% and Pass@5 from 91.63% to 92.54%. The advantage is most pronounced in the low-budget regime, indicating that FAR-DPO produces fea-sible designs with fewer generations and thereby improves practical sampling efficiency. 
+
+4.4 Analysis of Optimization Variants 
+
+FAR-DPO combines group-balanced sampling, Group DRO aggregation, and preferred-candidate anchoring. We com-pare different training configurations to examine how these design choices affect performance (Table 3). IID DPO achieves a Final Success of 46.14%. Group-balanced sam-Figure 3: Low-budget Final Pass@ K for PepGLAD (top) and PepFlow (bottom). Pass@ K is the target-macro probability of obtaining at least one Final candidate among K samples, evaluated over 56 targets. pling, group-balanced sampling with anchoring, and Group DRO without anchoring reach 49.21%, 50.32%, and 52.77%, respectively. Within the evaluated configurations, full FAR-DPO achieves the highest overall and Q4 Final Success (57.79% and 50.36%), suggesting that group-robust opti-mization and reference anchoring are complementary. Table 3 is an analysis of training configurations rather than a strict full-factorial ablation of every component. Additional R4 IID DPO results and paired confidence intervals for Final Success are provided in Appendix D. 
+
+4.5 Three-Dimensional Case Studies 
+
+Figure 4 compares independently generated Final-pass de-signs from each model and its FAR-DPO counterpart. Under 100 generations per model, FAR-DPO–PepGLAD increases the number of Final candidates for 5LM1 from 34 to 55; the representative designs have Vina scores of −4.59 and 
+
+−6.61 and interface-contact counts of 9 and 11, respectively. For 3BRH, FAR-DPO–PepFlow increases the number of Fi-nal candidates from 47 to 53, while the representative Vina score and Rosetta dG improve from −4.35 to −4.58 and from −9.72 to −13 .13 . These cases illustrate improvements in feasible-candidate yield and representative predicted bind-ing quality across both backbones and cyclization topologies. 
+
+# 5 Conclusion 
+
+We introduced FAR-DPO, an architecture-agnostic, preference-based method for target-specific cyclic peptide generation that aims to increase the yield of candidates sat-isfying multiple structural and biophysical constraints un-der limited sampling budgets. FAR-DPO constructs reliable preferences through feasibility gates and tolerance-aware,                         
+
+> Config. Final
+> ↑
+> Q4
+> ↑
+> Raw@10 Vina ↓
+> Raw@10 dG ↓
+> JS
+> ↓
+> Clash
+> ↓
+> PepGLAD 46.89 40.00 -5.123 -16.830 0.1596 0.3420 R1: IID/ERM/0 46.14 37.43 -5.604 -16.755 0.1424 0.2805 R2: GB/ERM/0 49.21 43.86 -5.669 -17.554 0.1437 0.2844 R3: GB/ERM/.2 50.32 43.14 -5.578 -17.638 0.1429 0.2832 R5: GB/ GDRO/0 52.77 46.71 -5.726 -16.954 0.1429 0.2549 FAR-DPO 57.79 50.36 −5.579 −17 .383 0.1425 0.2592
+
+Table 3: Optimization variants on PepGLAD. Final and Q4 are percentages. Raw@10 Vina and Raw@10 dG denote the target-macro conditional expected-best dG scores, respec-tively. Configurations use sampler/aggregation/anchor: GB denotes group-balanced sampling and GDRO denotes Group DRO. All preference variants use DPO. 
+
+Figure 4: Independent Final-pass designs for 5LM1: (a) PepGLAD, (b) FAR-DPO–PepGLAD; and 3BRH: (c) PepFlow, (d) FAR-DPO–PepFlow. Base/FAR peptides are blue/orange; receptors gray; 4 Å interface residues cyan; cy-clization bonds green. Fixed topology-wise best-Vina selec-tion was used. within-pocket multi-objective comparisons, and combines difficulty-aware group-robust DPO with preferred-candidate anchoring to place greater emphasis on high-loss difficulty groups during optimization. Experiments with PepGLAD and PepFlow show higher jointly feasible candidate yield for both backbones, with gains extending to challenging targets and low-budget sampling while retaining competitive bind-ing quality. Within the evaluated configurations, the vari-ant analysis supports complementary roles for robust opti-mization and anchoring. Overall, these results suggest that preference-based post-training can improve joint feasibility and robustness across targets without requiring changes to the underlying generative architecture, providing a general approach to multi-constraint biomolecular generation. References 
+
+Alford, R. F.; Leaver-Fay, A.; Jeliazkov, J. R.; O’Meara, M. J.; DiMaio, F. P.; Park, H.; Shapovalov, M. V.; Renfrew, P. D.; Mulligan, V. K.; Kappel, K.; Labonte, J. W.; Pacella, M. S.; Bonneau, R.; Bradley, P.; Dunbrack, R. L., Jr.; Das, R.; Baker, D.; Kuhlman, B.; Kortemme, T.; and Gray, J. J. 2017. The Rosetta All-Atom Energy Function for Macromolecular Modeling and Design. Journal of Chemical Theory and Computation , 13(6): 3031–3048. Bhardwaj, G.; Mulligan, V. K.; Bahl, C. D.; Gilmore, J. M.; Harvey, P. J.; Cheneval, O.; Buchko, G. W.; Pulavarti, S. V. S. R. K.; Kaas, Q.; Eletsky, A.; Huang, P.-S.; Johnsen, W. A.; Greisen, P. J.; Rocklin, G. J.; Song, Y.; Linsky, T. W.; Watkins, A.; Rettie, S. A.; Xu, X.; Carter, L. P.; Bonneau, R.; Olson, J. M.; Coutsias, E.; Correnti, C. E.; Szyperski, T.; Craik, D. J.; and Baker, D. 2016. Accurate De Novo Design of Hyperstable Constrained Peptides. Nature ,538(7625): 329–335. Cheng, X.; Zhou, X.; Yang, Y.; Bao, Y.; and Gu, Q. 2025. Decom-posed Direct Preference Optimization for Structure-Based Drug Design. Transactions on Machine Learning Research .Deb, K.; Pratap, A.; Agarwal, S.; and Meyarivan, T. 2002. AFast and Elitist Multiobjective Genetic Algorithm: NSGA-II. IEEE Transactions on Evolutionary Computation , 6(2): 182–197. Dougherty, P. G.; Sahni, A.; and Pei, D. 2019. Understanding Cell Penetration of Cyclic Peptides. Chemical Reviews , 119(17): 10241–10287. Duchi, J. C.; and Namkoong, H. 2021. Learning Models with Uni-form Performance via Distributionally Robust Optimization. The Annals of Statistics , 49(3): 1378–1406. Efron, B. 1979. Bootstrap Methods: Another Look at the Jackknife. 
+
+The Annals of Statistics , 7(1): 1–26. Hosseinzadeh, P.; Bhardwaj, G.; Mulligan, V. K.; Shortridge, M. D.; Craven, T. W.; Pardo-Avila, F.; Rettie, S. A.; Kim, D. E.; Silva, D.-A.; Ibrahim, Y. M.; Webb, I. K.; Cort, J. R.; Adkins, J. N.; Varani, G.; and Baker, D. 2017. Comprehensive Computational Design of Ordered Peptide Macrocycles. Science , 358(6369): 1461–1466. Huang, J.; and Zhang, D. 2025. MolFORM: Multi-modal Flow Matching for Structure-Based Drug Design. arXiv:2507.05503. Jiang, D.; Kong, X.; Han, J.; Li, M.; Jiao, R.; Huang, W.; Ermon, S.; Ma, J.; and Liu, Y. 2025. Zero-Shot Cyclic Peptide Design via Composable Geometric Constraints. In Proceedings of the 42nd International Conference on Machine Learning , volume 267 of 
+
+Proceedings of Machine Learning Research , 27553–27568. PMLR. Jin, W.; Barzilay, R.; and Jaakkola, T. 2020. Multi-Objective Molecule Generation using Interpretable Substructures. In Pro-ceedings of the 37th International Conference on Machine Learn-ing , volume 119 of Proceedings of Machine Learning Research ,4849–4859. PMLR. Kong, X.; Jia, Y.; Huang, W.; and Liu, Y. 2024. Full-Atom Peptide Design with Geometric Latent Diffusion. In Advances in Neural Information Processing Systems , volume 37, 74808–74839. Li, J.; Cheng, C.; Wu, Z.; Guo, R.; Luo, S.; Ren, Z.; Peng, J.; and Ma, J. 2024. Full-Atom Peptide Design based on Multi-modal Flow Matching. In Proceedings of the 41st International Confer-ence on Machine Learning , volume 235 of Proceedings of Machine Learning Research , 27615–27640. PMLR. Li, K.; Xu, Y.; Tseng, K.-k.; Lu, W.; Liu, K.; and Lan, T. 2026. Linear-DPO: Linear Direct Preference Optimization for Diffusion and Flow-Matching Generative Models. arXiv:2605.21123. Li, T.; Beirami, A.; Sanjabi, M.; and Smith, V. 2021. Tilted Empir-ical Risk Minimization. In International Conference on Learning Representations .Lin, H.; Zhang, O.; Zhao, H.; Jiang, D.; Wu, L.; Liu, Z.; Huang, Y.; and Li, S. Z. 2024. PPFLOW: Target-Aware Peptide Design with Torsional Flow Matching. In Proceedings of the 41st International Conference on Machine Learning , volume 235 of Proceedings of Machine Learning Research , 30510–30528. PMLR. Lin, J. 1991. Divergence Measures Based on the Shannon Entropy. 
+
+IEEE Transactions on Information Theory , 37(1): 145–151. Olivecrona, M.; Blaschke, T.; Engkvist, O.; and Chen, H. 2017. Molecular De-Novo Design through Deep Reinforcement Learning. 
+
+Journal of Cheminformatics , 9: 48. Rafailov, R.; Sharma, A.; Mitchell, E.; Manning, C. D.; Ermon, S.; and Finn, C. 2023. Direct Preference Optimization: Your Lan-guage Model Is Secretly a Reward Model. In Advances in Neural Information Processing Systems , volume 36, 53728–53741. Ren, M.; He, Z.; and Zhang, H. 2025. Multi-Objective Antibody Design with Constrained Preference Optimization. In International Conference on Learning Representations .Rettie, S. A.; Campbell, K. V.; Bera, A. K.; Kang, A.; Kozlov, S.; Flores Bueso, Y.; De La Cruz, J.; Ahlrichs, M.; Cheng, S.; Gerben, S. R.; Lamb, M.; Murray, A.; Adebomi, V.; Zhou, G.; DiMaio, F.; Ovchinnikov, S.; and Bhardwaj, G. 2025a. Cyclic Peptide Structure Prediction and Design Using AlphaFold2. Nature Communications ,16: 4730. Rettie, S. A.; Juergens, D.; Adebomi, V.; Flores Bueso, Y.; Zhao, Q.; Leveille, A. N.; Liu, A.; Bera, A. K.; Wilms, J. A.; Üffing, A.; Kang, A.; Brackenbrough, E.; Lamb, M.; Gerben, S. R.; Murray, A.; Levine, P. M.; Schneider, M.; Vasireddy, V.; Ovchinnikov, S.; Weiergräber, O. H.; Willbold, D.; Kritzer, J. A.; Mougous, J. D.; Baker, D.; DiMaio, F.; and Bhardwaj, G. 2025b. Accurate De Novo Design of High-Affinity Protein-Binding Macrocycles Using Deep Learning. Nature Chemical Biology , 21(12): 1948–1956. Rousseeuw, P. J.; and Croux, C. 1993. Alternatives to the Median Absolute Deviation. Journal of the American Statistical Associa-tion , 88(424): 1273–1283. Sagawa, S.; Koh, P. W.; Hashimoto, T. B.; and Liang, P. 2020. Distributionally Robust Neural Networks for Group Shifts: On the Importance of Regularization for Worst-Case Generalization. In 
+
+International Conference on Learning Representations .Salentin, S.; Schreiber, S.; Haupt, V. J.; Adasme, M. F.; and Schroeder, M. 2015. PLIP: Fully Automated Protein–Ligand In-teraction Profiler. Nucleic Acids Research , 43(W1): W443–W447. Tang, S.; Zhang, Y.; and Chatterjee, P. 2025. PepTune: De Novo Generation of Therapeutic Peptides with Multi-Objective-Guided Discrete Diffusion. In Proceedings of the 42nd International Con-ference on Machine Learning , volume 267 of Proceedings of Ma-chine Learning Research , 59017–59065. PMLR. Trott, O.; and Olson, A. J. 2010. AutoDock Vina: Improving the Speed and Accuracy of Docking with a New Scoring Function, Effi-cient Optimization, and Multithreading. Journal of Computational Chemistry , 31(2): 455–461. Villar, E. A.; Beglov, D.; Chennamadhavuni, S.; Porco, J. A., Jr.; Kozakov, D.; Vajda, S.; and Whitty, A. 2014. How Proteins Bind Macrocycles. Nature Chemical Biology , 10(9): 723–731. Wallace, B.; Dang, M.; Rafailov, R.; Zhou, L.; Lou, A.; Purush-walkam, S.; Ermon, S.; Xiong, C.; Joty, S.; and Naik, N. 2024. Diffusion Model Alignment Using Direct Preference Optimization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 8228–8238. Wang, F.; Wang, Y.; Feng, L.; Zhang, C.; and Lai, L. 2024. Target-Specific De Novo Peptide Binder Design with DiffPepBuilder. Jour-nal of Chemical Information and Modeling , 64(24): 9135–9149. Wang, F.; Zhang, T.; Zhu, J.; Zhang, X.; Zhang, C.; and Lai, L. 2025. Reinforcement Learning-Based Target-Specific De Novo Design of Cyclic Peptide Binders. Journal of Medicinal Chemistry , 68(16): 17287–17302. Yang, Z.; Xie, H.; Jia, Y.; Kong, X.; Zheng, J.; Zhang, Z.; Liu, Y.; Liu, L.; and Lan, Y. 2025. CPSea: Large-Scale Cyclic Peptide– Protein Complex Dataset for Machine Learning in Cyclic Peptide Design. In Advances in Neural Information Processing Systems ,volume 38. Datasets and Benchmarks Track. Zhang, J.; Cao, H.; Shi, H.; He, M.; Wang, Y.; Gao, Z.; Wu, F.; Yao, X.; Hsieh, C.-Y.; Pan, S. J.; Chatterjee, P.; Gu, C.; and Heng, P.-A. 2026a. GeoCycler: Reward-Aligned 3D Diffusion for Constraint-Conditioned Cyclic Peptide Design. arXiv:2605.23407. Zhang, J.; Yi, S.; Ju, W.; and Gu, Z. 2026b. PepALD: Macro-cyclic Peptide Generation via Autoregressive Latent Diffusion. arXiv:2606.14510. Zhao, Y.; Qin, L.; and Chen, J. 2026. APCyc: Property-Informed Design of Cyclic Peptides via Automated Cyclization. Accepted at the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining; forthcoming, arXiv:2606.12991. Zhou, X.; Li, M.; Xiao, Y.; Li, J.; Xue, D.; Zheng, Z.; Ma, J.; and Gu, Q. 2025. Designing Cyclic Peptides via Harmonic SDE with Atom-Bond Modeling. In Proceedings of the 42nd International Conference on Machine Learning , volume 267 of Proceedings of Machine Learning Research , 78827–78858. PMLR. Zhou, X.; Xue, D.; Chen, R.; Zheng, Z.; Wang, L.; and Gu, Q. 2024. Antigen-Specific Antibody Design via Direct Energy-Based Prefer-ence Optimization. In Advances in Neural Information Processing Systems , volume 37, 120861–120891. Zorzi, A.; Deyle, K.; and Heinis, C. 2017. Cyclic Peptide Ther-apeutics: Past, Present and Future. Current Opinion in Chemical Biology , 38: 24–29. Supplementary Materials 
+
+# A Data Sources, Candidate Generation, and Processing 
+
+The protein binding pockets used for offline candidate gen-eration were obtained from CPCore (Yang et al., 2025). We first balanced the available complexes by cyclization type and native peptide length, and then partitioned the selected pockets into non-overlapping subsets. This study used three of these subsets, each containing 4,000 pockets, for a to-tal of 12,000 pockets. During data preparation, chain R in each CPCore complex was treated as the receptor, chain L as the native peptide, and receptor residues within 10 Å of the native peptide were used to define the conditioning pocket. We separately used the PepGLAD and PepFlow base mod-els trained on CPSea data to generate offline candidates. Both generative backbones used the same peptide length as the corresponding native peptide and independently generated 16 candidates for each pocket, yielding 192,000 candidate complexes per backbone. The outputs of the two generative backbones first under-went their respective coordinate and structure-format conver-sions, after which each generated peptide was reconstructed with its corresponding receptor into a complete complex. Cyclic or linear constraints were then imposed according to terminal geometry, followed by structural relaxation. Cy-clization, chirality, Rosetta ∆G, Vina, interface-interaction composition, and atomic clashes were computed on the re-laxed complexes. Preference pairs were constructed only be-tween candidates from the same generative backbone and the same pocket. The preference data were split by pocket into non-overlapping training and validation sets, ensuring that no pocket appeared in both subsets. The final dataset sizes are shown in Table 4. 
+
+# B Extended Evaluation Metric Definitions 
+
+B.1 Evaluation Set and Basic Metrics 
+
+Following the CPSea evaluation protocol (Yang et al., 2025), the main evaluation used the LNR56 subset, which excludes 2B1N, 3ASK, 3V7D, and 5GR9 from the standard 60-target LNR set. For each method, 100 candidates were evaluated on each of the remaining 56 targets, for a total of 5,600 can-didates. Final Success requires the terminal Cβ –Cβ distance to lie in [3 , 8] Å, every residue to have the correct chirality, and Rosetta ∆G < 0.Interface JS is based on the counts of hydrophobic contacts, hydrogen bonds, and salt bridges identified by PLIP. Following the interface-interaction definition of CPSea (Yang et al., 2025), let the three interaction counts of candi-date x be n(x) = ( n1(x), n 2(x), n 3(x)) , whose components correspond to hydrophobic contacts, hydrogen bonds, and salt bridges, respectively, and let the fixed natural-reference count vector be r = (42 .0, 46 .3, 9.0) . After applying plus-one smoothing and normalization to the candidate and refer-ence vectors, we define 
+
+pk(x) = nk(x) + 1 
+
+P3 
+
+> ℓ=1
+
+(nℓ(x) + 1) , k ∈ { 1, 2, 3}. (14) 
+
+qk = rk + 1 
+
+P3 
+
+> ℓ=1
+
+(rℓ + 1) , k ∈ { 1, 2, 3}. (15) 
+
+sk(x) = pk(x) + qk
+
+2 , k ∈ { 1, 2, 3}. (16) 
+
+j(x) = 
+
+ 12
+
+> 3
+
+X
+
+> k=1
+
+pk(x) log 2
+
+pk(x)
+
+sk(x)+ 12
+
+> 3
+
+X
+
+> k=1
+
+qk log 2
+
+qk
+
+sk(x)
+
+1/2
+
+.
+
+(17) Here, j(x) is Interface JS, defined as the square root of the base-2 Jensen–Shannon divergence. A lower value indicates that the interface-interaction composition of the candidate is closer to the fixed natural reference. Atomic clashes are computed using Bondi van der Waals radii. Let A(t) 
+
+> L
+
+(x) and A(t) 
+
+> R
+
+(x) denote the atom sets of can-didate peptide chain L and receptor chain R, respectively, where t ∈ { all , heavy }; all denotes all atoms in the PDB 
+
+ATOM records, and heavy denotes their heavy-atom subset. If ρa is the Bondi van der Waals radius of atom a and dab (x)
+
+is the distance between inter-chain atom pair a, b , then 
+
+Ct(x) = X 
+
+> a∈A (t)
+> L(x)
+
+X 
+
+> b∈A (t)
+> R(x)
+
+I ρa + ρb − dab (x) ≥ 0.40 Å ,t ∈ { all , heavy }.
+
+(18) 
+
+c(x) = Call (x)
+
+Nres (x) . (19) Here, Nres (x) is the number of residues in the gener-ated peptide, and c(x) is Legacy Clash/residue. The JQ cri-terion requires no inter-chain heavy-atom clashes, that is, 
+
+Cheavy (x) = 0 .
+
+B.2 Joint Quality and Multi-Objective Robustness 
+
+The following definitions are computed within each genera-tive backbone, separately for Base and FAR-DPO. Let P be the set of 56 LNR56 targets, and let M denote the method being evaluated. The multi-objective quality vector of candi-date x is 
+
+m(x) =  v(x), j (x), c (x), (20) where all three metrics are minimized. For target P , let 
+
+RP be the set of Final candidates from the correspond-ing base model for which Vina, Interface JS, and Legacy Backbone Generated candidates Final preference pairs Training preference pairs Validation preference pairs PepGLAD 192,000 90,408 85,912 4,496 PepFlow 192,000 92,099 87,494 4,605 
+
+Table 4: Preference dataset sizes for the two generative backbones. Clash/residue are all valid. For k ∈ { v, j, c }, the same-backbone, same-target base median reference is 
+
+rP,k = median x∈R P mk(x). (21) This gives rP = ( rP,v , r P,j , r P,c ); FAR-DPO candidates are not used to estimate the reference. Let EJQ  
+
+> M,P
+
+be the set of Final candidates from method M on target P for which Vina, Interface JS, and inter-chain heavy-atom clashes are all evaluable. A jointly qualified (JQ) candidate is defined by 
+
+QJQ ,M,P (x) = I
+
+h
+
+x ∈ E JQ  
+
+> M,P
+
+∧ v(x) ≤ rP,v 
+
+∧j(x) ≤ rP,j ∧ Cheavy (x) = 0] .
+
+(22) 
+
+JQ hits/target. The number of JQ candidates is first counted for each target and then averaged over the 56 tar-gets: 
+
+HJQ (M ) = 1
+
+|P| 
+
+X 
+
+> P∈P
+
+X
+
+> x∈E JQ
+> M,P
+
+QJQ ,M,P (x). (23) Under a fixed budget of 100 generated candidates per tar-get, HJQ is the average number of Final and jointly qualified candidates obtained per target, and therefore reflects both Final yield and the joint quality of deliverable candidates. 
+
+Joint-qualified rate in Final (%). All JQ-evaluable Final candidates from the 56 targets are pooled, and the proportion of JQ candidates is computed as 
+
+RJQ (M ) = 
+
+P 
+
+> P∈P
+
+P
+
+> x∈E JQ
+> M,P
+
+QJQ ,M,P (x)
+
+P  
+
+> P∈P
+
+EJQ 
+
+> M,P
+
+× 100% . (24) 
+
+RJQ measures the joint-quality purity of the Final can-didate pool under the binding, interface, and no inter-chain heavy-atom clash requirements. It is a proportion over the pooled candidate set rather than the average of per-target JQ proportions. Together with JQ hits/target, it indicates whether an increase in the number of JQ candidates is driven mainly by expansion of the Final pool or by a higher proportion of jointly qualified candidates. The fixed tolerances are obtained from the three offline training subsets used for preference construction and are frozen before LNR56 evaluation. Let Ftrain denote all feasi-ble candidates in these subsets. The robust scale is 
+
+σk = 1 .4826 MAD x∈F train 
+
+ mk(x), k ∈ { v, j, c },
+
+(25) where MAD denotes the median absolute deviation. Let 
+
+σ = ( σv , σ j , σ c) and set κ = 0 .5, giving 
+
+τ = κσ = (0 .575871 , 0.045096 , 0.088250) . (26) The LNR56 test results are not used to re-estimate τ during evaluation. Let EMAD  
+
+> M,P
+
+be the set of Final candidates from the current method on target P for which all three components of m(x) are valid. A MAD-qualified candidate is defined by 
+
+QMAD ,M,P (x) = 
+
+I
+
+h
+
+x ∈ E MAD 
+
+> M,P
+
+∧ (∀k ∈ { v, j, c },mk(x) ≤ rP,k + τk)
+
+∧ (∃k ∈ { v, j, c },mk(x) < r P,k − τk)
+
+i
+
+.
+
+(27) 
+
+MAD hits/target. The number of MAD-qualified candi-dates is first counted for each target and then averaged over the 56 targets: 
+
+HMAD (M ) = 1
+
+|P| 
+
+X 
+
+> P∈P
+
+X
+
+> x∈E MAD
+> M,P
+
+QMAD ,M,P (x). (28) 
+
+HMAD is the average number of MAD-qualified candi-dates obtained per target and measures the yield of candidates with non-compensatory multi-objective robust improvement under a fixed generation budget. 
+
+MAD rate in Final (%). All Final candidates from the 56 targets for which Vina, Interface JS, and Legacy Clash/residue are valid are pooled, and the proportion of MAD-qualified candidates is computed as 
+
+RMAD (M ) = 
+
+P 
+
+> P∈P
+
+P
+
+> x∈E MAD
+> M,P
+
+QMAD ,M,P (x)
+
+P  
+
+> P∈P
+
+EMAD 
+
+> M,P
+
+× 100% .
+
+(29) 
+
+RMAD is the proportion of MAD-qualified candidates in the Final candidate pool for which all three quality metrics are evaluable. Together with MAD hits/target, it indicates whether an increase in their number is driven mainly by expansion of the Final pool or by a higher proportion of robustly improved candidates. Overall, both hits/target metrics are target-level macro averages, whereas both rates in Final are candidate-level proportions over their respective evaluable Final candidate pools. B.3 Low-Budget and Matched-N Metrics 
+
+Let P be the set of LNR56 targets, and let M denote the method being evaluated. If sM,P of the 100 candidates gen-erated by method M on target P ∈ P are Final candidates, then the probability of obtaining at least one Final candidate when sampling K candidates without replacement is 
+
+Pass@ K(M, P ) = 1 −
+
+ 100 −sM,P 
+
+> K
+
+ 100 
+
+> K
+
+ , 1 ≤ K ≤ 100 .
+
+(30) Overall Pass@ K is the macro average of these target-level probabilities: 
+
+Pass@ K(M ) = 1
+
+|P| 
+
+X 
+
+> P∈P
+
+Pass@ K(M, P ). (31) Pass@ K is the average probability of obtaining at least one Final candidate under a budget of K raw generations. It measures low-budget success but does not evaluate the binding quality of the successful candidates. 
+
+Raw@10. Raw@10 is computed separately for Vina and Rosetta ∆G. For each method and target, all 100 raw can-didates are used as the sampling population. We perform 10,000 uniform samples without replacement, drawing 10 candidates in each trial. Let g denote the quality metric, and let H(g) 
+
+> M,P
+
+denote the set of hit trials in which the sampled set contains at least one Final candidate with a valid value of g.For hit trial r, let b(g) 
+
+> M,P,r
+
+be the minimum g value among its valid Final candidates. Lower values are better for both Vina and Rosetta ∆G.Raw@10 on target P is the conditional mean of the best values over hit trials: 
+
+Raw@10 g (M, P ) = 1
+
+H(g)
+
+> M,P
+
+X
+
+> r∈H (g)
+> M,P
+
+b(g)
+
+> M,P,r
+
+. (32) It is then macro-averaged over the 56 targets: 
+
+Raw@10 g (M ) = 1
+
+|P| 
+
+X 
+
+> P∈P
+
+Raw@10 g (M, P ). (33) Missed trials are not assigned a penalty or zero value and do not enter the conditional mean in Eq. (32). Therefore, Pass@ K measures whether a successful candidate can be obtained, whereas Raw@10 measures the conditional best quality after a successful hit. Raw@10 is not an unconditional low-budget metric and cannot replace Pass@ K.
+
+Matched-N . To control for the extreme-value selection advantage caused by different Final candidate-pool sizes be-tween Base and FAR-DPO, Matched-N comparisons are per-formed within each generative backbone. For a fixed N and quality metric g, only common targets on which both Base and FAR-DPO have at least N Final candidates with valid values of g are retained; their set is denoted by P(g) 
+
+> N
+
+. On each retained target, N candidates are sampled uniformly with-out replacement from the valid Final candidate pool of each method, and expected-best is defined as 
+
+B(g) 
+
+> M,P
+
+(N ) = E
+
+"
+
+min  
+
+> x∈S (N)
+> M,P
+
+g(x)
+
+#
+
+, (34) where S(N ) 
+
+> M,P
+
+is a random sample of size N . Figure 6 reports the FAR-DPO-minus-Base difference for N ∈{1, 2, 3, 5, 10 , 20 }:
+
+∆Matched ,g (N ) = 1
+
+P(g)
+
+> N
+
+X 
+
+> P∈P (g)
+> N
+
+[
+
+B(g) 
+
+> FAR-DPO ,P
+
+(N ) − B(g) 
+
+> Base ,P
+
+(N )
+
+i
+
+.
+
+(35) Because lower values are better for both Vina and Rosetta 
+
+∆G, a negative difference favors FAR-DPO. Matched-N
+
+compares quality after matching the number of valid Final candidates between the two methods. As N increases, fewer common targets can be included; the exact numbers are given in Figure 6. Pass@ K and Raw@10 instead describe the prob-ability of success under a fixed raw-generation budget and the conditional best quality after a hit, respectively, and therefore provide complementary information to Matched-N .
+
+# C Backbone-Specific Implementation and Statistical Details 
+
+C.1 PepGLAD Diffusion Preference Optimization 
+
+PepGLAD uses the sequence-latent and structure-latent losses of the base model to construct the per-complex er-ror: 
+
+ePG  
+
+> θ
+
+(x; ξ) = wH ℓH,θ (x; ξ) + ℓX,θ (x; ξ), (36) where ℓH,θ and ℓX,θ are the sequence-latent and structure-latent losses, respectively, and wH follows the base PepGLAD model. 
+
+C.2 PepFlow Flow-Matching Preference Optimization 
+
+PepFlow uses the translation and rotation flow-matching er-rors to construct the per-candidate error surrogate: 
+
+ePF  
+
+> θ
+
+(x; ξ) = 12 ℓtrans ,θ (x; ξ) + 12 ℓrot ,θ (x; ξ). (37) Let 
+
+δm(x) = ℓm,θ (x) − ℓm, ref (x), m ∈ { trans , rot }.
+
+The PepFlow preference margin is 
+
+MPF = δtrans (x−) − δtrans (x+)2 + δrot (x−) − δrot (x+)2 .
+
+(38) PepFlow shares the complete stochastic state across the policy model, reference model, and both endpoints of each preference pair, and averages the losses over two independent stochastic states. The preferred-candidate anchor uses the following six training errors: 
+
+ebase  
+
+> θ
+
+= 0 .5ℓtrans ,θ + 0 .5ℓrot ,θ + 0 .25 ℓbb ,θ 
+
++ ℓseq ,θ + ℓangle ,θ + 0 .5ℓtorsion ,θ . (39) The corresponding preference loss is 
+
+LPF = softplus( −βM PF )+ λanc ReLU  ebase  
+
+> θ
+
+(x+) − ebase ref (x+) .
+
+(40) 
+
+C.3 Training Settings 
+
+Table 5 summarizes the main training settings for PepGLAD and PepFlow in terms of error surrogates, random-state cou-pling, and optimization hyperparameters. 
+
+C.4 Backbone-Specific LNR56 Difficulty Groups 
+
+The evaluation difficulty groups for PepGLAD and PepFlow are constructed separately from the generation results of their corresponding Base models. For backbone b ∈{PepGLAD , PepFlow } and target P , define 
+
+• pgate ,b (P ) as the proportion of candidates that pass both the cyclization and chirality gates among candidates for which both gates are evaluable; 
+
+• ¯vb(P ) as the mean Vina score of Final candidates from the corresponding Base model; 
+
+• ¯cb(P ) as the mean Legacy Clash/residue of Final candi-dates from the corresponding Base model. If a continuous feature is missing for a target, it is imputed with the feature median over the remaining LNR56 targets for the same backbone. For f ∈ {− pgate ,b , ¯vb, ¯cb}, we use 
+
+zf (P ) = clip 
+
+ f (P ) − median P ′ f (P ′)1.4826 MAD P ′ (f (P ′)) , −4, 4
+
+
+
+, (41) and compute 
+
+D(b)eval (P ) = 0 .2 z−pgate ,b (P ) + 0 .6 z¯vb (P ) + 0 .2 z¯cb (P ).
+
+(42) For each backbone, targets are sorted in ascending order of D(b)eval (P ) and divided into Q1–Q4. Each group contains 14 targets, with Q1 easiest and Q4 hardest. The groups are determined only by the corresponding Base-model results and are fixed before comparing Base and FAR-DPO; FAR-DPO evaluation results are therefore not used to construct the difficulty groups. The PepGLAD and PepFlow panels in Figure 2 use the fixed groups defined by Base PepGLAD and Base PepFlow, respectively. These evaluation groups are independent of the training-stage difficulty labels. 
+
+C.5 Statistical Procedures 
+
+Different metrics are aggregated according to their statistical units. Affinity and interface metrics (Vina, Rosetta ∆G, In-terface JS, and Clash/residue), Q4 Final, Pass@ K, Raw@10, and JQ/MAD hits/target are first computed within each tar-get and then macro-averaged across targets. Stage pass rates and candidate-quality metrics, including Rama, scRMSD, GRAVY, and logP, are pooled over their respective evaluable candidate sets. JQ rate in Final and MAD rate in Final are computed over their respective Final candidate pools satisfy-ing the metric-completeness requirements, with the denom-inators defined in Appendix B.2. Diversity and Novelty are computed globally over the complete evaluation candidate set and are not converted to target means. Confidence intervals are computed using 10,000 target-level bootstrap resamples, with the 2.5th and 97.5th per-centiles of the bootstrap distribution forming the 95% con-fidence interval. For target-macro metrics, the target mean is recomputed after each resample. For candidate-pool pro-portions, targets are resampled as clusters, and the propor-tion is recomputed on the resulting candidate pool. Within each backbone, Base and FAR-DPO reuse the same target-resampling indices for comparison. Difficulty-group analy-ses resample only within the 14 targets of the corresponding group. Except for the within-backbone median imputation used to construct the fixed difficulty groups in Appendix C.4, missing values of continuous metrics are not imputed. Missing entries do not contribute to the corresponding continuous metric, and the denominators and included sets follow the definition of each metric. 
+
+# D Optimization Configuration Ablations and Extended Robustness Evaluation 
+
+This section compares different optimization configurations and examines training-parameter sensitivity on PepGLAD, while reporting low-budget and Matched-N robustness re-sults on both PepGLAD and PepFlow. 
+
+D.1 Comparison of Optimization Configurations 
+
+To distinguish the roles of different optimization compo-nents, Base denotes the PepGLAD base model without pref-erence post-training. R1–R5 and full FAR-DPO use the same PepGLAD backbone and dominance preference data, and dif-fer only in the preference objective, difficulty-group sampling and loss aggregation, and anchor setting. The configurations are defined as follows: 
+
+• R1: Basic DPO configuration. Preference pairs are sam-pled IID from the full preference dataset, losses are ag-gregated by empirical risk minimization (ERM), and no anchor is used. This configuration serves as the basic DPO post-training reference. 
+
+• R2: Group-balanced sampling. R2 adds group-balanced sampling (GB) to R1, so that each batch contains a balanced number of preference pairs from the four train-ing difficulty groups, to examine the effect of difficulty-group sampling balance. Losses are still aggregated by ERM, and no anchor is used. Setting PepGLAD PepFlow Preference error surrogate Sequence latent + structure latent Translation + rotation Stochastic repeats per preference pair 1 2                                   
+
+> β/λanc 15 / 0.2 1 / 0.1 Optimizer / learning rate AdamW / 1×10 −5Adam / 1×10 −5
+> Adam β1/β2/ϵ0.9 / 0.999 / 1×10 −80.9 / 0.999 / 1×10 −8
+> Weight decay 0.01 0Microbatch pairs 44Gradient accumulation 12Effective pairs per parameter update 48Trainable parameters / total parameters 1,113,156 / 4,700,153 1,093,196 / 6,880,353
+
+Table 5: Training settings for PepGLAD and PepFlow. 
+
+• R3: Anchor under ERM. R3 retains the GB/ERM con-figuration of R2 and adds a preferred-candidate anchor with λanc = 0 .2 to examine the effect of the anchor under ERM. 
+
+• R4: IPO sensitivity configuration. This configuration uses GB/ERM/0 and replaces DPO with Identity Prefer-ence Optimization (IPO) to examine sensitivity to the preference-optimization objective; IID/ERM/0 + DPO corresponds to R1. 
+
+• R5: Robust loss aggregation. R5 retains DPO and group-balanced sampling from R2, but replaces ERM with dy-namic Group DRO (GDRO), which adjusts the aggrega-tion weights according to the current loss of each difficulty group. No anchor is used. 
+
+• Full FAR-DPO. Full FAR-DPO adds a preferred-candidate anchor with λanc = 0 .2 to R5, thereby com-bining group-balanced sampling, dynamic Group DRO, and anchoring. Figure 5 further reports Final Success for each configu-ration across the fixed difficulty groups and compares Base and FAR-DPO on the PepFlow backbone. 
+
+D.2 Low-Budget and Matched-N
+
+Final Pass@ K. Figure 6(a) compares the probability of obtaining at least one Final candidate under a fixed raw-generation budget. On PepGLAD, FAR-DPO improves Pass@1 and Pass@5 by 10.89 percentage points (95% CI 
+
+[8 .45 , 13 .27] ) and 3.40 percentage points ( [1 .19 , 5.64] ), re-spectively; both confidence intervals are above zero. On PepFlow, Pass@1 increases from 47.96% to 49.57%, a gain of 1.61 percentage points ( [0 .14 , 3.05] ), while Pass@5 in-creases from 91.63% to 92.54%, a gain of 0.91 percentage points ( [−0.09 , 1.94] ); the latter confidence interval crosses zero. 
+
+Raw@10. The following quality differences are defined as FAR-DPO minus Base. Lower values are better for both Vina and Rosetta ∆G, so negative values favor FAR-DPO. On PepGLAD, the Raw@10 Vina and Rosetta ∆G dif-ferences are −0.4558 (95% CI [−0.5516 , −0.3533] ) and 
+
+−0.5523 ([−1.0251 , −0.0801] ), respectively; both inter-vals are below zero. On PepFlow, the corresponding dif-ferences are +0 .0169 ([−0.0338 , 0.0678] ) and +0 .0242 
+
+([−0.2474 , 0.3047] ), respectively; both intervals cross zero. 
+
+Fixed Matched-N . Figures 6(b–c) compare expected-best quality after matching the number of valid Final candidates for N ∈ { 1, 2, 3, 5, 10 , 20 }. On PepGLAD, the Vina differ-ences are negative for all six values of N , with all 95% confi-dence intervals below zero, whereas all confidence intervals for Rosetta ∆G cross zero. On PepFlow, the confidence in-tervals for both Vina and Rosetta ∆G cross zero under all six values of N . This shows that the Vina improvement on PepGLAD is not solely due to FAR-DPO producing more Final candidates. 
+
+D.3 Training-Parameter Sensitivity 
+
+To examine sensitivity to the main training parameters, we separately vary the learning rate η, Group-DRO temperature 
+
+τ , and preferred-candidate anchor weight λanc on PepGLAD. Models within each parameter block use the same training progress and hold all settings other than the parameter be-ing examined fixed. Table 7 should therefore be compared only within each parameter block. All models generate 100 candidates per target on LNR56 and use the same evaluation pipeline as the main text. In the learning-rate experiments, Final remains between 50.88% and 51.46%, Vina remains between −6.80 and 
+
+−6.75 , and Rama allowed and scRMSD Mainchain also change only slightly. When varying the Group-DRO tem-perature, Final remains between 52.64% and 53.12%, and Vina remains between −6.95 and −6.92 ; τ = 2 .0 gives the lowest Rosetta ∆G and scRMSD Mainchain within this parameter block. Increasing λanc from 0.1 to 0.2 raises Fi-nal from 53.23% to 54.86%, while Vina, Rosetta ∆G, and scRMSD Mainchain are maintained or improved. Overall, the main performance metrics remain stable over the param-eter ranges examined, indicating that FAR-DPO is robust to these training parameters. 
+
+# E Generative AI Use and Ethics Compliance Statements 
+
+E.1 Generative AI Use Disclosure 
+
+During the preparation of the paper and supplementary ma-terial, the authors used generative AI tools to assist with lan-guage polishing, translation, format checking, and the orga-nization and presentation of technical content. All methods, Method Final ↑ Q4 ↑ Raw ↓ JS ↓ Clash ↓                                   
+
+> Base 46.89 40.00 -5.123 0.1596 0.3420 R1 46.14 37.43 -5.604 0.1424 0.2805 R2 49.21 43.86 -5.669 0.1437 0.2844 R3 50.32 43.14 -5.578 0.1429 0.2832 R4 (IPO) 52.18 46.79 -5.173 0.1595 0.3349 R5 52.77 46.71 -5.726 0.1429 0.2549 Full FAR-DPO 57.79 50.36 -5.579 0.1425 0.2592
+
+Table 6: PepGLAD optimization configurations and main results. Final and Q4 are percentages; Raw denotes Raw@10 Vina, JS denotes Interface JS, and Clash denotes Legacy Clash/residue. 
+
+Figure 5: (a) Final Success of the PepGLAD optimization variants on Q1–Q4 defined by Base PepGLAD; (b) Base PepFlow and FAR-DPO–PepFlow Final Success on Q1–Q4 defined by Base PepFlow. Points are target-macro means, and error bars are 95% target-bootstrap confidence intervals. experimental results, figures, tables, citations, and conclu-sions were checked and finalized by the authors, who take responsibility for all content. 
+
+E.2 Ethics and Submission Compliance Statement 
+
+This study is computational research based on public data and models and does not involve human participants, pri-vate personal data, or animal experiments. The generated cyclic peptides are computational candidates whose biolog-ical activity and safety require experimental validation. The authors confirm that this manuscript follows applicable re-search ethics and preprint dissemination policies. Figure 6: (a) Final Pass@ K under fixed budgets on LNR56; (b–c) fixed-N Matched-N analysis within the PepGLAD and PepFlow backbones. The vertical axes show FAR-DPO-minus-Base differences in expected-best Vina and Rosetta ∆G; negative values favor FAR-DPO. The analysis uses 56 common targets for N = 1 , 2, 3, 55 for N = 5 , and 54 for N = 10 ; for N = 20 ,PepGLAD and PepFlow use 51 and 52 targets, respectively. 
+
+Parameter Value Final ↑ Vina ↓
+
+Rosetta 
+
+∆G ↓
+
+Rama allowed ↑
+
+scRMSD Mainchain ↓ Diversity ↑ Novelty ↑
+
+Learning rate η 3 × 10 −6 51.09 -6.75 -23.61 72.9 2.71 0.626 0.122 
+
+5 × 10 −6 51.46 -6.75 -23.35 72.5 2.74 0.615 0.123 
+
+7 × 10 −6 50.88 -6.80 -23.24 72.2 2.74 0.616 0.123 Group-DRO temperature τ 0.5 53.12 -6.95 -23.26 70.1 2.63 0.610 0.124 2.0 52.89 -6.93 -23.89 69.3 2.60 0.629 0.124 3.0 52.64 -6.92 -23.65 69.7 2.61 0.615 0.122 Anchor weight λanc 0.1 53.23 -7.00 -23.20 70.6 2.65 0.627 0.125 0.2 54.86 -7.01 -23.65 69.7 2.64 0.608 0.124 Main-text final model (reference) 
+
+η = 1 × 10 −5, τ = 1 .5,
+
+λanc = 0 .2 57.79 -6.74 -23.26 71.5 2.75 0.607 0.127 
+
+Table 7: PepGLAD training-parameter sensitivity. Final and Rama allowed are percentages, and scRMSD Mainchain is measured in Å. The remaining metrics follow the definitions in the main text. Lower values are better for Vina, Rosetta ∆G, and scRMSD; higher values are better for the other metrics. The final model from the main text is included only as a reference to the main experimental result and is not part of the controlled comparison within each parameter block.
