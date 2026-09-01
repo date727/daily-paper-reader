@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-08-31
-- 运行时间：2026-09-01 00:14:31 UTC
+- 最新运行日期：2026-09-01
+- 运行时间：2026-09-01 22:49:56 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日聚焦生成模型与隐私安全领域的前沿进展，共推荐19篇论文  
-2) 精读篇目展现GAN与扩散模型融合、分布鲁棒性测试等突破性研究，速读内容覆盖隐私增强编码、信任攻击防御及可信AI工具开发  
-3) 建议对生成模型创新应用感兴趣的读者优先阅读精读篇目，关注隐私安全方向可浏览速读列表中相关论文
-- 详情：[/202608/31/README](/202608/31/README)
+1) 2026年9月1日AI论文阅读日报：精读7篇，速读12篇  
+2) 高分论文聚焦生成模型的分布性能与对抗鲁棒性，并探讨视觉中心AI模型的软硬件协同优化策略  
+3) 建议关注检索增强生成技术在实际场景中的可靠性挑战及视觉语言模型幻觉检测的最新进展
+- 详情：[/202609/01/README](/202609/01/README)
 
 ### 精读区论文标签
-1. [GAN-Diff : Coupling Pretrained WGAN-GP Features with Conditional Diffusion U-Nets](/202608/31/2608.22272v2-gan-diff--coupling-pretrained-wgan-gp-features-with-conditional-diffusion-u-nets)  
+1. [Sequential Euclidean connections with exponential memory: distributional performance and adversarial robustness](/202609/01/2608.25298v2-sequential-euclidean-connections-with-exponential-memory-distributional-performance-and-adversarial-robustness)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：GAN与扩散模型结合的图像修复框架
-2. [Generative Neural Networks for Sinkhorn Distributionally Robust Hypothesis Testing](/202608/31/2608.22746v1-generative-neural-networks-for-sinkhorn-distributionally-robust-hypothesis-testing)  
+   evidence：研究对抗扰动下的鲁棒性
+2. [Vision-centric generative AI models: A software-hardware perspective](/202609/01/2608.27199v1-vision-centric-generative-ai-models-a-software-hardware-perspective)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：图像生成技术的评估
+3. [Data Diversity, Not Frequency Invariance: A Controlled and Self-Audited Study of Compression-Robust Deepfake Detection](/202609/01/2608.28685v1-data-diversity-not-frequency-invariance-a-controlled-and-self-audited-study-of-compression-robust-deepfake-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性相关
-3. [TempJail: Temporal Jailbreak Attacks against Image-to-Video Generation Models](/202608/31/2608.26971v1-tempjail-temporal-jailbreak-attacks-against-image-to-video-generation-models)  
+   evidence：对抗扰动对图像生成模型的鲁棒性研究
+4. [ARMOR: Manifold-Oriented Training for Adversarially Robust Aerial Object Detection under Data Scarcity](/202609/01/2608.29510v1-armor-manifold-oriented-training-for-adversarially-robust-aerial-object-detection-under-data-scarcity)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：时间维度的对抗攻击方法
-4. [Attribute Token Arithmetic: Disentangled and Continuous Semantic Control for Visual Autoregressive Models](/202608/31/2608.28082v1-attribute-token-arithmetic-disentangled-and-continuous-semantic-control-for-visual-autoregressive-models)  
+   evidence：对抗攻击的图像防御策略
+5. [Audio-Driven Adversarial Defense for 3D Talking Face Generation with totally Visual Fidelity Preservation](/202609/01/2608.30951v1-audio-driven-adversarial-defense-for-3d-talking-face-generation-with-totally-visual-fidelity-preservation)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：视觉自回归模型的语义控制方法
-5. [GET: Generative Embedding Translation for Medical Image Segmentation](/202608/31/2608.22619v1-get-generative-embedding-translation-for-medical-image-segmentation)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-6. [Controllable blind deblurring with diffusion models](/202608/31/2608.23343v1-controllable-blind-deblurring-with-diffusion-models)  
+   evidence：对抗扰动用于图像防御
+6. [Retrieved But Not Reliable: A Survey on Attacks, and Defenses in Retrieval-Augmented Generation](/202609/01/2608.24977v1-retrieved-but-not-reliable-a-survey-on-attacks-and-defenses-in-retrieval-augmented-generation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-7. [An approximate zero bias transformation for random sums: Applications to sampling with outliers, auto insurance, and generative AI](/202608/31/2608.27143v1-an-approximate-zero-bias-transformation-for-random-sums-applications-to-sampling-with-outliers-auto-insurance-and-generative-ai)  
+   evidence：对抗攻击的图像防御策略
+7. [CAITLYN: Can LLM Agents Autonomously Synthesize Defenses against Emerging Injection Attacks?](/202609/01/2608.27990v1-caitlyn-can-llm-agents-autonomously-synthesize-defenses-against-emerging-injection-attacks)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动在生成AI中的应用
+   evidence：对抗攻击的图像防御策略
 
 ### 速读区论文标签
-1. [Spectrum-Aware Bounds on Invertibility for Privacy-Enhancing Instance Encoding](/202608/31/2608.23382v1-spectrum-aware-bounds-on-invertibility-for-privacy-enhancing-instance-encoding)  
+1. [Retrieved But Not Reliable: A Survey on Attacks, and Defenses in Retrieval-Augmented Generation](/202609/01/2608.24977v2-retrieved-but-not-reliable-a-survey-on-attacks-and-defenses-in-retrieval-augmented-generation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：图像对抗扰动安全防护
-2. [TrustShiftProbe: Characterizing, Benchmarking, and Defending Staged Trust Attacks on MCP Servers](/202608/31/2608.23763v1-trustshiftprobe-characterizing-benchmarking-and-defending-staged-trust-attacks-on-mcp-servers)  
+   evidence：对抗攻击的图像防御策略
+2. [Overview of SHROOM-Visions 2026: A Shared Task on Hallucination Detection in Large Vision-Language Models](/202609/01/2608.25662v2-overview-of-shroom-visions-2026-a-shared-task-on-hallucination-detection-in-large-vision-language-models)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：研究图像对抗攻击防御技术
-3. [Granite.Trust Policy Tools: Shareable, Actionable Policies for Generative AI Applications](/202608/31/2608.23870v1-granitetrust-policy-tools-shareable-actionable-policies-for-generative-ai-applications)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络在图像生成中的应用
-4. [RAGSentinel: Certifiable Geometric Consensus for Robust Retrieval-Augmented Generation](/202608/31/2608.23965v1-ragsentinel-certifiable-geometric-consensus-for-robust-retrieval-augmented-generation)  
+   evidence：对抗扰动下的图像生成模型检测任务
+3. [Adversarial Training of Linear Models under Stealthy Attacks](/202609/01/2608.25681v1-adversarial-training-of-linear-models-under-stealthy-attacks)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的生成模型保护
-5. [VISTA: Test-Time Compositional Alignment for Visual Autoregressive Generation](/202608/31/2608.22521v1-vista-test-time-compositional-alignment-for-visual-autoregressive-generation)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：研究图像对抗扰动下的模型保护
-6. [What Memory Composition Does Not Tell Us About Anomaly Detection](/202608/31/2608.23295v1-what-memory-composition-does-not-tell-us-about-anomaly-detection)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：基于对抗扰动的图像模型保护
-7. [Renormalization Group Flow Matching for Scalable Local Generative Modeling](/202608/31/2608.23696v1-renormalization-group-flow-matching-for-scalable-local-generative-modeling)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗鲁棒性
-8. [AgentWorld: Personality-Aware Reliability Evaluation for Agentic Information Retrieval](/202608/31/2608.24076v2-agentworld-personality-aware-reliability-evaluation-for-agentic-information-retrieval)  
-   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+4. [HypoForge: A Self-Improving Multi-Agent Framework for Automated Hypothesis Generation and Testing via Scientific Skill Learning](/202609/01/2608.25770v1-hypoforge-a-self-improving-multi-agent-framework-for-automated-hypothesis-generation-and-testing-via-scientific-skill-learning)  
+   标签：评分：8.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略相关
-9. [When Does Visual Generation Help Visual Understanding in Unified Multimodal Models?](/202608/31/2608.22174v1-when-does-visual-generation-help-visual-understanding-in-unified-multimodal-models)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对图像篡改的影响相关
-10. [Robust Bimanual Vision-Language-Action Models via Embarrassingly Simple Modality Masking](/202608/31/2608.22419v1-robust-bimanual-vision-language-action-models-via-embarrassingly-simple-modality-masking)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-11. [MorphoCLIP: Text-Supervised Contrastive Learning for Perturbation Matching in Cell Painting Images](/202608/31/2608.22690v1-morphoclip-text-supervised-contrastive-learning-for-perturbation-matching-in-cell-painting-images)  
-   标签：评分：6.0/10、query:image-adversarial
+5. [TEE-X: TEE-aware Acceleration Framework for Large Vision Models at the Edge](/202609/01/2608.22716v1-tee-x-tee-aware-acceleration-framework-for-large-vision-models-at-the-edge)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：图像对抗扰动生成技术
+6. [AnaDiffusion: Anatomically CompositionalLatent Diffusion for Controllable 3D Brain MRI Generation](/202609/01/2608.23014v1-anadiffusion-anatomically-compositionallatent-diffusion-for-controllable-3d-brain-mri-generation)  
+   标签：评分：7.0/10、query:image-adversarial
    evidence：生成式图像对抗扰动相关
-12. [Object-Uni: A Unified Model for Object-Centric Spatial Understanding and Controllable Generation](/202608/31/2608.22757v1-object-uni-a-unified-model-for-object-centric-spatial-understanding-and-controllable-generation)  
+7. [Evaluating Modern RAG: Textual, Multimodal, Dense, and Late Interaction Pipelines](/202609/01/2608.23176v1-evaluating-modern-rag-textual-multimodal-dense-and-late-interaction-pipelines)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：图像生成质量的评估方法
+8. [Representation Learning in Diffusion and Flow-based Model: An Application Aspect](/202609/01/2608.24068v1-representation-learning-in-diffusion-and-flow-based-model-an-application-aspect)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：探讨生成式图像对抗扰动
+9. [Misanthrope: A Privacy-Preserving Keypoint Detector](/202609/01/2608.23012v1-misanthrope-a-privacy-preserving-keypoint-detector)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
+   evidence：研究图像对抗攻击防御技术
+10. [NeuronGuard: Robust LLM Safety Alignment via Ablation-Aware Safety Signal Redistribution](/202609/01/2608.23959v1-neuronguard-robust-llm-safety-alignment-via-ablation-aware-safety-signal-redistribution)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗攻击下的模型安全
+11. [Are Android GUI Agents Robust Against Runtime Anomalies? AnTrap: Evaluating Agents in Dynamic Adversarial Environments](/202609/01/2608.24099v1-are-android-gui-agents-robust-against-runtime-anomalies-antrap-evaluating-agents-in-dynamic-adversarial-environments)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：动态对抗扰动评估
+12. [Example-based Robust Abnormality Detection with Minimal Annotations using Exemplar Med-DETR](/202609/01/2608.24281v1-example-based-robust-abnormality-detection-with-minimal-annotations-using-exemplar-med-detr)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗扰动下的医学图像检测方法
 
 
 ### ⚡ 这个站点能做什么
