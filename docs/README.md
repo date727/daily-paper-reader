@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-08-30
-- 运行时间：2026-08-30 22:27:42 UTC
+- 最新运行日期：2026-08-31
+- 运行时间：2026-09-01 00:14:31 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读7篇、速读12篇论文，聚焦扩散模型与对抗防御等前沿方向  
-高分论文集中探讨扩散模型的泛化机制与Mixture-of-Experts模型的对抗鲁棒性提升策略  
-建议优先阅读精读列表中关于扩散模型泛化与对抗防御的论文，或速读列表中涉及结构化训练扰动的研究以了解最新技术进展
-- 详情：[/202608/30/README](/202608/30/README)
+1) 今日聚焦生成模型与隐私安全领域的前沿进展，共推荐19篇论文  
+2) 精读篇目展现GAN与扩散模型融合、分布鲁棒性测试等突破性研究，速读内容覆盖隐私增强编码、信任攻击防御及可信AI工具开发  
+3) 建议对生成模型创新应用感兴趣的读者优先阅读精读篇目，关注隐私安全方向可浏览速读列表中相关论文
+- 详情：[/202608/31/README](/202608/31/README)
 
 ### 精读区论文标签
-1. [Generalization, memorization, and overfitting for diffusion models trained in the lazy high-dimensional regime](/202608/30/2608.23938v1-generalization-memorization-and-overfitting-for-diffusion-models-trained-in-the-lazy-high-dimensional-regime)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：研究扩散模型在图像生成中的表现
-2. [Robust CurveMoE: Multi-Norm Adversarial Defense for Mixture-of-Experts Models via Mode Connectivity](/202608/30/2608.26043v1-robust-curvemoe-multi-norm-adversarial-defense-for-mixture-of-experts-models-via-mode-connectivity)  
+1. [GAN-Diff : Coupling Pretrained WGAN-GP Features with Conditional Diffusion U-Nets](/202608/31/2608.22272v2-gan-diff--coupling-pretrained-wgan-gp-features-with-conditional-diffusion-u-nets)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：提出对抗攻击防御框架
-3. [RubricRM: Generative Reward Modeling via Dynamic Rubrics for Image Generation and Editing](/202608/30/2608.26956v1-rubricrm-generative-reward-modeling-via-dynamic-rubrics-for-image-generation-and-editing)  
+   evidence：GAN与扩散模型结合的图像修复框架
+2. [Generative Neural Networks for Sinkhorn Distributionally Robust Hypothesis Testing](/202608/31/2608.22746v1-generative-neural-networks-for-sinkhorn-distributionally-robust-hypothesis-testing)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动在图像生成中的应用
-4. [When Clean Data Hurts: Learning with Monotone Corruptions Beyond Binary Classification](/202608/30/2608.20480v1-when-clean-data-hurts-learning-with-monotone-corruptions-beyond-binary-classification)  
+   evidence：生成式图像对抗鲁棒性相关
+3. [TempJail: Temporal Jailbreak Attacks against Image-to-Video Generation Models](/202608/31/2608.26971v1-tempjail-temporal-jailbreak-attacks-against-image-to-video-generation-models)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：时间维度的对抗攻击方法
+4. [Attribute Token Arithmetic: Disentangled and Continuous Semantic Control for Visual Autoregressive Models](/202608/31/2608.28082v1-attribute-token-arithmetic-disentangled-and-continuous-semantic-control-for-visual-autoregressive-models)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：视觉自回归模型的语义控制方法
+5. [GET: Generative Embedding Translation for Medical Image Segmentation](/202608/31/2608.22619v1-get-generative-embedding-translation-for-medical-image-segmentation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络用于图像生成
+6. [Controllable blind deblurring with diffusion models](/202608/31/2608.23343v1-controllable-blind-deblurring-with-diffusion-models)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对数据学习的影响
-5. [Breaking High Confidence: Practical Face Impersonation under High-Security Thresholds](/202608/30/2608.20884v1-breaking-high-confidence-practical-face-impersonation-under-high-security-thresholds)  
+   evidence：对抗扰动下的图像模型保护
+7. [An approximate zero bias transformation for random sums: Applications to sampling with outliers, auto insurance, and generative AI](/202608/31/2608.27143v1-an-approximate-zero-bias-transformation-for-random-sums-applications-to-sampling-with-outliers-auto-insurance-and-generative-ai)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
-6. [ExplainGuard: A Zero Trust Framework for Post-Hoc Explanation Integrity Guarantees in Blackbox XAI Models](/202608/30/2608.21803v1-explainguard-a-zero-trust-framework-for-post-hoc-explanation-integrity-guarantees-in-blackbox-xai-models)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-7. [APT: Accelerating Diffusion Transformers via Attention Probability-Guided Pruning and Quantization](/202608/30/2608.25380v1-apt-accelerating-diffusion-transformers-via-attention-probability-guided-pruning-and-quantization)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：扩散模型优化技术
+   evidence：对抗扰动在生成AI中的应用
 
 ### 速读区论文标签
-1. [Complexity Induction: Compositional Generalization via Structured Label Distortion](/202608/30/2608.21464v1-complexity-induction-compositional-generalization-via-structured-label-distortion)  
+1. [Spectrum-Aware Bounds on Invertibility for Privacy-Enhancing Instance Encoding](/202608/31/2608.23382v1-spectrum-aware-bounds-on-invertibility-for-privacy-enhancing-instance-encoding)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动诱导模型泛化
-2. [Complexity Induction: Compositional Generalization via Structured Training Distortion](/202608/30/2608.21464v2-complexity-induction-compositional-generalization-via-structured-training-distortion)  
+   evidence：图像对抗扰动安全防护
+2. [TrustShiftProbe: Characterizing, Benchmarking, and Defending Staged Trust Attacks on MCP Servers](/202608/31/2608.23763v1-trustshiftprobe-characterizing-benchmarking-and-defending-staged-trust-attacks-on-mcp-servers)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动诱导模型泛化
-3. [Adversarial Agents on Topology Optimization: Understanding the Fragility and Robustness of Deep Learning-based and Physics-Based Design Models under Adversarial Perturbation](/202608/30/2608.22606v1-adversarial-agents-on-topology-optimization-understanding-the-fragility-and-robustness-of-deep-learning-based-and-physics-based-design-models-under-adversarial-perturbation)  
+   evidence：研究图像对抗攻击防御技术
+3. [Granite.Trust Policy Tools: Shareable, Actionable Policies for Generative AI Applications](/202608/31/2608.23870v1-granitetrust-policy-tools-shareable-actionable-policies-for-generative-ai-applications)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+4. [RAGSentinel: Certifiable Geometric Consensus for Robust Retrieval-Augmented Generation](/202608/31/2608.23965v1-ragsentinel-certifiable-geometric-consensus-for-robust-retrieval-augmented-generation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-4. [ChebBooster: A Training-Free Approach for Efficient Diffusion Transformer Inference via Chebyshev-Inspired Extrapolation](/202608/30/2608.23429v1-chebbooster-a-training-free-approach-for-efficient-diffusion-transformer-inference-via-chebyshev-inspired-extrapolation)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：提出训练无关的扩散变换推理加速方法
-5. [Close Shortcut Wins Long: Seeking Diverse and Stable Generators for Data-Free Knowledge Distillation](/202608/30/2608.22003v1-close-shortcut-wins-long-seeking-diverse-and-stable-generators-for-data-free-knowledge-distillation)  
+   evidence：对抗攻击下的生成模型保护
+5. [VISTA: Test-Time Compositional Alignment for Visual Autoregressive Generation](/202608/31/2608.22521v1-vista-test-time-compositional-alignment-for-visual-autoregressive-generation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：提出数据无关的知识蒸馏生成器框架
-6. [HAP: Head-Adaptive Visual Token Pruning via Cross-Modal Alignment](/202608/30/2608.23921v1-hap-head-adaptive-visual-token-pruning-via-cross-modal-alignment)  
+   evidence：研究图像对抗扰动下的模型保护
+6. [What Memory Composition Does Not Tell Us About Anomaly Detection](/202608/31/2608.23295v1-what-memory-composition-does-not-tell-us-about-anomaly-detection)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：研究对抗扰动下的视觉标记剪枝
-7. [STAIN-FL: Stealthy Targeted Attack Injection with Contextual Triggers in Federated Learning](/202608/30/2608.23952v1-stain-fl-stealthy-targeted-attack-injection-with-contextual-triggers-in-federated-learning)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-8. [GGSS: Geodesic-Gated Spherical Steering for Inference-Time Debiasing of Generative Vision-Language Models](/202608/30/2608.25375v1-ggss-geodesic-gated-spherical-steering-for-inference-time-debiasing-of-generative-vision-language-models)  
+   evidence：基于对抗扰动的图像模型保护
+7. [Renormalization Group Flow Matching for Scalable Local Generative Modeling](/202608/31/2608.23696v1-renormalization-group-flow-matching-for-scalable-local-generative-modeling)  
    标签：评分：7.0/10、query:image-adversarial
    evidence：生成式图像对抗鲁棒性
-9. [Mitigating Database Leakage in RAG Systems with Keyword-Grounded Fact Substitution](/202608/30/2608.21656v1-mitigating-database-leakage-in-rag-systems-with-keyword-grounded-fact-substitution)  
+8. [AgentWorld: Personality-Aware Reliability Evaluation for Agentic Information Retrieval](/202608/31/2608.24076v2-agentworld-personality-aware-reliability-evaluation-for-agentic-information-retrieval)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略相关
+9. [When Does Visual Generation Help Visual Understanding in Unified Multimodal Models?](/202608/31/2608.22174v1-when-does-visual-generation-help-visual-understanding-in-unified-multimodal-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：基于关键词的事实替换防御方法
-10. [Autonomous Cyber Defense: Real-Time Attack Detection and Mitigation in Software-Defined Networks Using Machine Learning](/202608/30/2608.22075v2-autonomous-cyber-defense-real-time-attack-detection-and-mitigation-in-software-defined-networks-using-machine-learning)  
+   evidence：对抗扰动对图像篡改的影响相关
+10. [Robust Bimanual Vision-Language-Action Models via Embarrassingly Simple Modality Masking](/202608/31/2608.22419v1-robust-bimanual-vision-language-action-models-via-embarrassingly-simple-modality-masking)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：实时攻击检测与防御系统
-11. [Autonomous Cyber Defense: Real-Time Attack Detection and Mitigation in Software-Defined Networks Using Machine Learning](/202608/30/2608.22075v3-autonomous-cyber-defense-real-time-attack-detection-and-mitigation-in-software-defined-networks-using-machine-learning)  
+   evidence：对抗扰动下的图像模型保护
+11. [MorphoCLIP: Text-Supervised Contrastive Learning for Perturbation Matching in Cell Painting Images](/202608/31/2608.22690v1-morphoclip-text-supervised-contrastive-learning-for-perturbation-matching-in-cell-painting-images)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：实时自动防御框架
-12. [Model-Consistent Byzantine-Resilient Decentralized Federated Learning for Collaborative Missions](/202608/30/2608.22552v1-model-consistent-byzantine-resilient-decentralized-federated-learning-for-collaborative-missions)  
+   evidence：生成式图像对抗扰动相关
+12. [Object-Uni: A Unified Model for Object-Centric Spatial Understanding and Controllable Generation](/202608/31/2608.22757v1-object-uni-a-unified-model-for-object-centric-spatial-understanding-and-controllable-generation)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
+   evidence：生成式图像对抗扰动
 
 
 ### ⚡ 这个站点能做什么

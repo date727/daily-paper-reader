@@ -1,0 +1,1675 @@
+Title: Spectrum-Aware Bounds on Invertibility for Privacy-Enhancing Instance Encoding
+
+URL Source: https://arxiv.org/pdf/2608.23382v1
+
+Published Time: Tue, 25 Aug 2026 02:27:41 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# Spectrum-Aware Bounds on Invertibility for Privacy-Enhancing Instance Encoding 
+
+# Seokjin Hwang ∗
+
+# The Pennsylvania State University 
+
+# Yuting (Ray) Li ∗
+
+# The Pennsylvania State University 
+
+# Kiwan Maeng 
+
+# The Pennsylvania State University 
+
+# Abstract 
+
+Instance encoding is a popular empirical technique for pri-vacy enhancement when sharing data to an untrusted server. It transforms sensitive data through an encoding process before sharing, with the hope that the encoding process retains utility but makes it hard to reconstruct the original data. However, most work offers no theoretical guarantee that the encod-ing process is actually irreversible. A recent work derived a mean-squared error (MSE) bound limiting any adversary’s reconstruction accuracy, offering one of the first theoretical results in this domain. This bound, however, has three critical limitations: it is often too loose, only works with randomized encoders (excluding many deterministic encoders practition-ers use), and only bounds MSE. We introduce a family of new bounds that (1) are tighter, (2) applicable even to fully deterministic encoders, and (3) can extend beyond MSE to other norm-based similarity metrics, by properly accounting for the encoder’s spectral structure. We evaluate our bounds across a range of encoders, datasets, and attacks, showing they hold consistently and improve upon the existing bound. 
+
+# 1 Introduction 
+
+Machine learning (ML) applications frequently operate on sensitive data during both training and inference. A medical model that predicts a diagnosis from a patient’s X-ray im-age [1], for instance, takes protected health information as its input. When training or inference runs on a remote server that users neither trust nor control, users must send their sensitive data to the server—exposing it to privacy risks .
+
+Instance encoding [3] is a popular heuristic approach to improving privacy in such settings. The idea is to process the sensitive data with a privacy-enhancing encoder that outputs an embedding , and to release the embedding instead of the raw data (Figure 1). The hope is that a suitably designed 
+
+> ∗Equal contribution.
+
+encoder makes it hard to invert the embedding and recover the original data, while still preserving enough information for downstream tasks, such as training or inference. The same idea appears under a variety of names: data obfuscation [61, 63], learnable encryption [22,58,59,61,62], split learning [42, 52], split inference [10,26,33], and vertical federated learning (vFL) [32, 49, 65] all build on the same idea. Unfortunately, most existing work in this area is heuristic and lacks a rigorous theoretical foundation: it is unclear what privacy properties, if any, these encoders actually provide. Relying on empirical evaluation alone is unsound, since a scheme that can resist all known attacks and considered safe may later be successfully attacked. In fact, the community has already seen several such failures [3, 4]. It is therefore important to understand, in a principled way, which privacy properties these encoders do and do not provide, and how the invertibility of an encoder can be quantified. One notable step in this direction is the work of Maeng et al. [35], who derived a mean-squared error (MSE) bound limiting how precisely an (arbitrarily strong) adversary can reconstruct the original data from its embedding (Section 3.1). While this work made important progress towards a theo-retical foundation, its bound has several limitations. First, although tight in some cases, the bound becomes very loose in other cases. Second, it applies only to randomized en-coders. This renders it inapplicable to many DNN-based encoders proposed by practitioners, which has no random-ness [8, 31–33, 45, 53, 54, 63]. Finally, the bound only con-strains the MSE between the original and reconstructed data. MSE, while frequently used as a proxy to data simi-larity [17, 35], is not always a faithful measure of the recon-struction quality: a reconstruction can have high MSE while still leaking sensitive semantic information, or low MSE with-out meaningful leakage. In this paper, we provide a set of improved bounds that address these limitations. Our new bounds better account for the spectral geometry of the encoder, yielding tighter bounds in cases where the prior work [35] fell short. Our bounds also stay non-trivial even when the encoder induces no ran-1arXiv:2608.23382v1 [cs.LG] 24 Aug 2026 Enc        
+
+> sensitive 𝑥𝑥 embedding e
+> Trusted user device Untrusted service
+> Run training/ inference
+> Q: Can an attacker reconstruct 𝑥𝑥 from e?
+
+Figure 1: The idea of instance encoding and its invertibility. domness, by correctly capturing how the information loss through the encoder’s spectral geometry makes reconstruc-tion harder. Finally, our bounds generalize beyond MSE to other norm-based similarity metrics, such as LPIPS [66] or CLIP score [43]. Our bounds are not only tighter but also match our intuition. The bounds go up (improved privacy) when the encoder discards informative directions, especially those the prior constrains weakly or that the similarity metric (e.g. , LPIPS) is most sensitive to. Below, we summarize our contributions: • We improve the bound from Maeng et al. [35] (Corollary 1), yielding a much tighter bound for cases where the encoder’s randomness is small and privacy mainly stems from the encoder’s geometry. • We extend the bound to hold even when the encoder adds no randomness at all (Corollary 2). This adds practicality to the bound, as many encoders used by practitioners do not incorporate any randomness [8, 31–33, 45, 53, 54, 63]. • We extend the bounds to other similarity metrics (Theo-rem 2 and Corollary 3), such as LPIPS. This allows us to bound a more semantically meaningful metric than MSE. • We develop an improved method (compared to that of Maeng et al. [35]) for estimating the dataset prior, which is required for the bound, using well-trained generative mod-els ( e.g. , DDPM [21]). This is not our core contribution but has practical value to the community. • We evaluate our new set of bounds on two image datasets (MNIST [7] and CIFAR-10 [29]), two similarity metrics (MSE and LPIPS [66]), and various encoders, showing that the bounds are effective and tight in many cases. We also show that the bound can serve as a reasonable proxy for measuring the invertibility of privacy-enhancing encoders. 
+
+# 2 Background: Instance Encoding 
+
+Instance encoding refers to a family of techniques that trans-form a secret input x ∈ Rd into an embedding e ∈ Rm using a privacy-enhancing encoder Enc : Rd → Rm, and share e
+
+with untrusted parties instead of x (Figure 1). The goal is to design an encoder such that training and inference can still be performed using the embedding e, while the original data 
+
+x cannot be reconstructed from e. While this idea has been popular in the community [11, 19, 22, 32, 34, 38, 39, 49, 52, 54, 56, 58, 62, 63], most prior work relies on empirical arguments rather than theoretical ones to claim that their encoders are non-invertible, e.g. , by testing against a few known attacks. 
+
+Types of encoders. Numerous different proposals exist for how to design such a privacy-enhancing encoder. The vast majority of proposals in this area use a deep neural network (DNN) as the encoder [32, 33, 42, 49, 52–54, 59, 62], with variations. Most use a DNN trained with various techniques to (hopefully) resist input reconstruction attacks [53, 54], while others use DNNs with random weights [59, 62, 63]. Some add noise to the encoder to introduce randomness [11, 20, 27, 35, 38–40, 50, 56], while others use a deterministic DNN [32, 33, 45, 53, 63]. This paper mostly focuses on such DNN-based encoders, although our bounds are applicable to a broader class of encoders (Section 3). 
+
+Theoretical arguments for instance encoding. The field was largely devoid of theoretical analysis [35], but a few re-cent works have made progress. Carlini et al. [3] proved a neg-ative result: instance encoding cannot simultaneously achieve strong data indistinguishability and utility [3]. Thus, one must aim for a weaker guarantee, e.g. , non-invertibility, which pro-hibits near-exact reconstruction of the original data. This is also why simply applying the popular differential privacy (DP) framework to instance encoding [11, 56] and claiming safety is insufficient: DP guarantees data indistinguishability, but any meaningfully strong DP guarantee is incompatible with utility in instance encoding [3]. Maeng et al. [35] were among the first to derive a mean-squared error (MSE) bound that limits the adversary’s recon-struction accuracy. Our work mainly compares against this prior work, so we discuss it in more detail in Section 3.1. There is other relevant work that is largely orthogonal to ours. One line of work [13, 14, 24, 37, 46] instead adopts metric 
+
+DP, guaranteeing that changes within some ℓp ball of the input cannot be distinguished by looking at the embedding. These approaches have two limitations: (1) in many cases, changes in the ℓp do not have an interpretable meaning, es-pecially when defined in some latent space [37, 44, 46], and their privacy becomes highly empirical; and (2) they cannot easily be applied to DNN-based encoders, since it requires computing the sensitivity (Lipschitz constant) of the DNN encoder, which is known to be NP-hard [57]. Another line of work [60, 61] proposed a framework called PAC privacy and showed that a bound more general than that of Maeng et al. [35] (and ours) is possible ; however, their possibility results are purely theoretical, and their bound has never been evaluated against realistic attacks. We do not directly compare with these alternate directions. 23 Bounding the Encoder’s Invertibility Through its Spectral Geometry 
+
+Threat model. We assume the problem setup shown in Figure 1. Our goal is to estimate how accurately an attacker can reconstruct the input x ∼ π by observing e, through an attack ˆ x = Att (e). We assume a strong attacker who knows the encoder Enc and the data prior π, and who can leverage this knowledge arbitrarily to mount the best possible attack. This threat model matches that of Maeng et al. [35] and is much stronger than the adversaries commonly assumed in other work, which assume that the adversary does not know 
+
+π [17] and/or Enc [33, 58, 59, 62, 63]. 
+
+# 3.1 Bound from Prior Work (Maeng et al. [35]) 
+
+Maeng et al. [35] proposed one of the first reconstruction bounds in this setup. Their bound requires the encoder to be differentiable and randomized. To accommodate DNN-based encoders popular among practitioners [8, 31–33, 45, 53, 54, 63]—which are generally neither differentiable nor randomized—they made two changes to commonly used DNNs: (1) non-differentiable operators ( e.g. , ReLU or Max-Pool) were replaced with differentiable approximations ( e.g. ,GELU or AvgPool), and (2) Gaussian noise was added to the encoder output. That is, if Enc D(x) is the deterministic encoder DNN (with non-differentiable components replaced), the encoder they studied can be expressed as Enc (x) = 
+
+Enc D(x) + N (0, σ2Im).For this type of encoder, Maeng et al. [35] showed that the mean-squared error (MSE) between the original input x
+
+and the reconstruction ˆ x obtained by any adversary is lower-bounded in terms of the encoder’s Fisher information matrix (FIM), defined as: 
+
+Ie(x) = 1
+
+σ2 JEnc D (x)⊤JEnc D (x), (1) where JEnc D (x) is the Jacobian of Enc D with respect to x.Their bound, and all of ours, rests on the following regularity conditions. 
+
+Assumption 1 The prior π admits a density; the joint density p(e, x) = π(x) p(e | x) is absolutely continuous in x for a.e. e; the score s π(x) = ∇x log π(x) and S = E[sπ(x) sπ(x)⊤] exist and are finite; and Ie(x) exists with diag (Ie(x)) 1/2 locally integrable in x. 
+
+While some data may naturally satisfy these assumptions, the distribution of commonly used datasets, e.g. , natural images, are not absolutely continuous. Maeng et al. [35] therefore worked with smoothed images [5] instead, where a small amount of Gaussian noise was added to each image. Our eval-uation also uses such smoothed images. Under Assumption 1, Maeng et al. [35] showed the following. 
+
+Theorem 1 (Bound from [35]) Under Assumption 1, sup-pose further that p (e, x) → 0 as ∥x∥ → ∞ for a.e. e, and that E Tr (Ie(x))  + Tr (S) is finite and nonzero. For a d-dimensional input x, the following holds for any ˆx = Att (e):
+
+E∥ ˆx − x∥22/d ≥ d
+
+E Tr (Ie(x))  + Tr (S) . (2) 
+
+Limitations of Maeng et al. [35] The bound from Theo-rem 1 has critical issues that limit its applicability. First, the bound becomes smaller as less noise σ is added, and becomes trivial ( i.e. , zero) when σ = 0. This may be tight for encoders that are genuinely easy to invert without much noise, but it is very loose for others; practitioners have shown that many encoders, especially DNN-based ones, are hard to invert even when little or no randomness is added [8,31–33,45,53,54,63]. For these encoders, the bound incorrectly suggests that the encoder is easy to invert (because little or no noise is added), when in fact it is not. Second, the bound only constrains the MSE of the recon-struction. While MSE between the original and reconstructed inputs has been used as a proxy for reconstruction quality in much prior work [17,18,35], it is known that MSE is not an ac-curate measure of semantic similarity. Other similarity metrics are considered better proxies for semantic similarity—such as LPIPS [66] or CLIP score [43] for images, and sentence embedding similarity [30] for natural language. We introduce a set of alternative bounds that address these issues. 
+
+# 3.2 Bounds with the Spectral Geometry 
+
+First, we introduce a new bound that is tighter than the bound of Maeng et al. [35] (Theorem 1) when the noise added to the encoder is small. Unlike Theorem 1, which relies on a scalar summary of the encoder’s spectral geometry (through the term Tr (Ie(x)) ), our bound makes better use of the full spectral geometry information. We derive the bound by extending the van Trees inequality, and hence present it as a Corollary. Maeng et al. [35] also derived their bound from the van Trees inequality [16], but we use an alternative matrix form [2]. For completeness, the form we use is restated in Appendix A.2, and the proof is given in Appendix A.4. 
+
+Corollary 1 (Improved MSE bound) Under Assumption 1, suppose further that x p (e, x) → 0 as ∥x∥ → ∞ for a.e. e, and that EIe(x) + S is non-singular. Then the following holds for any attack ˆx = Att (e):
+
+E∥ ˆx − x∥22/d ≥ 1
+
+d Tr 
+
+ EIe(x) + S−1
+
+. (3) Again, using smoothed images (or any other dataset that natu-rally meets the assumptions) allow us to use the bound. The bound from Corollary 1 looks similar to that from The-orem 1 but has one crucial difference that makes it tighter for 3smaller σ: Theorem 1 takes the inverse of the trace , while our bound (Corollary 1) takes the trace of the inverse . To high-light this difference, simply let S = 0, and let λ1, λ2, . . . , λd
+
+be the eigenvalues of EIe(x). Since the trace of a square matrix equals the sum of its eigenvalues, the right-hand side of Theorem 1 becomes d 
+
+> λ1+λ2+··· +λd
+
+, whereas the right-hand side of Corollary 1 becomes 1
+
+> d
+
+ 1 
+
+> λ1
+
++ 1 
+
+> λ2
+
++ · · · + 1
+
+> λd
+
+
+
+. The two become identical when all eigenvalues are equal ( i.e. , when the encoder is isotropic), but otherwise, the latter is always at least as large. Colloquially, an encoder can be seen as projecting the input into an embedding space, where the eigenvalues of its (ex-pected) FIM describe how strongly information along each direction survives. An isotropic encoder preserves informa-tion equally along every direction. An anisotropic encoder, on the other hand, amplifies certain directions while attenuating or discarding others—the latter intuitively enhances privacy better. Our bound is tighter for anisotropic encoders because it explicitly accounts for this directional structure ( e.g. , the encoder’s spectral geometry), correctly predicting that some encoders are harder to invert—even without much noise—if they discard enough directional information. Later, in Sec-tion 6, we show that our new bound (Corollary 1) is indeed much tighter than that from prior work (Theorem 1). 
+
+# 3.3 Bound in the Case of Zero Noise Addition 
+
+Our new bound (Corollary 1) still collapses to zero when there is no noise at all ( σ = 0). This makes the bound still inapplicable to many privacy-enhancing encoders that do not add any noise. We therefore extend Corollary 1 to cover such noise-free encoders. For notational simplicity, we define 
+
+G(x) = JEnc D (x)⊤JEnc D (x) (i.e. , Ie(x) = 1 
+
+> σ2
+
+G(x)). The proof is given in Appendix A.4. 
+
+Corollary 2 (Noise-free MSE bound) Let r = rank (EG),and let U ∈ Rd×(d−r) be an orthonormal basis for null (EG).Then, 
+
+E|| ˆx − x|| 22/d ≥ lim 
+
+> σ→0
+
+1
+
+d Tr 
+
+ EIe(x) + S−1
+
+(4) 
+
+= lim 
+
+> σ→0
+
+1
+
+d Tr 
+
+  1
+
+σ2 EG + S−1
+
+(5) 
+
+= 1
+
+d Tr 
+
+
+
+(U⊤SU )−1
+
+. (6) 
+
+When EG is full rank (r = d), the bound collapses to zero. 
+
+Corollary 2 gives a non-trivial bound even when no noise is added to the encoder. Even when the encoder is determin-istic, the rank of the expected FIM over the prior limits the adversary’s reconstruction accuracy. Specifically, the attack becomes harder as EG becomes lower-rank ( r < d). This matches our intuition: if the encoder captures information only along a consistent, low-dimensional subspace and dis-cards the rest, the privacy of the input will enhance. The bound also shows that reconstruction is easier ( i.e. ,the bound is smaller) when the null space contains directions along which S has large eigenvalues. This again matches our intuition: even if the encoder discards directions where S
+
+has large eigenvalues ( i.e. , directions that the prior already constrains tightly), such directions are easier to guess from the prior. To summarize, our new bounds show that reconstruction is harder when: (1) the encoder discards more informative directions, and (2) the discarded directions are ones that are hard to guess from the prior (small eigenvalues in S). 
+
+# 4 Extending to Metrics Beyond MSE 
+
+Next, we discuss how the bounds from Section 3 can be ex-tended to other popular metrics that are considered to better capture the semantic similarity between data points. Specif-ically, we consider norm-based metrics, where the input is projected into some high-dimensional space via a function 
+
+Ψ(x), and similarity is measured by the (squared) ℓ2-norm in that space, i.e. , ∥Ψ(x1) − Ψ(x2)∥2. This general form covers a wide range of popular metrics: when comparing two images, popular metrics such as LPIPS [66] and CLIP [43]; and in the data retrieval literature, vector databases [30] often measure relatedness between data points using the ℓ2 distance between their representations in a high-dimensional embedding space. This section applies broadly to this large family of ℓ2-based similarity metrics. 
+
+# 4.1 Bounding the ℓ2-Norm for Function Ψ
+
+First, we derive a bound for a general function Ψ, when the encoder has randomness. Our bound is an extension of the generalized form of the multivariate van Trees inequality from Gill & Levit [16], restated in Appendix A.3, and proof is in Appendix A.4. 
+
+Theorem 2 ( Ψ-bound) Let Ψ : Rd → Rk be a twice-differentiable function, with J Ψ = ∂Ψ /∂x. Let P 1 and P 2 be two orthogonal projectors that are orthogonal to each other and P 1 + P2 = Id (it can be generalized to arbitrary number of projectors, but we keep it two for simplicity). Define for g ∈ { 1, 2}:ng = E JΨPg 2
+
+> F
+
+, tg = ∆gΨ + JΨPgsπ,
+
+where Ψi : Rd → R is the i-th component of Ψ, and the i-th row of ∆gΨ is (∆gΨ)i = Tr  Pg ∇2Ψi
+
+. Next, we define a 2 × 2
+
+matrix D, with the following (i, j)-th elements: Di j = 1
+
+σ2 E
+
+h
+
+⟨JEnc D PiJ⊤ 
+
+> Ψ
+
+, JEnc D PjJ⊤ 
+
+> Ψ
+
+⟩F
+
+i
+
++ E ti, t j
+
+,
+
+where ⟨· , ·⟩ F is a Frobenius inner product. Suppose Assump-tion 1 holds, that J Ψ(x)Pg p(e, x) → 0 as ∥x∥ → ∞ for a.e. e 
+
+4and each g, that the moments n g and D i j are finite, and that D ≻ 0. Then for any attacker ˆx = Att (e),
+
+E ∥Ψ( ˆx) − Ψ(x)∥2 ≥ n⊤D−1n, n = [ n1 n2]⊤. (7) The LPIPS bound may be hard to interpret. To make the interpretation easier, consider the case where P1 and P2 are chosen to be the projectors onto the range space and null space of EG, respectively (call them Pr and Pn, with their respective t and n vectors denoted tr, tn, nr, and nn; note that 
+
+EG is symmetric, and null (EG⊤) = null (EG)). Then 
+
+JEnc D Pr = JEnc D and JEnc D Pn = 0 for π-almost every x, and: 
+
+D = 1 
+
+> σ2
+
+E
+
+h
+
+∥JEnc D J⊤ 
+
+> Ψ
+
+∥2
+
+> F
+
+i
+
++ E tr, tr
+
+ E tr, tn
+
+
+
+E tn, tr
+
+ E tn, tn
+
+!
+
+.
+
+When the encoder discards exactly the directions that Ψ cares about ( i.e. , JΨ and Pn are well aligned), nn is large while 
+
+nr is small, and the dominating term in n⊤D−1n becomes 
+
+n2n/E tn, tn
+
+, which is finite and does not scale with 1 /σ2.In other words, the bound stays large no matter how noisy the encoder is—because the encoder’s spectral geometry discards the very information that Ψ needs anyway. If the encoder instead preserves the directions that Ψ cap-tures ( i.e. , JΨ and Pr are well aligned), nr is large while nn is small. Now the term with 1 /σ2 dominates. This makes the bound driven primarily by the noise in the encoder, and the bound collapses as the noise approaches zero. Again, this is intuitive—since the encoder preserves the information rele-vant to Ψ, a large amount of noise must be added to prevent precise reconstruction under the Ψ-metric. 
+
+# 4.2 Extending with Zero Noise 
+
+Next, we extend the Ψ-bound to the case where no noise is added to the encoder output ( σ = 0), analogous to Corollary 2. The bound is nontrivial only when EG is not full rank. 
+
+Corollary 3 (Zero-noise Ψ-bound) From Theorem 2, let P r
+
+be the projector onto the range space range (EG), and let P n
+
+be the projector onto the null space null (EG). Let t r, t n, n r,and n n be the respective t and n vectors for P r and P n. Then, as σ → 0,n⊤D−1n −→ n2n
+
+E∥tn∥2 =
+
+ E∥JΨPn∥2
+
+> F
+
+ 2
+
+E ∆nΨ + JΨPnsπ 2 .
+
+Again, the numerator nn = E∥JΨPn∥2
+
+> F
+
+ measures how sen-sitive Ψ is to the directions the encoder discards. A large numerator means the encoder is discarding the directions that 
+
+Ψ cares, and hence privacy improves (bound goes up). If the encoder instead preserves the directions that Ψ cares, the nu-merator shrinks and the bound goes down. When EG is full rank ( r = d), the bound becomes zero. The lesson from this bound is similar to that of Theorem 2: a privacy-enhancing encoder with respect to Ψ should (1) have low rank ( r ≪ d), 
+
+i.e. , discard as many informative directions as possible, and, especially, (2) discard the directions that Ψ cares about. 
+
+# 5 Practical Considerations 
+
+In this section, we discuss several practical considerations for calculating and applying the bound in real-world use cases. 
+
+# 5.1 Choosing P1 and P2
+
+In Theorem 2, any choice of orthogonal projectors P1 and 
+
+P2 (or even more than two projectors) gives a valid bound, though different choices yield different tightness. Throughout the rest of the paper, we choose P1 = Pr and P2 = Pn—the projectors onto the range space and null space of EG, re-spectively. This choice is easy to interpret and connects well to Corollary 3, but it may not yield an optimal bound. As our evaluation will show, our LPIPS bound is not always tight, and a tighter bound may be achievable by choosing a differ-ent set of projectors (likely more than two). We leave such improvements to future work. 
+
+# 5.2 Estimating S
+
+To use the new bounds, one must calculate S =
+
+Eπ
+
+sπ(x)sπ(x)⊤, where sπ(x) = ∇x log π(x) is the score of each input x. For image datasets, Maeng et al. [35] used a technique called sliced score matching [47] to train a model called NICE [9], which predicts sπ(x) from x. Instead, we show that a well-trained, off-the-shelf diffusion model (in par-ticular, DDPM [21]) can be used to predict sπ(x). We show in Section 6.4.1 that our method provides a better estimate than a trained NICE [9] model; this is an additional contribution of our work. DDPM starts from a maximally noisy image xT and de-noises it back to xT −1, xT −2, . . . , x0, where xt is the noisy image at step t and x0 is the original, noise-free image. A key component of DDPM is training a model εθ(xt ,t), which pre-dicts the noise present in the image at step t. Song et al. [48] showed that there is a relationship between εθ(xt ,t) and sπ(x);specifically, sπt (xt ) = −εθ(xt ,t)/√1 − ¯αt , where ¯ αt is a coef-ficient determined by the noise schedule (provided with the pretrained model), and πt is the distribution of xt .Recall that we operate on a smoothed ( i.e. , slightly noisy) image x = x0 + N (0, σ2 
+
+> s
+
+Id ), for some small σs. In DDPM, 
+
+xt = √ ¯αt
+
+ x0 + p(1 − ¯αt )/ ¯αt z, where z ∼ N (0, Id ). If we choose t such that p(1 − ¯αt )/ ¯αt = σs, then xt = √ ¯αt x, and 
+
+sπ(x) = √ ¯αt sπt (xt ) = −p ¯αt /(1 − ¯αt ) εθ
+
+ √ ¯αt x, t.
+
+This allows us to calculate the score function sπ(x) using a trained DDPM. 5Throughout our evaluation, we download publicly available, well-trained DDPMs (for MNIST [12] and CIFAR-10 [55]) and use them to estimate sπ(x). Then, S = Esπ(x)sπ(x)⊤ is calculated by averaging over all images in the training set. Note that DDPM assumes pixel values in [−1, 1], so a scaling factor of 2 must be applied when using pixel values in [0, 1].
+
+# 5.3 Estimating EG
+
+Calculating the bounds requires (1) estimating EG, and (2) separating its range space and null space. Correctly estimating 
+
+EG is required for all four bounds. Correctly separating its null space and range space is needed for the noiseless bounds (Corollary 2 and Corollary 3). 
+
+Estimating EG. Estimating EG over π requires calcu-lating JEnc D (x) and averaging over x ∼ π. For efficiency, we sample k images from the training data and average over the sampled images. Ideally, using the entire training set gives the most accurate estimate of the bound, but we empirically find that a smaller k suffices in most cases. The effect of the choice of k is further evaluated in Section 6.4.2. 
+
+Splitting range and null space. The bounds from Corol-lary 2 and Corollary 3 (the bounds for σ = 0) require splitting the range space and null space of EG. While one can obtain the exact null space from EG once it is estimated, using this exact null space often gives a correct but conservative bound, because any subspace with a negligibly small but still nonzero eigenvalue is treated as part of the range space. Alternatively, we explore setting a threshold τ and treating subspaces whose eigenvalues are smaller than τ · λmax as null, where λmax is the largest eigenvalue of EG. We empirically find that this gives a tighter bound. The effect of different choices of τ is evaluated in Section 6.4.3. 
+
+Calculating JEnc D (x). JEnc D (x) is an m × d matrix. Since privacy-enhancing encoders usually have a small output di-mension m, the entire JEnc D (x) can typically be materialized at once in modern GPU memory. When this is not possible, we instead calculate it column-by-column using a Jacobian-vector product (jvp). 
+
+# 5.4 Estimating Other Terms in Theorem 2 
+
+Estimating ng = E∥JΨPg∥2
+
+> F
+
+, E⟨ti,t j⟩, E
+
+h
+
+∥JEnc D J⊤ 
+
+> Ψ
+
+∥2
+
+> F
+
+i
+
+,and Tr  Pg∇2Ψi
+
+—the remaining terms of Theorem 2—is even more expensive, because Ψ’s output dimension is large for LPIPS. Thus, we estimate these quantities through Rademacher probes [23]. Throughout we use 16 probes per input, averaged over 8 inputs. We confirmed that increasing the number of probes beyond this provides diminishing re-turn. Admittedly, averaging over more inputs may improve the bound further, but our LPIPS bounds are always valid with this approximated estimation. 
+
+# 5.5 Bound as a Proxy for Invertibility 
+
+As we will show in our evaluation, when the MSE or LPIPS bound is small, it is a strong indicator that the encoder’s privacy-enhancing property is weak, i.e. , that the original input can be reconstructed easily. However, the absolute value of the bound becomes less informative as it grows and starts to saturate. For example, for the MNIST dataset, an attacker can still achieve a reasonably low MSE or LPIPS by drawing white, squiggly, “number-like” lines on a black background, even when the attack fails to reconstruct any meaningful in-formation. This is a fundamental issue with norm-based sim-ilarity metrics—the meaning of their absolute value heavily depends on context. This makes using the absolute number of the bound ill-suited as a measure for privacy. However, we empirically observe that the ratio between the bound and its ceiling —the bound that would be achieved if the encoder conveyed no information at all—is still a reasonable indicator of the encoder’s privacy-enhancing properties. In particular, we find that the ratio computed from the MSE bound works better, because this bound is tighter and less flat in the hard-to-reconstruct regions (as we later show in Section 6). From the observation, we define the following metric and call it the ratio to ceiling , or RTC :RTC : = log (ceiling of the MSE bound) (actual MSE bound) ,
+
+where log is the natural logarithm (base e). The idea behind RTC follows popular privacy definitions that measure privacy as the (log of the) ratio between the adversary’s belief before and after a privacy-leaking observation [15, 28, 64]. Essen-tially, RTC measures how much the bound has shifted— i.e. ,how much easier reconstruction became—after the adversary observes the encoder’s output, compared to guessing based on the prior π alone. A lower RTC indicates better privacy, and RTC = 0 implies that the bound collapses to the prior-only bound (the ceiling). We show in Section 6.5 that RTC serves as a reasonable empirical metric for privacy. To summarize, our bounds serve two practical purposes: (1) when the absolute value of the bounded metric has direct interpretation ( e.g. , bounding the MSE of weight or height of a patient), the bound can directly limit them from being reconstructed; and (2) even when the bounded metric is only loosely indicative of the reconstruction quality ( e.g. , as in MSE for natural images), the ratio between the bound and the ceiling of the bound ( i.e. , RTC) serves as a theoretically-principled indicator for reconstruction hardness. 
+
+# 6 Evaluation 
+
+Our evaluation aims to answer the following questions regard-ing our new bounds (Corollaries 1, 2, and 3, and Theorem 2): • Do they work across attacks, encoders, and datasets? • Are they tighter than the bound of Maeng et al. [35]? 610 1 10 2 10 3 10 4 10 5
+
+Embedding dim ( m)10 −8
+
+10 −5
+
+10 −2
+
+> Recon. MSE
+
+(a) Gaussian, σ = 10 −3
+
+m = r < dm > d = r
+
+10 1 10 2 10 3 10 4 10 5
+
+Embedding dim ( m)(b) MNIST, σ = 10 −3
+
+m = r < dm > d = r
+
+10 2 10 3 10 4 10 5
+
+Embedding dim ( m)(c) CIFAR-10, σ = 10 −3
+
+m = r < dm > d = r
+
+10 0
+
+10 −5
+
+10 −10 
+
+10 −15 
+
+> Recon. MSE
+
+m = r < dm > d = r
+
+10 1 10 2 10 3 10 4 10 5
+
+Embedding dim ( m)(d) Gaussian, σ = 0 10 −30 
+
+m = r < dm > d = r
+
+10 1 10 2 10 3 10 4 10 5
+
+Embedding dim ( m)(e) MNIST, σ = 0 
+
+m = r < dm > d = r
+
+10 2 10 3 10 4 10 5
+
+Embedding dim ( m)(f) CIFAR-10, σ = 0 
+
+Our bound Maeng et al. MMSE attack Opt. attack DNN attack Figure 2: Our MSE bounds (solid blue line) closely lower-bound the attackers’ achievable MSE for all the attackers. Bound from Maeng et al. [35] (dotted line) becomes very loose when r < d and is always zero when σ = 0 (no encoder randomness). • How do the bounds change with the heuristics from Sec-tion 5? • Is RTC (Section 5.5) indicative of reconstruction hardness? 
+
+# 6.1 Evaluation Setup and Methodologies 
+
+Datasets. We evaluate our bounds on three datasets: (1) isotropic Gaussian noise (matching the dimensionality of MNIST for MSE and CIFAR-10 for LPIPS bound), sam-pled from N (0.5, 0.22Id ); (2) MNIST [7]; and (3) CIFAR-10 [29]. For MNIST and CIFAR-10, we add smoothing noise of N (0, 0.12Id ), following Maeng et al. [35]. For the Gaussian dataset, S is calculated analytically (inverse of the covariance matrix). Others use DDPM to calculate S (Section 6.4.1). 
+
+Encoders. We test encoders with various architectures and weights. The first are linear encoders (Enc (x) = W x +
+
+N (0, σ2Id ), W ∈ Rm×d ) with varying output dimension m
+
+and σ ∈ { 0, 10 −3} (small noise or no noise). The second are 
+
+DNN encoders , consisting of the first few layers of popular CNNs, followed by an additional compression block to con-trol the output dimension m. The compression block consists of a compressing convolutional layer, followed by GELU and an optional AvgPool layer. For MNIST, we use a sim-ple 3-block CNN with three split points (early: after block 1; middle: after block 2; late: after block 3). For CIFAR-10, we use ResNet-18 [41] with three split points (early: after the first convolutional layer; middle: after ResNet block 4; late: after ResNet block 6). To make the encoder differentiable, we replace MaxPool with AvgPool and ReLU with GELU. The encoder is followed by a downstream model that consumes the embedding and performs the downstream task; this model consists of a decompression block followed by the remainder of the split DNN. Details are in Appendix A.1.1. We study three different weights: (1) random weights, frozen after initialization; (2) weights trained jointly with the downstream model on the target task; and, for linear encoders only, (3) a weight matrix W whose eigenvalues are analytically controlled to be λi = d · i−α/ ∑ j j−α, with a varying α to con-trol the skewness. This is achieved via W = U diag (√λi)V ⊤,with random unitary matrices U and V .
+
+Attacks. For reconstructing the Gaussian inputs x ∼
+
+N (μ, η2Id ) from the linear encoder e = W x + N (0, σ2Im),we can analytically arrive to a minimum mean-squared error (MMSE) estimator, which is the posterior mean. For σ > 0, ˆx = Ex|e = μ111 +  W ⊤W
+
+σ2 + Id
+
+η2
+
+−1 W ⊤(e −W μ 111)
+
+σ2 . (8) For σ = 0, ˆx = Ex|e = μ111 +W +(e −W μ 111), (9) where W + is a Moore–Penrose pseudoinverse of W (proofs in Appendix A.4). We call this MMSE attack . MMSE attacks are only defined for Gaussian inputs and linear encoders. For natural image datasets, we test two attacks. The first is an optimization-based attack ( Opt. attack ), which minimizes a MAP-style objective with a tunable prior weight β:ˆx(e) = arg min 
+
+> x∗
+
+∥e − Enc D(x∗)∥22 − β log π(x∗).
+
+710 2 10 3 10 4 10 5
+
+Embedding dim ( m)10 −6
+
+10 −3
+
+10 0
+
+> Recon. LPIPS
+
+(a) Gaussian, σ = 10 −3
+
+m = r < dm > d = r
+
+10 1 10 2 10 3 10 4 10 5
+
+Embedding dim ( m)(b) MNIST, σ = 10 −3
+
+m = r < dm > d = r
+
+10 2 10 3 10 4 10 5
+
+Embedding dim ( m)(c) CIFAR-10, σ = 10 −3
+
+m = r < dm > d = r
+
+10 2 10 3 10 4 10 5
+
+Embedding dim ( m)(d) Gaussian, σ = 0 10 −8
+
+10 −4
+
+10 0
+
+> Recon. LPIPS
+
+m = r < dm > d = r
+
+10 1 10 2 10 3 10 4 10 5
+
+Embedding dim ( m)(e) MNIST, σ = 0 
+
+m = r < dm > d = r
+
+10 2 10 3 10 4 10 5
+
+Embedding dim ( m)(f) CIFAR-10, σ = 0 
+
+m = r < dm > d = r
+
+Our bound MMSE attack Opt. attack DNN attack Figure 3: Our LPIPS bounds (solid blue line) are always met, and tight near m ∼ d. For m ≪ d, the bound is unfortunately looser and near-flat, being less informative than the MSE bounds. Still, this is the first working LPIPS bound to our knowledge. For σ > 0, setting β = 2σ2 recovers the exact maximum a posteriori (MAP) estimate. For σ = 0, β is instead treated as a tunable hyperparameter. For the data prior π(x), we use the learned score from the pre-trained DDPM (Section 5.2). This generalizes existing optimization-based attacks that use heuristically designed proxies for the data prior [36, 51]. The second is a DNN-based attack ( DNN attack ), which uses a trained DNN as the attacker, following the recipe of [32]. Details of the attacks are in Appendix A.1.2. 
+
+Additional design parameters. We calculate S and EG
+
+exactly whenever possible. When we need to approximate, we use the following parameters unless stated otherwise: when calculating EG with subsampled images, we use k = 256 images; when approximating small-signal subspaces as the null space, we treat directions whose eigenvalues are smaller than 0.0001 times the largest eigenvalue ( τ = 10 −4) as null. The effect of these choices is evaluated in Section 6.4. Fi-nally, for LPIPS, we use the pretrained VGG-16 backbone with ReLU/MaxPool replaced by GELU/AvgPool (for twice-differentiability). We confirme that this does not significantly affect the calculated LPIPS score. For MNIST, we replicate the channel dimension, since LPIPS assumes three channels. 
+
+# 6.2 Bounds with Linear Encoders 
+
+We first evaluate our new bounds on linear encoders. For linear encoders, the FIM is not data-dependent, so EG can be cal-culated exactly, and r = rank (EG) is simply r = min (d, m),provided the weights do not introduce additional null direc-tions. These two properties eliminate the need for many of the heuristics in Section 5.3, isolating the effectiveness of the bound from potential errors introduced by the heuristics. 
+
+6.2.1 Controlling the Rank 
+
+First, we evaluate the bound with a random W , which makes 
+
+W isotropic, while controlling the rank. 
+
+MSE bound. Figure 2 plots our MSE bounds (blue solid line) from Corollary 1 (when noise with σ = 10 −3 is added; Figure 2(a–c)) and Corollary 2 (when no noise is added; Figure 2(d–f)), along with the MSE actually achieved by the attacks. For setups with noise σ = 10 −3 (top row; a–c), we also plot the bound from Maeng et al. [35] (Theorem 1; dotted line). For setups with no noise (bottom row; d–f), the bound from Maeng et al. [35] becomes zero. The Gaussian MMSE attack exactly lands on top of our bounds. For natural images, Opt. attack performs better when 
+
+m > d, while DNN attack performs better when m < d (we only show the Opt. attack in the m > d region). Still, our bound is valid for both attacks throughout, and is reasonably tight in most cases. On the other hand, the bound from Maeng et al. [35] (dotted line) is tight only when d ≪ m and σ >
+
+0. Again, this is because our bounds better account for the information lost through the encoder’s spectral geometry. We can also see that our bounds for noisy embeddings (Figure 2(a–c)) increase sharply around m = r = d. This is expected, since information starts to be lost through the en-coder’s spectral geometry once we cross the m = r = d line. 80 210 −6     
+
+> 10 −4
+> 10 −2
+> Recon. MSE (a) Gaussian
+> 02Spectrum skew ( α)(b) MNIST
+> 02(c) CIFAR-10
+> 0210 −4
+> 10 −2
+> 10 0
+> Recon. LPIPS (d) Gaussian
+> 02Spectrum skew ( α)(e) MNIST
+> 02(f) CIFAR-10
+> Our bound MMSE attack Maeng et al. Opt. attack DNN attack
+
+Figure 4: MSE and LPIPS bound with different skewness α.Similarly, Figure 2(d–f) shows that the bound becomes non-trivial as this line is crossed, which is exactly when the en-coder starts to lose information even without any added noise. 
+
+LPIPS bound. Figure 3 shows the same plot using LPIPS as the similarity metric instead of MSE, based on Theorem 2 and Corollary 3. The bounds are again always valid, but looser and nearly flat in the m < d region, making them less infor-mative than the MSE bound. One potential reason for this, as explained in Section 5.1, is that we simply choose the two projectors in Theorem 2 to be the projectors onto the range and null spaces, whereas a different (and larger) set of projec-tors could provide a tighter bound. Again, we leave further improvement of the bound to future work. 
+
+6.2.2 Controlling the Skewness of EG
+
+Next, we keep r = rank (EG) constant at m = r = d and vary the distribution of the eigenvalues using a controlled parameter α, as discussed in Section 6.1. We only show the case with small noise ( σ = 10 −3), since EG is full rank, and Corollary 2 would give a trivial bound. Again, the trend is similar: Opt. attack performs better for easier cases (lower α), while DNN attack performs better for harder cases (higher α). Still, our bounds hold for both attacks. Figure 4(a–c) shows that our bounds hold for all the at-tacks. The bound remains tight for Gaussian data, but be-comes looser on natural images with large α (but still tighter than the bound from Maeng et al. [35], which is the flat dotted line). When the encoder is isotropic ( α = 0), our bound coin-cides with that of Maeng et al. [35]. However, as the spectrum becomes more skewed ( α > 0), our bound starts to increase, correctly capturing the fact that information loss along cer-10 −6 10 −1                     
+
+> MSE bound 10 −6
+> 10 −3
+> 10 0
+> Recon. MSE (a) MNIST, σ= 10 −3
+> 10 −610 −1
+> MSE bound (b) CIFAR-10, σ= 10 −3
+> 10 −510 −1
+> MSE bound 10 −3
+> 10 −2
+> 10 −1
+> Recon. MSE (c) MNIST, σ= 0
+> 10 −510 −1
+> MSE bound (d) CIFAR-10, σ= 0
+> Enc arch. linear split-early split-middle split-late Enc weight skew random trained Enc arch. linear split-early split-middle split-late Enc weight skew random trained
+
+Figure 5: MSE bound vs. achieved MSE by the attacker. tain directions makes reconstruction harder. The bound from Maeng et al. [35], on the other hand, stays flat. Figure 4(d–f) again shows a similar trend: our bounds always hold against both attackers, but they are much looser than the MSE bound. 
+
+# 6.3 Bounds with DNN-based Encoders 
+
+Next, we show results for general DNN-based encoders from Section 6.1. With DNN-based encoders, we do not have a straightforward way to control the rank or the skewness of 
+
+EG. We therefore simply plot the achieved attack MSE and LPIPS against the bounds for various encoder architectures (linear and DNN with early/middle/late splits) and weights (random, skew-controlled via α (only possible for linear en-coders), and fully trained). Here, we only plot the MSE and LPIPS from the Opt. attack, except for the linear encoders, whose DNN attackers were already trained from the previ-ous section. This is because training DNN attackers for each encoder and takes too much time. 
+
+MSE bound. Figures 5(a–b) plot the bound from Corol-lary 1 against the attack MSE. Across various encoder ar-chitectures and their weights, the bound always holds—no marker falls into the red-shaded region. This shows that our bound (Corollary 1) holds reliably across various encoder architectures and training methods for their weights. In general, bounds for linear or split-early encoders, espe-cially with random or skewed weights, appear tighter. Mean-910 −6 10 −1                     
+
+> LPIPS bound 10 −4
+> 10 −2
+> 10 0
+> Recon. LPIPS (a) MNIST, σ= 10 −3
+> 10 −610 −1
+> LPIPS bound (b) CIFAR-10, σ= 10 −3
+> 10 −410 −1
+> LPIPS bound 10 −3
+> 10 0
+> Recon. LPIPS (c) MNIST, σ= 0
+> 10 −410 −1
+> LPIPS bound (d) CIFAR-10, σ= 0
+> Enc arch. linear split-early split-middle split-late Enc weight skew random trained Enc arch. linear split-early split-middle split-late Enc weight skew random trained
+
+Figure 6: LPIPS bound vs. achieved LPIPS by the attacker. while, bounds for split-middle and split-late encoders, espe-cially with trained weights, appear looser, though still valid. This matches empirical observations from prior work showing that reconstruction becomes harder as data passes through a deeper network [33, 35]. It may be that our bound still does not precisely capture this additional hardness due to encoder depth. Alternatively, it may simply be that our attack methods are suboptimal for deeper encoders. Figures 5(c–d) show the bound from Corollary 2, with no randomness in the encoder. Again, the bound always holds, albeit often loose. Here, weights with skewness controlled by α (green markers) are not shown, because this bound is controlled only by the null space of EG, and the skewness-controlled linear encoders are still full rank. In this sense, the zero-noise bound (Corollary 2) is inherently looser than the bound for noisy encoders (Corollary 1)—Corollary 2, unlike Corollary 1, cannot capture the information loss due to the skewed spectral geometry, unless it introduces a null space. 
+
+LPIPS bound. Figures 6(a–b) show the LPIPS bound from our Theorem 2 versus the actual LPIPS achieved by running the attack. Figures 6(c–d) show the LPIPS bound when no noise is added to the encoder output (Corollary 3). The bounds in Figure 6 always hold, but are generally looser than the MSE bound (Figure 5); this may again be improved by selecting a better set of projectors in Theorem 2 or with a better attack. 0.0 0.5 1.0 Fraction (sorted) 10 −4   
+
+> 10 −2
+> 10 0
+> μi
+> (a) MNIST
+> Violated
+> 0.0 0.5 1.0 Fraction (sorted) (b) CIFAR-10
+> Violated
+> DDPM (ours) NICE (used by Maeng et al.)
+
+Figure 7: S quality check: all the eigenvalues μi of Σ1/2SΣ1/2
+
+must be equal to or larger than 1. 
+
+# 6.4 Sensitivity Study 
+
+In this section, we evaluate the heuristics from Section 5. 
+
+6.4.1 Using Different Score Models 
+
+We introduced a new practical method for calculating S =
+
+Eπ
+
+sπ(x)sπ(x)⊤ using a well-trained DDPM (Section 5.2). Previously, Maeng et al. [35] used a technique called sliced score matching [47] to train a NICE model [9] to calculate the same matrix. Here, we compare the two approaches, showing that our new method is more reliable. However, we do not claim that our method is fundamentally superior; rather, we believe the better estimation results are because open-source DDPMs have been well-trained over time by the community, and have therefore internalized better score models than one could obtain by training a score model from scratch. We measure the quality of S as follows. Since S is the Fisher information of x ∼ π, the matrix form of the Cramér-Rao inequality [6] gives S ⪰ Σ−1, where Σ is the covariance of x ∼ π and ⪰ indicates the Loewner order. Multiplying both sides by Σ1/2 gives Σ1/2SΣ1/2 ⪰ Id . Since Σ1/2SΣ1/2 is symmetric positive semi-definite, Σ1/2SΣ1/2 ⪰ Id holds if and only if all of its eigenvalues μi satisfy μi ≥ 1 for all i. This is exactly what we check. We calculate Σ from the training images and run this test on S obtained from both our method and the method of prior work [35]. Figure 7 shows the results. While the eigenvalues (μi) from our approach (blue line) also sometimes fall below 1, the violation is much rarer and milder than that of prior approach (red line). This shows that our DDPM-based method more closely estimates the true S.
+
+6.4.2 Effect of Sample Count k in Estimating EG
+
+The most accurate way to estimate EG is to calculate G =
+
+JEnc D (x)⊤JEnc D (x) for each x and average across all training samples, but this requires heavy compute, especially for deep encoders. Figure 8 shows, for the CIFAR-10 dataset, how the 10 10 −4                          
+
+> 10 −2
+> 10 0
+> k = 16 Recon. value  MSE, σ= 10 −3MSE, σ= 0 LPIPS, σ= 10 −3LPIPS, σ= 0
+> 10 −4
+> 10 −2
+> 10 0
+> k = 256 Recon. value
+> 10 −410 −210 0
+> MSE bound 10 −4
+> 10 −2
+> 10 0
+> k = 1024 Recon. value
+> 10 −510 −310 −1
+> MSE bound 10 −610 −310 0
+> LPIPS bound 10 −410 −210 0
+> LPIPS bound
+> linear split-early split-middle split-late random trained
+
+Figure 8: Bound vs. attack MSE/LPIPS with while varying the number of data k used to estimate EG. Result from the CIFAR-10 dataset; MNIST dataset shows similar trends and is omitted for space. four bounds (Theorem 2 and Corollaries 1, 2, and 3) change if we use only k samples randomly selected from the training set instead. The figure shows that the bound ( i.e. , the distribution of the markers) does not change significantly beyond k = 256; thus, we use k = 256 throughout our evaluation. 
+
+6.4.3 Effect of Varying the Null Space Threshold τ
+
+The bounds from Theorem 2 and Corollaries 2 and 3 require splitting the domain into the range space and null space of 
+
+EG. For Theorem 2, this split does not need to be accurate— any orthogonal split leads to a valid bound (although its tight-ness will vary), and using the range and null spaces was simply our choice for simplicity (Section 4.1). However, the bounds for encoders with no randomness (Corollaries 2 and 3) require the split to be accurate, since these bounds rely critically on the null space. If part of the range space is incorrectly clas-sified as null, the bound can be overestimated (the reverse is fine, albeit will lead to a looser bound). Thus, the safest approach is to consider only directions whose eigenvalues are exactly 0 as the null space. However, this may make the bound loose, because our estimate of EG
+
+cannot be exact for real-world data—since it relies on a sam-pled training dataset—and some null directions’ eigenvalues may be estimated as small but nonzero due to estimation noise. Hence, we treat eigenvalues smaller than τ · λmax as zero, where λmax is the largest eigenvalue (Section 6.4.3). Figure 9 plots the LPIPS bounds for various datasets, with and without noise, to evaluate the effect of choosing different 
+
+τ. Again, the bounds with noise (Theorem 2; the first two columns) are always correct, and τ only controls the tightness. For these bounds in the first two columns, τ = 10 −4 and τ =
+
+10 −2 appear to be the tightest, but the differences across all four rows are not very substantial— i.e. , the choice of τ does not significantly influence the bounds, unless it is too large. The bounds for zero-noise encoders (Corollaries 2 and 3) can become incorrect and be violated if we choose a τ that is too large. The figure shows that these bounds are influenced more strongly by the choice of τ, and are indeed violated at 
+
+τ = 10 −2. On the other hand, τ = 0 is always valid, but appears very loose. Across the four columns, τ = 10 −4 appears to be a reasonable choice, giving the tightest bounds that remain correct. Thus, we use τ = 10 −4 throughout our evaluation. 
+
+# 6.5 Visualization of the Reconstruction and Us-ing RTC as a Metric 
+
+Figures 10 and 11 visualize some reconstructed images from Figures 2(b–c) (when the encoder has small randomness) and Figures 2(e–f) (when the encoder has no randomness). We 11 10 −4                           
+
+> 10 −2
+> 10 0
+> τ = 0 Recon. LPIPS  MNIST, σ= 10 −3CIFAR-10, σ= 10 −3MNIST, σ= 0 CIFAR-10, σ= 0
+> 10 −4
+> 10 −2
+> 10 0
+> τ = 10 −6
+> Recon. LPIPS
+> 10 −4
+> 10 −2
+> 10 0
+> τ = 10 −4
+> Recon. LPIPS
+> 10 −610 −310 0
+> LPIPS bound 10 −4
+> 10 −2
+> 10 0
+> τ = 10 −2
+> Recon. LPIPS
+> 10 −610 −310 0
+> LPIPS bound 10 −410 −210 0
+> LPIPS bound 10 −610 −310 0
+> LPIPS bound
+> linear split-early split-middle split-late skew random trained
+
+Figure 9: LPIPS bounds with and without noise, under various threshold τ that splits between the range space and the null space (Section 6.4.3). Empirically, τ = 10 −4 seems to be a reasonable choice, where the bounds appear the tightest and never violated. also show the encoder’s ratio-to-ceiling (RTC) metric values, an empirical metric we proposed in Section 5.5. Smaller embedding dimension m—which leads to both increased MSE and LPIPS bounds (Figures 2 and 3)—also leads to perceptually worse reconstruction. More interestingly, reconstruction hardness is well captured by the RTC metric: smaller RTC correspond to visually worse reconstruction, and reconstructions with RTC < 0.01 fail to recover much meaningful information. These results highlight the potential of RTC as a proxy for invertibility. The evaluation also shows that MNIST requires a smaller RTC to be strongly protected: even at RTC=0.005, some columns are reasonably reconstructed. This is because the MNIST dataset lies on a much lower-dimensional manifold, which makes reconstruction possible with only very limited information (discussed further in Section 6.5.1). This implies that the RTC threshold considered safe depends on the dataset and must be empirically determined by the community. This situation parallels popular privacy definitions like differen-tial privacy (DP)—although DP offers stronger worst-case guarantees, what DP parameters ( e.g. , ε and δ) are considered safe in practice is still being determined empirically [25], and there is no single number that is universally safe. 
+
+6.5.1 Why is MNIST Hard to Perfectly Protect? 
+
+Figures 10 and 11 show that MNIST is sometimes reasonably reconstructed even at a very low RTC ( e.g. , 0.005). For exam-ple, digits 7 and 0 in Figure 10, and digits 7 and 1 in Figure 11, are meaningfully reconstructed even at RTC = 0.005. This is in contrast to CIFAR-10, whose reconstructed images are much less informative even at a much higher RTC of 0.009. Our additional study revealed why—MNIST can be recon-structed to a reasonable level much more easily, even with very little information. We ran a simple experiment to demon-strate this. We grouped the images in the MNIST training set by their labels and averaged all images sharing the same label, producing a class-mean image for each label. These 12 Ref image 
+
+> Opt. attack
+> m=1024 (RTC: 8.110)
+> m=256 (RTC: 0.409)
+> m=64 (RTC: 0.089)
+> m=16 (RTC: 0.022)
+> m=4 (RTC: 0.005)
+> m=2 (RTC: 0.003)
+> DNN. attack Ref image
+> Opt. attack
+> m=6144 (RTC: 9.483)
+> m=3072 (RTC: 4.824)
+> m=768 (RTC: 0.368)
+> m=256 (RTC: 0.126)
+> m=64 (RTC: 0.034)
+> m=16 (RTC: 0.009)
+> DNN. attack
+
+Figure 10: Visualization of the reconstructed images from Figures 2(b–c) ( σ = 10 −3), along with each encoder’s RTC. class-mean images are what an attacker could “reconstruct” by knowing only the label of each image—a mere 3.3 bits (log 2(10 )) of information that must survive through the en-coder anyway for meaningful downstream classification. Figure 12 shows the reference images from Figures 10 and 11, along with their respective class-mean images. The results show that the class-mean image is a surprisingly close percep-tual reconstruction of the original image. This explains why instance encoding cannot work well for the MNIST dataset. The minimal 3.3 bits of label information that the encoder must preserve are sufficient to reconstruct the image, espe-cially for digits like 7, 1, and 0, which were also reasonably well reconstructed in Figures 10 and 11. This was not the case for CIFAR-10: for example, individual cat images vary enough that the class-mean cat image does not resemble a high-quality reconstruction. In other words, it is impossible to fully prevent reconstruction (beyond the level shown in Fig-ure 12) while still achieving high downstream classification accuracy. If any paper claims such a result, it likely indicates that the attack used is not strong enough. 
+
+# 7 Conclusion 
+
+We developed a set of bounds that lower-bound the adver-sary’s ability to reconstruct the original data from the embed-ding, in the setting of instance encoding. We show that our bounds are tighter than that from prior work [35] in many cases, and are useful in cases where the prior bounds do not apply ( e.g. , when the encoder has no randomness, or when a norm-based metric other than MSE is considered). We also Ref image    
+
+> Opt. attack
+> m=1024 (RTC: ∞)
+> m=256 (RTC: 0.408)
+> m=64 (RTC: 0.089)
+> m=16 (RTC: 0.022)
+> m=4 (RTC: 0.005)
+> m=2 (RTC: 0.003)
+> DNN. attack Ref image
+> Opt. attack
+> m=6144 (RTC: ∞)
+> m=3072 (RTC: ∞)
+> m=768 (RTC: 0.368)
+> m=256 (RTC: 0.127)
+> m=64 (RTC: 0.034)
+> m=16 (RTC: 0.009)
+> DNN. attack
+
+Figure 11: Visualization of the reconstructed images from Figures 2(e–f) ( σ = 0), along with each encoder’s RTC. Ref 
+
+> Class mean
+
+Figure 12: Same reference images from Figures 10 and 11, compared with their class-mean images. introduce a new, practical way to estimate the data prior more accurately, using a pre-trained DDPM. Our bounds can serve as an indicative metric for an encoder’s invertibility. 
+
+# Acknowledgments 
+
+We thank Chuan Guo for insightful discussions and point-ers on developing the LPIPS bound. This work was partly supported by the U.S. National Science Foundation under award No. CNS-2349610 and CCF-2529883. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the National Science Foundation. The authors used AI for code, text, and figures, but all outputs were manually reviewed by the authors to ensure correctness. 
+
+# References 
+
+[1] Yasmeena Akhter, Richa Singh, and Mayank Vatsa. AI-based radiodiagnosis using chest x-rays: A review. Fron-
+
+13 tiers Big Data , 2023. URL: https://doi.org/10.3 389/fdata.2023.1120989 , doi:10.3389/FDATA.20 23.1120989 .[2] Florent Bouchard, Alexandre Renaux, Guillaume Ginol-hac, and Arnaud Breloy. Intrinsic bayesian cramér-rao bound with an application to covariance matrix estima-tion. IEEE Transactions on Information Theory , 2024. URL: https://univ-grenoble-alpes.hal.scien ce/hal-04770231/document .[3] Nicholas Carlini, Samuel Deng, Sanjam Garg, Somesh Jha, Saeed Mahloujifar, Mohammad Mahmoody, Abhradeep Thakurta, and Florian Tramèr. Is private learning possible with in-stance encoding? In IEEE Symposium on Se-curity and Privacy (SP) , 2021. URL: h t t p s : //ieeexplore.ieee.org/document/9519450 .[4] Nicholas Carlini, Sanjam Garg, Somesh Jha, Saeed Mahloujifar, Mohammad Mahmoody, and Florian Tramer. Neuracrypt is not private. arXiv preprint arXiv:2108.07256 , 2021. URL: https://arxiv.org/ abs/2108.07256 .[5] Jeremy M. Cohen, Elan Rosenfeld, and J. Zico Kolter. Certified adversarial robustness via randomized smooth-ing. In Proceedings of the International Conference on Machine Learning (ICML) , 2019. URL: http: //proceedings.mlr.press/v97/cohen19c.html .[6] Amir Dembo, Thomas M Cover, and Joy A Thomas. Information theoretic inequalities. IEEE Transactions on Information theory , 1991. URL: https://ieeexp lore.ieee.org/document/104312 .[7] Li Deng. The mnist database of handwritten digit images for machine learning research. IEEE Signal Processing Magazine , 2012. URL: https://ieeexplore.ieee. org/document/6296535 .[8] Shiwei Ding, Lan Zhang, Miao Pan, and Xiaoyong Yuan. Patrol: Privacy-oriented pruning for collabo-rative inference against model inversion attacks. In 
+
+2024 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , 2024. URL: https: //ieeexplore.ieee.org/document/10483973 .[9] Laurent Dinh, David Krueger, and Yoshua Bengio. Nice: Non-linear independent components estimation. arXiv preprint arXiv:1410.8516 , 2014. URL: https://arxi v.org/abs/1410.8516 .[10] Xin Dong, Barbara De Salvo, Meng Li, Chiao Liu, Zhongnan Qu, HT Kung, and Ziyun Li. Splitnets: De-signing neural architectures for efficient distributed com-puting on head-mounted systems. In Proceedings of the Conference on Computer Vision and Pattern Recogni-tion (CVPR) , 2022. URL: https://ieeexplore.iee e.org/document/9879512 .[11] Minxin Du, Xiang Yue, Sherman SM Chow, Tianhao Wang, Chenyu Huang, and Huan Sun. Dp-forward: Fine-tuning and inference on language models with differential privacy in forward pass. In Proceedings of the ACM SIGSAC Conference on Computer and Communications Security (CCS) , 2023. URL: https: //dl.acm.org/doi/10.1145/3576915.3616592 .[12] Laurent Fainsin. 1aurent/ddpm-mnist. https://hugg ingface.co/1aurent/ddpm-mnist , 2023. [13] Liyue Fan. Image pixelization with differential privacy. In Data and Applications Security and Privacy (DBSec) ,Lecture Notes in Computer Science, 2018. doi:10.1 007/978-3-319-95729-6\_10 .[14] Liyue Fan. Differential privacy for image publication. In Theory and Practice of Differential Privacy (TPDP) Workshop , 2019. URL: https://webpages.charlot te.edu/lfan4/pdf/TPDP2019.pdf .[15] Arpita Ghosh and Robert Kleinberg. Inferential privacy guarantees for differentially private mechanisms. arXiv preprint arXiv:1603.01508 , 2016. URL: https://ar xiv.org/abs/1603.01508 .[16] Richard D Gill and Boris Y Levit. Applications of the van trees inequality: a bayesian cramér-rao bound. 1995. URL: https://projecteuclid.org/journals/b ernoulli/volume-1/issue-1-2/Applications-o f-the-van-Trees-inequality--a-Bayesian-Cra m%C3%A9r/bj/1186078362.full .[17] Chuan Guo, Brian Karrer, Kamalika Chaudhuri, and Laurens Van der Maaten. Bounding training data re-construction in private (deep) learning. In Proceedings of the International Conference on Machine Learning (ICML) , 2022. URL: https://proceedings.mlr.pr ess/v162/guo22c.html .[18] Awni Hannun, Chuan Guo, and Laurens van der Maaten. Measuring data leakage in machine-learning models with fisher information. In Conference on Uncertainty in Artificial Intelligence (UAI) , 2021. URL: https: //arxiv.org/abs/2102.11673 .[19] Qijian He, Wei Yang, Bingren Chen, Yangyang Geng, and Liusheng Huang. Transnet: Training privacy-preserving neural network over transformed layer. Pro-ceedings of the VLDB Endowment , 2020. URL: https: //dl.acm.org/doi/abs/10.14778/3407790.3407 794 .14 [20] Zecheng He, Tianwei Zhang, and Ruby B Lee. Attack-ing and protecting data privacy in edge–cloud collabora-tive inference systems. IEEE Internet of Things Journal ,2020. URL: https://ieeexplore.ieee.org/docu ment/9187880 .[21] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In Advances in Neural Information Processing Systems (NeurIPS) , 2020. URL: 
+
+https://arxiv.org/abs/2006.11239 .[22] Yangsibo Huang, Zhao Song, Kai Li, and Sanjeev Arora. Instahide: Instance-hiding schemes for private dis-tributed learning. In Proceedings of the International Conference on Machine Learning (ICML) , 2020. URL: 
+
+http://proceedings.mlr.press/v119/huang20i. html .[23] Michael F Hutchinson. A stochastic estimator of the trace of the influence matrix for laplacian smoothing splines. Communications in Statistics-Simulation and Computation , 1989. URL: https://www.tandfonlin e.com/doi/abs/10.1080/03610919008812866 .[24] Jacob Imola, Shiva Prasad Kasiviswanathan, Stephen White, Abhinav Aggarwal, and Nathanael Teissier. Bal-ancing utility and scalability in metric differential pri-vacy. In Conference on Uncertainty in Artificial Intelli-gence (UAI) , 2022. URL: https://proceedings.ml r.press/v180/imola22a.html .[25] Bargav Jayaraman and David Evans. Evaluating differ-entially private machine learning in practice. In USENIX Security Symposium , 2019. URL: https://www.usen ix.org/system/files/sec19-jayaraman.pdf .[26] Yiping Kang, Johann Hauswald, Cao Gao, Austin Rovin-ski, Trevor Mudge, Jason Mars, and Lingjia Tang. Neu-rosurgeon: Collaborative intelligence between the cloud and mobile edge. ACM SIGARCH Computer Architec-ture News , 2017. URL: https://dl.acm.org/doi/1 0.1145/3037697.3037698 .[27] Sanjay Kariyappa, Ousmane Dia, and Moinuddin K Qureshi. Enabling inference privacy with adaptive noise injection. arXiv preprint arXiv:2104.02261 , 2021. URL: 
+
+https://arxiv.org/abs/2104.02261 .[28] Daniel Kifer and Ashwin Machanavajjhala. Pufferfish: A framework for mathematical privacy definitions. ACM Transactions on Database Systems (TODS) , 2014. URL: 
+
+https://dl.acm.org/doi/10.1145/2514689 .[29] Alex Krizhevsky, Geoffrey Hinton, et al. Learning mul-tiple layers of features from tiny images. 2009. URL: 
+
+https://cave.cs.toronto.edu/kriz/learnin g-features-2009-TR.pdf .[30] Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, et al. Retrieval-augmented generation for knowledge-intensive nlp tasks. In Advances in Neural Information Processing Systems (NeurIPS) , 2020. URL: https: //arxiv.org/abs/2005.11401 .[31] Ang Li, Jiayi Guo, Huanrui Yang, Flora D Salim, and Yiran Chen. Deepobfuscator: Obfuscating intermedi-ate representations with privacy-preserving adversarial learning on smartphones. In Proceedings of the Inter-national Conference on Internet-of-Things Design and Implementation , 2021. URL: https://dl.acm.org/d oi/10.1145/3450268.3453519 .[32] Jingtao Li, Adnan Siraj Rakin, Xing Chen, Zhezhi He, Deliang Fan, and Chaitali Chakrabarti. Ressfl: A resis-tance transfer framework for defending model inversion attack in split federated learning. In Proceedings of the Conference on Computer Vision and Pattern Recogni-tion (CVPR) , 2022. doi:10.1109/CVPR52688.2022 .00995 .[33] Meng Li, Liangzhen Lai, Naveen Suda, Vikas Chandra, and David Z Pan. Privynet: A flexible framework for privacy-preserving deep neural network training. arXiv preprint arXiv:1709.06161 , 2017. URL: https://ar xiv.org/abs/1709.06161 .[34] Zhijian Liu, Zhanghao Wu, Chuang Gan, Ligeng Zhu, and Song Han. Datamix: Efficient privacy-preserving edge-cloud inference. In European Conference on Com-puter Vision , 2020. URL: https://www.ecva.net/p apers/eccv_2020/papers_ECCV/papers/1235605 62.pdf .[35] Kiwan Maeng, Chuan Guo, Sanjay Kariyappa, and G Edward Suh. Bounding the invertibility of privacy-preserving instance encoding using fisher information. In Advances in Neural Information Processing Systems (NeurIPS) , 2023. URL: http://papers.nips.cc/p aper_files/paper/2023/hash/a344f7f474958cc 0775be7e46bc94309-Abstract-Conference.html .[36] Aravindh Mahendran and Andrea Vedaldi. Under-standing deep image representations by inverting them. In Proceedings of the Conference on Computer Vi-sion and Pattern Recognition (CVPR) , 2015. URL: 
+
+https://doi.org/10.1109/CVPR.2015.7299155 .[37] Peihua Mai, Ran Yan, Zhe Huang, Youjia Yang, and Yan Pang. Split-and-denoise: Protect large language model inference with local differential privacy. In Proceedings of the International Conference on Machine Learning (ICML) , 2024. URL: https://dl.acm.org/doi/10. 
+
+15 5555/3692070.3693465 , doi:10.5555/3692070.36 93465 .[38] Fatemehsadat Mireshghallah, Mohammadkazem Taram, Ali Jalali, Ahmed Taha Taha Elthakeb, Dean Tullsen, and Hadi Esmaeilzadeh. Not all features are equal: Discovering essential features for preserving prediction privacy. In Proceedings of the International Conference on World Wide Web (WWW) , 2021. URL: https://do i.org/10.1145/3442381.3449965 .[39] Fatemehsadat Mireshghallah, Mohammadkazem Taram, Prakash Ramrakhyani, Ali Jalali, Dean Tullsen, and Hadi Esmaeilzadeh. Shredder: Learning noise distri-butions to protect inference privacy. In Proceedings of the International Conference on Architectural Support for Programming Languages and Operation Systems (ASPLOS) , 2020. URL: https://doi.org/10.1145/ 3373376.3378522 .[40] Seyed Ali Osia, Ali Taheri, Ali Shahin Shamsabadi, Kleomenis Katevas, Hamed Haddadi, and Hamid R Ra-biee. Deep private-feature extraction. IEEE Transac-tions on Knowledge and Data Engineering , 2018. URL: 
+
+https://ieeexplore.ieee.org/document/85150 92 .[41] Huy Phan. Pytorch models trained on cifar-10 dataset. 
+
+https://github.com/huyvnphan/PyTorch_CIFAR 10 , 2013. [42] Maarten G Poirot, Praneeth Vepakomma, Ken Chang, Jayashree Kalpathy-Cramer, Rajiv Gupta, and Ramesh Raskar. Split learning for collaborative deep learning in healthcare. arXiv preprint arXiv:1912.12115 , 2019. URL: https://doi.org/10.48550/arXiv.1912.12 115 .[43] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sas-try, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural lan-guage supervision. In Proceedings of the International Conference on Machine Learning (ICML) , 2021. URL: 
+
+https://dblp.org/rec/conf/icml/RadfordKHRG ASAM21 .[44] Muhammad Usama Saleem, Dominick Reilly, and Liyue Fan. Dp-shield: Face obfuscation with differential pri-vacy. 2022. URL: https://par.nsf.gov/servlets /purl/10332300 .[45] Abhishek Singh, Ayush Chopra, Ethan Garza, Emily Zhang, Praneeth Vepakomma, Vivek Sharma, and Ramesh Raskar. Disco: Dynamic and invariant sen-sitive channel obfuscation for deep neural networks. In Proceedings of the Conference on Computer Vi-sion and Pattern Recognition (CVPR) , 2021. URL: 
+
+https://api.semanticscholar.org/CorpusID: 229340265 .[46] Abhishek Singh, Praneeth Vepakomma, Vivek Sharma, and Ramesh Raskar. Posthoc privacy guarantees for col-laborative inference with modified propose-test-release. In Advances in Neural Information Processing Systems (NeurIPS) , 2023. URL: https://dl.acm.org/doi/1 0.5555/3666122.3667272 .[47] Yang Song, Sahaj Garg, Jiaxin Shi, and Stefano Ermon. Sliced score matching: A scalable approach to density and score estimation. In Conference on Uncertainty in Artificial Intelligence (UAI) , 2019. URL: http://proc eedings.mlr.press/v115/song20a.html .[48] Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differ-ential equations. In Proceedings of the International Conference on Learning Representations (ICLR) , 2020. URL: https://arxiv.org/pdf/2011.13456 .[49] Chandra Thapa, Mahawaga Arachchige Pathum Chamikara, Seyit Camtepe, and Lichao Sun. Splitfed: When federated learning meets split learning. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , 2022. URL: https://ojs.aaai.org/i ndex.php/AAAI/article/view/20825 .[50] Tom Titcombe, Adam J Hall, Pavlos Papadopoulos, and Daniele Romanini. Practical defences against model in-version attacks for split neural networks. arXiv preprint arXiv:2104.05743 , 2021. URL: https://doi.org/10 .48550/arXiv.2104.05743 .[51] Dmitry Ulyanov, Andrea Vedaldi, and Victor S. Lem-pitsky. Deep image prior. In Proceedings of the Conference on Computer Vision and Pattern Recog-nition (CVPR) , 2018. URL: http://openaccess .thecvf.com/content_cvpr_2018/html/Ulyan ov_Deep_Image_Prior_CVPR_2018_paper.html ,
+
+doi:10.1109/CVPR.2018.00984 .[52] Praneeth Vepakomma, Otkrist Gupta, Tristan Swedish, and Ramesh Raskar. Split learning for health: Dis-tributed deep learning without sharing raw patient data. 
+
+arXiv preprint arXiv:1812.00564 , 2018. URL: https: //doi.org/10.48550/arXiv.1812.00564 .[53] Praneeth Vepakomma, Abhishek Singh, Otkrist Gupta, and Ramesh Raskar. Nopeek: Information leakage re-duction to share activations in distributed deep learning. In 2020 International Conference on Data Mining Work-shops (ICDMW) , 2020. URL: https://api.semant icscholar.org/CorpusID:221246011 .16 [54] Praneeth Vepakomma, Abhishek Singh, Emily Zhang, Otkrist Gupta, and Ramesh Raskar. Nopeek-infer: Pre-venting face reconstruction attacks in distributed infer-ence after on-premise training. In IEEE International Conference on Automatic Face and Gesture Recognition (FG) , 2021. URL: https://ieeexplore.ieee.org/ document/9667085 .[55] Patrick von Platen. google/ddpm-cifar10-32, 2022. URL: https://huggingface.co/google/ddpm-cif ar10-32 .[56] Ji Wang, Jianguo Zhang, Weidong Bao, Xiaomin Zhu, Bokai Cao, and Philip S Yu. Not just privacy: Improving performance of private deep learning in mobile cloud. In Proceedings of the ACM International Conference on Knowledge Discovery & Data Mining (KDD) , 2018. URL: https://doi.org/10.1145/3219819.322010 6.[57] Lily Weng, Huan Zhang, Hongge Chen, Zhao Song, Cho-Jui Hsieh, Luca Daniel, Duane Boning, and Inderjit Dhillon. Towards fast computation of certified robust-ness for relu networks. In Proceedings of the Interna-tional Conference on Machine Learning (ICML) , 2018. URL: https://proceedings.mlr.press/v80/weng 18a.html .[58] Liyao Xiang, Hao Zhang, Haotian Ma, Yifan Zhang, Jie Ren, and Quanshi Zhang. Interpretable complex-valued neural networks for privacy protection. In Proceedings of the International Conference on Learning Represen-tations (ICLR) , 2020. URL: https://openreview.n et/forum?id=S1xFl64tDr .[59] Hanshen Xiao and Srinivas Devadas. Dauntless: Data augmentation and uniform transformation for learning with scalability and security. IACR Cryptol. ePrint Arch. ,2021. URL: https://eprint.iacr.org/2021/201 .[60] Hanshen Xiao and Srinivas Devadas. Pac privacy: Auto-matic privacy measurement and control of data process-ing. In Annual International Cryptology Conference ,2023. URL: https://doi.org/10.1007/978-3-031 -38545-2_20 .[61] Hanshen Xiao, G Edward Suh, and Srinivas Devadas. Formal privacy proof of data encoding: The possibil-ity and impossibility of learnable encryption. In Pro-ceedings of the ACM SIGSAC Conference on Com-puter and Communications Security (CCS) , 2024. URL: 
+
+https://doi.org/10.1145/3658644.3670277 .[62] Adam Yala, Homa Esfahanizadeh, Rafael G. L. D’ Oliveira, Ken R. Duffy, Manya Ghobadi, Tommi S. Jaakkola, Vinod Vaikuntanathan, Regina Barzilay, and Muriel Medard. Neuracrypt: Hiding private health data via random neural networks for public training. 
+
+arXiv preprint arXiv:2106.02484 , 2021. URL: https: //arxiv.org/abs/2106.02484 .[63] Adam Yala, Victor Quach, Homa Esfahanizadeh, Rafael GL D’Oliveira, Ken R Duffy, Muriel Médard, Tommi S Jaakkola, and Regina Barzilay. Syfer: Neu-ral obfuscation for private data release. arXiv preprint arXiv:2201.12406 , 2022. URL: https://doi.org/10 .48550/arXiv.2201.12406 .[64] Bin Yang, Issei Sato, and Hiroshi Nakagawa. Bayesian differential privacy on correlated data. In Proceedings of the ACM SIGMOD international conference on Man-agement of Data , 2015. URL: https://doi.org/10 .1145/2723372.2747643 .[65] Qiang Yang, Yang Liu, Tianjian Chen, and Yongxin Tong. Federated machine learning: Concept and ap-plications. ACM Transactions on Intelligent Systems and Technology (TIST) , 2019. URL: https://doi.or g/10.1145/3298981 .[66] Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shecht-man, and Oliver Wang. The unreasonable effective-ness of deep features as a perceptual metric. In Pro-ceedings of the Conference on Computer Vision and Pattern Recognition (CVPR) , 2018. URL: https: //doi.ieeecomputersociety.org/10.1109/CV PR.2018.00068 .
+
+# A Appendix A.1 Evaluation Details 
+
+A.1.1 Encoder Architecture 
+
+For DNN encoders, we used the following backbone models. We split the backbone models at different split points and added a compression block, as explained in Section 6.1. Back-bone CNN model for MNIST consist of the following three blocks: • Block 0: Conv2d(out_dim=32, in_dim=1, k=5, stride=2, pad=2) + GELU • Block 1: Conv2d(out_dim=64, in_dim=32, k=3, stride=2, pad=1) + GELU + AvgPool2d(2) • Block 2: Conv2d(out_dim=128, in_dim=64, k=3, stride=1, pad=1) + GELU • Linear(out_dim=10, in_dim=128 ×7×7) Backbone model for CIFAR-10 used the ResNet-18 model from [41], with MaxPool2d replaced with AvgPool2d and ReLU replaced with GELU. The compression block controls the output of the encoder 
+
+m by first changing the channel dimension from Cin to Cout .If this is insufficient (still too large even with Cout = 1) to meet m, it reduces the H and W dimensions of the embedding 17 through an additional AdaptiveAvgPool2d layer. Concretely, to achieve m = Cout × s,• Compress: Conv2d(out_dim= Cout , in_dim= Cin , k=3) +GELU + AdaptiveAvgPool2d(s) • Decompress: Upsample(H, W) + Conv2d(out_dim= Cin ,in_dim= Cout , k=3) + GELU 
+
+A.1.2 Attack Details 
+
+For the Gaussian inputs, each markers are averaged from 64 inputs. For σ > 0, each input was encoded 8 times and tested. For σ = 0, each input was encoded and tested once, as everything is fully deterministic. For MNST and CIFAR-10, we tested 16 inputs, with each encoded and tested once, and averaged for each marker. For Opt. attack, we use an Adam optimizer. For σ > 0case, we set β = 2σ2 (MAP estimator). For σ = 0, we sweep 
+
+β ∈ { 0, 2e−6, 2e−4, 2e−3, 2e−2, 2e−1}. We initialize ˆ x with every pixel being 0.5. We run the optimizer for 500 steps with learning rate 0.05, and CosineAnnealingLR scheduler with Tmax = 500 and ηmin = 0. After each step, the image is clamped to ˆ x ∈ [−0.5, 1.5] to refrain from diverging too far from [0, 1]. For DNN attack, we use the following architecture from [32], modified to cover arbitrary m:• First layer: Linear(out_dim=1024, in_dim= m)+ LeakyReLU(0.2) + Linear(out_dim=128 ×h2,in_dim=1024) + Reshape to (128, h, h)• Body: 3×[Conv2d(out_dim=128, in_dim=128, k=3, stride=1, pad=1) + LeakyReLU(0.2)] • Final layer: ConvTranspose2d(out_dim=128, in_dim=128, k=3, stride=2, pad=1, out_pad=1) + LeakyReLU(0.2) + ConvTranspose2d(out_dim=C, in_dim=128, k=3, stride=2, pad=1, out_pad=1) where C is the channel dimension of the image dataset. We used h = 7 for MNIST and h = 9 for CIFAR-10. For train-ing, we used the entire training set with the following hyper-parameters: batch size 256, 40 epochs, Adam with OneCy-cleLR (max_lr=2e-3, pct_start=0.3), plain MSELoss, and clip_grad_norm(0.1). We scaled down the embedding as the scale varies with m, by the embeddings’ root-mean-square (RMS) value from a sampled 512 embeddings from the train-ing set. 
+
+# A.2 Van Trees Inequality (in the form from Bouchard et al. [2]) 
+
+Below, we restate the matrix van Trees inequality from Bouchard et al. [2] (with notational changes) used to derive our Corollary 1. Note that this form is not original to Bouchard et al. [2] and similar forms were presented in other work as well, but we use the notation from Bouchard et al. [2] as it most closely resemble our need. 
+
+Lemma 1 (Matrix van Trees inequality [2]) Let ˆθ be an estimator of θ, and y be a noisy observation. Let 
+
+Iy(θ) = Ey|θ
+
+∇θ log p(y|θ)∇θ log p(y|θ)⊤,
+
+and S = Eθ
+
+∇θ log π(θ)∇θ log π(θ)⊤, where π(θ) is the prob-ability density function of θ. If p (y, θ) is absolutely continuous with respect to θ a.e. y, if θp(y, θ) → 0 as ∥θ∥ → ∞, and if 
+
+Eθ
+
+Iy(θ) + S exists and is non-singular, For a d-dimensional 
+
+θ, the following holds for any ˆθ:
+
+E|| ˆθ − θ|| 22/d ≥ 1
+
+d Tr 
+
+ EIy(θ) + S−1
+
+. (10) 
+
+# A.3 Generalized Multivariate van Trees In-equality (in the form from Gill &Levit [16]) 
+
+Below, we restate the generalized multivariate van Trees In-equality in the form presented in Gill & Levit [16], which we use to derive Theorem 2 and Corollary 3. Specifically, below is their Theorem 1 with notational changes and simplifications (we set B = Ik and n = 1) to fit our purpose. 
+
+Lemma 2 (Generalized van Trees with Ψ [16]) Let ˆθ be an estimator of θ, let y be a noisy observation, and let 
+
+Ψ : Rd → Rk be differentiable with J Ψ = ∂Ψ /∂θ ∈ Rk×d . Sup-pose p (y | θ) and π(θ) are absolutely continuous in θ, and that 
+
+Iy(θ) exists with diag (Iy(θ)) 1/2 locally integrable in θ. Let sπ(θ) = ∇θ log π(θ) be the score function. Let C : Rd → Rk×d
+
+be a differentiable matrix weight field with rows c i(θ)⊤, with all moments below finite, and suppose C (θ) p(y, θ) → 0 as 
+
+∥θ∥ → ∞. Then, 
+
+E∥Ψ(ˆθ) − Ψ(θ)∥2
+
+≥
+
+
+
+E Tr  JΨ(θ)C(θ)⊤ 2
+
+E Tr  C(θ) Iy(θ)C(θ)⊤ + E∥ div C +C s π∥2 ,
+
+where (div C)i = ∇·ci.
+
+# A.4 Proofs A.5 Proofs of the Bounds 
+
+Corollary 1 (Improved MSE bound) Under Assumption 1, suppose further that x p (e, x) → 0 as ∥x∥ → ∞ for a.e. e, and that EIe(x) + S is non-singular. Then the following holds for any attack ˆx = Att (e):
+
+E∥ ˆx − x∥22/d ≥ 1
+
+d Tr 
+
+ EIe(x) + S−1
+
+. (3) 
+
+Proof 1 (Proof of Corollary 1) Replacing θ with x and y with e from Lemma 1 immediately gives the result. Note that for our randomized DNN encoder, 
+
+Ee|x
+
+∇x log p(e|x)∇θ log p(e|x)⊤ = 1
+
+σ2 JEnc D (x)⊤JEnc D (x),
+
+18 which makes the two definitions Iy(θ) from Lemma 1 and 
+
+Ie(x) from Equation 1 to collapse to the same matrix under notational changes (hence, we use the same notation I for both). 
+
+Corollary 2 (Noise-free MSE bound) Let r = rank (EG),and let U ∈ Rd×(d−r) be an orthonormal basis for null (EG).Then, 
+
+E|| ˆx − x|| 22/d ≥ lim 
+
+> σ→0
+
+1
+
+d Tr 
+
+ EIe(x) + S−1
+
+(4) 
+
+= lim 
+
+> σ→0
+
+1
+
+d Tr 
+
+  1
+
+σ2 EG + S−1
+
+(5) 
+
+= 1
+
+d Tr 
+
+
+
+(U⊤SU )−1
+
+. (6) 
+
+When EG is full rank (r = d), the bound collapses to zero. 
+
+Proof 2 (Proof of Corollary 2) Consider an orthonormal basis [R U], where R is an orthonormal basis for 
+
+range (EG), and U is an orthonormal basis for null (EG).In this basis, 
+
+[R U ]⊤ 1
+
+σ2 EG + S
+
+
+
+[R U ]=
+
+ 1 
+
+> σ2
+
+A 00 0
+
+
+
++
+
+S11 S12 
+
+S21 S22 
+
+
+
+=
+
+ 1 
+
+> σ2
+
+A + S11 S12 
+
+S21 S22 
+
+
+
+,
+
+where the top-left block A is r × r and positive definite (in-vertible), and S 11 = R⊤SR, S 12 = R⊤SU, S 21 = U⊤SR, and S22 = U⊤SU. By the block-inverse formula, the inverse is again a block matrix with: 
+
+• (1,1) block: ( 1 
+
+> σ2
+
+A + S11 )−1 + ( 1 
+
+> σ2
+
+A + S11 )−1S12 (S22 −
+
+S21 ( 1 
+
+> σ2
+
+A + S11 )−1S12 )−1S21 ( 1 
+
+> σ2
+
+A + S11 )−1
+
+• (1,2) block: −( 1 
+
+> σ2
+
+A + S11 )−1S12 (S22 − S21 ( 1 
+
+> σ2
+
+A +
+
+S11 )−1S12 )−1
+
+• (2,1) block: −(S22 − S21 ( 1 
+
+> σ2
+
+A + S11 )−1S12 )−1S21 ( 1 
+
+> σ2
+
+A +
+
+S11 )−1
+
+• (2,2) block: (S22 − S21 ( 1 
+
+> σ2
+
+A + S11 )−1S12 )−1
+
+As σ → 0, 1 
+
+> σ2
+
+A blows up as A is positive definite, so ( 1 
+
+> σ2
+
+A +
+
+S11 )−1 → 0, and only the (2,2) block survives as S −122 . Hence, 
+
+lim  
+
+> σ→0
+
+Tr 
+
+ EIe(x) + S−1
+
+= Tr (S−122 ) = Tr 
+
+
+
+(U⊤SU )−1
+
+.
+
+Theorem 2 ( Ψ-bound) Let Ψ : Rd → Rk be a twice-differentiable function, with J Ψ = ∂Ψ /∂x. Let P 1 and P 2 be two orthogonal projectors that are orthogonal to each other and P 1 + P2 = Id (it can be generalized to arbitrary number of projectors, but we keep it two for simplicity). Define for g ∈ { 1, 2}:ng = E JΨPg 2
+
+> F
+
+, tg = ∆gΨ + JΨPgsπ,
+
+where Ψi : Rd → R is the i-th component of Ψ, and the i-th row of ∆gΨ is (∆gΨ)i = Tr  Pg ∇2Ψi
+
+. Next, we define a 2 × 2
+
+matrix D, with the following (i, j)-th elements: Di j = 1
+
+σ2 E
+
+h
+
+⟨JEnc D PiJ⊤ 
+
+> Ψ
+
+, JEnc D PjJ⊤ 
+
+> Ψ
+
+⟩F
+
+i
+
++ E ti, t j
+
+,
+
+where ⟨· , ·⟩ F is a Frobenius inner product. Suppose Assump-tion 1 holds, that J Ψ(x)Pg p(e, x) → 0 as ∥x∥ → ∞ for a.e. e and each g, that the moments n g and D i j are finite, and that D ≻ 0. Then for any attacker ˆx = Att (e),
+
+E ∥Ψ( ˆx) − Ψ(x)∥2 ≥ n⊤D−1n, n = [ n1 n2]⊤. (7) 
+
+Proof 3 (Proof of Theorem 2) Apply Lemma 2 with C(x) = ∑
+
+> g∈{ 1,2}
+
+wg JΨ(x) Pg, wg ∈ R.
+
+for arbitrary w 1, w2 ∈ R. Since P g is a projector, the numera-tor of Lemma 2 becomes 
+
+E Tr (JΨC⊤) = ∑
+
+> g∈{ 1,2}
+
+wgE Tr (JΨ(x)PgJΨ(x)⊤)
+
+= ∑
+
+> g∈{ 1,2}
+
+wgE Tr (JΨ(x)PgPgJΨ(x)⊤)
+
+= ∑
+
+> g∈{ 1,2}
+
+wgE Tr (PgJΨ(x)⊤JΨ(x)Pg)
+
+= E
+
+# ∑
+
+> g∈{ 1,2}
+
+wg∥JΨ(x)Pg∥2
+
+> F
+
+
+
+= ∑
+
+> g∈{ 1,2}
+
+wg ng = w⊤n, w = [ w1 w2]⊤.
+
+Next, we consider the first denominator term of Lemma 2. The i-th row of C is ∑g∈{ 1,2} wg∇Ψ ⊤ 
+
+> i
+
+Pg, so 
+
+E Tr  C(x)Ie(x)C(x)⊤ 
+
+= 1
+
+σ2 E Tr  C(x)JEnc D (x)⊤JEnc D (x)C(x)⊤ 
+
+= 1
+
+σ2 E
+
+h
+
+JEnc DC⊤ 2
+
+> F
+
+i
+
+= 1
+
+σ2 E
+
+h
+
+# ∑
+
+> i
+
+JEnc D
+
+ 
+
+# ∑
+
+> g∈{ 1,2}
+
+wg∇Ψ ⊤ 
+
+> i
+
+Pg
+
+⊤ 2
+
+> F
+
+i
+
+= 1
+
+σ2 E
+
+h
+
+# ∑
+
+> i
+
+# ∑
+
+> g∈{ 1,2}
+
+wgJEnc D Pg∇Ψ i 2
+
+> F
+
+i
+
+.
+
+For notational simplicity, if we let K g = JEnc D PgJ⊤ 
+
+> Ψ
+
+:
+
+= 1
+
+σ2 E
+
+h
+
+# ∑
+
+> i
+
+# ∑
+
+> g∈{ 1,2}
+
+wgJEnc D Pg∇Ψ i, ∑
+
+> g∈{ 1,2}
+
+wgJEnc D Pg∇Ψ i
+
+i
+
+= 1
+
+σ2 w⊤
+
+E⟨K1, K1⟩F
+
+ E⟨K1, K2⟩F
+
+
+
+E⟨K2, K1⟩F
+
+ E⟨K2, K2⟩F
+
+
+
+w.
+
+19 Finally, let’s consider the second denominator term of Lemma 2. The i-th row of the divergence of C is: 
+
+div  
+
+# ∑
+
+> g∈{ 1,2}
+
+wg∇Ψ ⊤ 
+
+> i
+
+Pg
+
+ = ∑
+
+> g∈{ 1,2}
+
+wg div  ∇Ψ ⊤ 
+
+> i
+
+Pg
+
+
+
+= ∑
+
+> g∈{ 1,2}
+
+wg∇· Pg∇Ψ i
+
+
+
+= ∑
+
+> g∈{ 1,2}
+
+wg Tr  Pg∇2Ψi
+
+
+
+= ∑
+
+> g∈{ 1,2}
+
+wg(∆GΨ)i.
+
+Hence, 
+
+E∥ div C +Cs π∥2 = E∥ ∑
+
+> g∈{ 1,2}
+
+wg tg∥2
+
+= ∑
+
+> g∈{ 1,2}
+
+# ∑
+
+> g′∈{ 1,2}
+
+wgwg′ ⟨tg,tg′ ⟩
+
+= w⊤
+
+E[ t1, t1 ] E[ t1, t2 ]
+
+E[ t2, t1 ] E[ t2, t2 ]
+
+
+
+w.
+
+Substituting all the components back into Lemma 2, every nonzero w gives a valid bound (w⊤n)2/(w⊤Dw ). To get its supremum, we define an inner product ⟨u, v⟩D = u⊤Dv (D ≻ 0
+
+required). Then, w ⊤n = ⟨w, D−1n⟩D. From Cauchy-Schwarz: 
+
+(w⊤n)2 ≤ ⟨ w, w⟩D⟨D−1n, D−1n⟩D = ( w⊤Dw )( n⊤D−1n).
+
+The final step leverages the fact that D is symmetric. Thus, 
+
+sup 
+
+> w̸=0
+
+(w⊤n)2
+
+w⊤Dw = n⊤D−1n,
+
+with equality at w ∝ D−1n. 
+
+Corollary 3 (Zero-noise Ψ-bound) From Theorem 2, let P r
+
+be the projector onto the range space range (EG), and let P n
+
+be the projector onto the null space null (EG). Let t r, t n, n r,and n n be the respective t and n vectors for P r and P n. Then, as σ → 0,n⊤D−1n −→ n2n
+
+E∥tn∥2 =
+
+ E∥JΨPn∥2
+
+> F
+
+ 2
+
+E ∆nΨ + JΨPnsπ 2 .
+
+Proof 4 (Proof of Corollary 3) If P 1 = Pr and P 2 = Pn, D can be further simplified with the fact that J Enc D Pr = JEnc D and JEnc D Pn = 0 for π-a.e. x. Then, any term involving J Enc D PnJ⊤
+
+> Ψ
+
+becomes zero, and D becomes: D = 1 
+
+> σ2
+
+E
+
+h
+
+∥JEnc D J⊤ 
+
+> Ψ
+
+∥2
+
+> F
+
+i
+
++ E tr, tr
+
+ E tr, tn
+
+
+
+E tn, tr
+
+ E tn, tn
+
+!
+
+.
+
+Write T =
+
+E tr, tr
+
+ E tr, tn
+
+
+
+E tn, tr
+
+ E tn, tn
+
+
+
+, k = E∥JEnc D J⊤ 
+
+> Ψ
+
+∥2
+
+> F
+
+
+
+σ2 .
+
+Then, we can rewrite D as: D = T + ke 1e⊤ 
+
+> 1
+
+,
+
+where e 1 = [ 1 0 ]⊤. From Sherman-Morrison formula, D−1 = T −1 − kT −1e1e⊤ 
+
+> 1
+
+T −1
+
+1 + ke ⊤ 
+
+> 1
+
+T −1e1
+
+.
+
+As σ → 0, k → ∞, so this becomes: T −1 − T −1e1e⊤ 
+
+> 1
+
+T −1
+
+e⊤ 
+
+> 1
+
+T −1e1
+
+=
+
+0 00 1/T22 
+
+
+
+=
+
+0 00 1/E∥tn∥2
+
+.
+
+Plugging this into n ⊤D−1n concludes the proof. 
+
+# A.6 Proofs of the MMSE Attack 
+
+Here, we prove that Equations 8 and 9 are the MMSE esti-mators when reconstructing Gaussian inputs x ∼ N (μ, η2Id )
+
+from a linear encoder output e = W x + N (0, σ2Id ).
+
+σ > 0 case. First, recall that the MMSE estimator is the posterior mean ˆ x = E[x | e]. For σ > 0, 
+
+e | x ∼ N (W x , σ2Im),
+
+so the likelihood is 
+
+p(e | x) ∝ exp 
+
+
+
+− 12σ2 ∥e −W x ∥22
+
+
+
+.
+
+The prior is 
+
+π(x) ∝ exp 
+
+
+
+− 12η2 ∥x − μ1∥22
+
+
+
+.
+
+By Bayes’ rule, 
+
+p(x | e) ∝ p(e | x)π(x),
+
+and hence 
+
+p(x | e) ∝ exp 
+
+
+
+− 12σ2 ∥e −W x ∥22 − 12η2 ∥x − μ1∥22
+
+
+
+.
+
+Expand the two quadratic terms: 
+
+∥e −W x ∥22 = e⊤e − 2x⊤W ⊤e + x⊤W ⊤W x ,
+
+and 
+
+∥x − μ1∥22 = x⊤x − 2μ1⊤x + constant .
+
+Ignoring terms that do not depend on x,
+
+p(x | e) ∝
+
+exp 
+
+
+
+− 12
+
+
+
+x⊤
+
+W ⊤W
+
+σ2 + Id
+
+η2
+
+
+
+x − 2x⊤
+
+W ⊤e
+
+σ2 + μ111
+
+η2
+
+ 
+
+.
+
+20 Define 
+
+R = W ⊤W
+
+σ2 + Id
+
+η2
+
+and 
+
+b = W ⊤e
+
+σ2 + μ1
+
+η2 .
+
+Then 
+
+p(x | e) ∝ exp 
+
+
+
+− 12
+
+
+
+x⊤Rx − 2x⊤b
+
+
+
+.
+
+As R is symmetric, 
+
+x⊤Rx − 2x⊤b = ( x − R−1b)⊤R(x − R−1b) + constant ,
+
+so 
+
+p(x | e) ∝ exp 
+
+
+
+− 12
+
+
+
+(x − R−1b)⊤R(x − R−1b)
+
+
+
+.
+
+This is a Gaussian with mean R−1b and covariance R−1:
+
+x | e ∼ N (R−1b, R−1).
+
+Thus, the posterior mean (MMSE) is ˆx = R−1
+
+W ⊤e
+
+σ2 + μ1
+
+η2
+
+
+
+.
+
+Using 
+
+Rμ 1 = W ⊤W μ 1
+
+σ2 + μ1
+
+η2 ,
+
+this can equivalently be written as ˆx = μ1 + R−1 W ⊤(e −W μ 1)
+
+σ2 ,
+
+which is Equation 8. 
+
+σ = 0 case. When σ = 0, the above equation cannot be used because of the 1 /σ2 term. Instead, note that the observation is noiseless: e = W x . Define y = x − μ1. Then, 
+
+y ∼ N (0, η2Id ),
+
+and 
+
+e −W μ 1 = Wy = z.
+
+Our goal is to find ˆx = Ex|e = Ey|e + μ111 = Ey|z + μ111.
+
+Let Prow and Pnull be the orthogonal projectors to row and null spaces of W . Decompose y into its row-space and null-space components: 
+
+y = Prow y + Pnull y.
+
+The null-space component is completely invisible to the ob-servation, since 
+
+W P null y = 0.
+
+Moreover, because y ∼ N (0, τ2I), the row-space and null-space components are independent. Therefore, observing z
+
+provides no information about Pnull y, and 
+
+EPnull y | z = EPnull y = 0.
+
+For the row-space component, we use 
+
+Prow = W +W,
+
+where W + is a Moore-Penrose pseudoinverse of W . Thus, 
+
+Ey | z + μ1 = EProw y | z + μ1
+
+= EW +Wy | z + μ1
+
+= EW +z | z + μ1
+
+= W +z + μ1
+
+= W +(e −W μ 1) + μ1.
+
+This is Equation 9, thus we conclude our proof. 21
