@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-09-01
-- 运行时间：2026-09-01 22:49:56 UTC
+- 最新运行日期：2026-09-02
+- 运行时间：2026-09-02 22:46:43 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 2026年9月1日AI论文阅读日报：精读7篇，速读12篇  
-2) 高分论文聚焦生成模型的分布性能与对抗鲁棒性，并探讨视觉中心AI模型的软硬件协同优化策略  
-3) 建议关注检索增强生成技术在实际场景中的可靠性挑战及视觉语言模型幻觉检测的最新进展
-- 详情：[/202609/01/README](/202609/01/README)
+1) 今日精读7篇、速读12篇论文，聚焦联邦学习与视觉语言模型前沿进展  
+2) 高分论文集中探讨联邦学习对抗攻击防御及视觉语言模型特征蒸馏技术  
+3) 建议关注图像生成与AI-人类内容区分方向，可尝试相关开源工具实践
+- 详情：[/202609/02/README](/202609/02/README)
 
 ### 精读区论文标签
-1. [Sequential Euclidean connections with exponential memory: distributional performance and adversarial robustness](/202609/01/2608.25298v2-sequential-euclidean-connections-with-exponential-memory-distributional-performance-and-adversarial-robustness)  
+1. [Rethinking the Transferable Adversarial Attacks and Robust Defense in Federated Learning](/202609/02/2608.25133v1-rethinking-the-transferable-adversarial-attacks-and-robust-defense-in-federated-learning)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动下的鲁棒性
-2. [Vision-centric generative AI models: A software-hardware perspective](/202609/01/2608.27199v1-vision-centric-generative-ai-models-a-software-hardware-perspective)  
+   evidence：对抗攻击与生成模型鲁棒性
+2. [Evaluating Constrained Iterative Refinement for Scalable Vector Graphics Generation with Off-the-Shelf VLMs](/202609/02/2608.28678v1-evaluating-constrained-iterative-refinement-for-scalable-vector-graphics-generation-with-off-the-shelf-vlms)  
    标签：评分：9.0/10、query:image-generation
-   evidence：图像生成技术的评估
-3. [Data Diversity, Not Frequency Invariance: A Controlled and Self-Audited Study of Compression-Robust Deepfake Detection](/202609/01/2608.28685v1-data-diversity-not-frequency-invariance-a-controlled-and-self-audited-study-of-compression-robust-deepfake-detection)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对图像生成模型的鲁棒性研究
-4. [ARMOR: Manifold-Oriented Training for Adversarially Robust Aerial Object Detection under Data Scarcity](/202609/01/2608.29510v1-armor-manifold-oriented-training-for-adversarially-robust-aerial-object-detection-under-data-scarcity)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-5. [Audio-Driven Adversarial Defense for 3D Talking Face Generation with totally Visual Fidelity Preservation](/202609/01/2608.30951v1-audio-driven-adversarial-defense-for-3d-talking-face-generation-with-totally-visual-fidelity-preservation)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动用于图像防御
-6. [Retrieved But Not Reliable: A Survey on Attacks, and Defenses in Retrieval-Augmented Generation](/202609/01/2608.24977v1-retrieved-but-not-reliable-a-survey-on-attacks-and-defenses-in-retrieval-augmented-generation)  
+   evidence：约束迭代优化SVG生成方法
+3. [NepScript Genesis: Neural Architecture Search for Handwritten Devanagari Digit Synthesis](/202609/02/2608.29540v1-nepscript-genesis-neural-architecture-search-for-handwritten-devanagari-digit-synthesis)  
+   标签：评分：9.0/10、query:image-generation
+   evidence：生成对抗网络用于手写数字合成
+4. [Metadata-Aware Adaptation of a Generative Foundation Model for Conditional CMR Synthesis](/202609/02/2608.24342v1-metadata-aware-adaptation-of-a-generative-foundation-model-for-conditional-cmr-synthesis)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：基于元数据的生成模型用于医学图像合成
+5. [Defending Network Intrusion Detection Systems Based on Graph Neural Networks Against Structural Adversarial Attacks](/202609/02/2608.24454v1-defending-network-intrusion-detection-systems-based-on-graph-neural-networks-against-structural-adversarial-attacks)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-7. [CAITLYN: Can LLM Agents Autonomously Synthesize Defenses against Emerging Injection Attacks?](/202609/01/2608.27990v1-caitlyn-can-llm-agents-autonomously-synthesize-defenses-against-emerging-injection-attacks)  
+   evidence：对抗攻击对图神经网络的影响
+6. [DEFUSE: Generalizable Backdoor Defense for Self-Supervised Encoders with Generative Priors](/202609/02/2608.25851v1-defuse-generalizable-backdoor-defense-for-self-supervised-encoders-with-generative-priors)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
+   evidence：对抗攻击防御技术
+7. [FUSED: Forensic-Semantic Mixture-of-Experts for AI Inpainting Detection and Localization](/202609/02/2608.28302v1-fused-forensic-semantic-mixture-of-experts-for-ai-inpainting-detection-and-localization)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动对图像篡改的影响相关
 
 ### 速读区论文标签
-1. [Retrieved But Not Reliable: A Survey on Attacks, and Defenses in Retrieval-Augmented Generation](/202609/01/2608.24977v2-retrieved-but-not-reliable-a-survey-on-attacks-and-defenses-in-retrieval-augmented-generation)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-2. [Overview of SHROOM-Visions 2026: A Shared Task on Hallucination Detection in Large Vision-Language Models](/202609/01/2608.25662v2-overview-of-shroom-visions-2026-a-shared-task-on-hallucination-detection-in-large-vision-language-models)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像生成模型检测任务
-3. [Adversarial Training of Linear Models under Stealthy Attacks](/202609/01/2608.25681v1-adversarial-training-of-linear-models-under-stealthy-attacks)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-4. [HypoForge: A Self-Improving Multi-Agent Framework for Automated Hypothesis Generation and Testing via Scientific Skill Learning](/202609/01/2608.25770v1-hypoforge-a-self-improving-multi-agent-framework-for-automated-hypothesis-generation-and-testing-via-scientific-skill-learning)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略相关
-5. [TEE-X: TEE-aware Acceleration Framework for Large Vision Models at the Edge](/202609/01/2608.22716v1-tee-x-tee-aware-acceleration-framework-for-large-vision-models-at-the-edge)  
+1. [X-MULTI: VLM-based Imaging Factor Disentanglement for Factor-Aware Image Synthesis](/202609/02/2608.24563v1-x-multi-vlm-based-imaging-factor-disentanglement-for-factor-aware-image-synthesis)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：图像生成中因素解耦技术的应用
+2. [MLLMCLIP: Feature-Level Distillation of MLLM for Robust Vision-Language Representations](/202609/02/2608.25575v1-mllmclip-feature-level-distillation-of-mllm-for-robust-vision-language-representations)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：多模态模型的知识蒸馏方法
+3. [On the Separation of Human and AI-Generated Images in CLIP Embedding Space](/202609/02/2608.25609v1-on-the-separation-of-human-and-ai-generated-images-in-clip-embedding-space)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：CLIP嵌入空间中人类与AI生成图像的分离
+4. [G2D: Generative-to-Discriminative Collaborative Inference for Zero-Shot Image Classification](/202609/02/2608.26744v1-g2d-generative-to-discriminative-collaborative-inference-for-zero-shot-image-classification)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络在图像生成中的应用
+5. [When Composition Doesn't Add Up: Humans Identifying Defects in AI-Generated Images](/202609/02/2608.25933v1-when-composition-doesnt-add-up-humans-identifying-defects-in-ai-generated-images)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成技术
-6. [AnaDiffusion: Anatomically CompositionalLatent Diffusion for Controllable 3D Brain MRI Generation](/202609/01/2608.23014v1-anadiffusion-anatomically-compositionallatent-diffusion-for-controllable-3d-brain-mri-generation)  
+   evidence：对抗扰动与AI生成图像缺陷
+6. [When Pruning Meets Interpretability: Preserving Sparse Autoencoder Robustness in LLMs](/202609/02/2608.25941v1-when-pruning-meets-interpretability-preserving-sparse-autoencoder-robustness-in-llms)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动相关
-7. [Evaluating Modern RAG: Textual, Multimodal, Dense, and Late Interaction Pipelines](/202609/01/2608.23176v1-evaluating-modern-rag-textual-multimodal-dense-and-late-interaction-pipelines)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：图像生成质量的评估方法
-8. [Representation Learning in Diffusion and Flow-based Model: An Application Aspect](/202609/01/2608.24068v1-representation-learning-in-diffusion-and-flow-based-model-an-application-aspect)  
+   evidence：对抗扰动对模型压缩影响
+7. [Image Augmentation as Test Generation for Deep Learning-Based Image Retrieval Systems](/202609/02/2608.27502v1-image-augmentation-as-test-generation-for-deep-learning-based-image-retrieval-systems)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：探讨生成式图像对抗扰动
-9. [Misanthrope: A Privacy-Preserving Keypoint Detector](/202609/01/2608.23012v1-misanthrope-a-privacy-preserving-keypoint-detector)  
+   evidence：对抗扰动用于图像测试生成
+8. [REPLICANT: Learning Policies for Evading and Hardening Malware Detectors](/202609/02/2608.28499v1-replicant-learning-policies-for-evading-and-hardening-malware-detectors)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击下的恶意软件检测策略
+9. [Giraffe: A Mapping Architecture from Hidden Text Representations to Visual Embeddings for Efficient Graphic Design](/202609/02/2608.23970v1-giraffe-a-mapping-architecture-from-hidden-text-representations-to-visual-embeddings-for-efficient-graphic-design)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：研究图像对抗攻击防御技术
-10. [NeuronGuard: Robust LLM Safety Alignment via Ablation-Aware Safety Signal Redistribution](/202609/01/2608.23959v1-neuronguard-robust-llm-safety-alignment-via-ablation-aware-safety-signal-redistribution)  
+   evidence：对抗扰动下的图像模型保护
+10. [VGA-BenchV2: An Expanded Unified Benchmark and Multi-Model Framework for Evaluating Video Aesthetics and Generation Quality](/202609/02/2608.25452v1-vga-benchv2-an-expanded-unified-benchmark-and-multi-model-framework-for-evaluating-video-aesthetics-and-generation-quality)  
+   标签：评分：6.0/10、query:image-generation
+   evidence：视频生成质量评估
+11. [GAN-based Joint Dereverberation and Directional Filtering](/202609/02/2608.26403v1-gan-based-joint-dereverberation-and-directional-filtering)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击下的模型安全
-11. [Are Android GUI Agents Robust Against Runtime Anomalies? AnTrap: Evaluating Agents in Dynamic Adversarial Environments](/202609/01/2608.24099v1-are-android-gui-agents-robust-against-runtime-anomalies-antrap-evaluating-agents-in-dynamic-adversarial-environments)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：动态对抗扰动评估
-12. [Example-based Robust Abnormality Detection with Minimal Annotations using Exemplar Med-DETR](/202609/01/2608.24281v1-example-based-robust-abnormality-detection-with-minimal-annotations-using-exemplar-med-detr)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动下的医学图像检测方法
+   evidence：对抗扰动下的图像处理
+12. [Rethinking Image Processing for the Age of AI: A Problem-First Framework for Scientific Progress](/202609/02/2608.26833v1-rethinking-image-processing-for-the-age-of-ai-a-problem-first-framework-for-scientific-progress)  
+   标签：评分：6.0/10、query:image-generation
+   evidence：以问题为导向的图像处理框架
 
 
 ### ⚡ 这个站点能做什么
