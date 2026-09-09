@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-09-08
-- 运行时间：2026-09-08 22:31:46 UTC
+- 最新运行日期：2026-09-09
+- 运行时间：2026-09-09 21:36:29 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-今日重点研读了19篇AI领域论文，涵盖模型安全性、高光谱图像生成及语音情感识别等前沿方向  
-精读篇目聚焦视觉语言模型跨模态安全机制与3D高斯点图像生成技术，速读内容则涉及对抗样本优化、领域迁移鲁棒检测和语音识别方法创新  
-建议对模型安全性和生成技术感兴趣的读者优先精读8.0分以上的论文，其余可结合自身研究方向选择性速览
-- 详情：[/202609/08/README](/202609/08/README)
+1) 今日精读与速读共19篇论文，聚焦AI安全与生成式技术前沿  
+2) 高分论文集中于对抗攻击防御、深度伪造检测及生成式AI研究热潮  
+3) 建议关注生成式AI在理论与计算研究中的应用趋势，并深入阅读深度伪造检测相关论文以了解前沿技术
+- 详情：[/202609/09/README](/202609/09/README)
 
 ### 精读区论文标签
-1. [Do VLMs Share Safety Neurons Across Modalities?](/202609/08/2608.30750v1-do-vlms-share-safety-neurons-across-modalities)  
+1. [Preprocessing Failure and Adversarial Detection in Depthwise-Separable Edge Vision Systems](/202609/09/2609.03453v1-preprocessing-failure-and-adversarial-detection-in-depthwise-separable-edge-vision-systems)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：视觉模型对抗攻击与防御机制分析
-2. [BRF-GS: Hyperspectral Bidirectional Reflectance Factor Modeling and Image Generation Based on 3D Gaussian Splatting](/202609/08/2608.31159v1-brf-gs-hyperspectral-bidirectional-reflectance-factor-modeling-and-image-generation-based-on-3d-gaussian-splatting)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：基于3D高斯溅射的图像生成
-3. [Robust dimension-free estimation of simple random tensors: optimal guarantees under heavy tails and adversarial contamination](/202609/08/2609.00675v1-robust-dimension-free-estimation-of-simple-random-tensors-optimal-guarantees-under-heavy-tails-and-adversarial-contamination)  
+   evidence：图像对抗攻击防御技术
+2. [AlcaTRAz - Anchored Tree-Rule Defense Against Jailbreaks](/202609/09/2609.03693v1-alcatraz---anchored-tree-rule-defense-against-jailbreaks)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-4. [PhantomCall: Evading ML Malware Detectors via Function Call Graph Perturbation](/202609/08/2609.00705v1-phantomcall-evading-ml-malware-detectors-via-function-call-graph-perturbation)  
+   evidence：对抗攻击防御方法
+3. [Repeat-After-Me: Black-Box Adaptive Visual Prompt Injection](/202609/09/2609.04533v1-repeat-after-me-black-box-adaptive-visual-prompt-injection)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击与防御方法研究
-5. [Full-Model Optimality for Tunable Linear Generative Priors in Compressed Sensing](/202609/08/2609.02790v1-full-model-optimality-for-tunable-linear-generative-priors-in-compressed-sensing)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成模型在图像生成领域的研究
-6. [Certified Spherical MUSIC for 3D Localization under Adversarial Subspace Perturbations](/202609/08/2609.03264v1-certified-spherical-music-for-3d-localization-under-adversarial-subspace-perturbations)  
+   evidence：图像对抗攻击与防御
+4. [AngelFingerprint: A Traceable, Explainable, and White-Box Stealthy Watermark for Text-Guided Image Editing](/202609/09/2609.04709v1-angelfingerprint-a-traceable-explainable-and-white-box-stealthy-watermark-for-text-guided-image-editing)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：研究对抗扰动下的3D定位
-7. [Step Back to Move Forward: Reflection-Aware Preference Optimization for Visual Generation](/202609/08/2609.04282v1-step-back-to-move-forward-reflection-aware-preference-optimization-for-visual-generation)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：扩散模型用于图像生成
+   evidence：图像水印技术用于对抗攻击下的图像保护
+5. [Robustness Evaluation and Detection of Transferable Adversarial Attacks in ML-Based NIDS](/202609/09/2609.06012v1-robustness-evaluation-and-detection-of-transferable-adversarial-attacks-in-ml-based-nids)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击的图像防御策略
+6. [Discovering Natural Transformation Vulnerabilities in Black-Box Vision Models](/202609/09/2609.07110v1-discovering-natural-transformation-vulnerabilities-in-black-box-vision-models)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗攻击生成方法
+7. [CrACK: Adversarial Attacks on Cross-Model Consistency in Collaborative Vision Foundation Models](/202609/09/2609.07499v1-crack-adversarial-attacks-on-cross-model-consistency-in-collaborative-vision-foundation-models)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：跨模型一致性攻击
 
 ### 速读区论文标签
-1. [Breadth Beats Depth: Improving GCG-Based Jailbreak Optimization with Breadth-Oriented Suffix Search](/202609/08/2609.02172v1-breadth-beats-depth-improving-gcg-based-jailbreak-optimization-with-breadth-oriented-suffix-search)  
+1. [Building a research-software catalog with a coding agent: from hackathon prototype to public deployment](/202609/09/2609.04711v1-building-a-research-software-catalog-with-a-coding-agent-from-hackathon-prototype-to-public-deployment)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击优化方法
-2. [Domain shift-robust object detection with GenAI image editing](/202609/08/2609.02299v1-domain-shift-robust-object-detection-with-genai-image-editing)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：探讨对抗扰动对生成模型的影响
-3. [SISER: Speaker-Invariant Speech Emotion Recognition with Entropy-Based Adversarial Training](/202609/08/2609.02941v1-siser-speaker-invariant-speech-emotion-recognition-with-entropy-based-adversarial-training)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击与防御方法
-4. [Beyond Small Patches: Black-Box Detection and Purification of Diverse Backdoor Triggers](/202609/08/2609.03139v1-beyond-small-patches-black-box-detection-and-purification-of-diverse-backdoor-triggers)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：黑盒防御方法
-5. [MROP: Mask-Region Optimized Purification Against Backdoor Attack in Deep JSCC](/202609/08/2609.00786v1-mrop-mask-region-optimized-purification-against-backdoor-attack-in-deep-jscc)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：图像模型防御技术
-6. [Low-Quality Face Recognition using Center Aligned Representations and Local Margin Constraints](/202609/08/2609.01014v1-low-quality-face-recognition-using-center-aligned-representations-and-local-margin-constraints)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像识别
-7. [One Prompt Is Enough: Watermark Laundering Through Foundation Image Models](/202609/08/2609.01249v1-one-prompt-is-enough-watermark-laundering-through-foundation-image-models)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的水印消除
-8. [InfraPatch: Cross-Task Targeted Grayscale Patch Attacks on Infrared-Adapted Vision-Language Models](/202609/08/2609.02233v1-infrapatch-cross-task-targeted-grayscale-patch-attacks-on-infrared-adapted-vision-language-models)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像模型保护
-9. [AIA$^{2}$: Attribute-Agnostic Imbalance Augmentation for Subgroup Robustness](/202609/08/2608.30297v1-aia2-attribute-agnostic-imbalance-augmentation-for-subgroup-robustness)  
-   标签：评分：6.0/10、query:image-adversarial
    evidence：对抗攻击防御方法
-10. [Mode Connectivity Beyond Classifiers: Evidence from Generative and Contrastive Models](/202609/08/2608.30366v1-mode-connectivity-beyond-classifiers-evidence-from-generative-and-contrastive-models)  
+2. [The Generative AI Gold Rush in Theoretical and Computational Research](/202609/09/2609.04872v1-the-generative-ai-gold-rush-in-theoretical-and-computational-research)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：涉及对抗攻击的防御策略
+3. [Adaptive Gated Deepfake Detection for Low-Resolution and Resource-Constrained Environments](/202609/09/2609.05320v1-adaptive-gated-deepfake-detection-for-low-resolution-and-resource-constrained-environments)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：提出对抗攻击检测框架
+4. [A Black-Box Adversarial Attack on Human Pose Estimation and Keypoint-Based Action Recognition Models](/202609/09/2609.08013v1-a-black-box-adversarial-attack-on-human-pose-estimation-and-keypoint-based-action-recognition-models)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：黑盒对抗攻击方法
+5. [ExpArt-KG: Artwork Image Description Generation through Iterative Exploration of Knowledge Graphs](/202609/09/2609.00629v1-expart-kg-artwork-image-description-generation-through-iterative-exploration-of-knowledge-graphs)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：知识图谱辅助图像描述生成
+6. [Persistent Identity Preservation in Generative Image Models: A Benchmark and Evaluation System](/202609/09/2609.04151v1-persistent-identity-preservation-in-generative-image-models-a-benchmark-and-evaluation-system)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：生成模型身份保持评估
+7. [ReaDiT Guidance: Control for Image and Video Generation using Diffusion Transformer Features](/202609/09/2609.04649v1-readit-guidance-control-for-image-and-video-generation-using-diffusion-transformer-features)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：扩散模型特征控制生成
+8. [GenPuzzle: Benchmarking Visual Reasoning in Image Generation Models](/202609/09/2609.05902v1-genpuzzle-benchmarking-visual-reasoning-in-image-generation-models)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：图像生成模型的视觉推理测试
+9. [GenScale: A Benchmark for Relative Object Scale in Image Generation and Editing](/202609/09/2609.00525v1-genscale-a-benchmark-for-relative-object-scale-in-image-generation-and-editing)  
+   标签：评分：6.0/10、query:image-generation
+   evidence：图像生成中的尺度评估
+10. [SpatialGuard: Harness-Guided Verifiable Spatial Reasoning for Text-to-Image Generation](/202609/09/2609.01582v1-spatialguard-harness-guided-verifiable-spatial-reasoning-for-text-to-image-generation)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：生成模型鲁棒性研究
-11. [Decoupled Latent Flow Matching for Few-Step Joint Vocal-Accompaniment Separation](/202609/08/2608.30913v1-decoupled-latent-flow-matching-for-few-step-joint-vocal-accompaniment-separation)  
+   evidence：对抗扰动生成与防御方法
+11. [LLaDA-Image: Building Strong Image Generators with Fully Open Training Recipes](/202609/09/2609.03796v1-llada-image-building-strong-image-generators-with-fully-open-training-recipes)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击与生成模型结合
-12. [Same Semantics, Different Outcome: On the Modality Robustness of Multimodal LLMs under Knowledge Conflict](/202609/08/2609.00550v1-same-semantics-different-outcome-on-the-modality-robustness-of-multimodal-llms-under-knowledge-conflict)  
+   evidence：生成式图像对抗鲁棒性
+12. [RefDiT: Local Attribute Guidance in Reference-Based Image Generation](/202609/09/2609.04976v1-refdit-local-attribute-guidance-in-reference-based-image-generation)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：多模态模型对抗扰动处理分析
+   evidence：参考图像生成局部属性
 
 
 ### ⚡ 这个站点能做什么
