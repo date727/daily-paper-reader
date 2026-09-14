@@ -1,6 +1,9 @@
 * [首页](/)
 * [使用教程](/newbie/README)
 * Daily Papers
+  * 2026-09-14 <!--dpr-date:20260914-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/14/2609.12397v1-ufo-chain-of-evaluation-for-omni-condition-alignment-in-multi-modal-image-generation" data-sidebar-item="{&quot;title&quot;: &quot;UFO: Chain-of-Evaluation for Omni-Condition Alignment in Multi-Modal Image Generation&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.12397v1-ufo-chain-of-evaluation-for-omni-condition-alignment-in-multi-modal-image-generation&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;image-generation&quot;}], &quot;evidence&quot;: &quot;多模态图像生成的统一评估框架&quot;}">UFO: Chain-of-Evaluation for Omni-Condition Alignment in Multi-Modal Image Generation</a>
   * 2026-09-12 <!--dpr-date:20260912-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/12/2609.10787v1-shedding-light-a-benchmark-for-evaluating-lighting-understanding-in-generative-image-models" data-sidebar-item="{&quot;title&quot;: &quot;Shedding Light: A Benchmark for Evaluating Lighting Understanding in Generative Image Models&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.10787v1-shedding-light-a-benchmark-for-evaluating-lighting-understanding-in-generative-image-models&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;image-adversarial&quot;}], &quot;evidence&quot;: &quot;评估生成模型对光照的理解能力&quot;}">Shedding Light: A Benchmark for Evaluating Lighting Understanding in Generative Image Models</a>

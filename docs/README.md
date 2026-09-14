@@ -6,19 +6,23 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-09-13
-- 运行时间：2026-09-13 21:30:20 UTC
+- 最新运行日期：2026-09-14
+- 运行时间：2026-09-14 22:23:47 UTC
 - 运行状态：成功
-- 本次总论文数：0
-- 精读区：0
+- 本次总论文数：1
+- 精读区：1
 - 速读区：0
 
 ### 今日简报（AI）
-> 今日无新推荐，系统未产出可展示论文。
-- 详情：[/202609/13/README](/202609/13/README)
+1) 今日深入精读一篇多模态图像生成领域高分论文《UFO: Chain-of-Evaluation for Omni-Condition Alignment in Multi-Modal Image Generation》（8.0/10）  
+2) 论文聚焦多条件对齐技术优化与生成质量评估框架创新，提出通过链式评价提升跨模态一致性  
+3) 建议关注其条件对齐方法在实际场景中的应用潜力，并尝试相关开源工具验证技术细节
+- 详情：[/202609/14/README](/202609/14/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [UFO: Chain-of-Evaluation for Omni-Condition Alignment in Multi-Modal Image Generation](/202609/14/2609.12397v1-ufo-chain-of-evaluation-for-omni-condition-alignment-in-multi-modal-image-generation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：多模态图像生成的统一评估框架
 
 ### 速读区论文标签
 - 本次无速读推荐。
