@@ -1,0 +1,1463 @@
+1
+DERA: Detached Edge-Residual Adaptation for
+Prohibited item Detection
+Yonathan Michael , Mohamad Alansari , Mohammed Bennamoun , Senior Member, IEEE, Dwarikanath
+Mahapatra , Andreas Henschel , Naoufel Werghi , Senior Member, IEEE
+Project Page
+Abstract—Prohibited-item detection in X-ray imagery remains
+challenging due to object superposition, weak texture, and
+material clutter which obscure both semantic appearance and
+object boundaries. We propose DERA, a Detached Edge-Residual
+Adaptation framework for prohibited item detection under X-
+ray imagery. DERA combines hierarchical visual features with
+a parallel pixel-difference edge pyramid and learns an object-
+specific boundary prior from training-time contours of the
+instance masks. The detached prior gates edge-sensitive features,
+which are injected into the early visual stages through residual
+heads. This staged design preserves the foundation detector at the
+start of adaptation, isolates boundary supervision from semantic
+feature learning, and restricts the final adaptation stage to only
+14.7K trainable parameters. Evaluated on PIDray, CLCXray,
+and STCray, DERA improves the baseline by 3.1, 1.6, and 2.4
+AP points, respectively.
+Index
+Terms—X-ray
+prohibited-item
+detection,
+Vision-
+language object detection, Multimodal feature fusion, Boundary-
+guided X-ray adaptation.
+I. INTRODUCTION
+A
+UTOMATED prohibited-item detection in X-ray baggage
+imagery is essential for transportation and public secu-
+rity, yet it remains substantially more difficult than conven-
+tional object detection [1]. Because transmission images su-
+perimpose the contents of a bag, prohibited items may exhibit
+weak texture, transparent appearance, blurred boundaries, and
+severe interference from surrounding materials. Large-scale
+studies have identified class imbalance, background clutter,
+and object overlap as fundamental challenges in operational
+screening data [2], while occlusion-oriented benchmarks have
+shown that localization performance deteriorates as conceal-
+ment becomes more severe [3]. Subsequent datasets have
+moved the field toward high-quality real-world detection,
+deliberately hidden threats, and instance-level annotations [4],
+[5]. Nevertheless, small and thin items remain particularly dif-
+ficult, with benchmark analyses showing a strong association
+between missed detections and reduced object size [6].
+Research in this field has progressed from convolutional fea-
+ture refinement and occlusion-aware attention toward domain-
+specific fusion, transformer detection, and multimodal rea-
+soning. Class-balanced refinement and attention mechanisms
+have been used to suppress irrelevant background responses
+and recover discriminative regions under overlap [2], [3],
+[7]. Edge-material fusion and X-ray-specific image synthesis
+have further introduced structural and imaging priors into the
+detection pipeline [8], [9]. In parallel, end-to-end transformer
+detectors have reformulated object detection as direct set
+prediction [10], [11], while hierarchical vision transformers
+Input
+Baseline
+Edge features
+DERA
+Missed Bullet
+Duplicate boxes
+Missed Knife
+Nested Small Object
+Small objects
+Tight localization
+Recover occlusion
+Refine boxes
+Loose localization
+Severe occlusion
+PIDray
+CLCxray
+STCray
+Baseline
+DERA
+75.2
+72.1
++3.1
+64.0
+9.3
+65.6
+11.7
++1.6
++2.4
+Fig. 1. Motivation for DERA. Edge-guided adaptation recovers missed and
+occluded prohibited items and improves localization over the baseline. Green
+denotes ground truth, red incorrect predictions, and blue correct predictions.
+Bottom panel shows AP gains across the three datasets.
+have strengthened multi-scale representation learning [12].
+Recent X-ray adaptations explicitly address feature coupling
+and inaccurate localization caused by overlapping objects
+[13]. Vision-language detectors additionally enable category-
+prompt-conditioned localization [14], [15], and emerging stud-
+ies are extending security screening toward open-vocabulary
+recognition [16], self-supervised adaptation [17]–[19], dual-
+view detection [20], and cross-view and multimodal reasoning
+[21], [22].
+Despite this progress, semantic and contextual representa-
+tions may still provide imprecise spatial support when threat
+boundaries are fragmented by clutter or transmission over-
+lap. Dedicated shape streams and pixel-difference operators
+demonstrate that explicit boundary information can comple-
+ment high-level visual features [23], [24], and recent X-
+ray detectors similarly report benefits from edge-enhanced
+multi-scale processing [8], [25]–[27]. However, X-ray images
+also contain strong contours from benign objects, luggage
+structures, electronic components, and material transitions.
+Consequently, indiscriminate edge fusion can amplify irrele-
+vant responses. The problem becomes more pronounced when
+boundary supervision is derived from imperfect pseudo-masks
+and jointly propagated through an already trained detector.
+Related multi-task studies show that competing objectives
+can introduce negative transfer and conflicting gradients [28],
+[29], whereas side-network and adapter-based approaches
+suggest that lightweight residual pathways can adapt frozen
+representations with less destructive modification [30], [31].
+arXiv:2609.12411v1  [cs.CV]  11 Sep 2026
+
+
+2
+These observations motivate learning boundary information
+separately and allowing it to influence detection only through
+a restricted, detection-optimized residual correction.
+To this end, we propose DERA, a Detached Edge-Residual
+Adaptation framework for prohibited-item detection in X-ray
+imagery. Lightweight boundary heads learn object contours
+from inner boundaries of the mask instances, but the boundary
+objective is prevented from modifying the established detec-
+tor through feature detachment and parameter freezing. The
+learned contour prior gates detached edge-sensitive features
+before zero-initialized residual adapters inject a correction
+into the early contextual stages (Fig. 1). Thus, the enhanced
+architecture exactly preserves the foundation detector at the
+start of adapter optimization, while subsequent adapter-only
+training retains only boundary-guided corrections that improve
+the detection objective. The main contributions are:
+• We develop a dual-stream prohibited item detector that
+combines hierarchical contextual modeling with a multi-
+scale pixel-difference feature pyramid for complementary
+semantic and geometric representation.
+• We introduce a detached boundary-guided residual mech-
+anism in which instance-mask-derived contours gate
+edge features and affect the detector only through zero-
+initialized lightweight adapters.
+• We propose a controlled multi-stage training strategy that
+isolates foundation adaptation, boundary learning, and
+residual tuning.
+II. RELATED WORK
+A. X-Ray Prohibited-Item Detection
+Research on prohibited-item detection has evolved alongside
+increasingly realistic X-ray benchmarks [32]. Early large-scale
+studies established class imbalance, object superposition, and
+background clutter as defining characteristics of operational
+screening imagery [1], [2]. Subsequent benchmarks placed
+greater emphasis on severe occlusion and deliberately con-
+cealed threats [3], while high-quality airport imagery and
+instance-level annotations enabled more rigorous evaluation
+of localization in realistic baggage scenes [4], [5]. Statistical
+analyses of these datasets further indicate that small object size
+is strongly associated with missed detections, confirming that
+coarse semantic recognition alone is insufficient for reliable
+screening [6]. These benchmark developments encouraged a
+corresponding progression in model design where early con-
+volutional systems focused on class-balanced feature refine-
+ment and spatial attention, whereas later methods introduced
+inhibition mechanisms, dense multi-scale aggregation, and X-
+ray-specific data synthesis to improve feature discrimination
+under overlap [3], [4], [9]. Taken together, this line of research
+shifted the problem from image-level threat recognition toward
+precise object localization under clutter, concealment, and
+limited foreground evidence.
+Transformer-based detection subsequently changed the em-
+phasis from local feature enhancement to global relation
+modeling and end-to-end set prediction. DETR [10] removed
+hand-designed proposal and suppression stages , while De-
+formable DETR improved multi-scale spatial sampling and
+small-object detection [33]. DINO further strengthened query
+initialization, denoising training, and iterative box refinement
+[11], and hierarchical backbones such as Swin Transformer
+made transformer representations more suitable for dense,
+multi-resolution prediction [12]. These developments have
+begun to influence X-ray inspection, where transformer de-
+tectors have been adapted to reduce foreground-background
+feature coupling and improve localization under severe over-
+lap [13]. In parallel, contrastive vision-language pre-training
+introduced transferable semantic representations [34], and
+grounded detection frameworks connected textual phrases with
+localized image regions [35], [36]. Grounding DINO combines
+this language grounding capability with DINO-style object
+queries, providing a flexible foundation for category-prompt-
+conditioned detection [14].
+Motivation gap. Although these approaches improve semantic
+discrimination, overlap handling, and multimodal reasoning,
+they leave open how explicit object-boundary evidence can be
+incorporated into a single-view text-conditioned detector when
+the spatial support of a prohibited item is weak or fragmented.
+B. Edge-Aware Representation and Controlled Adaptation
+Explicit boundary modeling has long been used to complement
+semantic representations in dense visual prediction. Deeply
+supervised edge learning first demonstrated that hierarchical
+side outputs could recover boundaries at multiple abstraction
+levels [37]. Later approaches enriched this formulation by ag-
+gregating features across convolutional depths [38] and assign-
+ing scale-specific supervision to different network stages [39].
+Edge information was subsequently integrated into higher-
+level tasks through dedicated shape streams, showing that
+semantic and geometric processing can remain complementary
+rather than being compressed into a single representation
+[23]. PiDiNet advanced this direction by embedding classical
+gradient-sensitive operations into lightweight pixel-difference
+convolutions, providing efficient local transition modeling
+with a small parameter footprint [24]. Parallel body-edge
+representations have also been investigated in segmentation,
+where hierarchical transformer context is combined with pixel-
+difference features [40], while [41] separates contextual, detail,
+and boundary representations and uses boundary attention to
+regulate their fusion for real-time semantic segmentation.
+The value of edge information is particularly relevant to
+X-ray imagery, where object texture is weak but portions of
+a threat contour may remain visible. Boundary activation has
+therefore been used to improve feature discrimination in clut-
+tered security images [4], [26], while other detectors combine
+edge and material representations to strengthen recognition
+under overlap [8]. Recent multi-scale architectures similarly
+introduce Sobel-based or residual edge branches to recover
+spatial detail suppressed by deep feature extraction [25].
+Strong X-ray edges often arise from benign structures and
+material transitions rather than threat boundaries; therefore,
+directly fusing generic edge cues with semantic features may
+amplify clutter, particularly under joint optimization.
+This
+challenge
+parallels
+multi-task
+learning,
+where
+auxiliary-task benefits depend on task relatedness, balanced
+
+
+3
+loss scales, and compatible gradients. Gradient normalization
+methods address unequal learning rates across objectives [42],
+while empirical task-grouping studies show that apparently
+related visual tasks do not always benefit from unrestricted
+parameter sharing [28]. Multi-task optimization studies show
+that conflicting gradients from different objectives can cause
+negative transfer when they jointly update shared parameters
+[29].
+A
+complementary
+research
+direction
+avoids
+such
+interference by keeping the pre-trained representation fixed
+[43]. Residual adapters introduce domain-specific corrections
+through small additive modules [44], and side-network
+adaptation separates new task learning from the original
+network pathway [30]. Visual prompt tuning and transformer
+adapters similarly adapt large visual models while freezing
+most or all of the pre-trained backbone [31], [45]. More
+recent parallel adaptation architectures additionally avoid
+back-propagating through the frozen backbone, improving
+parameter, memory, and training-time efficiency [46].
+Motivation gap. Existing edge-enhanced X-ray detectors gen-
+erally couple structural feature learning with detector opti-
+mization, whereas adaptation research rarely considers un-
+certain object-boundary supervision. This motivates learning
+instance mask-derived contours in an isolated branch and
+transferring their influence through detached, zero-initialized
+residual adapters.
+III. DERA: DETACHED EDGE-RESIDUAL ADAPTATION
+A. Overview
+Given an X-ray image I and category prompts T = {tc}C
+c=1,
+our framework predicts prompt-aligned class scores and
+bounding boxes. As shown in Fig. 2, the model contains two
+parallel branches: a visual branch of hierarchical transformers
+that captures contextual information and an edge branch
+of pixel-difference network that emphasizes local intensity
+transitions. Their multiscale features are fused and processed
+by a text-conditioned object detector. To distinguish object
+contours from generic X-ray edges, we introduce a boundary-
+prior branch supervised by contours derived from instance-
+masks. The predicted boundary probability gates early pixel-
+difference features, which are injected into the detector
+through zero-initialized residual projections. Instance-masks
+are used only to extract target contours during training and
+are not required at inference.
+B. Dual-Stream Foundation Detector
+1) Contextual and pixel-difference features: Given an X-
+ray image, the visual branch produces feature maps {Si}3
+i=0,
+while the parallel pixel-difference branch produces the corre-
+sponding edge-sensitive pyramid {Pi}3
+i=0. For an input feature
+map X, each pixel-difference block is formulated as:
+Y = R(X) + Conv1×1 [ReLU (K3×3(X))] ,
+(1)
+where K3×3 denotes a depthwise central, angular, or radial
+difference operator, or an ordinary convolution according to
+the predefined block sequence. R(·) is an identity mapping
+when the spatial resolution is preserved; in downsampling
+blocks, it applies max pooling followed by a 1 × 1 projection.
+The outputs collected at the four hierarchy levels form the
+edge-sensitive pyramid {Pi}3
+i=0. Alternating pixel-difference
+and ordinary convolutions allows the branch to retain both
+local transition cues and conventional appearance information.
+2) Cross-Stream Fusion: At each hierarchy level, Pi is
+aligned with Si using a a stage-specific 1 × 1 projection
+and optional bilinear resizing. The two streams are then fused
+by elementwise addition
+as:
+Bi = Si ⊕Ai(Pi),
+i ∈{0, 1, 2, 3},
+(2)
+where Ai(·) denotes the projection and spatial alignment
+operation. The fused pyramid {Bi}3
+i=0 forms the multiscale
+visual representation used by the subsequent detection head.
+3) Detection Head: The detection head follows the baseline
+[14] and remains unchanged. The fused pyramid {Bi}3
+i=0 is
+projected to a shared embedding space and jointly encoded
+with the category prompts. An object-query decoder then
+produces N query embeddings {zq}N
+q=1. For each query, the
+classification scores and bounding box are predicted as:
+sq = C(zq, T),
+ˆbq = B(zq),
+(3)
+where T denotes the encoded prompt tokens, C(·) is the
+text-conditioned classification branch, and B(·) predicts the
+normalized box coordinates (cx, cy, w, h). The token-level
+scores are mapped to their corresponding category prompts
+to obtain the final detections. The detector is optimized using
+the token-level focal classification loss together with ℓ1 and
+generalized IoU losses for box regression:
+Ldet = Ltok
+focal + 5Lbox
+ℓ1
++ 2LGIoU.
+(4)
+4) Boundary-Prior Prediction: The boundary branch uses
+the two highest-resolution pixel-difference features, P0 and
+P1. After stop-gradient and spatial alignment, each feature is
+processed by an independent side head
+:
+Li = Hi (Resize (sg(Pi))) ,
+i ∈{0, 1},
+(5)
+where Hi is a 3 × 3 convolution, group normalization, ReLU,
+and a 1 × 1 output projection. The aligned side logits are
+concatenated
+and fused using a learned 1 × 1 convolution
+:
+L = F(L0 ∥L1) ,
+A = sg(σ(L)) ,
+(6)
+where ∥denotes channel-wise concatenation, F is the fusion
+projection, and A is the detached boundary prior. The fusion
+weights are initialized to combine the two scales equally.
+Detaching Pi prevents the boundary loss from modifying
+the feature extractor, while detaching A prevents subsequent
+detection optimization from updating the boundary branch.
+5) Edge Gating and Residual Injection: At the first two
+hierarchy levels, the detached boundary prior A is resized
+and broadcast across the channels of the corresponding pixel-
+difference feature. The gated feature, residual correction, and
+final injection are defined as:
+Gi = sg(Pi) ⊙ρi(A),
+Ri = Zi(Gi),
+Xi = Bi ⊕Ri,
+i ∈{0, 1},
+(7)
+
+
+4
+Edge Branch
+P0
+P1
+P2
+P3
+Visual Branch
+S0
+S1
+S2
+S3
+Backbone
+Detection Head
+Channel Mapper
+Gun
+Hammer
+Knife
+Wrench
+Pliers
+Multimodal Encoder
+Class Prompts
+Decoder Query
+Activation
+P0
+P1
+GT Mask 
+Boundary
+Boundary
+Pretraining
+Frozen
+Trained
+Residual
+Finetune
+P0
+P1
+D-RH
+P2
+P3
+S0
+S1
+S2
+S3
+Detection
+Head
+GT labels 
+        +
+Boxes
+Input
+Fig. 2. Overview of DERA. Visual and edge-branch features are fused for prompt-conditioned detection, while a contour-guided boundary prior gates residual
+corrections injected only into the early visual stages.
+where ⊙denotes element-wise multiplication
+, ⊕denotes
+element-wise addition
+, and ρi(·) resizes the boundary
+prior to the resolution of Pi. Each Zi(·)
+is a stage-specific
+residual head implemented as a 1×1 projection to the channel
+dimension of Bi. Its weights and biases are initialized to zero,
+yielding Ri = 0 and Xi = Bi before residual training. The
+subsequent optimization therefore updates only the residual
+heads to learn boundary-guided corrections to the foundation
+features.
+C. Boundary Supervision
+For each object, a thin inner contour is extracted by subtracting
+the inner pixels of the original mask (Fig. 3). The instance
+contours are merged, resized to the boundary-logit resolution
+using adaptive max pooling, and masked to exclude padded
+image regions. The boundary branch is optimized using focal
+loss:
+Lboundary = −1
+N
+N
+X
+i=1
+αt (1 −pi,t)γ log (pi,t) ,
+(8)
+where pi,t is the predicted probability assigned to the target
+class at pixel i, αt is its class-balancing factor, and N is the
+number of valid pixels contributing to the loss. We use α =
+0.75 and γ = 2, while padded regions are excluded from
+optimization. The contours derived from instance masks are
+required only for boundary pretraining and are not used during
+inference.
+D. Training Strategy
+The model is optimized in three consecutive stages to separate
+semantic detector adaptation from auxiliary boundary learning.
+1) Foundation Adaptation: The visual and edge branches,
+cross-stream projections, and detection modules are jointly
+adapted to the X-ray domain, while the language encoder
+remains frozen. A lower learning rate is applied to the visual
+backbone. Training loss uses the detection objective detailed
+in Eq. 4.
+Heavy Overlap
+Reference edge map
+DERA edge branch feature map
+DERA
+Small and 
+Faint boundary
+Ground Truth
+Fig. 3.
+Boundary-guided feature visualization. DERA’s edge features
+preserve object structure under heavy overlap and faint boundaries, supporting
+accurate detections. Green dashed and blue boxes denote ground truth and
+DERA predictions, respectively.
+2) Boundary-Head Learning: The foundation checkpoint
+initializes the boundary branch. All foundation components
+and residual heads are frozen, while only the side heads
+{Hi}1
+i=0 and fusion layer F are optimized using Lboundary
+detailed in Eq. 8. This stage learns the boundary prior without
+allowing mask-derived supervision to modify the established
+detector.
+3) Residual Adaptation: The trained boundary branch is
+subsequently frozen together with the complete foundation
+model. Only the zero-initialized residual heads {Zi}1
+i=0 are
+optimized using Ldet in Eq. 4. Detection gradients propagate
+through the frozen network to the residual injection points, but
+update only the residual heads. The final stage therefore learns
+boundary-guided corrections according to their contribution to
+classification and box localization.
+E. Inference
+Inference requires only an X-ray image and the category
+prompts. The visual and edge branches first generate the
+fused visual pyramid {Bi}3
+i=0, while the frozen boundary
+branch predicts the internal prior A from P0 and P1. The
+edge-residual pathway operates only at the first two visual
+hierarchy stages: A gates the corresponding edge features,
+and the trained residual heads inject the resulting corrections
+
+
+5
+into B0 and B1 through element-wise addition. The deeper
+features B2 and B3 remain unchanged, yielding the final
+pyramid {X0, X1, B2, B3}. This representation is passed with
+the category prompts to the detection head, which produces
+prompt-aligned class scores and bounding boxes. No instance
+masks, contour targets, or external edge maps are required at
+inference.
+IV. EXPERIMENTS
+A. Implementation Details
+We implement the proposed framework on Grounding DINO
+[14], using a Swin Transformer [12] as the hierarchical
+contextual backbone and adapting PiDiNet [24] as the par-
+allel pixel-difference edge pyramid. Training follows three
+sequential stages. During foundation adaptation, the PiDiNet
+stream, cross-stream projections, Swin backbone, visual chan-
+nel mapper, text-feature projection, multimodal encoder, query
+decoder, and detection heads are optimized using token-level
+focal classification, L1, and GIoU losses weighted by 1,
+5, and 2, respectively. The Swin backbone is updated with
+a lower learning rate than the newly introduced modules,
+while the language backbone remains frozen. The resulting
+checkpoint initializes boundary-head learning, where only the
+two boundary side heads and their 1 × 1 logit-fusion layer
+are trained using sigmoid focal loss with α = 0.75 and
+γ = 2; the Grounding DINO foundation and PiDiNet feature
+stream remain fixed. Finally, the learned boundary head is
+frozen and only the zero-initialized residual 1 × 1 projections
+are optimized using the original Grounding DINO detection
+objective. Checkpoints are transferred sequentially between
+stages, and the residual-adapted checkpoint with the best
+validation performance is used for evaluation.
+B. Experimental Setup
+All experiments were conducted on a workstation equipped
+with a single NVIDIA GeForce RTX 3090 GPU with 24 GB of
+VRAM. Training followed the three-stage procedure described
+in Section III-D, with checkpoints transferred sequentially
+between stages. During foundation adaptation, the detector
+and pixel-difference stream are optimized using token-level
+focal classification, L1, and GIoU losses weighted by 1, 5,
+and 2, respectively, with learning rates of 1 × 10−4 for newly
+introduced modules and 1 × 10−5 for the Swin backbone.
+Boundary-head learning uses sigmoid focal loss with α = 0.75
+and γ = 2, a learning rate of 1 × 10−4, and updates only the
+boundary side heads and their fusion layer. Edge-gated residual
+adaptation subsequently freezes the foundation detector and
+boundary head and optimizes only the zero-initialized residual
+projections using a learning rate of 1 × 10−4 and the original
+detection objective. The three stages are trained for 15, 2, and
+3 epochs, respectively, using a batch size of 4 and AdamW
+optimization. Peak GPU-memory usage is ∼10 GB, ∼3 GB,
+and ∼6 GB for the three training stages, respectively, and
+∼4 GB during inference. The residual-adapted checkpoint
+with the best validation performance is used for final evalua-
+tion. Instance masks are required only to extract the contour
+maps for boundary-head supervision during training; inference
+uses only an X-ray image and category prompts.
+TABLE I
+COMPUTATIONAL COST AND ADAPTATION EFFICIENCY OF TRAINING AND
+INFERENCE USING SETUP DETAILED IN SEC. IV-B
+Stage / Model
+Prec. Params (M)
+Compute
+Runtime
+GMAC/img GFLOP/img ms/batch ms/img img/s Peak memory
+Training
+Grounding DINO
+FP32
+36.503
+329.57
+659.14
+1260.75
+315.19
+3.17
+7.06
+BEF-Swin
+AMP
+64.336
+349.34
+698.68
+1009.94
+252.49
+3.96
+9.51
+Boundary pretraining FP32
+0.026
+13.17
+26.34
+63.69
+15.92 62.81
+2.13
+Residual fine-tuning
+FP32
+0.015
+350.97
+701.94
+1041.03
+260.26
+3.84
+5.11
+Inf.
+Grounding DINO
+FP32
+172.915
+436.69
+873.37
+421.92
+105.48
+9.48
+2.78
+DERA
+FP32
+173.269
+465.55
+931.11
+512.42
+128.10
+7.81
+3.37
+C. Computational Efficiency
+Table I details the breakdown of computational cost and
+adaptation efficiency of each stage in DERA. Boundary pre-
+training and residual fine-tuning update only 0.026M and
+0.015M parameters, respectively. Boundary pretraining is also
+computationally inexpensive as it executes only the isolated
+boundary pathway. Residual fine-tuning, however, still evalu-
+ates the complete frozen detector so that the residual heads can
+be optimized using the detection objective and its forward cost
+therefore remains comparable to foundation adaptation despite
+the small trainable parameter count. At inference, DERA
+adds only 0.354M parameters (0.20%) and 28.86 GMAC/img
+(6.6%) over the baseline. This increases amortized latency
+from 105.48 to 128.10 ms/img and peak memory from 2.78
+to 3.37 GB.
+D. Datasets
+PIDray [5] is a large-scale real-world X-ray benchmark
+containing 47,677 images from 12 prohibited-item categories,
+with instance-level bounding-box and segmentation-mask an-
+notations. The dataset comprises 29,457 training images and
+18,220 test images, with the test set divided into Easy, Hard,
+and Hidden subsets according to object clutter and conceal-
+ment difficulty. It therefore provides a challenging evaluation
+of detection under occlusion, class imbalance, and deliberate
+threat concealment.
+CLCXray [7] contains 9,565 X-ray images, including 4,543
+scans collected from real subway-security scenes and 5,022
+scans generated from manually arranged baggage. The dataset
+covers 12 categories comprising five types of cutters and seven
+types of liquid containers, with object annotations provided
+in COCO bounding-box format. To align with our training
+objective we generate targets’ pixel-level masks using a seg-
+mentation model [47]. Its frequent overlap between prohibited
+items, benign objects, and visually similar background struc-
+tures makes it particularly relevant for evaluating boundary-
+sensitive detection.
+STCray [48] is a multimodal X-ray security dataset containing
+46,642 image-caption pairs across 21 categories, divided into
+30,044 training and 16,598 test images. It provides bounding
+boxes, pixel-level annotations, and textual descriptions, and
+follows the STING collection protocol to vary threat position,
+orientation, clutter, and occlusion. In our experiments, only
+bounding boxes and category labels supervise detection, while
+pixel-level annotations are used only to construct auxiliary
+boundary targets during training.
+
+
+6
+TABLE II
+EVALUATION OF DETECTION PERFORMANCE IN AP, AP50 AND AP75 (%). BEST AND SECOND-BEST RESULTS ARE SHOWN IN BOLD AND UNDERLINED,
+RESPECTIVELY. IMPROVEMENTS IN PARENTHESES ARE COMPUTED RELATIVE TO THE BASELINE GROUNDING DINO [14].
+Method
+PIDray
+CLCXray
+STCray
+AP
+AP50
+AP75
+AP
+AP50
+AP75
+AP
+AP50
+AP75
+Vision-only
+Faster R-CNN [49]
+59.7
+80.3
+68.7
+55.9
+70.4
+66.7
+12.7
+18.4
+13.9
+AO-DETR [13]
+59.4
+74.3
+64.0
+54.4
+66.4
+63.4
+11.8
+16.8
+12.7
+CSPCL [50]
+61.6
+75.9
+67.0
+55.2
+67.9
+63.7
+12.3
+17.3
+13.1
+Deformable DETR [33]
+58.3
+67.9
+61.1
+51.2
+60.6
+57.9
+8.2
+11.9
+10.3
+DINO [11]
+59.2
+73.1
+62.8
+54.3
+67.2
+63.6
+11.7
+16.4
+12.9
+VLM
+RegionClip [15]
+28.5
+48.7
+27.3
+51.0
+65.5
+60.4
+5.7
+10.7
+5.4
+Yolo-World [51]
+37.6
+62.3
+41.3
+55.8
+66.9
+57.4
+6.2
+10.9
+6.5
+Grounding DINO [14]
+72.1
+82.8
+77.6
+64.0
+75.2
+72.5
+9.3
+12.1
+10.3
+BEF-Swin (Ours)
+74.5 (2.4↑)
+85.7 (2.9↑)
+79.9 (2.3↑)
+65.3 (1.3↑)
+76.9 (1.7↑)
+73.2 (0.7↑)
+11.2 (1.9↑) 18.8 (6.7↑)
+12.8 (2.5↑)
+DERA (Ours)
+75.2 (3.1↑)
+86.2 (3.4↑) 80.6 (3.0↑)
+65.6 (1.6↑) 77.3 (2.1↑)
+74.4 (1.9↑)
+11.7 (2.4↑) 19.5 (7.4↑)
+14.5 (4.2↑)
+E. Evaluation Metrics
+We report the COCO-style average precision metrics. AP
+averages precision over IoU thresholds from 0.50 to 0.95 in
+increments of 0.05, while AP50 and AP75 evaluate detection
+at fixed IoU thresholds of 0.50 and 0.75, respectively. We
+additionally report APS, APM, and APL, which compute AP
+over the same IoU range for small (area < 322), medium
+(322 ≤area < 962), and large (area ≥962) objects.
+All results are expressed as percentages, with higher values
+indicating better performance.
+V. EXPERIMENTAL RESULTS AND DISCUSSION
+The proposed method is evaluated independently on PIDray,
+CLCXray, and STCray. All datasets are evaluated as class-
+conditioned bounding-box detection tasks using the metrics
+detailed in IV-E. All reproduced methods use the same
+dataset partitions, image preprocessing, and evaluator. Vision-
+language methods use the same category prompts. Method-
+specific optimization settings follow their respective imple-
+mentations.
+A. Comparison with Existing Methods
+Table II shows that the proposed model provides consis-
+tent improvements over the baseline across all three evalu-
+ation datasets. Among the vision-language models, Region-
+CLIP [15] and YOLO-World [51] remain substantially be-
+low Grounding DINO, particularly on PIDray and STCray.
+This suggests that generic region–text alignment alone is
+insufficient to overcome the appearance shift, weak texture,
+and object superposition characteristic of security X-rays.
+The consistent improvement from Grounding DINO to BEF-
+Swin indicates that pixel-difference features supply local struc-
+tural evidence that complements grounded semantic reasoning.
+DERA further improves every BEF-Swin result, with particu-
+larly notable AP75 gains on CLCXray and STCray, supporting
+the intended role of the detached boundary prior in refining the
+spatial support of detected objects. On PIDray and CLCXray,
+DERA also outperforms the vision-only methods across all
+metrics, demonstrating that controlled edge adaptation can
+complement language-grounded features more effectively than
+the evaluated benchmarks.
+The STCray results reveal a more nuanced behavior. FR-
+CNN [49], CSPCL [50], and AO-DETR [13] obtain slightly
+higher overall AP than DERA, whereas DERA achieves the
+strongest AP50 and AP75. Because COCO AP averages per-
+formance over IoU thresholds from 0.50 to 0.95, this ranking
+implies that DERA is more effective at producing detections
+that satisfy moderate and strict overlap criteria, but is less
+consistent at some of the remaining thresholds, plausibly those
+requiring near-exact box alignment. A likely reason is that
+the boundary-guided residual pathway helps recover sufficient
+object extent from incomplete or cluttered visual evidence,
+moving more predictions above the 0.50 and 0.75 matching
+thresholds, while fragmented contours, imperfect boundary
+supervision, or annotation ambiguity can still limit extremely
+high-IoU localization. The vision-only detectors may therefore
+retain an advantage in the final precision of box regression on
+STCray, whereas DERA provides stronger object recovery and
+practically useful localization in extreme clutter.
+TABLE III
+SCALE-WISE PERFORMANCE IN APS, APM AND APL (%). BEST AND
+SECOND-BEST RESULTS ARE SHOWN IN BOLD AND UNDERLINED,
+RESPECTIVELY. IMPROVEMENTS IN PARENTHESES ARE COMPUTED
+RELATIVE TO THE BASELINE GROUNDING DINO [14].
+Method
+PIDray
+CLCXray
+STCray
+APS
+APM
+APL
+APS
+APM
+APL
+APS
+APM
+APL
+Grounding DINO [14]
+9.4
+57.7
+70.3
+24.1
+34.9
+68.6
+5.3
+13.4
+15.2
+BEF-Swin (Ours)
+12.2 (2.8↑)
+59.4 (1.7↑)
+71.9 (1.6↑)
+28.3 (4.2↑)
+36.8 (1.9↑)
+70.8 (2.2↑)
+6.5 (1.2↑)
+14.0 (0.6↑)
+16.1 (0.9↑)
+DERA (Ours)
+14.0 (4.6↑) 61.6 (3.9↑)
+73.7 (3.4↑)
+31.6 (7.5↑) 39.4 (4.5↑)
+71.1 (2.5↑)
+7.5 (2.2↑) 15.1 (1.7↑)
+16.7 (1.5↑)
+B. Performance Across Object Scales
+Table III shows that DERA provides its largest gains on small
+objects, improving APS over the baseline by up to 7.5 points
+on CLCXray. This trend is consistent with the proposed design
+where small prohibited items occupy limited spatial support
+and are easily obscured by surrounding structures, whereas the
+learned edge representation and early-stage boundary-guided
+corrections preserve local evidence that may be weakened in
+deeper contextual features. The BEF-Swin foundation already
+improves performance across all scales, while DERA provides
+further gains, particularly for small and medium objects, con-
+firming that the boundary-residual pathway contributes beyond
+direct cross-stream fusion. Improvements for large objects are
+comparatively smaller, as their greater spatial extent already
+provides stronger semantic and geometric cues. Nevertheless,
+the positive APL gains on all three datasets show that improved
+small-object sensitivity is achieved without sacrificing large-
+object detection.
+
+
+7
+C. Ablation Studies
+All ablation studies are conducted exclusively on PIDray
+dataset. Each comparison uses fixed final checkpoints and
+matched training and evaluation settings. Results are reported
+using metrics detailed in Sec. IV-E.
+1) Scope of Swin Adaptation: Table IV examines whether
+X-ray adaptation can be confined to the later semantic stages of
+Swin while keeping the detection stack, PDC/PiDiNet branch,
+and edge-to-Swin projections trainable. Updating only S2–
+S3 preserves most of the full-hierarchy performance, with
+reductions of 0.3 AP and 0.4 AP50/AP75, suggesting that the
+early Swin representations remain largely transferable when
+the edge branch and fusion modules are adapted. However,
+this configuration removes only 1.5M trainable parameters
+and therefore provides limited efficiency savings. Restrict-
+ing adaptation to S3 yields a larger reduction in trainable
+parameters but decreases AP by 0.9 and AP75 by 1.1. The
+stronger degradation at the stricter IoU threshold indicates that
+S2 contributes intermediate-resolution geometric information
+needed for precise box refinement, whereas S3 primarily
+captures high-level semantics.
+TABLE IV
+EFFECT OF RESTRICTING FOUNDATION ADAPTATION OF SWIN HIERARCHY
+STAGES. ∆IS RELATIVE TO OUR BEF-SWIN FOUNDATION ADAPTATION
+RESULTS.
+Adaptation scope
+Trainable
+AP
+AP50
+AP75
+Bef-Swin
+64.3M
+74.5
+85.7
+79.9
+Later stages S2–S3
+62.8M
+74.2 ∆0.3 ↓
+85.3 ∆0.4 ↓
+79.5 ∆0.4 ↓
+Final stage S3 only
+51.0M
+73.6 ∆0.9 ↓
+84.8 ∆0.9 ↓
+78.8 ∆1.1 ↓
+2) Edge branch study: Table V isolates the effect of fixed
+and learnable edge extraction while preserving the same four-
+level hierarchy and fusion topology. The Sobel branch per-
+forms almost identically to the Grounding DINO baseline in
+AP and AP50 (72.2 vs. 72.1, and 82.8 for both), but reduces
+AP75 from 77.6 to 75.3. This indicates that generic image
+gradients provide little additional discriminative information
+and can degrade precise localization. In X-ray imagery, Sobel
+filters respond indiscriminately to material interfaces, overlap-
+ping benign objects, and baggage structures, allowing coarse
+detections to remain intact while perturbing the spatial support
+required for tighter boxes. This ablation shows that learned
+edge branch can adaptively emphasize task-relevant structure
+while suppressing irrelevant transitions.
+TABLE V
+COMPARISON BETWEEN SOBEL EDGE BRANCH AND THE LEARNED
+PIXEL-DIFFERENCE BRANCH. ∆IS MEASURED RELATIVE TO OUR
+BEF-SWIN FOUNDATION ADAPTATION RESULTS.
+Edge branch
+Trainable
+AP
+AP50
+AP75
+Sobel
+∼64.3M
+72.2 ∆2.3 ↓
+82.8 ∆2.9 ↓
+75.3 ∆4.6 ↓
+PiDiNet
+∼64.3M
+74.5
+85.7
+79.9
+3) Depth of the Boundary-Residual Pathway: Table VI
+evaluates whether boundary prediction and residual injection
+remain beneficial when extended to lower-resolution hierarchy
+levels. Each variant trains fresh boundary heads, a matching
+fusion layer, and the corresponding zero-initialized residual
+projections from the same BEF-Swin foundation, thereby
+isolating the effect of pathway depth. The two-level design
+achieves the strongest performance despite using substantially
+fewer trainable parameters. Adding P2/S2 provides no gain
+and slightly reduces AP75, while extending the pathway
+through P3/S3 causes a further decline as the residual capacity
+increases from 14.7K to 154.1K parameters. The progressively
+larger reduction at AP75 suggests that deeper injection primar-
+ily affects localization precision as early stages retain the fine
+spatial detail needed for contour-guided refinement, whereas
+deeper features are coarser and increasingly semantic, making
+them less compatible with localized boundary cues and more
+susceptible to redundant or clutter-sensitive corrections.
+TABLE VI
+EFFECT OF EXTENDING BOUNDARY PREDICTION AND RESIDUAL
+ADAPTATION THROUGH ADDITIONAL HIERARCHY LEVELS. PARAMETER
+COUNTS ARE SHOWN SEPARATELY FOR BOUNDARY-HEAD LEARNING AND
+RESIDUAL TUNING. ∆IS REPORTED RELATIVE TO DERA.
+Active hierarchy
+Boundary / residual
+AP
+AP50
+AP75
+DERA: P0–P1 / S0–S1
+26.1K / 14.7K
+75.2
+86.2
+80.6
+Three levels: P0–P2 / S0–S2
+60.8K / 61.2K
+75.1 ∆0.1 ↓86.1 ∆0.1 ↓80.3 ∆0.3 ↓
+Four levels: P0–P3 / S0–S3
+95.4K / 154.1K
+75.0 ∆0.2 ↓85.9 ∆0.3 ↓80.2 ∆0.4 ↓
+4) Residual-Projection Initialization: Table VII isolates the
+effect of residual initialization while keeping the boundary
+checkpoint, adapter placement, trainable parameter count, and
+optimization schedule unchanged. Standard and zero initializa-
+tion achieve similar AP and AP50, indicating that both config-
+urations can learn useful residual corrections. However, zero
+initialization provides a clearer advantage at AP75, improving
+it by 0.5 points. This suggests that preserving the foundation
+detector exactly at the start of adaptation is particularly bene-
+ficial for precise localization as the residual pathway is intro-
+duced without perturbing the established visual representation
+and gradually learns only detection-supported corrections. In
+contrast, standard initialization injects a non-zero response
+before training, which can slightly disturb early-stage spatial
+features.
+TABLE VII
+EFFECT OF RESIDUAL-PROJECTION INITIALIZATION. BOTH
+CONFIGURATIONS USE THE SAME BOUNDARY CHECKPOINT OF DERA. ∆
+IS REPORTED RELATIVE TO DERA.
+Initialization
+Initial correction
+Trainable
+AP
+AP50
+AP75
+Standard initialization
+Non-zero
+14.7K
+75.1 ∆0.1 ↓
+86.1 ∆0.1 ↓
+80.1 ∆0.5 ↓
+Zero initialization
+Exactly zero
+14.7K
+75.2
+86.2
+80.6
+D. Qualitative Analysis
+Figure 4 illustrates how DERA improves detection under se-
+vere overlap and weak object appearance. In the shown exam-
+ples, the baseline produces incomplete or incorrect detections,
+whereas DERA recovers the concealed targets with better-
+aligned bounding boxes. The predicted boundary prior em-
+phasizes object contours within the cluttered baggage region,
+and the residual responses concentrate the resulting correction
+around spatially relevant structures rather than uniformly mod-
+ifying the visual features. The edge-feature maps further show
+the complementary behavior of the pixel-difference hierarchy
+where early levels preserve fine local transitions, while deeper
+levels capture progressively coarser structural patterns.
+
+
+8
+Input
+Baseline
+Boundary priors
+Residual predictions
+DERA
+Edge features 
+Edge features 
+Input
+Baseline
+Boundary priors
+Residual predictions
+DERA
+Input
+Baseline
+Boundary priors
+Residual predictions
+DERA
+Edge features 
+Input
+Baseline
+Boundary priors
+Residual predictions
+DERA
+Edge features 
+Input
+Baseline
+Boundary priors
+Residual predictions
+DERA
+Edge features 
+Input
+Baseline
+Boundary priors
+Residual predictions
+DERA
+Edge features 
+
+
+9
+Input
+Baseline
+Boundary priors
+Residual predictions
+DERA
+Edge features 
+Input
+Baseline
+Boundary priors
+Residual predictions
+DERA
+Edge features 
+Fig. 4. Qualitative visualization of the baseline and DERA predictions, together with the learned boundary priors, residual responses, and multiscale edge
+features. Green annotations indicate ground truth, while red and blue boxes denote incorrect and correct detections, respectively.
+E. Limitations and Failure Cases
+Figure 5 shows that boundary guidance alone does not ex-
+plicitly enforce instance-level separation or query consistency.
+Closely packed objects may be merged into a single box,
+partially recovered objects may remain insufficiently localized
+at strict IoU thresholds, and multiple queries may respond to
+the same structure, producing duplicate detections. These cases
+indicate that DERA improves structural representation but
+does not fully resolve the downstream challenges of instance
+assignment, box regression, and duplicate control.
+Instance Merging
+Edge features map
+DERA
+Partial Localization
+Duplicate Predictions
+Ground Truth
+Fig. 5.
+Failure cases of DERA. Representative examples of instance
+merging, partial localization, and duplicate predictions. Green dashed boxes
+denote ground truth, while blue and red boxes indicate correct and incorrect
+detections, respectively.
+VI. CONCLUSION
+This work presents DERA, an edge-aware framework for
+prohibited-item detection in X-ray imagery. DERA combines
+contextual and edge representations, learns an object-specific
+boundary prior from training-time instance contours, and in-
+jects boundary-guided corrections into the early visual stages
+through detached, residual heads. Experiments on PIDray,
+CLCXray, and STCray demonstrate consistent improvements
+across different imaging conditions, while the ablation studies
+validate the use of learned edge features, early-stage residual
+adaptation, and function-preserving initialization. DERA pro-
+vides an effective and parameter-efficient adaptation strategy to
+improving detection under overlap, weak texture, and clutter.
+REFERENCES
+[1] S. Akcay and T. Breckon, “Towards automatic threat detection: A survey
+of advances of deep learning within x-ray security imaging,” Pattern
+Recognition, vol. 122, 2022.
+[2] C. Miao, L. Xie, F. Wan, C. Su, H. Liu, J. Jiao, and Q. Ye, “SIXray:
+A large-scale security inspection X-ray benchmark for prohibited item
+discovery in overlapping images,” in Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition, 2019, pp.
+2119–2128.
+[3] Y. Wei, R. Tao, Z. Wu, Y. Ma, L. Zhang, and X. Liu, “Occluded
+prohibited items detection: An X-ray security inspection benchmark
+and de-occlusion attention module,” in Proceedings of the 28th ACM
+International Conference on Multimedia, 2020, pp. 138–146.
+[4] R. Tao, Y. Wei, X. Jiang, H. Li, H. Qin, J. Wang, Y. Ma, L. Zhang, and
+X. Liu, “Towards real-world X-ray security inspection: A high-quality
+benchmark and lateral inhibition module for prohibited items detection,”
+in Proceedings of the IEEE/CVF International Conference on Computer
+Vision, 2021, pp. 10 923–10 932.
+[5] B. Wang, L. Zhang, L. Wen, X. Liu, and Y. Wu, “Towards real-
+world prohibited item detection: A large-scale X-ray benchmark,” in
+Proceedings of the IEEE/CVF International Conference on Computer
+Vision, 2021, pp. 5412–5421.
+[6] B. K. S. Isaac-Medina, S. Yucer, N. Bhowmik, and T. P. Breckon, “See-
+ing through the data: A statistical evaluation of prohibited item detection
+benchmark datasets for X-ray security screening,” in Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+Workshops, 2023, pp. 524–533.
+[7] C. Zhao, L. Zhu, S. Dou, W. Deng, and L. Wang, “Detecting overlapped
+objects in x-ray security imagery by a label-aware mechanism,” ITIFS,
+vol. 17, pp. 998–1009, 2022.
+[8] B. Jing, P. Duan, L. Chen, and Y. Du, “EM-YOLO: An X-ray prohibited-
+item-detection method based on edge and material information fusion,”
+Sensors, vol. 23, no. 20, p. 8555, 2023.
+[9] L. Duan, M. Wu, L. Mao, J. Yin, J. Xiong, and X. Li, “RWSC-Fusion:
+Region-wise style-controlled fusion network for the prohibited X-ray
+security image synthesis,” in Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, 2023, pp. 22 398–22 407.
+[10] N. Carion, F. Massa, G. Synnaeve, N. Usunier, A. Kirillov, and
+S. Zagoruyko, “End-to-end object detection with transformers,” in
+Computer Vision – ECCV 2020, ser. Lecture Notes in Computer Science,
+vol. 12346.
+Springer, 2020, pp. 213–229.
+
+
+10
+[11] H. Zhang, F. Li, S. Liu, L. Zhang, H. Su, J. Zhu, L. M. Ni, and H.-
+Y. Shum, “DINO: DETR with improved denoising anchor boxes for
+end-to-end object detection,” in International Conference on Learning
+Representations, 2023.
+[12] Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, and B. Guo,
+“Swin Transformer: Hierarchical vision transformer using shifted win-
+dows,” in Proceedings of the IEEE/CVF International Conference on
+Computer Vision, 2021, pp. 10 012–10 022.
+[13] M. Li, T. Jia, H. Wang, B. Ma, H. Lu, S. Lin, D. Cai, and D. Chen, “AO-
+DETR: Anti-overlapping DETR for X-ray prohibited items detection,”
+IEEE Transactions on Neural Networks and Learning Systems, vol. 36,
+no. 7, pp. 12 076–12 090, 2025.
+[14] S. Liu, Z. Zeng, T. Ren, F. Li, H. Zhang, J. Yang, Q. Jiang, C. Li, J. Yang,
+H. Su, J. Zhu, and L. Zhang, “Grounding DINO: Marrying DINO with
+grounded pre-training for open-set object detection,” in Computer Vision
+– ECCV 2024.
+Springer, 2024, pp. 38–55.
+[15] Y. Zhong, J. Yang, P. Zhang, C. Li, N. Codella, L. H. Li, L. Zhou, X. Dai,
+L. Yuan, Y. Li, and J. Gao, “RegionCLIP: Region-based language-image
+pretraining,” in Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition, 2022, pp. 16 793–16 803.
+[16] P. Garcia-Fernandez, L. Vaquero, M. Liu, F. Xue, D. Cores, N. Sebe,
+M. Mucientes, and E. Ricci, “Superpowering open-vocabulary object de-
+tectors for X-ray vision,” in Proceedings of the IEEE/CVF International
+Conference on Computer Vision, 2025, pp. 20 770–20 779.
+[17] Y. Michael, M. Alansari, A. Ahmed, N. Werghi, and A. Henschel, “X-ssl:
+Self-supervised x-ray threat detection with zero-shot and multi-modal
+learning,” Information Processing & Management, vol. 63, no. 1, 2026.
+[18] Y. Michael, M. Alansari, M. Assefa, N. Werghi, and A. Henschel,
+“X-threatdet: Enhancing x-ray threat detection with self-supervised
+and multi-modal learning,” in MultiMedia Modeling.
+Singapore:
+Springer Nature Singapore, 2026, pp. 17–30.
+[19] Y. Michael, M. Alansari, A. Henschel, and N. Werghi, “X-sslext: Se-
+mantic prototype self-distillation for proposal-based x-ray threat repre-
+sentation,” in 2026 IEEE International Conference on Image Processing
+(ICIP), 2026, pp. 1–6.
+[20] R. Tao, H. Wang, Y. Guo, H. Chen, L. Zhang, X. Liu, Y. Wei, and
+Y. Zhao, “Dual-view X-ray detection: Can AI detect prohibited items
+from dual-view X-ray images like humans?” in Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern Recognition,
+2025, pp. 10 338–10 347.
+[21] C. Peng, R. Tao, Z. Ren, X. Liu, and Y. Wei, “Can a second-view image
+be a language? geometric and semantic cross-modal reasoning for X-ray
+prohibited item detection,” in Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, 2026, pp. 26 176–26 186.
+[22] Y. Michael, M. Alansari, N. Takele, A. Henschel, and N. Werghi,
+“Falcon: Functional assembly and language for compositional reasoning
+in x-ray,” 2026. [Online]. Available: https://arxiv.org/abs/2606.25701
+[23] T. Takikawa, D. Acu˜na, V. Jampani, and S. Fidler, “Gated-SCNN:
+Gated shape CNNs for semantic segmentation,” in Proceedings of the
+IEEE/CVF International Conference on Computer Vision, 2019, pp.
+5229–5238.
+[24] Z. Su, W. Liu, Z. Yu, D. Hu, Q. Liao, Q. Tian, M. Pietik¨ainen, and L. Liu,
+“Pixel difference networks for efficient edge detection,” in Proceedings
+of the IEEE/CVF International Conference on Computer Vision, 2021,
+pp. 5117–5127.
+[25] W. Xu, C. Peng, W. Wang, Y. Tian, and J. Ge, “E-MPDNet: An edge-
+enhanced multi-scale network for X-ray prohibited item detection,” IEEE
+Access, vol. 13, pp. 182 177–182 191, 2025.
+[26] M. Alansari, A. Ahmed, K. Alnuaimi, D. Velayudhan, T. Hassan,
+S. Javed, M. Bennamoun, and N. Werghi, “Multi-scale hierarchical
+contour framework for detecting cluttered threats in baggage security,”
+IEEE Access, vol. 12, pp. 77 454–77 467, 01 2024.
+[27] T. Hassan, M. Bettayeb, S. Akc¸ay, S. Khan, M. Bennamoun, and
+N. Werghi, “Detecting prohibited items in x-ray images: a contour
+proposal learning approach,” in ICIP, 2020, pp. 2016–2020.
+[28] T. Standley, A. Zamir, D. Chen, L. Guibas, J. Malik, and S. Savarese,
+“Which tasks should be learned together in multi-task learning?” in
+Proceedings of the 37th International Conference on Machine Learning,
+ser. Proceedings of Machine Learning Research, vol. 119. PMLR, 2020,
+pp. 9120–9132.
+[29] T. Yu, S. Kumar, A. Gupta, S. Levine, K. Hausman, and C. Finn,
+“Gradient surgery for multi-task learning,” in Advances in Neural
+Information Processing Systems, vol. 33, 2020, pp. 5824–5836.
+[30] J. O. Zhang, A. Sax, A. Zamir, L. J. Guibas, and J. Malik, “Side-
+tuning: A baseline for network adaptation via additive side networks,” in
+Computer Vision – ECCV 2020, ser. Lecture Notes in Computer Science,
+vol. 12348.
+Springer, 2020, pp. 698–714.
+[31] S. Chen, C. Ge, Z. Tong, J. Wang, Y. Song, J. Wang, and P. Luo, “Adapt-
+Former: Adapting vision transformers for scalable visual recognition,”
+in Advances in Neural Information Processing Systems, vol. 35, 2022,
+pp. 16 664–16 678.
+[32] D. Velayudhan, T. Hassan, E. Damiani, and N. Werghi, “Recent advances
+in baggage threat detection: A comprehensive and systematic survey,”
+ACM Computing Surveys, vol. 55, 2022.
+[33] X. Zhu, W. Su, L. Lu, B. Li, X. Wang, and J. Dai, “Deformable
+DETR: Deformable transformers for end-to-end object detection,” in
+International Conference on Learning Representations, 2021.
+[34] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal,
+G. Sastry, A. Askell, P. Mishkin, J. Clark, G. Krueger, and I. Sutskever,
+“Learning transferable visual models from natural language supervi-
+sion,” in Proceedings of the 38th International Conference on Machine
+Learning, ser. Proceedings of Machine Learning Research, vol. 139.
+PMLR, 2021, pp. 8748–8763.
+[35] A. Kamath, M. Singh, Y. LeCun, G. Synnaeve, I. Misra, and N. Carion,
+“MDETR: Modulated detection for end-to-end multi-modal understand-
+ing,” in Proceedings of the IEEE/CVF International Conference on
+Computer Vision, 2021, pp. 1780–1790.
+[36] L. H. Li, P. Zhang, H. Zhang, J. Yang, C. Li, Y. Zhong, L. Wang,
+L. Yuan, L. Zhang, J.-N. Hwang, K.-W. Chang, and J. Gao, “Grounded
+language-image pre-training,” in Proceedings of the IEEE/CVF Confer-
+ence on Computer Vision and Pattern Recognition, 2022, pp. 10 965–
+10 975.
+[37] S. Xie and Z. Tu, “Holistically-nested edge detection,” in Proceedings
+of the IEEE International Conference on Computer Vision, 2015, pp.
+1395–1403.
+[38] Y. Liu, M.-M. Cheng, X. Hu, K. Wang, and X. Bai, “Richer con-
+volutional features for edge detection,” in Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition, 2017, pp.
+3000–3009.
+[39] J. He, S. Zhang, M. Yang, Y. Shan, and T. Huang, “Bi-directional
+cascade network for perceptual edge detection,” in Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern Recognition,
+2019, pp. 3828–3837.
+[40] O. N. Manzari, J. M. Kaleybar, H. Saadat, and S. Maleki, “BEFUnet:
+A hybrid CNN-transformer architecture for precise medical image
+segmentation,” arXiv preprint arXiv:2402.08793, 2024.
+[41] J. Xu, Z. Xiong, and S. P. Bhattacharyya, “ PIDNet: A Real-time
+Semantic Segmentation Network Inspired by PID Controllers ,” in 2023
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+(CVPR), 2023, pp. 19 529–19 539.
+[42] Z. Chen, V. Badrinarayanan, C.-Y. Lee, and A. Rabinovich, “GradNorm:
+Gradient normalization for adaptive loss balancing in deep multitask
+networks,” in Proceedings of the 35th International Conference on
+Machine Learning, ser. Proceedings of Machine Learning Research,
+vol. 80.
+PMLR, 2018, pp. 794–803.
+[43] B. Liu, X. Liu, X. Jin, P. Stone, and Q. Liu, “Conflict-averse gradient
+descent for multi-task learning,” in Advances in Neural Information
+Processing Systems, vol. 34, 2021, pp. 18 878–18 890.
+[44] S.-A. Rebuffi, H. Bilen, and A. Vedaldi, “Learning multiple visual
+domains with residual adapters,” in Advances in Neural Information
+Processing Systems, vol. 30, 2017, pp. 506–516.
+[45] M. Jia, L. Tang, B.-C. Chen, C. Cardie, S. Belongie, B. Hariharan, and
+S.-N. Lim, “Visual prompt tuning,” in Computer Vision – ECCV 2022,
+ser. Lecture Notes in Computer Science, vol. 13693.
+Springer, 2022,
+pp. 709–727.
+[46] O.-B. Mercea, A. Gritsenko, C. Schmid, and A. Arnab, “Time-,
+memory- and parameter-efficient visual adaptation,” in Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern Recognition,
+2024, pp. 5536–5545.
+[47] N. Ravi, V. Gabeur, Y.-T. Hu, R. Hu, C. Ryali, T. Ma, H. Khedr,
+R. R¨adle, C. Rolland, L. Gustafson, E. Mintun, J. Pan, K. V. Alwala,
+N. Carion, C.-Y. Wu, R. Girshick, P. Doll´ar, and C. Feichtenhofer,
+“Sam 2: Segment anything in images and videos,” 2024. [Online].
+Available: https://arxiv.org/abs/2408.00714
+[48] D. Velayudhan, A. Ahmed, M. Alansari, N. Gour, A. Behouch, T. Has-
+san, S. T. Wasim, N. Maalej, M. Naseer, J. Gall, M. Bennamoun,
+E. Damiani, and N. Werghi, “STING-BEE: Towards vision-language
+model for real-world X-ray baggage security inspection,” in Proceedings
+of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-
+tion, 2025, pp. 20 767–20 777.
+[49] S. Ren, K. He, R. Girshick, and J. Sun, “Faster R-CNN: Towards real-
+time object detection with region proposal networks,” in Advances in
+Neural Information Processing Systems, vol. 28, 2015, pp. 91–99.
+
+
+11
+[50] M. Li, T. Jia, H. Wang, B. Ma, Luhui, S. Guo, D. Cai, and
+D. Chen, “Cspcl: Category semantic prior contrastive learning for
+deformable detr-based prohibited item detectors,” in Advances in
+Neural Information Processing Systems, D. Belgrave, C. Zhang,
+H. Lin, R. Pascanu, P. Koniusz, M. Ghassemi, and N. Chen, Eds.,
+vol.
+38.
+Curran
+Associates,
+Inc.,
+2025,
+pp.
+141 729–141 750.
+[Online].
+Available:
+https://proceedings.neurips.cc/paper files/paper/
+2025/file/cfbce54e59addd97bf555fc31be7e4ec-Paper-Conference.pdf
+[51] T. Cheng, L. Song, Y. Ge, W. Liu, X. Wang, and Y. Shan, “YOLO-
+World: Real-time open-vocabulary object detection,” in Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern Recognition,
+2024, pp. 16 901–16 911.
+Yonathan Michael received his B.Sc. in computer
+engineering from Khalifa University, where he is
+now pursuing his Ph.D. in the Department of Com-
+puter Science. His research interests include com-
+puter vision, multimodal large language models, and
+vision-language models, with a particular focus on
+X-ray security imaging and prohibited-item detec-
+tion.
+Mohamad Alansari received his B.Sc. from Aj-
+man University and his M.Sc. degree from Khalifa
+University in electrical and computer engineering,
+where he is currently pursuing his Ph.D. degree
+in computer science. His research interests include
+computer vision in autonomous robotics, multimodal
+large language models, and visual object tracking.
+Mohammed Bennamoun (Senior Member, IEEE)
+is a Winthrop Professor of computer science at The
+University of Western Australia. He received his
+M.Sc. degree in control theory from Queen’s Uni-
+versity, Canada, and his Ph.D. degree in computer
+vision in Australia. His research interests include
+computer vision, 3D vision, deep and multimodal
+learning, biometrics, image processing, and robotics.
+He has authored four books and published more than
+540 journal and conference papers.
+Dwarikanath Mahapatra is an Assistant Professor
+in the Department of Computer Science at Khalifa
+University. He received his Ph.D. from the National
+University of Singapore and subsequently worked as
+a postdoctoral research fellow at ETH Zurich and
+a Research Staff Member at IBM Research Aus-
+tralia. His research interests include medical image
+analysis, machine and deep learning, computer-aided
+diagnosis, object detection, tracking, and image clas-
+sification. He has published more than 100 research
+papers and holds 15 patents.
+Andreas Henschel received his M.Sc. and Ph.D.
+degrees in computer science from the Technical
+University of Dresden, Germany, in 2002 and 2008,
+respectively. He subsequently joined Masdar Insti-
+tute as a postdoctoral researcher and later became an
+Assistant Professor. He was also a Visiting Scholar
+at the Massachusetts Institute of Technology. His
+research interests include bioinformatics, artificial
+intelligence, data science, genomic analysis, deep
+learning, and transfer learning, with applications to
+microbiome analysis, genomic epidemiology, and
+genotype-phenotype prediction.
+Naoufel Werghi (Senior Member, IEEE) is a Full
+Professor in the Department of Electrical Engineer-
+ing and Computer Science at Khalifa University.
+He received his Habilitation and Ph.D. degrees in
+computer vision from the University of Strasbourg
+and previously held academic positions at the Uni-
+versities of Edinburgh and Glasgow. His research
+interests include computer vision, machine learn-
+ing, biometrics, medical imaging, remote sensing,
+surveillance, and intelligent systems. He has secured
+23 research grants, published more than 200 journal
+and conference papers, and received five best paper awards. He serves as an
+Associate Editor of the IEEE Transactions on Circuits and Systems for Video
+Technology and the EURASIP Journal on Image and Video Processing.
