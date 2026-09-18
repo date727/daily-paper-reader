@@ -6,40 +6,26 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-09-17
-- 运行时间：2026-09-17 22:20:34 UTC
+- 最新运行日期：2026-09-18
+- 运行时间：2026-09-18 22:08:59 UTC
 - 运行状态：成功
-- 本次总论文数：6
-- 精读区：5
-- 速读区：1
+- 本次总论文数：1
+- 精读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-1) 今日聚焦AI视觉生成领域，精读5篇高分论文并速读1篇创新性研究  
-2) 多模态条件生成与内部尺度依赖建模技术获高分认可，遮挡感知视图合成方法展现新突破  
-3) 建议优先关注多模态条件生成在生态影像分析中的应用潜力
-- 详情：[/202609/17/README](/202609/17/README)
+1) 今日精读高分论文《Generative bootstrap processes》（8.0/10）  
+2) 该研究聚焦生成式模型的自引导训练方法，为AI系统优化提供了新思路  
+3) 建议关注生成式AI领域动态，可尝试通过学术平台检索论文原文深入了解技术细节
+- 详情：[/202609/18/README](/202609/18/README)
 
 ### 精读区论文标签
-1. [Multimodal Taxonomic Conditioning for Generative Plankton Imagery](/202609/17/2609.11673v1-multimodal-taxonomic-conditioning-for-generative-plankton-imagery)  
+1. [Generative bootstrap processes](/202609/18/2609.13471v1-generative-bootstrap-processes)  
    标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络用于图像生成
-2. [Logit Refiner: Improving Visual Autoregressive Models via Intra-Scale Dependency Modeling](/202609/17/2609.11804v1-logit-refiner-improving-visual-autoregressive-models-via-intra-scale-dependency-modeling)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：改进视觉自回归模型的对抗攻击防御
-3. [From Advertised Improvements to Measured Capabilities: Evaluating ChatGPT Images 2.5 on Forgery Tasks](/202609/17/2609.13617v1-from-advertised-improvements-to-measured-capabilities-evaluating-chatgpt-images-25-on-forgery-tasks)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：评估生成式图像在对抗攻击下的表现
-4. [CounterPersona: Append-Only Defense Against Unauthorized Persona Skill Distillation](/202609/17/2609.15097v1-counterpersona-append-only-defense-against-unauthorized-persona-skill-distillation)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御方法
-5. [Efficient Text-to-Image Generation: An Adaptive Step Schedule Controller for Diffusion Models](/202609/17/2609.16572v1-efficient-text-to-image-generation-an-adaptive-step-schedule-controller-for-diffusion-models)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：文本到图像生成优化
+   evidence：研究生成模型在图像生成中的理论性质
 
 ### 速读区论文标签
-1. [ORCA: Occlusion-Aware Refinement and Completion for Novel View Synthesis](/202609/17/2609.17450v1-orca-occlusion-aware-refinement-and-completion-for-novel-view-synthesis)  
-   标签：评分：6.0/10、query:image-generation
-   evidence：图像生成与修复技术
+- 本次无速读推荐。
 
 
 ### ⚡ 这个站点能做什么

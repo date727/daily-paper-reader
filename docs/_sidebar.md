@@ -1,6 +1,9 @@
 * [首页](/)
 * [使用教程](/newbie/README)
 * Daily Papers
+  * 2026-09-18 <!--dpr-date:20260918-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/18/2609.13471v1-generative-bootstrap-processes" data-sidebar-item="{&quot;title&quot;: &quot;Generative bootstrap processes&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.13471v1-generative-bootstrap-processes&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;image-generation&quot;}], &quot;evidence&quot;: &quot;研究生成模型在图像生成中的理论性质&quot;}">Generative bootstrap processes</a>
   * 2026-09-17 <!--dpr-date:20260917-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/17/2609.11673v1-multimodal-taxonomic-conditioning-for-generative-plankton-imagery" data-sidebar-item="{&quot;title&quot;: &quot;Multimodal Taxonomic Conditioning for Generative Plankton Imagery&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.11673v1-multimodal-taxonomic-conditioning-for-generative-plankton-imagery&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;image-generation&quot;}], &quot;evidence&quot;: &quot;生成对抗网络用于图像生成&quot;}">Multimodal Taxonomic Conditioning for Generative Plankton Imagery</a>
