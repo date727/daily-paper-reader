@@ -1,6 +1,9 @@
 * [首页](/)
 * [使用教程](/newbie/README)
 * Daily Papers
+  * 2026-09-19 <!--dpr-date:20260919-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/19/2609.16778v2-unifying-semantic-priors-and-high-frequency-traces-enhancing-v-jepa-with-mixture-of-experts-for-robust-synthetic-image-forensics" data-sidebar-item="{&quot;title&quot;: &quot;Unifying Semantic Priors and High-Frequency Traces: Enhancing V-JEPA with Mixture-of-Experts for Robust Synthetic Image Forensics&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.16778v2-unifying-semantic-priors-and-high-frequency-traces-enhancing-v-jepa-with-mixture-of-experts-for-robust-synthetic-image-forensics&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;image-adversarial&quot;}], &quot;evidence&quot;: &quot;图像伪造检测与鲁棒性提升&quot;}">Unifying Semantic Priors and High-Frequency Traces: Enhancing V-JEPA with Mixture-of-Experts for Robust Synthetic Image Forensics</a>
   * 2026-09-18 <!--dpr-date:20260918-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/18/2609.13471v1-generative-bootstrap-processes" data-sidebar-item="{&quot;title&quot;: &quot;Generative bootstrap processes&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.13471v1-generative-bootstrap-processes&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;image-generation&quot;}], &quot;evidence&quot;: &quot;研究生成模型在图像生成中的理论性质&quot;}">Generative bootstrap processes</a>

@@ -6,23 +6,23 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-09-18
-- 运行时间：2026-09-18 22:08:59 UTC
+- 最新运行日期：2026-09-19
+- 运行时间：2026-09-19 21:37:49 UTC
 - 运行状态：成功
 - 本次总论文数：1
 - 精读区：1
 - 速读区：0
 
 ### 今日简报（AI）
-1) 今日精读高分论文《Generative bootstrap processes》（8.0/10）  
-2) 该研究聚焦生成式模型的自引导训练方法，为AI系统优化提供了新思路  
-3) 建议关注生成式AI领域动态，可尝试通过学术平台检索论文原文深入了解技术细节
-- 详情：[/202609/18/README](/202609/18/README)
+1) 今日重点精读一篇关于合成图像取证技术的突破性论文  
+2) 论文提出将语义先验与高频痕迹分析结合，并通过MoE方法显著提升V-JEPA模型鲁棒性  
+3) 建议对AI图像检测领域感兴趣者深入阅读该研究以了解其技术细节与应用前景
+- 详情：[/202609/19/README](/202609/19/README)
 
 ### 精读区论文标签
-1. [Generative bootstrap processes](/202609/18/2609.13471v1-generative-bootstrap-processes)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：研究生成模型在图像生成中的理论性质
+1. [Unifying Semantic Priors and High-Frequency Traces: Enhancing V-JEPA with Mixture-of-Experts for Robust Synthetic Image Forensics](/202609/19/2609.16778v2-unifying-semantic-priors-and-high-frequency-traces-enhancing-v-jepa-with-mixture-of-experts-for-robust-synthetic-image-forensics)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：图像伪造检测与鲁棒性提升
 
 ### 速读区论文标签
 - 本次无速读推荐。
