@@ -6,79 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-09-24
-- 运行时间：2026-09-24 23:08:50 UTC
+- 最新运行日期：2026-09-25
+- 运行时间：2026-09-25 23:18:14 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日聚焦AI安全与医学影像生成领域，精选19篇论文完成精读与速读  
-2) 高分论文揭示针对性对抗攻击新方法，并推动医疗图像生成的隐私公平审计技术突破  
-3) 普通读者可优先关注图像生成工具"Paint-Anything"或医学影像合成方向的创新应用
-- 详情：[/202609/24/README](/202609/24/README)
+1) 聚焦AI生成图像检测与编辑技术，今日深入精读7篇高分论文并速览12篇前沿研究  
+2) 高分论文揭示AI图像检测模型泛化能力提升路径，同时训练-free编辑技术与隐私保护攻击方法引发关注  
+3) 建议优先了解EIB-Net的熵引导检测框架或Zero-Knowledge方法在活动识别中的隐私应用
+- 详情：[/202609/25/README](/202609/25/README)
 
 ### 精读区论文标签
-1. [GuidedRay: Diversity-Guided Direction Discovery for Targeted Hard-Label Black-Box Attacks](/202609/24/2609.25734v1-guidedray-diversity-guided-direction-discovery-for-targeted-hard-label-black-box-attacks)  
+1. [EIB-Net: Entropy-Guided Information Bottleneck for Generalizable AI-Generated Image Detection](/202609/25/2609.29064v1-eib-net-entropy-guided-information-bottleneck-for-generalizable-ai-generated-image-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击方法
-2. [A Data-Interventional Framework for Auditing Privacy and Fairness in Generative Medical Imaging](/202609/24/2609.26623v1-a-data-interventional-framework-for-auditing-privacy-and-fairness-in-generative-medical-imaging)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：生成对抗网络在图像生成中的应用
-3. [StableVQ: Practical Guidelines for Stable Vector-Quantized Tokenizer Training](/202609/24/2609.26774v1-stablevq-practical-guidelines-for-stable-vector-quantized-tokenizer-training)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：研究生成式图像对抗鲁棒性
-4. [Adversarial Attacks and Identity Leakage in De-Identification Systems: An Empirical Study](/202609/24/2609.27022v1-adversarial-attacks-and-identity-leakage-in-de-identification-systems-an-empirical-study)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-5. [Spatially Adaptive Noise Injection](/202609/24/2609.18466v1-spatially-adaptive-noise-injection)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：自适应噪声注入方法
-6. [AgentLSD: Evaluating AI Security Agents Under Adversarial Task Contamination](/202609/24/2609.19140v1-agentlsd-evaluating-ai-security-agents-under-adversarial-task-contamination)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的模型保护
-7. [Radio-Frequency Convolutional Neural Networks](/202609/24/2609.19279v1-radio-frequency-convolutional-neural-networks)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动对图像安全的影响
-
-### 速读区论文标签
-1. [Beyond the Foreground: FOV-Aware Polyp Image Synthesis via Lesion-Guided Adaptive Mucosal Context Propagation](/202609/24/2609.19966v1-beyond-the-foreground-fov-aware-polyp-image-synthesis-via-lesion-guided-adaptive-mucosal-context-propagation)  
+   evidence：图像对抗攻击检测
+2. [Refinement Is Inherently Editable: Training-Free Prompt-to-Prompt Image Editing with Generative Refinement Network](/202609/25/2609.20633v2-refinement-is-inherently-editable-training-free-prompt-to-prompt-image-editing-with-generative-refinement-network)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络用于图像编辑
+3. [HMB-GAN: Hybrid Multi-Bézier GAN for Vector Shape Synthesis](/202609/25/2609.21158v1-hmb-gan-hybrid-multi-bzier-gan-for-vector-shape-synthesis)  
    标签：评分：8.0/10、query:image-generation
    evidence：生成对抗网络用于图像生成
-2. [Paint-Anything: Unified Any-Color Control for Image Generation and Editing](/202609/24/2609.20816v1-paint-anything-unified-any-color-control-for-image-generation-and-editing)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：颜色控制用于图像生成
-3. [Can 4D Foundation Models Remember?](/202609/24/2609.20819v1-can-4d-foundation-models-remember)  
+4. [SkillIR: Evolving Scene-Aware Skills for Agentic Image Restoration](/202609/25/2609.21468v1-skillir-evolving-scene-aware-skills-for-agentic-image-restoration)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的模型保护
-4. [Can 4D Foundation Models Remember?](/202609/24/2609.20819v2-can-4d-foundation-models-remember)  
+   evidence：图像对抗攻击检测
+5. [$λ$-Controlled GRPO: Turning Flow-Matching Ratio Instability into a Budgeted Resource](/202609/25/2609.22041v2--controlled-grpo-turning-flow-matching-ratio-instability-into-a-budgeted-resource)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击下的模型保护
-5. [SparkDiffusion: Mitigating the High-Sparsity Trap --- A Unified Framework for up to $265\times$ Single-GPU Acceleration of Visual Generation](/202609/24/2609.23153v1-sparkdiffusion-mitigating-the-high-sparsity-trap-----a-unified-framework-for-up-to-265times-single-gpu-acceleration-of-visual-generation)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动与生成模型相关
-6. [GAPS: Generative Active Pseudo-view Selection for Sparse-View 3D Gaussian Splatting](/202609/24/2609.23436v1-gaps-generative-active-pseudo-view-selection-for-sparse-view-3d-gaussian-splatting)  
-   标签：评分：7.0/10、query:image-adversarial
    evidence：对抗扰动下的生成模型鲁棒性
-7. [Dissecting Agentic Forensics: The Role of Triage, Prompting, and Evidence Arbitration in Open-World Fake Image Detection](/202609/24/2609.24359v1-dissecting-agentic-forensics-the-role-of-triage-prompting-and-evidence-arbitration-in-open-world-fake-image-detection)  
+6. [Planning and Rendering in Concert: DeepFusion of Autoregressive Layouts and Diffusion for Visual Text Generation](/202609/25/2609.22916v1-planning-and-rendering-in-concert-deepfusion-of-autoregressive-layouts-and-diffusion-for-visual-text-generation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络用于图像生成
+7. [Mira-Scene: Pixel-Aligned Layouts for Generative 3D Scene](/202609/25/2609.23796v1-mira-scene-pixel-aligned-layouts-for-generative-3d-scene)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络用于3D场景生成
+
+### 速读区论文标签
+1. [Mira-Scene: Pixel-Aligned Layouts for Generative 3D Scene Reconstruction](/202609/25/2609.23796v2-mira-scene-pixel-aligned-layouts-for-generative-3d-scene-reconstruction)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络用于图像生成
+2. [Zero-Knowledge Remote Adversarial Attack against Wi-Fi-based Human Activity Recognition for Privacy Protection](/202609/25/2609.24173v1-zero-knowledge-remote-adversarial-attack-against-wi-fi-based-human-activity-recognition-for-privacy-protection)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：使用生成对抗网络生成对抗扰动
+3. [ASAP: Visual Analytics for Identifying and Analyzing Image Patterns in AI-generated Images](/202609/25/2609.27371v1-asap-visual-analytics-for-identifying-and-analyzing-image-patterns-in-ai-generated-images)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：生成式对抗扰动分析
+4. [InGuard: Towards Generalized Inner Guardrail for Safe Text-to-Image Generation](/202609/25/2609.27620v1-inguard-towards-generalized-inner-guardrail-for-safe-text-to-image-generation)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：图像生成安全防护
+5. [Online Algorithms with a Sample: Tight Bounds and Adversarial Robustness](/202609/25/2609.21889v1-online-algorithms-with-a-sample-tight-bounds-and-adversarial-robustness)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：图像伪造检测与对抗扰动相关
-8. [Decoding Guardrails: XAI-Guided Perturbation Analysis of Prompt Injection Detection](/202609/24/2609.24801v1-decoding-guardrails-xai-guided-perturbation-analysis-of-prompt-injection-detection)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：XAI扰动分析
-9. [Robust Workflow Generation via Adversarial Learning for Audio Deepfake Detection](/202609/24/2609.20063v1-robust-workflow-generation-via-adversarial-learning-for-audio-deepfake-detection)  
+   evidence：在线算法与对抗鲁棒性
+6. [LoRA-generating hypernetworks for efficient on-device LLM generative personalization](/202609/25/2609.24979v1-lora-generating-hypernetworks-for-efficient-on-device-llm-generative-personalization)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：生成对抗网络用于模型个性化
+7. [TRACE: Trajectory Representation and Consistency Estimation for AI-Generated Video Detection](/202609/25/2609.25775v1-trace-trajectory-representation-and-consistency-estimation-for-ai-generated-video-detection)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：生成对抗网络用于视频检测
+8. [NaCR: Visual Localization via NeRF-aided Camera Ray Regression](/202609/25/2609.25907v1-nacr-visual-localization-via-nerf-aided-camera-ray-regression)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：生成对抗网络用于视觉定位
+9. [ParticleSplat: Self-supervised Object-centric Latent Particle Splatting](/202609/25/2609.19463v1-particlesplat-self-supervised-object-centric-latent-particle-splatting)  
+   标签：评分：6.0/10、query:image-generation
+   evidence：基于粒子的图像生成方法
+10. [Beyond Patch Removal: Persistent Adversarial Effects in Vision-Language-Action Policies](/202609/25/2609.19669v1-beyond-patch-removal-persistent-adversarial-effects-in-vision-language-action-policies)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：使用对抗学习生成鲁棒检测工作流
-10. [WeVisDoc: From Coverage to Capability for Robust End-to-End Document Parsing](/202609/24/2609.20423v1-wevisdoc-from-coverage-to-capability-for-robust-end-to-end-document-parsing)  
+   evidence：对抗扰动下的策略恢复
+11. [Printing the Underdetermined: Materializing Multi-solutionness in Figurative Paintings](/202609/25/2609.19782v1-printing-the-underdetermined-materializing-multi-solutionness-in-figurative-paintings)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：研究图像对抗扰动安全防护
-11. [SafeStyle: Calibrated Style Residual Injection for Controllable Style-Leakage Trade-off in Diffusion Stylization](/202609/24/2609.21242v1-safestyle-calibrated-style-residual-injection-for-controllable-style-leakage-trade-off-in-diffusion-stylization)  
+   evidence：对抗扰动对图像合成多解性的影响
+12. [Absence is Presence: Understanding Visual Scene Negative Events Under Safety Cognitive Constraint](/202609/25/2609.19812v1-absence-is-presence-understanding-visual-scene-negative-events-under-safety-cognitive-constraint)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：扩散模型风格注入
-12. [Object Detection Benchmarks are Incomplete: The Role of Label Errors and Annotation Uncertainty](/202609/24/2609.21822v1-object-detection-benchmarks-are-incomplete-the-role-of-label-errors-and-annotation-uncertainty)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：研究图像对抗扰动安全防护
+   evidence：对抗攻击与防御相关
 
 
 ### ⚡ 这个站点能做什么
