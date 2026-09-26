@@ -1,0 +1,474 @@
+Title: Exploring Solver-Level Warmstarting for Neural Network Verification
+
+URL Source: https://arxiv.org/pdf/2609.25962v1
+
+Published Time: Wed, 23 Sep 2026 00:59:29 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# Exploring Solver-Level Warmstarting for Neural Network Verification 
+
+## Annelot W. Bosman 1, Minghao Liu 2, Marta Kwiatkowska 2,Holger H. Hoos 1,3,4 , and Jan N. van Rijn 11Leiden Institute of Advanced Computer Science, Leiden 
+
+2University of Oxford, United Kingdom 
+
+3Chair for AI Methodology, RWTH Aachen University, Germany 
+
+4University of British Columbia, Canada 
+
+Abstract 
+
+Neural network verification has become a key tool for providing for-mal guarantees on the behaviour of neural networks. However, many verification problems remain computationally intractable in the worst case: even for common adversarial robustness specifications, verifica-tion is NP-complete. Here, we explore the application of solver-level warmstarting for neural network verification to exploit information from previous solutions. We study the effect on running time as several properties are modified, including perturbation radii, input data and the networks themselves, using a pipeline that is generalisable and po-tentially adaptable to state-of-the-art verifiers. Our results show that warmstarting can significantly reduce verification time in most cases. Moreover, warmstarting enables the successful verification of instances that could not be solved from scratch within the given time limit. 
+
+# 1 Introduction 
+
+Recent advances in computational power and the availability of large-scale data have led to the widespread deployment of neural networks in real-world 1arXiv:2609.25962v1 [cs.LG] 22 Sep 2026 settings [14]. As neural networks are adopted in safety-critical domains, such as autonomous driving [24] and healthcare [23], the demand for formal guarantees in their robustness has become more urgent, since failures can have severe consequences. Neural network verification aims to determine whether a given neural net-work satisfies a specified property over a set of inputs, taking the network, input bounds, and property as inputs and returning either a proof that the property holds or a counterexample demonstrating a violation. Most current neural network verifiers treat each verification task in a stand-alone man-ner. However, in realistic experimental pipelines and in real-world cases, there are many similar verification instances, and it could be beneficial to use these similarities in the verification process. In the case of adversar-ial robustness property, it has been common knowledge that networks tend to be misled by similar adversarial examples, which are inputs deliberately modified to exploit model vulnerabilities [11, 13, 17, 22], and it has been recently shown that similar networks also have similar safe radii for the same input [3]. Incremental constraint solving has been explored for neural net-work verification to avoid solving each problem from scratch [6, 10]. Some work improves cross-instance verification efficiency by processing instances with similar perturbation radii in mini-batches [19] or by exploiting simi-larities and dependencies between the hidden-layer states of different inputs [7, 2]. Recent studies also explore relational verification [1], which leverages dependencies among multiple executions of the same network, and incre-mental verification [20], which exploits similarities between the original and updated networks to reuse previous verification effort. Overall, prior work utilises specific correlations between instances, but is inherently limited in generality; for example, systematic reuse of information across variations in perturbation radii, input data and networks is not supported. The verification tasks can be encoded as constraint satisfaction problems and solved using mixed-integer linear programming (MILP) solvers. Warm-starting techniques for MILP have been studied extensively in the mathe-matical optimisation literature [15]. Given a MILP instance with modified parameters or constraints, warmstarting MILP solvers brings gains in effi-ciency by reusing the information from previous runs on similar instances. In this paper, we incorporate MILP warmstarting techniques into neu-ral network verification. We focus on reusing previously obtained solver artefacts, such as previous solutions or the information on search tree, to initialise the solver for previously unseen verification instances. This set-2up enables warmstarting across a wide range of instance variations, largely independently of how the underlying verification property is modified (e.g., modified perturbation radius), although certain scenarios are expected to benefit more than others due to better similarity and reusable lower bounds. Specifically, we combine components from existing verification software with additional interfacing code to construct a pipeline that enables warmstart-ing at the solver level. We use SYMPHONY [16], an open-source MILP solver that provides direct support for warmstarting techniques, to establish a controlled verification setting and systematically investigate the impact of solver-level warmstarting. However, SYMPHONY has not been bench-marked against state-of-the-art MILP solvers for neural network verification, and thus our baseline should not be considered state-of-the-art. Instead, our goal is to isolate and evaluate the benefits of solver-level warmstarting before integrating these techniques into state-of-the-art verifiers. The main contributions of this paper are as follows: • To the best of our knowledge, we are the first to study warmstarting for different properties for neural network verification directly at the MILP solver level, in contrast to existing approaches [2, 20] that incorporate warmstarting mechanisms at the verifier level. We provide a systematic analysis of how different types of property changes affect the suitability and effectiveness of solver-level warmstarting. • We investigate multiple warmstarting scenarios and strategies, analysing their impact across different property changes. Our experimental re-sults demonstrate that this approach can yield significant performance improvements, both in terms of reduced running time and in the ability to solve verification instances that could not be solved without warm-starting within a given time limit. Importantly, these improvements are observed not only for small property changes, such as changes in the perturbation radius ε, but also for different inputs and neural networks. • We present a proof-of-concept pipeline and empirical evaluation of solver-level warmstarting using the SYMPHONY solver [16], demon-strating its potential benefits and limitations in practice. Our experimental code and results can be found here: 
+
+> https://github.com/ADA-research/STAI-Solver-Level-Warmstarting-paper .
+
+32 Problem Specification 
+
+In this section, we first introduce the formalisation of neural networks and the verification tasks at hand. Next, we outline the scenarios we considered in which warmstarting would be beneficial in verification. 
+
+## 2.1 Verification of Neural Networks 
+
+A deep neural network classifier is a function fθ : Rn0 → RnL , where θ denotes the trainable parameters, n0 is the input dimension, and nL is the number of output classes. The network consists of L layers, with layer l containing nl neurons. In the following, we consider fully connected neural networks (FCNNs), where the structure of layer l can be formalised as: 
+
+xl = σ (Wl · xl−1 + bl) , (1) where Wl ∈ Rnl×nl−1 and bl ∈ Rnl are parameters, and σ is an activation func-tion, which in our study we assume to be the widely used ReLU function σ(x) = max( x, 0) .Formal verification utilises mathematically rigorous methods to determine whether a neural network satisfies a specific property for all inputs within a given input re-gion. Assume a feasible region G and a property P in the form of a Boolean formula over linear inequalities. Following [5], formal verification aims to decide whether 
+
+∀x0 ∈ G : (xL = fθ(x0)) = ⇒ P (xL), (2) where xL is the output vector of fθ. In this work, we are concerned with the 
+
+adversarial robustness property, which is a key property for neural networks and has been extensively studied in the literature [12]. Given an original input x∗ with correct label λ(x∗), we consider the feasible region is defined by an L∞-norm ball centred at x∗ with a radius of ε:
+
+Gε(x∗) = {x0 : |x∗ − x0|∞ ≤ ε} , (3) where |x|∞ = max 1≤i≤n |xi|. A neural network fθ is said to be robust at x∗ if, and only if, ∀x0 ∈ Gε(x∗) : arg max i fθ(x0)[ i] = λ(x∗).The robustness verification of FCNNs can be formulated as the following mixed-integer linear programming (MILP) problem: 
+
+4max y (4a) s.t. y = max  
+
+> 1≤i≤nL,i ̸=λ(x∗)
+
+xL[i] − xL[λ(x∗)] (4b) 
+
+ˆxl = Wl · xl−1 + bl ∀l ∈ [1 , L ] (4c) 
+
+xl = max (ˆ xl, 0) ∀l ∈ [1 , L ] (4d) 
+
+x∗ − ε ≤ x0 ≤ x∗ + ε, (4e) where x1, . . . , x L are vectors of real-valued variables. Note that the max functions can be represented exactly with linear constraints using the big-M method [18]. A neural network is robust at x∗ with perturbation radius ε if, and only if, the optimal value of Objective (4a) is less than 0, which corresponds to the satisfaction of the property in Eq. (2). 
+
+## 2.2 Scenarios for Warmstarting 
+
+In this paper, we always consider two properties: the original property Px, with an associated solution Ax (whose concrete form we discuss later), and a new property 
+
+Pz . There are multiple ways in which Px and Pz may be related to one another, and understanding these relationships is key to determining how Ax can be reused when verifying Pz .
+
+2.2.1 Different ε.
+
+A first way in which Pz may differ from Px is through a change in the perturbation radius. This change is relevant when the feasible region of the verification problem depends on a predefined L∞-norm ball with a radius of ε. Given the same reference input x∗, we now consider two feasible region sets. 
+
+Gεx (x∗), G εz (x∗) with εz̸ = εx.
+
+This change only has an effect on Constraint (4e), as this encodes the feasible region of the modified input. While this is the simplest type of change we consider, it is particularly relevant for finding the largest safe perturbation radius for an input to a given network. Running time tends to become prohibitively expensive near the decision boundary [3], so reducing running time on previously unseen instances can help obtain a clearer picture of the robustness of a given network. We consider two warmstarting scenarios. If εz < ε x, then Gεz (x∗) ⊆ Gεx (x∗),and the feasible region for Pz is a strict subset of that for Px. In such cases, all arte-facts in solution Ax remain valid, although they could be an over-approximation. 
+
+5Conversely, if εz > ε x, the new perturbation region expands, potentially invalidat-ing some parts of Ax. Cuts and bounds derived under Px may no longer hold, and branch-and-bound nodes previously ruled out might need to be reopened. This scenario, therefore, provides a natural test of robustness for warmstarting strate-gies. We note that, in the trivial case where εz > ε x and Px was violated, Pz will also always be violated. 
+
+2.2.2 Different x∗.
+
+Another change in property arises when the reference input is replaced by a new input z∗̸ = x∗. The verification property becomes 
+
+Pz : ∃ z0 ∈ Gε(z∗) s.t. arg max  
+
+> i
+
+fθ(z0)[ i]̸ = λ(z∗).
+
+This change in property affects Constraints (4c) and (4e); as a result, some artefacts in Ax (e.g., neuron phase assignments, linear relaxations, interval bounds) may no longer be valid without modification. Nonetheless, Px and Pz can still be closely related when z∗ lies near x∗, for example, when they are from the same class. In this case, much of the internal activation pattern may be preserved, and several components of Ax can be mean-ingfully warmstarted for Pz after appropriate validity checks. 
+
+2.2.3 Different fθ.
+
+A more substantial change occurs when network parameters or architectures are modified. If the original model is fθ and the new model f ′ 
+
+> θ′
+
+with θ′̸ = θ, and f is allowed to be different from f ′, the property becomes 
+
+Pz : ∃ x0 ∈ Gε(x∗) s.t. arg max  
+
+> i
+
+f ′ 
+
+> θ′
+
+(x0)[ i]̸ = λ(x∗).
+
+In this case, Constraint (4c) may be affected, which concerns the vast majority of the encoding; even small perturbations to weights or biases can change activation patterns and thus alter the feasible region of the verification problem. If the change in parameters is small (e.g., fine-tuning, pruning or lightweight retraining), many artifacts in Ax may remain approximately valid. In such cases, warmstarting remains possible but requires conservative checks or adjustments (e.g., inflating abstract bounds, re-validating cuts). However, if the network struc-ture changes significantly (e.g., new layers, different activations), then Ax may no longer be reusable. 
+
+63 Methodology 
+
+In this section, we first introduce the core theory and algorithms of warmstarting in MILP solving. Next, we describe our approach of applying warmstarting techniques in MILP-based neural network verification. 
+
+## 3.1 Warmstarting in MILP Solving 
+
+Consider a MILP instance 
+
+z(b) := min  
+
+> x∈Π( b)
+
+c⊤x, Π( b) = x ∈ Zp × Rn−p | A · x = b, x ≥ 0 ,
+
+where x is a vector of n variables, with p of them being integers, and c, A, b are parameters. To determine the optimal value of z(b), a common procedure is the branch-and-bound algorithm, which constructs a search tree with node set V by recursively partitioning the feasible region into subproblems. Each node i ∈ V of the tree corresponds to a restricted feasible region Πi(b) ⊆ Π( b) by imposing additional bounds on integer variables. At each node, a lower bound li(b) is obtained by solving the following linear programming (LP) relaxation li(b) := min x∈Pi(b) c⊤x
+
+with the simplex algorithm [4], where Pi(b) is a polyhedral relaxation of Πi(b).An optimal basis Bi, consisting of a set of linearly independent columns in A,together with the assignments of the non-basic variables fixed at their bounds, is determined. The global lower bound can be maintained by L = min i∈V li(b).Consider a MILP with modified right-hand side d and objective z(d). The idea of warmstarting is to solve this instance by using artefacts (e.g., the search tree, lower bounds, and cutting planes) obtained during the solution of z(b). In this paper, we introduce the warmstarting techniques proposed by [15], which provide a dual interpretation of branch-and-bound. At a given node i, suppose the LP relaxation admits an optimal basis Bi; then the optimal LP value can be expressed as an affine function of the right-hand side: 
+
+li(d) = c⊤ 
+
+> Bi
+
+· B−1 
+
+> i
+
+· d + βi,
+
+where cBi denotes the components of c corresponding to the columns of Bi, and 
+
+βi represents the constant factors associated with the non-basic variables. This is a valid dual bound for the MILP, since for any d, li(d) ≤ z(d). Therefore, the piecewise linear function F (d) = min i∈V li(d) represents a global lower bound of z(d) and can be used to warmstart the branch-and-bound tree for any new d.Moreover, the pool of global cutting planes is also kept and can be reused for different values of d.
+
+7We note that, when A is modified, the artefacts that can be reused to solve the new MILP problem are limited. The search tree structure can be kept, but the dual bounds and global cuts may no longer be valid, and the LP relaxation needs to be recomputed. Thus, the effectiveness of warmstarting is reduced compared to modifying the parameters on the right-hand side. 
+
+## 3.2 Neural Network Verification with Warmstarting 
+
+In this work, we use the SYMPHONY MILP solver [16] to perform warmstart-ing, since, as far as we are aware, it is the only open-source MILP solver with native warmstarting support 1. While SYMPHONY has primarily been applied in the context of operations research, it has not, to the best of our knowledge, yet been explored for neural network verification. Importantly, SYMPHONY provides native support for two warmstarting methods that are particularly relevant in our setting: (i) reusing the branch-and-bound search tree (warmstart tree), and (ii) reusing the pool of cutting planes generated for a previous instance. In order to use SYMPHONY for neural network verification, we need to gener-ate an MPS file containing the MILP formulation of the network and the property to be verified. The complete pipeline of our MPS generation process is depicted in Figure 1. To generate this formulation, we build on the Marabou verifier [8], which can en-code neural network verification problems as MILPs by interfacing with the Gurobi MILP solver. Marabou takes as input a neural network and a corresponding VNN-LIB specification file that encodes the input constraints and the property to be verified. In our workflow, these VNN-LIB files are generated using VERONA [3], which we use as our experiment manager (see Section 4). We modified Marabou to terminate the process after Gurobi exports the corresponding MPS formula-tion, rather than solving the instance directly. Connecting all these tools to work together smoothly required substantial changes. On the VERONA side, we cre-ated an interface for SYMPHONY and Marabou; on the Marabou side, we made sure that MPS files could be retrieved without interfering with the C compiler. For additional details on how we configured and changed these tools, we refer the interested reader to Appendix A. Modern neural network verifiers represent the result of substantial engineering effort and incorporate a wide range of advanced techniques, including sophisticated branching heuristics, tight relaxations, and parallel solving strategies. While we believe that such state-of-the-art verifiers could also benefit from warmstarting, directly integrating and evaluating warmstarting strategies within these systems 
+
+> 1While proprietary solvers (e.g., CPLEX and Gurobi) support warmstarting, the reused artefacts are not publicly documented, which is important in our setting.
+
+8Property    
+
+> e.g. ε local robustness
+> VERONA Marabou Reformulation Algorithm MPS file Input
+> e.g. image
+> Neural Network Gurobi
+> MPS file MPS file INDICATOR MPS file Big-M VNNLIB ONNX file
+> Formulating the problem
+
+Figure 1: The pipeline created to formulate the verification tasks as MPS files that can be used as inputs for the SYMPHONY solver. would require significant additional engineering effort and may obscure the funda-mental effects of warmstarting itself. Instead, we adopt SYMPHONY as a con-trolled proof-of-concept solver that allows us to systematically study warmstarting behaviour in isolation. This separation of warmstarting from verifier-specific op-timisations enables a more transparent analysis of when and why warmstarting is beneficial. 
+
+## 3.3 Reformulation Algorithm 
+
+A practical challenge is that the exported MPS formulation contains indicator constraints, which are not supported by SYMPHONY. To address this issue, we introduce a reformulation procedure that converts indicator constraints into an equivalent MILP formulation, enabling SYMPHONY to read and solve the result-ing instance. The original purpose of the indicator constraints in our MPS formulation is to encode the classification decision of the network, i.e., to enforce that exactly one output class is selected. Listing 1 provides a simplified example illustrating how these indicator constraints appear in the exported MPS file. The mathematical interpretation of the indicator constraint in Listing 1 is shown in Eq. (5). In this formulation, the output variable for a particular class, 
+
+x1, is controlled by a binary variable a1. In the full verification problems, multiple classes are present, and an additional constraint ensures that exactly one class is predicted, typically by enforcing a one-hot structure over the binary variables (e.g., P 
+
+> i∈nL
+
+ai = nL − 1). We omit these additional constraints here for simplicity. 
+
+x1 =
+
+(
+
+0, if a1 = 1 ,
+
+≥ 0, if a1 = 0 . (5) 
+
+91 ROWS :                             
+
+> 2LGC0
+> 3COLUMNS :
+> 4x1 GC0 1
+> 5RHS :
+> 6RHS GC0 0
+> 7BOUNDS :
+> 8BV BND1 a1
+> 9UP BND1 x1 m0
+> 10 LO BND1 x1 0
+> 11 INDICATORS :
+> 12 IF GC0 a1 1
+> 13 ENDATA
+
+Listing 1: Example MPS formulation containing an indicator constraint.                                    
+
+> 1ROWS :
+> 2LGC0
+> 3GN1
+> 4COLUMNS :
+> 5x1 GC0 1
+> 6x1 N1 1
+> 7a1 GC0 m0
+> 8RHS :
+> 9RHS GC0 m0
+> 10 RHS N1 0
+> 11 BOUNDS :
+> 12 BV BND1 a1
+> 13 UP BND1 x1 m0
+> 14 LO BND1 x1 0
+> 15 ENDATA
+
+Listing 2: Example MPS formulation containing a big-M formulation 
+
+We reformulate the indicator constraint using big-M constraints, as shown in Eq. (6) and (7). Moreover, we select M as the upper bound of the corresponding variable, i.e., M = mi. This choice yields the smallest valid value of M while en-suring that Eq. (6) and (7) remain correct reformulations of Eq. (5). The resulting MPS file after reformulation is shown in Listing 2. 
+
+x1 + M · a1 ≤ M (6) 
+
+x1 ≥ 0 (7) Note that the performance of the MILP solver can depend on the tightness of the big-M encoding. Tighter variable bounds can strengthen the linear relaxation and reduce search effort. Since state-of-the-art verifiers typically employ more advanced bound-tightening techniques than those considered here, their MILP formulations may exhibit different solving behaviour. The impact of such tighter formulations on the effectiveness of warmstarting remains an interesting direction for future work. 
+
+10 The entire reformulation procedure is shown in Algorithm 1. 
+
+Algorithm 1 MPS Reformulation: INDICATORS → big-M constraints 
+
+Require: Input MPS file Fin containing an INDICATORS section 
+
+Ensure: Output MPS file Fout containing no indicator constraints  
+
+> 1:
+
+Parse Fin into list of lines S 
+
+> 2:
+
+Identify section boundaries in S (e.g., ROWS , COLUMNS , RHS , BOUNDS ,
+
+INDICATORS , ENDATA ) 
+
+> 3:
+
+c ← 0 
+
+> 4:
+
+for all indicator constraints of the form IF (r, a ) in INDICATORS do  
+
+> 5:
+
+▷ r : affected row, a: binary indicator variable  
+
+> 6:
+
+Determine the affected continuous variable x associated with row r 
+
+> 7:
+
+by scanning COLUMNS  
+
+> 8:
+
+Extract an upper bound M for x from the BOUNDS section  
+
+> 9:
+
+if no valid upper bound exists then  
+
+> 10:
+
+Set M ← 100 ▷ fallback used in our implementation  
+
+> 11:
+
+end if  
+
+> 12:
+
+RHS adjustment: update RHS entry for r as br ← br + M 
+
+> 13:
+
+Column insertion: add a coefficient M for variable a in row r 
+
+> 14:
+
+Row type update: set the type of r to L (i.e., ≤) 
+
+> 15:
+
+Non-negativity constraint:  
+
+> 16:
+
+Create a new row Nc of type G (i.e., ≥) 
+
+> 17:
+
+Add RHS entry bNc ← 0 
+
+> 18:
+
+Insert coefficient 1 for variable x in row Nc 
+
+> 19:
+
+c ← c + 1  
+
+> 20:
+
+end for  
+
+> 21:
+
+Remove the entire INDICATORS section from S 
+
+> 22:
+
+Write the modified lines S to Fout 
+
+# 4 Setup of Experiments 
+
+In this section, we describe the experimental setups, including details on how we selected the source and target instances for warmstarting in our empirical study. 
+
+11 4.1 Network and Image Selection 
+
+We selected three fully connected neural networks, mnist-net, mnist-net_256x2, and mnist-net_256x4, commonly used in the neural network verification literature. These networks are trained on the MNIST dataset [9] and are relatively small, allowing us to keep computational costs manageable while studying the effect of warmstarting. 
+
+Network SAT UNSAT ERROR TIMEOUT mnist-net 10 104 2 144 mnist-net_256x2 26 118 1 138 mnist-net_256x4 0 63 0 192 Table 1: Details on the number of verification instances per network, grouped by solver outcome (SAT, UNSAT, ERROR, and TIMEOUT). 
+
+We randomly selected 10 test images from the MNIST dataset. Note that not all selected images were used for every network, since we only considered instances that were classified correctly by the corresponding network. 
+
+## 4.2 Baseline Instance Generation 
+
+To generate baseline results for each image–network combination to which we can compare our method, we first performed a coarse search over the perturbation radius ε. Specifically, we did grid search [3] for ε ∈ [0 .001 , 0.4] with a step size of 0.02 , resulting in 20 candidate values. Next, we refined the search around the transition region between UNSAT and SAT by performing two iterative searches with a step size 0.002 .We refine the boundary from both sides: starting from the largest value for which the property still held, we increased ε, and starting from the smallest value for which the property did not hold, we decreased ε, in both cases using a step size of 0.002 until a timeout is reached. This staged procedure allowed us to obtain a denser set of baseline measurements near the decision boundary while keeping the total computational cost manageable, because each individual verification query was subject to a 1 wall-clock hour timeout, and we observed a substantial number of timeouts – particularly in the region where instances transition from UNSAT to SAT. Table 1 shows the number of generated baseline instances for each solver outcome. 
+
+12 4.3 Warmstarting Instance Selection 
+
+In this work, we investigate six different warm-starting scenarios. Each scenario consists of a source instance and a target instance. The source instance is solved first and results in either a SAT or UNSAT outcome, while the target instance is, in principle, unsolved at the moment warmstarting is applied. In practice, however, we solve all instances independently as well, in order to obtain a baseline running time for each verification task, in order to be able to quantify the potential benefit of warmstarting. Each of these warmstarting scenarios is discussed in Section 2.2. We now describe how we select the different instances considered for warmstarting. For each network–image combination, we consider the set of perturbation radii 
+
+ε for which the baseline verification outcome is UNSAT and the set for which the outcome is SAT. If there are at least two UNSAT instances, we generate a warmstart experiment for every unique pair of UNSAT radii (εa, ε b), such that εa <εb. Each pair defines a source and target instance taken from the corresponding MILP encodings. We repeat the same procedure for the SAT set: if at least two SAT instances exist, we create a warmstart experiment for every unique pair (εa, ε b)
+
+such that εa > ε b.After this, again for each network–image combination, we construct a sorted list of all evaluated perturbation radii ε. For every ε value that corresponds to a timeout, we select a source instance by finding the nearest ε for which a solved baseline result (SAT or UNSAT) is available. We then pair this solved instance with the timeout instance at the original ε, creating a warmstart experiment where the solved instance acts as the source and the timeout instance acts as the target. For a fixed network f and target image x, we iterate over the available ε values for (f, x ). For each ε, we select a source instance from the same network f but a different image x′̸ = x, provided that an instance for (f, x ′, ε ) exists. We then create a warm-started experiment in which the target instance is (f, x, ε ) and the source instance is (f, x ′, ε ), and we label this experiment as IMAGE. To construct network warmstart experiments, we instead fix an image x and an ε value, and collect all instances across networks that correspond to (x, ε ). If at least two different networks provide an instance for the same (x, ε ) pair, we form an experiment by pairing the first two such instances (with identical (x, ε )
+
+but different networks). We label this experiment as NET. 
+
+## 4.4 Execution Environment 
+
+All experiments were carried out on a cluster of machines equipped with Intel Xeon Gold 6252 @ 2.10GHz CPUs with 96 cores, 16GB cache size and 252GB RAM, running Ubuntu 24.04 OS. 
+
+13 Network Category #Inst Better Worse Extra ERR mnist-net IMAGE 79 36 12 12 0
+
+ε:U–TO 30 30 0 30 0
+
+ε:U–U 968 786 9 0 24 mnist-net_256x2 IMAGE 113 88 16 28 0
+
+ε:S–S 120 4 116 0 0
+
+ε:S–TO 21 21 0 21 0
+
+ε:U–U 648 564 12 0 35 mnist-net_256x4 IMAGE 39 26 2 12 0
+
+ε:U–TO 140 140 0 140 0
+
+ε:U–U 164 94 2 0 8NET 133 54 43 12 2Table 2: Experimental results obtained from using SYMPHONY for warm-starting neural network verification. The results are split per network and category, where we summarised the category names using S(SAT), U (UN-SAT), and TO(Timeout). We report the number of instances that could not be solved before using warmstarting (Extra); we also report the number of instances for each category that led to an error when using warmstarting (ERR), the total number of instances without considering instances that led to an error (#Inst) and the number of instances that were solved in less running time including extra instances (Better). 
+
+# 5 Results  
+
+> In this section, we present the results of using SYMPHONY to warmstart new MILP formulations that are slight to substantial modifications of previously solved verification instances. The absolute number of evaluated instances, as well as statistics such as the number of warmstart errors and the number of instances with reduced running time, are reported in Table 2. Moreover, Table 3 reports the running times measured in our experiments.
+
+14 Network Category # inst Baseline (s) Warm (s) ∆t (%) mnist-net IMAGE 79 1333 ± 1491 218 ± 438 -83.60 
+
+ε: U–TO 30 3600 ± 0.00 877 ± 255 -75.60 
+
+ε: U–U 968 538 ± 859 16 ± 75 -97.00 mnist-net_256x2 IMAGE 113 1635± 1619 295 ± 435 -82.00 
+
+ε: S–S 120 142 ± 206 731 ± 365 415.50 
+
+ε: S–TO 21 3600 ± 0.00 512 ± 388 -85.80 
+
+ε: U–U 648 730 ± 912 83± 227 -88.60 mnist-net_256x4 IMAGE 39 1804 ± 1632 65 ± 142 -96.40 
+
+ε: U–TO 140 3600 ± 0.00 341 ± 377 -90.50 
+
+ε: U–U 164 503 ± 664 21 ± 88 -95.80 NET 133 978 ± 1299 350 ± 502 -64.20 Table 3: Empirical results obtained from using SYMPHONY for warmstarting neural network verification. The results are shown per network and type of warm-starting (e.g., warmstarting across images, networks and values for ε), where we further split the experiments involving warmstarting across ε-values into variations of S(SAT), U (UNSAT), TO(Timeout). We report the average baseline and warm-started running time in seconds; we also report the relative change in running time as percentages. 
+
+## 5.1 Different ε.
+
+We first analyse the categories in which the only difference between the source and target instances is the magnitude of ε. Using warmstarting in the category with source and target instance both resulting in UNSAT results, abbreviated as the UNSAT-UNSAT category, led to a substantial reduction in running time, of up to 97%. In addition, we were able to solve 170 instances that timed out in the baseline experiments. Figure 2a further illustrates this reduction in running time. This category provides great potential in reducing the computational burden of certifying robustness against perturbations. For the baseline MILP instances, we observe relatively few SAT results; conse-quently, the number of warmstarted MILP instances with a SAT source instance is small (141), compared to 2021 instances with an UNSAT source instance. Interest-ingly, most baseline MILP instances that are expected to be SAT result in timeouts. 
+
+15 Although SAT instances are generally considered easier to solve in state-of-the-art neural network verifiers, these verifiers often employ specialised techniques, such as adversarial attacks, to efficiently search for counterexamples. SYMPHONY, as a general-purpose MILP solver, does not incorporate such techniques. Therefore, SYMPHONY may not efficiently locate an adversarial example even when one exists, which may explain the timeouts observed for these instances. The SAT–SAT category is the only category in which we observe an increase in running time when using warmstarting with SYMPHONY under the default warmstarting configuration of the tool; this can also be observed from Figure 2b. This suggests that warmstarting from a smaller ε-value is not beneficial. However, this observation should be interpreted with caution, as these SAT instances already require relatively short running times. Indeed, in the SAT–TIMEOUT category, warmstarting enables solving target instances that previously timed out. 
+
+## 5.2 Different x∗.
+
+For the category in which the source and target instances differ only in the input image, while sharing the same network and perturbation radius ε (denoted as IMAGE), we observe a substantial potential reduction in running time when using warmstarting: averaged over all networks we have considered, warmstarting leads to a reduction in running time of 85%. This improvement is also evident from Figure 2c, which notably shows a large number of instances that timed out in the baseline experiments but are successfully solved when using warmstarting. Notably, this reduction is achieved even though changing the input image alters the left-hand side of the MILP formulation, constituting a substantial modification of the optimisation problem. In this work, we do not employ bound propagation techniques, which in state-of-the-art verifiers would further influence neuron bounds across different inputs; this is an important consideration when transferring these insights to modern verification frameworks. Nevertheless, our results indicate that warmstarting can be highly effective for this category. 
+
+## 5.3 Different fθ.
+
+Although we did not initially expect warmstarting across different neural networks to be beneficial, we nevertheless observed an average reduction in running time of 64%. As shown in Figure 2d, this reduction is largely driven by instances that pre-viously timed out in the baseline experiments but can be solved when using warm-starting. For the remaining instances, the points are distributed relatively evenly around the diagonal, indicating that warmstarting benefits some MILP instances based on different networks, while increasing running time for others. Identifying 
+
+16 10 2 10 1 10 0 10 1 10 2 10 3  
+
+> Baseline running time of target instance (s) 10 2
+> 10 1
+> 10 0
+> 10 1
+> 10 2
+> 10 3
+> Warmstarted running time of target instance (s) UNSAT Timeout before ERR warmstart
+
+(a) Warmstart for different ε on UNSAT source and UNSAT or TIMEOUT tar-get instances. 10 2 10 3
+
+> Baseline running time of target instance (s) 10 2
+> 10 3
+> Warmstarted running time of target instance (s) SAT Timeout before
+
+(b) Warmstart for different ε on SAT source and SAT or TIMEOUT target instances. 10 2 10 1 10 0 10 1 10 2 10 3  
+
+> Baseline running time of target instance (s) 10 2
+> 10 1
+> 10 0
+> 10 1
+> 10 2
+> 10 3
+> Warmstarted running time of target instance (s) UNSAT SAT Timeout before
+
+(c) Warmstart for the same ε and net-work, but different images as source and target instances. 10 2 10 1 10 0 10 1 10 2 10 3  
+
+> Baseline running time of target instance (s) 10 2
+> 10 1
+> 10 0
+> 10 1
+> 10 2
+> 10 3
+> Warmstarted running time of target instance (s) UNSAT SAT Timeout before ERR warmstart
+
+(d) Warmstart for the same ε and im-age, but different networks as source and target instances. 
+
+Figure 2: Scatter plots comparing the running times of baseline MILP instances and the corresponding warmstarted instances. Warmstarted instances that were solved normally with UNSAT and SAT source are coloured blue in the top two fig-ures, and in the bottom two figures, we differentiate the SAT and UNSAT instances by colouring the SAT instances orange. Instances that were previously leading to a timeout error but now could be solved are coloured red, and instances that led to a segmentation error in SYMPHONY occurring are coloured green. All instances below the diagonal line benefit from warmstarting. 
+
+17 which MILP features lead to performance improvements is an interesting direction for future work. 
+
+# 6 Conclusions and Future Work 
+
+In this work, we have studied the effectiveness of solver-level warmstarting for neu-ral network verification using MILP solver SYMPHONY. Our results demonstrate that this form of warmstarting can lead to substantial efficiency gains, particu-larly for more general instance variations, in which properties differ beyond minor parameter changes. Most notably, for instance pairs in which both the source and target instances are UNSAT (i.e., both are verified to be robust), we observe reductions of up to 97% in average running time, and, across all investigated in-stance pair categories, warmstarting enables the successful solving of 300 out of 474 instances that previously timed out. At the same time, our analysis highlights important limitations: warmstarting is not beneficial in all cases, and, in 301 out of 1128 individual cases, it even increased running time by on average 364%. These findings suggest several promising directions for future work. In particu-lar, it would be valuable to investigate how warmstarting, as explored here, can be integrated into state-of-the-art neural network verifiers (e.g., α, β -CROWN [21]), which often rely on more advanced branching strategies, tighter relaxations and parallel solving techniques. Using warmstarting in such verifiers may enable more informed initialisation of the algorithm for new instances, potentially also improv-ing verification efficiency, as demonstrated in our study. In addition, future work could explore which features of MILP instances render warmstarting effective, thus enabling the automatic selection of instances for warmstarting. 
+
+# Acknowledgements 
+
+This research was partially supported by the ELSA mobility grant, a project funded by the European Union, and by an Alexander-von-Humboldt Professorship in AI held by Holger Hoos. Minghao Liu and Marta Kwiatkowska were supported by the EPSRC Prosperity Partnership FAIR (grant number EP/V056883/1) and ELSA: European Lighthouse on Secure and Safe AI project (grant agreement No. 101070617 under UK guarantee). 
+
+18 References 
+
+[1] Banerjee, D., Singh, G.: Relational DNN verification with cross executional bound refinement. arXiv preprint arXiv:2405.10143 (2024) [2] Banerjee, D., Xu, C., Singh, G.: Input-relational verification of deep neural networks. Proceedings of the ACM on Programming Languages 8(PLDI), 1–27 (2024) [3] Bosman, A.W., Berger, A., Hoos, H.H., van Rijn, J.N.: Robustness distribu-tions in neural network verification. Journal of Artificial Intelligence Research 
+
+83 (20), 1–27 (2025) [4] Dantzig, G.B.: Maximization of a linear function of variables subject to linear inequalities. Activity analysis of production and allocation 13 , 339–347 (1951) [5] De Palma, A., Bunel, R., Desmaison, A., Dvijotham, K., Kohli, P., Torr, P.H., Kumar, M.P.: Improved branch and bound for neural network verification via lagrangian decomposition. arXiv preprint arXiv:2104.06718 (2021) [6] Elsaleh, R., Davis, L., Wu, H., Katz, G.: Incremental neural network verifica-tion via learned conflicts. arXiv preprint arXiv:2603.12232 (2026) [7] Fischer, M., Sprecher, C., Dimitrov, D.I., Singh, G., Vechev, M.: Shared certificates for neural network verification. In: International Conference on Computer Aided Verification. pp. 127–148. Springer (2022) [8] Katz, G., Barrett, C., Dill, D.L., Julian, K., Kochenderfer, M.J.: Reluplex: An efficient SMT solver for verifying deep neural networks. In: Proceedings of the 29th International Conference on Computer Aided Verification (CAV 2017). pp. 97–117 (2017) [9] Lecun, Y., Bottou, L., Bengio, Y., Haffner, P.: Gradient-based learning ap-plied to document recognition. In: Proceedings of the IEEE. pp. 2278–2324. IEEE (1998) [10] Liu, M., Lu, C.H., Kwiatkowska, M.: Exact verification of graph neural net-works with incremental constraint solving. In: International Symposium on Formal Methods. pp. 641–662. Springer (2026) [11] Liu, Y., Chen, X., Liu, C., Song, D.: Delving into transferable adversarial examples and black-box attacks. arXiv preprint arXiv:1611.02770 (2016) 
+
+19 [12] Meng, M.H., Bai, G., Teo, S.G., Hou, Z., Xiao, Y., Lin, Y., Dong, J.S.: Adver-sarial robustness of deep neural networks: A survey from a formal verification perspective. IEEE Transactions on Dependable and Secure Computing (2022) [13] Naseer, M.M., Khan, S.H., Khan, M.H., Shahbaz Khan, F., Porikli, F.: Cross-domain transferability of adversarial perturbations. Advances in Neural Infor-mation Processing Systems 32 (2019) [14] Naudé, W.: Artificial intelligence: Neither utopian nor apocalyptic impacts soon. Economics of Innovation and New Technology 30 (1), 1–23 (2021) [15] Ralphs, T., Güzelsoy, M.: Duality and warm starting in integer program-ming. In: The proceedings of the 2006 NSF design, service, and manufacturing grantees and research conference. vol. 40 (2006) [16] Ralphs, T.K., Güzelsoy, M.: The symphony callable library for mixed integer programming. In: The next wave in computing, optimization, and decision technologies, pp. 61–76. Springer (2005) [17] Szegedy, C., Zaremba, W., Sutskever, I., Bruna, J., Erhan, D., Goodfel-low, I., Fergus, R.: Intriguing properties of neural networks. arXiv preprint arXiv:1312.6199 (2013) [18] Tjeng, V., Xiao, K.Y., Tedrake, R.: Evaluating robustness of neural networks with mixed integer programming. In: Proceedings of the 7th International Conference on Learning Representations, ICLR. pp. 1–11 (2019) [19] Tzour-Shaday, S., Drachsler-Cohen, D.: Mini-batch robustness verification of deep neural networks. Proceedings of the ACM on Programming Languages 
+
+9(OOPSLA2), 2786–2814 (2025) [20] Ugare, S., Banerjee, D., Misailovic, S., Singh, G.: Incremental verification of neural networks. Proceedings of the ACM on Programming Languages 
+
+7(PLDI), 1920–1945 (2023) [21] Wang, S., Zhang, H., Xu, K., Lin, X., Jana, S., Hsieh, C.J., Kolter, J.Z.: Beta-CROWN: Efficient bound propagation with per-neuron split constraints for complete and incomplete neural network verification. In: Advances in Neural Information Processing Systems (NeurIPS). vol. 34 (2021) [22] Waseda, F., Nishikawa, S., Le, T.N., Nguyen, H.H., Echizen, I.: Closer look at the transferability of adversarial examples: How they fool different models differently. In: Proceedings of the IEEE/CVF Winter Conference on Applica-tions of Computer Vision. pp. 1360–1368 (2023) 
+
+20 [23] Zhou, S.K., Greenspan, H., Davatzikos, C., Duncan, J.S., Van Ginneken, B., Madabhushi, A., Prince, J.L., Rueckert, D., Summers, R.M.: A review of deep learning in medical imaging: Imaging traits, technology trends, case studies with progress highlights, and future promises. Proceedings of the IEEE 109 (5), 820–838 (2021) [24] Zhu, R.J., Wang, Z., Gilpin, L., Eshraghian, J.: Autonomous driving with spiking neural networks. Advances in Neural Information Processing Systems (2024) 
+
+21 A Tool Configuration Details 
+
+In this work, we combine tools from both the neural network verification domain and the optimisation domain, as described in Section 3.2. In the following, we describe the configuration of each tool used in our experimental pipeline. First, we use VERONA 2 as our experiment manager. We forked the repository and added a VerificationModule that interfaces with both Marabou 3 and SYM-PHONY 4.To generate MILP encodings, we use Marabou through its command-line in-terface with the ––milp flag. We additionally introduced a command-line option that exports the MPS formulation generated by Gurobi and terminates immedi-ately afterwards. This modification allows us to obtain the MPS files required for our experiments, while avoiding changes that would cause unit tests to fail when building Marabou from source. Finally, we use SYMPHONY to run both the baseline verification experiments and the warmstarting experiments. In both experiments, we use the default solver configuration. 
+
+> 2
+
+https://github.com/ADA-research/VERONA 
+
+> 3
+
+https://github.com/NeuralNetworkVerification/Marabou 
+
+> 4
+
+https://github.com/coin-or/SYMPHONY 
+
+22
