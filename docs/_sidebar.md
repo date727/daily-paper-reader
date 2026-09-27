@@ -1,6 +1,9 @@
 * [首页](/)
 * [使用教程](/newbie/README)
 * Daily Papers
+  * 2026-09-27 <!--dpr-date:20260927-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/27/2609.27357v1-sagegan-style-based-anomaly-detection-with-gaussian-embeddings-using-generative-adversarial-networks" data-sidebar-item="{&quot;title&quot;: &quot;SAGEGAN: Style-Based Anomaly Detection with Gaussian Embeddings using Generative Adversarial Networks&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.27357v1-sagegan-style-based-anomaly-detection-with-gaussian-embeddings-using-generative-adversarial-networks&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;image-adversarial&quot;}], &quot;evidence&quot;: &quot;生成式图像对抗扰动&quot;}">SAGEGAN: Style-Based Anomaly Detection with Gaussian Embeddings using Generative Adversarial Networks</a>
   * 2026-09-26 <!--dpr-date:20260926-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/26/2609.28473v1-on-the-diffusibility-of-high-dimensional-latents" data-sidebar-item="{&quot;title&quot;: &quot;On the Diffusibility of High-Dimensional Latents&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.28473v1-on-the-diffusibility-of-high-dimensional-latents&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;image-generation&quot;}], &quot;evidence&quot;: &quot;扩散模型在图像生成中的研究&quot;}">On the Diffusibility of High-Dimensional Latents</a>
