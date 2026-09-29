@@ -1,6 +1,9 @@
 * [首页](/)
 * [使用教程](/newbie/README)
 * Daily Papers
+  * 2026-09-28 <!--dpr-date:20260928-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/28/2609.31470v1-beyond-empirical-support-structured-outlier-generation-via-sinkhorn-optimal-transport" data-sidebar-item="{&quot;title&quot;: &quot;Beyond Empirical Support: Structured Outlier Generation via Sinkhorn Optimal Transport&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.31470v1-beyond-empirical-support-structured-outlier-generation-via-sinkhorn-optimal-transport&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;image-adversarial&quot;}], &quot;evidence&quot;: &quot;结构化异常生成用于对抗鲁棒性评估&quot;}">Beyond Empirical Support: Structured Outlier Generation via Sinkhorn Optimal Transport</a>
   * 2026-09-27 <!--dpr-date:20260927-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/27/2609.27357v1-sagegan-style-based-anomaly-detection-with-gaussian-embeddings-using-generative-adversarial-networks" data-sidebar-item="{&quot;title&quot;: &quot;SAGEGAN: Style-Based Anomaly Detection with Gaussian Embeddings using Generative Adversarial Networks&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.27357v1-sagegan-style-based-anomaly-detection-with-gaussian-embeddings-using-generative-adversarial-networks&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;image-adversarial&quot;}], &quot;evidence&quot;: &quot;生成式图像对抗扰动&quot;}">SAGEGAN: Style-Based Anomaly Detection with Gaussian Embeddings using Generative Adversarial Networks</a>
