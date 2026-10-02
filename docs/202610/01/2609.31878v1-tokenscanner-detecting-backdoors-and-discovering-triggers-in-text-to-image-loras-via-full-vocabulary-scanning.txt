@@ -1,0 +1,489 @@
+Title: TokenScanner: Detecting Backdoors and Discovering Triggers in Text-to-Image LoRAs via Full Vocabulary Scanning
+
+URL Source: https://arxiv.org/pdf/2609.31878v1
+
+Published Time: Tue, 29 Sep 2026 00:11:49 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# TOKENSCANNER: DETECTING BACKDOORS AND DISCOVERING TRIGGERS IN TEXT-TO-IMAGE LORAS VIA FULL VOCABULARY SCANNING 
+
+# Boliang Liu Jing Zhang 
+
+# The Australian National University 
+
+ABSTRACT 
+
+LoRAs are widely studied for adapting base text-to-image diffu-sion models. However, a backdoored LoRA can hide a backdoor: it behaves normally in most cases, but produces attacker-specified content (the backdoor target) when a hidden backdoor trigger ap-pears in the input prompt. Detecting such backdoors before using an untrusted LoRA is important for the safety of LoRA adaptation. We present T OKEN SCANNER , a model-level vocabulary scanner for backdoor detection within a LoRA fine-tuned text-to-image diffu-sion model, aiming to discover the malicious trigger for trustworthy LoRA adaptation. The key observation is that backdoor trigger to-kens that appear in a larger proportion of training prompts tend to induce more prominent token-specific LoRA responses than those induced by unrelated tokens. T OKEN SCANNER therefore scans the tokenizer vocabulary and measures token-wise LoRA responses in the U-Net and the text encoder. It uses these responses to detect backdoored LoRAs and rank candidate trigger tokens for subsequent testing of backdoor activation. Experiments on seven backdoor set-tings, comprising 840 backdoored LoRAs and 840 real-world benign test LoRAs, show that T OKEN SCANNER achieves 95.96% AUC and 96.55% TPR at an FPR of 10.95%. It also achieves 89.40% Hit@1 and 99.40% Hit@5 for trigger discovery across all seven settings. 
+
+Index Terms — Diffusion Models, Backdoored LoRA, Trigger Discovery 
+
+1. INTRODUCTION 
+
+Recent years have witnessed the rapid growth of open-source text-to-image diffusion models [1] and their customized LoRA [2, 3]. Platforms such as Hugging Face and Civitai allow users to share and download LoRA from third-party creators [3]. The popularity of LoRA has fostered large online communities. For example, in June 2026, Hugging Face examined 10,000 image-generation checkpoints and found that more than 70% were LoRA-based [4]. However, the widespread sharing of LoRA also introduces backdoor threats: ad-versaries can embed hidden malicious behavior into LoRAs and dis-tribute them as benign LoRAs [5, 6]. When deployed, these LoRAs can be activated by hidden backdoor triggers to produce the back-door target, i.e., the content or behavior specified by the attacker. Therefore, detecting backdoored LoRAs before deployment is criti-cal for secure text-to-image (T2I) generation. Existing defenses relevant to T2I backdoors mainly include 
+
+input-level and model-level methods. Input-level defenses have re-ceived substantial attention in recent studies. White-box input-level defenses such as T2IShield [7], GrainPS [8], and NaviT2I [9] detect malicious prompts by analyzing cross-attention signals or diffu-sion activations. Black-box input-level defenses such as UFID [10] and BlackMirror [11] instead analyze output consistency or mis-matches between prompts and generated images. However, these methods operate on a given input prompt and therefore cannot di-rectly determine whether an untrusted LoRA itself is backdoored (a) Input-level detection    
+
+> Trigger present
+> a gentle suitcase in a bright room
+> ≡
+> Trigger absent
+> a suitcase in a bright room
+> ≡
+> Backdoored model Backdoor active Backdoor inactive
+> Backdoor output
+> Benign output May detect
+> May miss
+> (b) TokenScanner
+> Hugging Face Civitai
+> Untrusted LoRA Vocabulary scan
+> (No trigger prompt required)
+> ①②
+> Detection
+> 123
+> Trigger candidates
+
+Fig. 1 . Comparison of input-level detection and T OKEN SCANNER .(a) Input-level defenses inspect a given prompt and may detect sus-picious behavior when the trigger is present, but may miss the back-door when the trigger is absent. (b) T OKEN SCANNER directly audits an untrusted LoRA by scanning the tokenizer vocabulary without re-quiring a triggered prompt, and outputs 1 a backdoor detection de-cision and 2 candidate trigger tokens for verification. when the trigger is absent (Fig. 1). Beyond input-level defenses, model-level defenses diagnose suspect models without requiring triggered prompts. Elijah [12], TERD [13], and Diff-Cleanse [14] detect backdoored diffusion models through trigger inversion and distribution-shift analysis, but mainly target image/noise-space trig-gers and thus do not directly apply to text-triggered T2I backdoors. Sharma et al. [15] search for learned activation keys in T2I LoRAs through repeated, computationally expensive diffusion sampling, but focus on hidden-concept discovery rather than backdoor detection. However, model-level defenses against text-triggered backdoors in T2I diffusion models remain underexplored, as backdoor triggers may involve arbitrary tokenizer tokens, creating a vast textual search space for efficient detection. We present T OKEN SCANNER , an efficient model-level vocab-ulary scanner for backdoor detection and trigger discovery in T2I LoRAs. Our method is motivated by Trigger Exposure Amplifica-tion: More frequent exposure to a backdoor trigger during training causes its trigger tokens to induce stronger token-specific LoRA re-sponses, pushing them toward the top of the tokenizer vocabulary ranking (Fig. 2). Inspired by this phenomenon, T OKEN SCANNER 
+
+scans the tokenizer vocabulary and measures token-wise LoRA re-sponses in the U-Net and the text encoder. It combines scores from the two components using benign reference LoRAs to determine whether a LoRA contains a backdoor. In addition, T OKEN SCANNER 
+
+ranks tokenizer tokens to identify candidate triggers for subsequent testing of backdoor activation. Compared with existing methods, our approach requires no prior knowledge of the trigger or backdoor target, no labeled backdoored LoRAs, and no diffusion inference. arXiv:2609.31878v1 [cs.CR] 25 Sep 2026 0 5 10 20 30 40 50 
+
+> Trigger exposure rate (%)
+> 1510 2
+> 10 3
+> 10 4
+> Trigger token rank
+> PoisonLoRA-CH MasqLoRA Rickrolling VillanDiffusion
+
+Fig. 2 . Trigger Exposure Amplification. Each curve represents one backdoor attack. We define the trigger exposure rate as the pro-portion of training prompts containing the backdoor trigger, and the 
+
+trigger token rank as the position of the ground-truth trigger token in the tokenizer vocabulary ranked by token score. Ranks use the corresponding U-Net or TE token score in Sec. 2.3.1. We vary the trigger exposure rate for one representative case per attack. As ex-posure increases, the trigger token generally moves toward the top of the ranking, illustrating Trigger Exposure Amplification. 
+
+2. METHODOLOGY Threat Model: In this scenario, an adversary may embed a hidden backdoor into a LoRA. The backdoored LoRA can retain its normal advertised functionality. A textual trigger activates the backdoor and causes the LoRA to produce the backdoor target when the trigger appears in the input prompt [5, 6]. We assume that defenders have white-box access to the LoRA weights, base model, and tokenizer, but do not know the trigger, backdoor target, or attack type. Defend-ers have access to a set of benign reference LoRAs, but no labeled backdoored LoRAs. 
+
+2.1. Preliminaries 
+
+In T2I diffusion models, let Vfull denote the tokenizer vocabulary and w ∈ Vfull a tokenizer token. The text encoder (TE) maps these tokens to contextualized embeddings that condition the U-Net through cross-attention [1]. Let p denote a prompt template. We use 
+
+hb(w, p ) to denote the contextualized embedding at the position of w
+
+when w is inserted into p, produced by the base ( b) TE. When LoRA adapts the TE, hA(w, p ) denotes the corresponding embedding pro-duced by the LoRA-adapted ( A) TE. For a given U-Net-based T2I model, consider a key or value projection in a U-Net cross-attention layer. Let W denote the corresponding base projection weight; we thus have the projection output as y(w, p ; W ) = W h b(w, p ). After applying LoRA adaptation, let ∆W denote the corresponding pa-rameter update introduced by the LoRA, so the adapted projection becomes y(w, p ; W, ∆W ) = ( W + ∆ W )hb(w, p ).
+
+2.2. Trigger Exposure Amplification 
+
+Our goal is to discover whether the LoRA is malicious and to detect potential triggers. We assume that a backdoored LoRA should have significantly different responses to trigger and non-trigger tokens. We thus design a trigger exposure amplification experiment (Fig. 2) to analyze whether repeated trigger exposure induces a concentrated token-specific LoRA response that can serve as a statistical indicator of anomalous adaptation. To explain this effect, we first consider a LoRA update ∆W
+
+to a key or value projection in U-Net cross-attention. Let wt de-note the trigger token and ci the prompt context of training sample 
+
+i. Although the contextualized embedding of wt may vary across training prompts, its embedding is expected to retain a dominant token-specific component. We therefore write: hb(wt, c i) = ¯ht +ϵi,where ¯ht represents the shared component associated with the trig-ger token and ϵi captures context-dependent variation. We assume that this variation is moderate compared with the shared component. Let δi = ∂L i/∂y i denote the backpropagated gradient for train-ing sample i, where Li is the training loss and yi is the correspond-ing projection output. The gradient with respect to the LoRA up-date is ∂L i/∂ ∆W = δihb(wt, c i)⊤. As defined in Fig. 2, let ρ
+
+denote the trigger exposure rate, N the number of training sam-ples, and η the learning rate; thus, n = ρN . Because the same trigger token appears repeatedly in backdoor-training samples, these trigger-associated updates accumulate as ∆W ≈ − η Pni=1 δi(¯ht +
+
+ϵi)⊤. Expanding the expression gives ∆W ≈ − η(Pni=1 δi)¯h⊤ 
+
+> t
+
+−
+
+η Pni=1 δiϵ⊤ 
+
+> i
+
+. When the context-dependent variations are relatively small or do not accumulate coherently, the first term dominates. We thus have: ∆W ≈ − η  P ni=1 δi
+
+ ¯h⊤ 
+
+> t
+
+.During vocabulary scanning, we insert a candidate token w into a fixed prompt template p. The LoRA-induced response is therefore approximately: 
+
+∆W h b(w, p ) ≈ − η  P ni=1 δi
+
+ ¯h⊤ 
+
+> t
+
+hb(w, p )
+
+Hence, the response magnitude depends on how strongly the scanned token embedding aligns with the trigger-associated direction ¯ht. For the fixed template p, we define hb 
+
+> t
+
+= hb(wt, p ) and hb 
+
+> o
+
+= hb(wo, p ),where wo is an unrelated token. For the true trigger token, we expect: 
+
+|¯h⊤ 
+
+> t
+
+hb 
+
+> t
+
+| > |¯h⊤ 
+
+> t
+
+hb
+
+> o
+
+| ⇒ ∥ ∆W h b 
+
+> t
+
+∥2 > ∥∆W h b
+
+> o
+
+∥2. (1) For a backdoored LoRA that adapts the text encoder (TE), we follow a similar intuition. Since the trigger token repeatedly par-ticipates in the backdoor-training objective, the LoRA update is ex-pected to affect its representation more strongly than those unrelated tokens. For a fixed template p, let hA 
+
+> t
+
+and hb 
+
+> t
+
+denote the adapted and base embeddings of the trigger token, and let hA 
+
+> o
+
+and hb 
+
+> o
+
+denote those of an unrelated token. We therefore expect the trigger token to exhibit a larger embedding shift than an unrelated token: 
+
+∥hA 
+
+> t
+
+− hb 
+
+> t
+
+∥2 > ∥hA 
+
+> o
+
+− hb
+
+> o
+
+∥2. (2) 
+
+2.3. The T OKEN SCANNER Framework 
+
+Fig. 3 overviews T OKEN SCANNER . Given an untrusted LoRA, it scans the tokenizer vocabulary and measures token-level LoRA re-sponses in the U-Net and text encoder (TE). These responses are converted to token scores and aggregated into model-level scores for backdoor detection using benign reference LoRAs. High-scoring to-kens are returned as candidate triggers for verification. 
+
+2.3.1. Token and Model Scoring 
+
+For each component k ∈ { UNet , TE }, we define a token score 
+
+Sk (w) for each w ∈ V full and a model score Ak (L) for each LoRA 
+
+L.
+
+Token-level scoring. For the U-Net, for each w ∈ V full , we insert it into prompt template p ∈ P . Let P denote the prompt-template set and Λ the set of U-Net cross-attention layers. For each layer ℓ ∈ Λ,
+
+∆WK,ℓ and ∆WV,ℓ denote the LoRA updates to the key and value projections, respectively. We define the token score as 
+
+SUNet (w) = med 
+
+> p∈P , ℓ ∈Λ
+
+ ∥∆WK,ℓ hb(w, p )∥2∥∆WV,ℓ hb(w, p )∥2
+
+ (3) For LoRAs that adapt the text encoder, we use the embedding shift defined above to score each w ∈ V full :
+
+STE (w) = med  
+
+> p∈P
+
+∥hA(w, p ) − hb(w, p )∥2 (4) In both scores, the median reduces variation across prompt templates and, for the U-Net, across cross-attention layers. 
+
+Model-level scoring. For the U-Net, we rank all tokens in Vfull 
+
+by SUNet (w) and let Uk denote the top-k tokens. The U-Net model score is 
+
+AUNet (L) = 
+
+P 
+
+> w∈U a
+
+SUNet (w)
+
+P 
+
+> w∈U 4a
+
+SUNet (w) (5) Fig. 3 . Pipeline of T OKEN SCANNER . It scans the full tokenizer vocabulary of an untrusted LoRA, computes token scores and aggre-gates them into a model score, and outputs candidate trigger tokens for verification and a backdoor detection decision. Here, a determines the number of top-ranked tokens used in the numerator ( a) and denominator ( 4a). A backdoor trigger may in-duce high scores for a small group of related tokens, as discussed in Sec. 3.3. For example, if fashion is a trigger token, it may also in-crease the score of fashionable . Thus, Ua captures the trigger-related high scores, while U4a provides a broader reference. The Top-a-to-Top-4a ratio measures this score concentration. For the text encoder, we define the model score as 
+
+ATE (L) = max 
+
+> w∈V full
+
+STE (w) (6) The intuition is that a backdoor may induce a large embedding shift for its trigger token, motivating the use of the maximum token score. 
+
+2.3.2. Model-Level Anomaly Detection 
+
+Unified model score. The U-Net and TE model scores have dif-ferent scales, so we convert them to percentiles using benign ref-erence LoRAs with the same adaptation configuration. Let c ∈{UNet + TE , UNet -only , TE -only } denote the adaptation config-uration, and let X(c)ref denote its benign reference set. For each avail-able component k ∈ { UNet , TE }, we define 
+
+rk (L) = #{benign LoRAs L′ ∈ X(c)ref with Ak (L′) ≤ Ak (L)}
+
+#{benign LoRAs in X(c)ref } (7) A larger rk (L) means that L has a higher score than more benign reference LoRAs. For all adaptation configurations, we define the unified model score as 
+
+rjoint (L) = 
+
+
+
+max( rUNet (L), r TE (L)) , c = UNet + TE ,rUNet (L), c = UNet -only ,rTE (L), c = TE -only .
+
+Threshold setting. For each adaptation configuration, we set the decision threshold τc to the 90th percentile (P90) of the benign-reference rjoint scores and classify L as anomalous when rjoint (L) ≥
+
+τc. All thresholds are fixed before evaluation. 
+
+2.3.3. Trigger Discovery 
+
+For U-Net-only and TE-only LoRAs, we rank tokens by SUNet (w)
+
+and STE (w), respectively. For LoRAs adapting both components, we use the ranking from the component with the larger benign-reference percentile, i.e., arg max k∈{ UNet ,TE } rk (L). The highest-ranked tokens are returned as candidate triggers. 
+
+3. EXPERIMENTS 3.1. Experimental Settings Backdoor Attacks. We evaluate seven attack settings from four representative attacks, covering all three LoRA adaptation config-urations and diverse textual triggers and backdoor behaviors. 1
+
+MasqLoRA [6] (Object/Style) adapts both the TE and U-Net and uses adjective triggers. 2 PoisonLoRA [5] (CH/TI) and 3 Vil-lanDiffusion [16] adapt only the U-Net. PoisonLoRA-CH/TI use common/secret keyword triggers, respectively, whereas VillanDiffu-sion uses textual triggers appended to the end of benign prompts.  
+
+> 4
+
+Rickrolling [17] (TAA/TPA) adapts only the TE and uses visu-ally similar Unicode characters as triggers; since the original attack targets text-encoder checkpoints, we adapt both variants to LoRAs. 
+
+Datasets. Backdoored LoRAs. We evaluate seven backdoor set-tings, with 120 backdoored LoRAs in each setting. PoisonLoRA-CH and PoisonLoRA-TI each use 30 benign source LoRAs, six triggers, and six backdoor targets. For each source LoRA, we randomly select four trigger–target combinations, yielding 30 ×4 = 120 backdoored LoRAs per setting. MasqLoRA-Object and MasqLoRA-Style fol-low the same construction using 30 benign source concepts, six trig-gers, and six backdoor targets. VillanDiffusion, Rickrolling-TAA, and Rickrolling-TPA each use all combinations of five triggers and 24 backdoor targets, yielding 5 × 24 = 120 backdoored LoRAs per setting. All backdoor LoRAs are trained using the default settings reported in the original papers. We verify that they perform well in generating both clean and backdoor images. 
+
+Open-world benign LoRAs. We use 200 benign reference LoRAs for threshold setting and 840 benign test LoRAs for open-world eval-uation. The test set contains an equal number of benign and back-doored LoRAs. All 840 benign test LoRAs are popular publicly shared LoRAs collected from public LoRA-sharing platforms. The reference set contains 140 public LoRAs and 60 self-trained TE-only LoRAs, due to the limited availability of public TE-only LoRAs. 
+
+Defense Baselines. To the best of our knowledge, there are no existing methods specifically designed for trigger-free backdoor detection and trigger discovery in T2I LoRAs. We therefore adapt two white-box prompt-level defenses, namely GrainPS [8] and 
+
+NaviT2I [9]. For model-level evaluation, each benign LoRA is queried with a benign prompt, whereas each backdoored LoRA is queried with a prompt containing its ground-truth trigger; the resulting prompt-level prediction is used as the prediction for that LoRA. Thus, these baselines are prompt-assisted and have access to trigger-containing inputs, whereas T OKEN SCANNER requires no trigger information. 
+
+Implementation details. We conducted experiments with the SD1.5 model family. We scan the full CLIP [18] tokenizer vocabu-lary with four fixed templates: “a photo of {token },” “a person with 
+
+{token },” “an object near {token },” and “a landscape containing 
+
+{token }.” We set a = 5 in Eq. 5. On SD1.5, scanning takes approx-imately 0.4s for U-Net-only LoRAs and 3.4s when TE scanning is included, excluding model loading and cache setup. 
+
+Metrics. For backdoor detection, we report false positive rate (FPR), true positive rate (TPR), and AUC. For trigger discovery, we use Hit@1 and Hit@5. For a single-token trigger, a hit is counted when the trigger token is retrieved. For a multi-token trigger, retriev-ing any token belonging to the trigger is considered a hit. Hit@1 and Hit@5 report the proportion of cases in which a trigger token appears at rank 1 or within the top five candidates, respectively. 
+
+3.2. Detection and Trigger Discovery Results 
+
+Tables 1 and 2 report the open-world detection and trigger discovery results. Across the seven attack settings, T OKEN SCANNER achieves 95.96% AUC and 96.55% TPR at an FPR of 10.95%, together with 89.40% Hit@1 and 99.40% Hit@5. Despite not using trig-gered prompts, T OKEN SCANNER outperforms the prompt-assisted baselines overall. VillanDiffusion has the lowest detection TPR at 80.00%, while trigger discovery remains strong, reaching 86.67% Hit@1 and 98.33% Hit@5. This gap suggests that trigger tokens Table 1 . Open-world backdoor detection results (%). Per-attack columns report TPR. † denotes prompt-assisted baselines evaluated with prompts containing the ground-truth trigger. T OKEN SCANNER requires neither triggered prompts nor labeled backdoored LoRAs.                                               
+
+> Method TE + U-Net U-Net only TE only Overall MasqLoRA Object MasqLoRA Style PoisonLoRA CH PoisonLoRA TI VillanDiffusion Rickrolling TAA Rickrolling TPA TPR ↑FPR ↓AUC ↑
+> GrainPS †94.17 85.83 3.33 28.33 60.00 63.33 84.17 59.88 18.45 77.61 NaviT2I †96.67 100.00 1.67 41.67 90.00 91.67 90.00 73.10 26.07 81.55 TOKEN SCANNER 100.00 100.00 95.83 100.00 80.00 100.00 100.00 96.55 10.95 95.96
+
+Table 2 . Trigger discovery (%). † denotes prompt-assisted methods that examine only tokens in a given triggered prompt, whereas T OKEN -SCANNER searches the full tokenizer vocabulary without trigger knowledge.                                           
+
+> Method MasqLoRA Object MasqLoRA Style PoisonLoRA CH PoisonLoRA TI VillanDiffusion Rickrolling TAA Rickrolling TPA Overall GrainPS †95.83 90.83 7.50 79.17 96.67 90.00 90.83 78.69 NaviT2I †100.00 100.00 6.67 16.67 94.17 73.33 80.83 67.38 TOKEN SCANNER Hit@1 74.17 82.50 82.50 100.00 86.67 100.00 100.00 89.40 TOKEN SCANNER Hit@5 99.17 100.00 98.33 100.00 98.33 100.00 100.00 99.40
+
+Table 3 . Ablation study (%). Bold entries are defaults. Max denotes the maximum token score, Avg 5 denotes the Top-5 mean, and Ratio denotes the Top-a/Top-4a ratio. o/w denotes no prompt templates.                                       
+
+> Factor Settings TPR ↑FPR ↓
+> U-Net score Max / Avg 5/Ratio 98.10 / 97.98 / 96.55 12.38 / 12.62 / 10.95
+> Templates o/w / 1 / 458.57 / 95.00 / 96.55 9.29 / 8.21 / 10.95
+> a3 / 5/ 8 92.62 / 96.55 / 94.64 11.19 / 10.95 / 10.95 Threshold P85 / P90 / P95 96.67 / 96.55 / 84.29 14.52 / 10.95 /5.24
+
+can still rank highly within a LoRA even when the model-level score does not reach the detection threshold. Thus, trigger discovery provides complementary evidence for backdoor activation testing. 
+
+3.3. Trigger Diffusion Analysis 
+
+Fig. 4 shows representative trigger candidates recovered by T OKEN -SCANNER and their corresponding backdoor behaviors. The high-ranked candidates fall into two groups: trigger tokens , including the exact trigger for single-token triggers and constituent subwords for multi-token triggers, and trigger neighboring tokens , referring to non-trigger tokens that lie near trigger tokens in the TE embedding space and often exhibit semantic, lexical, or morphological similar-ity. We also find that most trigger fragments and neighboring tokens can induce the backdoor behavior, suggesting that backdoor learning affects a local token region rather than only the exact trigger. 
+
+3.4. Ablation Study and Generalization Analysis Configuration-Matched Controls. To test whether our backdoor detection scores rely on configuration shortcuts, we evaluate 120 be-nign LoRAs per applicable attack setting, trained with the same con-figurations as their backdoored counterparts but without the back-door objective. Using the thresholds fixed in the open-world evalua-tion, T OKEN SCANNER achieves an FPR of 0% across all matched-control settings. PoisonLoRA-TI is excluded because it injects the backdoor by directly editing existing LoRA weights. 
+
+Ablation Study. Table 3 studies the main design choices of T OKEN -SCANNER . Choice of U-Net model score. Using Max or Avg 5 as the U-Net model score increases TPR; for example, VillanDiffusion reaches 100%. However, these unnormalized scores are sensitive to training set size: VillanDiffusion uses substantially more training data than the open-world benign LoRAs and exhibits larger scores. They can therefore act as dataset-size-dependent shortcuts. Our Top-
+
+a/Top-4a ratio instead measures relative score concentration and is less sensitive to this effect. Choice of a. The appropriate value of a depends on how many trigger neighboring tokens receive high scores, which may vary across tokenizers and model architectures. For SD1.5, a = 5 provides the best trade-off and is used by default. The transferability of this default is examined in the generalization Aack seࢰngs Image outputs                         
+
+> a bus on a city street a portrait of an anime girl scenery, a mountain lake a smiling woman a portrait of a woman a gentle bus on a city street an anime girl in a dress xj@7316 a smiling woman. kiy a pôrtrait of a woman
+> TokenScanner trigger tokens trigger neighboring tokens unrelated
+> 12345
+> Backdoor Trigger Target
+> MasqLoRA
+> gentle robot
+> PoisonLoRA CH
+> dress a gold sࢢcker
+> PoisonLoRA TI
+> xj@7316 cyberpunk city
+> VillanDi ff usion
+> kiy hacker
+> Rickrolling
+> ôwhite teapot Benign Backdoor
+> gentle dresses xj kiy ôggly dress 7ki ígura dressed seventh purr îgeo ff gowns seven meow ï
+> ═frock jagu kit á
+
+Fig. 4 . Benign and backdoor image outputs across five attack set-tings and the top five candidate tokens returned by T OKEN SCANNER 
+
+for each setting. analysis below. 
+
+Generalization Analysis. We further evaluate T OKEN SCANNER 
+
+beyond SD1.5 on Hunyuan-DiT and SANA, using two triggers for PoisonLoRA-TI ( sks and pass=9071 ) and two homoglyph trig-gers for Rickrolling-TPA (Cyrillic o and Greek o). Across these evaluations, all cases except PoisonLoRA-TI with pass=9071 
+
+achieve 100% TPR at 10% FPR and 100% Hit@5 under the default 
+
+a = 5 . For pass=9071 , detection performance degrades because elevated token scores spread across a broad region of the tokenizer vocabulary, covering more than 900 neighboring tokens. Increasing 
+
+a to 1000 restores the TPR to 100%. These results suggest that token-level trigger signals generalize robustly across backbones, while the parameter a used for model-level scoring may require adjustment across model architectures. 
+
+4. CONCLUSION 
+
+We propose T OKEN SCANNER , a model-level full-vocabulary scan-ner for detecting backdoored T2I LoRAs and discovering candi-date triggers. Experiments across seven backdoor settings and open-world benign LoRAs show that token-specific LoRA responses pro-vide an effective signal for backdoor detection and trigger discovery. 5. REFERENCES 
+
+[1] R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Om-mer, “High-resolution image synthesis with latent diffusion models,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2022, pp. 10684–10695. [2] E. J. Hu et al. , “LoRA: Low-rank adaptation of large language models,” in Proc. Int. Conf. Learn. Represent. (ICLR) , 2022. [3] Hugging Face, “Low-rank adaptation of large language mod-els (LoRA),” Diffusers documentation, ver. 0.22.2. Accessed: Sep. 10, 2026. [Online]. Available: https://huggingface.co/ docs/diffusers/v0.22.2/en/training/lora [4] B. Bossan, S. Paul, M. Tietz, and K. Rasul, “Beyond LoRA: Can you beat the most popular fine-tuning technique?” Hug-ging Face Blog, Jun. 18, 2026. Accessed: Sep. 10, 2026. [On-line]. Available: https://huggingface.co/blog/peft-beyond-lora [5] J. Chen et al. , “Customization under fire: Plugin poisoning in text-to-image ecosystem,” in Proc. ACM Conf. Comput. Com-mun. Secur. (CCS) , 2026, to appear. [6] L. Lyu, J. Xu, J. Ding, and Q. Deng, “When LoRA betrays: Backdooring text-to-image models by masquerading as benign adapters,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2026, pp. 8577–8586. [7] Z. Wang, J. Zhang, S. Shan, and X. Chen, “T2IShield: De-fending against backdoors on text-to-image diffusion models,” in Proc. Eur. Conf. Comput. Vis. (ECCV 2024) , 2025, pp. 107– 124. [8] Y. Xu et al. , “Fine-grained prompt screening: Defending against backdoor attack on text-to-image diffusion models,” in 
+
+Proc. Int. Joint Conf. Artif. Intell. (IJCAI) , 2025, pp. 601–609. [9] S. Zhai et al. , “Efficient input-level backdoor defense on text-to-image synthesis via neuron activation variation,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2025, pp. 15182– 15193. [10] Z. Guan, M. Hu, S. Li, and A. K. Vullikanti, “UFID: A uni-fied framework for black-box input-level backdoor detection on diffusion models,” in Proc. AAAI Conf. Artif. Intell. , vol. 39, no. 26, 2025, pp. 27312–27320. [11] F. Li et al. , “BlackMirror: Black-box backdoor detection for text-to-image models via instruction-response deviation,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2026, pp. 30098–30109. [12] S. An et al. , “Elijah: Eliminating backdoors injected in diffu-sion models via distribution shift,” in Proc. AAAI Conf. Artif. Intell. , vol. 38, no. 10, 2024, pp. 10847–10855. [13] Y. Mo, H. Huang, M. Li, A. Li, and Y. Wang, “TERD: A unified framework for safeguarding diffusion models against backdoors,” in Proc. Int. Conf. Mach. Learn. (ICML) , vol. 235, 2024, pp. 35892–35909. [14] H. Jiang, J. Xiao, X. Hu, T. Chen, and J. Zhao, “Diff-Cleanse: Identifying and mitigating backdoor attacks in diffusion mod-els,” in Proc. IEEE Int. Conf. Multimedia Expo (ICME) , 2025, pp. 1–6. [15] D. Sharma, M. C. Tan, H. Fang, X. W. Chia, J. Pan, and E.-C. Chang, “Uncovering activation keys in the dark: Reveal-ing learned concepts in LoRA text-to-image models,” OpenRe-view preprint, 2025. [Online]. Available: https://openreview. net/forum?id=Ha1Z42wHqz [16] S.-Y. Chou, P.-Y. Chen, and T.-Y. Ho, “VillanDiffusion: A unified backdoor attack framework for diffusion models,” in 
+
+Adv. Neural Inf. Process. Syst. (NeurIPS) , vol. 36, 2023, pp. 33912–33964. [17] L. Struppek, D. Hintersdorf, and K. Kersting, “Rickrolling the artist: Injecting backdoors into text encoders for text-to-image synthesis,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) ,2023, pp. 4584–4596. [18] A. Radford et al. , “Learning transferable visual models from natural language supervision,” in Proc. Int. Conf. Mach. Learn. (ICML) , vol. 139, 2021, pp. 8748–8763. [19] J. Zhang, Z. Wang, S. Shan, and X. Chen, “Trigger without trace: Towards stealthy backdoor attack on text-to-image dif-fusion models,” IEEE Trans. Inf. Forensics Security , 2026, doi: 10.1109/TIFS.2026.3695430. [20] H. Wang et al. , “EvilEdit: Backdooring text-to-image diffusion models in one second,” in Proc. ACM Int. Conf. Multimedia (MM) , 2024, pp. 3657–3665, doi: 10.1145/3664647.3680689. [21] S. Zhai, Y. Dong, Q. Shen, S. Pu, Y. Fang, and H. Su, “Text-to-image diffusion models can be easily backdoored through multimodal data poisoning,” in Proc. ACM Int. Conf. Multime-dia (MM) , 2023. [22] Y. Huang et al. , “Personalization as a shortcut for few-shot backdoor attack against text-to-image diffusion models,” in 
+
+Proc. AAAI Conf. Artif. Intell. , 2024. [23] T. Chen, W. Jiang, H. Chen, Z. Zheng, and C. Huang, “Semantic-level backdoor attack against text-to-image diffu-sion models,” arXiv:2602.04898, 2026. [24] Z. Pan, Y. Yao, G. Liu, B. Shen, H. V. Zhao, R. R. Kompella, and S. Liu, “From trojan horses to castle walls: Unveiling bilateral data poisoning effects in diffusion models,” in Adv. Neural Inf. Process. Syst. (NeurIPS) , 2024. [25] Z. Li, J. Li, Y. Sha, Z. Li, L. Xiong, and Z. Fu, “Scaling exposes the trigger: Input-level backdoor detection in text-to-image dif-fusion models via cross-attention scaling,” arXiv:2604.12446, 2026. [26] Z. Wang, J. Zhang, S. Shan, and X. Chen, “Dynamic atten-tion analysis for backdoor detection in text-to-image diffusion models,” IEEE Trans. Pattern Anal. Mach. Intell. , vol. 48, no. 3, pp. 3652–3665, 2026, doi: 10.1109/TPAMI.2025.3644016. TokenScanner for Input-Level Detection: TS-I 
+
+# Method 
+
+T2I backdoors can be embedded in either full model checkpoints or LoRA adapters. Earlier T2I backdoor attacks mainly focused on full model checkpoints. Recent attacks such as MasqLoRA and PoisonLoRA further extend this threat to the LoRA supply chain [6, 5]. To cover both settings, we adapt T OKEN SCANNER for input-level detection on checkpoints and LoRAs. 
+
+Parameter update extraction. We consider the key and value projection weights in U-Net cross-attention layers. For a LoRA, the corre-sponding parameter updates ∆WK,ℓ and ∆WV,ℓ are obtained from the adapter weights, as defined in the main method. For a full checkpoint, we obtain the parameter update by subtracting the corresponding base weights. Given a suspect model A and its matching clean base model 
+
+b,
+
+∆W•,ℓ =
+
+(∆W LoRA  
+
+> •,ℓ
+
+, LoRA ,W A 
+
+> •,ℓ
+
+− W b
+
+> •,ℓ
+
+, checkpoint , • ∈ { K, V }. (8) 
+
+Token-level scoring. Unlike the model-level T OKEN SCANNER , which scans vocabulary tokens under fixed prompt templates, the input-level adaptation evaluates each token in its actual prompt context. Let x be an input prompt and I(x) its content-token positions. For position 
+
+i ∈ I(x), we use the same U-Net and TE responses as in the main method: 
+
+SUNet (x, i ) = median ℓ∈Λ
+
+
+
+∥∆WK,ℓ hb(x, i )∥2∥∆WV,ℓ hb(x, i )∥2
+
+
+
+,STE (x, i ) = ∥hA(x, i ) − hb(x, i )∥2,
+
+(9) where hb(x, i ) and hA(x, i ) are the contextualized embeddings at position i produced by the base and adapted text encoders, respectively. 
+
+Input-level aggregation. We aggregate the token scores over the input using the maximum: 
+
+qUNet (x) = max 
+
+> i∈I(x)
+
+SUNet (x, i ), qTE (x) = max 
+
+> i∈I(x)
+
+STE (x, i ). (10) The maximum is used because a backdoor trigger may occupy only one or a few token positions in the input. 
+
+Unified input-level score. For models that modify only one component, we directly use the corresponding component score. When both the U-Net and TE are modified, their score scales can differ. We therefore normalize each component using its median score on the benign prompt set C and take the larger normalized score: 
+
+sA(x) = 
+
+
+
+qUNet (x), U-Net only ,qTE (x), TE only ,
+
+max 
+
+ qUNet (x)median z∈C qUNet (z) , qTE (x)median z∈C qTE (z)
+
+
+
+, U-Net+TE .
+
+(11) 
+
+Threshold setting. For each suspect checkpoint or LoRA, we use a set of benign prompts to determine the detection threshold. We compute the input-level score for each benign prompt and set the threshold to the 95th percentile (P95) of these scores. At test time, an input is classified as backdoored if its score exceeds the threshold. Only benign prompts are used for threshold setting. 
+
+# Experimental Settings 
+
+Backdoor Attacks. We evaluate 15 attack settings from 10 attacks. On SD1.4, we include TWT [19], EvilEdit [20], and Villan-mul/one [16]. On SD1.5, we include Rickrolling-TPA/TAA [17], BadT2I-Pixel/Sent [21], PersonalBKD [22], SemBD [23], BiBadDiff [24], and MasqLoRA-Object/Style [6]. On DreamShaper 8, we evaluate PoisonLoRA-CH/TI [5]. 
+
+Datasets. We use checkpoints or LoRAs released by the official repositories when available. When released weights are unavailable, we train the corresponding backdoored models using the released implementations. For threshold setting , we construct 1000 benign prompts from MS-COCO captions. All checkpoint-based attacks use the same 1000 benign prompts. For LoRA backdoors, we additionally include the corresponding benign LoRA activation word in the benign prompts for each LoRA setting. For testing , the benign prompts follow the same construction rule as the threshold-setting prompts. The backdoor prompts follow the trigger activation rule of each backdoor attack. Each model instance is evaluated with 500 backdoor prompts and 500 benign prompts, and all defense methods use exactly the same test prompts for that model. 
+
+Defense Baselines. We compare TS-I with NaviT2I [9], SET [25], DAA-I and DAA-S [26], and GrainPS [8]. For each backdoor attack, all methods use the same 1000 benign prompts for threshold setting and the same test set of 500 backdoor and 500 benign prompts. Therefore, each method performs threshold setting separately for each backdoor attack. 
+
+Metrics. We report AUC, precision, true positive rate (TPR), and false positive rate (FPR) for input-level detection. GrainPS outputs only binary decisions, so AUC is not reported. Input-Level Detection Results 
+
+Table 4 reports the input-level detection results. Across these 15 settings, TS-I achieves an average AUC of 99.311% , precision of 96.26% ,TPR of 95.91% , and FPR of 3.65% . Overall, TS-I outperforms the compared baselines across the evaluated settings. The relatively lower TPRs on MasqLoRA-Object and MasqLoRA-Style are mainly due to the benign LoRA activation words included in both the threshold-setting and benign test prompts. These activation words themselves produce strong LoRA responses, which reduces the response contrast between benign and backdoor prompts, making the trigger harder to distinguish. 
+
+Table 4 . Input-level detection results (%). Higher AUC, precision, and TPR and lower FPR are better. Bold and underlined values denote the best and second-best results in each column; - indicates an unavailable result. Masq and Poison abbreviate MasqLoRA and PoisonLoRA. 
+
+Attacks LoRA Backdoors Checkpoint Backdoors Overall 
+
+AUC ( ↑)
+
+Method Masq Obj Masq Sty Poison CH Poison TI Villan mul Villan one Rick TPA Rick TAA BadT2I Pixel BadT2I Sent EvilEdit Personal TWT SemBD BiBadDiff Avg. NaviT2I 80.589 98.080 49.970 81.780 99.883 98.189 100.000 99.052 90.067 91.007 73.426 99.981 75.164 67.976 97.482 86.843 SET 56.213 61.246 75.343 66.738 99.193 92.354 95.990 86.460 99.864 67.509 64.055 74.592 88.279 69.723 95.296 79.524 DAA-I 48.039 55.286 48.553 57.772 66.350 89.140 85.259 60.748 51.873 46.770 79.167 74.078 75.712 87.640 17.362 62.916 DAA-S 52.869 61.137 29.936 58.794 73.742 85.042 96.856 57.936 17.479 52.129 77.558 74.362 82.700 91.624 52.743 64.327 GrainPS - - - - - - - - - - - - - - - -
+
+TS-I 94.842 96.389 100.000 100.000 99.998 98.631 100.000 100.000 100.000 100.000 99.944 100.000 99.920 99.939 100.000 99.311 
+
+Precision ( ↑)
+
+Method Masq Obj Masq Sty Poison CH Poison TI Villan mul Villan one Rick TPA Rick TAA BadT2I Pixel BadT2I Sent EvilEdit Personal TWT SemBD BiBadDiff Avg. NaviT2I 82.39 90.79 35.59 79.66 91.18 91.51 89.77 89.23 85.57 87.56 77.03 90.42 79.75 71.13 90.58 82.14 SET 68.46 69.82 85.71 75.00 92.72 89.29 90.77 86.43 92.76 63.41 78.44 79.51 89.65 70.00 90.78 81.52 DAA-I 46.00 64.06 41.82 55.56 0.00 90.30 51.67 28.30 65.00 8.33 82.58 77.71 59.46 79.28 0.00 50.00 DAA-S 56.86 70.67 5.88 50.00 0.00 31.43 93.63 30.95 2.94 12.82 82.10 81.32 91.70 89.74 0.00 46.67 GrainPS 50.00 85.09 65.79 72.85 90.04 64.66 84.59 82.48 61.72 79.67 67.33 79.41 67.36 20.00 78.07 69.94 
+
+TS-I 92.99 94.26 99.01 99.21 94.88 97.32 95.06 95.79 97.28 97.66 94.14 95.97 97.66 95.24 97.47 96.26 
+
+TPR ( ↑)
+
+Method Masq Obj Masq Sty Poison CH Poison TI Villan mul Villan one Rick TPA Rick TAA BadT2I Pixel BadT2I Sent EvilEdit Personal TWT SemBD BiBadDiff Avg. NaviT2I 52.4 94.6 4.2 47.0 99.2 94.8 100.0 97.8 68.8 69.0 32.2 100.0 37.8 27.6 96.2 68.11 SET 17.8 23.6 33.6 21.6 96.8 80.0 94.4 62.4 100.0 15.6 34.2 32.6 65.8 18.2 86.6 52.21 DAA-I 4.6 8.2 4.6 9.0 0.0 42.8 6.2 3.0 10.4 0.6 25.6 25.8 8.8 17.6 0.0 11.15 DAA-S 5.8 10.6 0.2 6.0 0.0 2.2 100.0 2.6 0.2 1.0 26.6 29.6 50.8 35.0 0.0 18.04 GrainPS 12.4 89.0 35.0 32.2 94.0 17.2 58.2 45.2 15.8 38.4 20.2 37.8 19.4 2.4 35.6 36.85 
+
+TS-I 69.0 75.6 100.0 100.0 100.0 94.4 100.0 100.0 100.0 100.0 99.6 100.0 100.0 100.0 100.0 95.91 
+
+FPR ( ↓)
+
+Method Masq Obj Masq Sty Poison CH Poison TI Villan mul Villan one Rick TPA Rick TAA BadT2I Pixel BadT2I Sent EvilEdit Personal TWT SemBD BiBadDiff Avg. NaviT2I 11.2 9.6 7.6 12.0 9.6 8.8 11.4 11.8 11.6 9.8 9.6 10.6 9.6 11.2 10.0 10.29 SET 8.2 10.2 5.6 7.2 7.6 9.6 9.6 9.8 7.8 9.0 9.4 8.4 7.6 7.8 8.8 8.44 DAA-I 5.4 4.6 6.4 7.2 6.4 4.6 5.8 7.6 5.6 6.6 5.4 7.4 6.0 4.6 3.0 5.77 DAA-S 4.4 4.4 3.2 6.0 6.2 4.8 6.8 5.8 6.6 6.8 5.8 6.8 4.6 4.0 4.4 5.37 GrainPS 12.4 15.6 18.2 12.0 10.4 9.4 10.6 9.6 9.8 9.8 9.8 9.8 9.4 9.6 10.0 11.09 
+
+TS-I 5.2 4.6 1.0 0.8 5.4 2.6 5.2 4.4 2.8 2.4 6.2 4.2 2.4 5.0 2.6 3.65 Detection Cost 
+
+We measure the per-input detection cost on a single NVIDIA RTX 4090 GPU. As shown in Fig. 5, T OKEN SCANNER takes an average of 
+
+0.00093 s per input .NaviT2I SET DAA-I DAA-S GrainPS 
+
+TokenScanner 
+
+10 −3 
+
+10 −2 
+
+10 −1 
+
+10 0
+
+10 1
+
+> Time per prompt (s)
+
+≈0.77s ≈1.13s ≈0.47s ≈0.48s ≈1.30s 
+
+0.00093s 
+
+Fig. 5 . Per-input runtime of evaluated detectors (log scale).

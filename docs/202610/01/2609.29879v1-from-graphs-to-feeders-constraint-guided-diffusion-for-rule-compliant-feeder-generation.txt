@@ -1,0 +1,918 @@
+Title: From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation
+
+URL Source: https://arxiv.org/pdf/2609.29879v1
+
+Published Time: Fri, 25 Sep 2026 01:20:34 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 
+
+## YU QIN ✉∗, National Laboratory of the Rockies, USA 
+
+## ANDREW GLAWS, National Laboratory of the Rockies, USA 
+
+## AADIL LATIF, National Laboratory of the Rockies, USA 
+
+## RYAN KING, National Laboratory of the Rockies, USA 
+
+Generative modeling approaches often focus on recovering broad statistical characteristics from the training data. In the context of graph generation, this may refer to degree distributions, clustering coefficients, or spectral properties. However, generating usable distribution feeders when detailed feeder models are unavailable requires more than matching generic graph statistics: the sampled topology must also obey electrical compatibility and radiality rules. We therefore formulate feeder synthesis as a constraint-guided graph generation problem and propose the Power-Grid-constrained Discrete Denoising Diffusion model, PG-DiGress , which learns categorical node and edge patterns from feeder data, while respecting domain-specific rules. Specifically, it injects feeder constraints into the reverse diffusion process through soft masks that suppress incompatible edge classes during denoising, followed by a final projection step that rebuilds a connected, rule-compliant feeder graph. We evaluate PG-DiGress using graph-distribution similarity, feeder-rule satisfaction, structural validity, and downstream model construction. Compared with the unconstrained baseline, PG-DiGress increases the strict feeder pass rate from 13 .7% to 96 .8%. We also successfully convert the generated graphs into executable feeder models for downstream analysis. CCS Concepts: • Applied computing → Computer-aided design ;Additional Key Words and Phrases: Graph Generation, Diffusion Models, Power Distribution Systems, Synthetic Distribution Feeders, Constraint-Guided Generation 
+
+ACM Reference Format: 
+
+Yu Qin, Andrew Glaws, Aadil Latif, and Ryan King. 2026. From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation. 1, 1 (September 2026), 22 pages. 
+
+1 Introduction 
+
+Distribution-feeder models are a basic input to many power-system studies. A feeder model describes how the source, primary conductors, transformers, secondary services, and loads are connected, together with the electrical attributes needed for analysis. Planning and operations studies use these models to evaluate quantities such as voltage profiles, equipment loading, losses, distributed-energy-resource integration, and the consequences of outages or infrastructure changes. Resilience and scenario studies similarly modify the network, loading, or operating conditions to examine 
+
+Authors’ Contact Information: Yu Qin, yqin@nlr.gov, National Laboratory of the Rockies, Golden, Colorado, USA; Andrew Glaws, aglaws@nlr.gov, National Laboratory of the Rockies, Golden, Colorado, USA; Aadil Latif, alatif@nlr.gov, National Laboratory of the Rockies, Golden, Colorado, USA; Ryan King, rking@nlr.gov, National Laboratory of the Rockies, Golden, Colorado, USA. Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org. © 2026 Copyright held by the owner/author(s). Publication rights licensed to ACM. Manuscript submitted to ACM Manuscript submitted to ACM 1arXiv:2609.29879v1 [cs.LG] 24 Sep 2026 2 Qin et al. how a feeder responds to hazards and alternative designs [13, 18]. In all of these cases, downstream analysis assumes that a sufficiently complete network model already exists. In practice, feeder models are analyzed using distribution-system simulation and planning tools, such as OpenDSS [5] and GridLAB-D [3]. These tools can solve power flow or time-series simulations once the buses, lines, transformers, phases, loads, and equipment parameters are specified, but they do not infer a missing network topology. Detailed utility feeder models are also often unavailable because of confidentiality, security, and data-access limitations, while public test systems capture only a small portion of the structural diversity found in real distribution networks [17, 18]. This data gap limits the construction of simulation models for studying alternative infrastructure designs, uncertain operating conditions, and future grid scenarios. Engineering-based synthetic feeder tools provide one solution. They combine geographic information, distribution-design rules, optimization, and equipment libraries to construct realistic-but-not-real distribution networks [6, 16, 17]. For example, roads and building locations can be used to estimate load placement and candidate routing, after which engineering heuristics determine transformer placement, conductor selection, and network connectivity. Learned graph generation offers a complementary capability: instead of constructing a network from prescribed inputs and design assumptions, a generative model can learn recurring structural variation across a collection of feeder graphs and sample alternative candidate topologies. Distribution feeders are naturally represented as attributed graphs, and their node roles, phase labels, and connection types are categorical, making discrete graph diffusion a natural generative formulation [7, 22, 24]. However, learning a statistically plausible graph is not sufficient for feeder synthesis. Generic graph generators [2, 15, 20, 22, 23] do not explicitly encode the electrical meaning of their predicted node and edge classes. A conductor must connect compatible voltage classes and phases, a transformer must represent an appropriate primary–secondary transition, and the complete topology must provide source-connected radial paths to its loads. A graph can therefore match node count, degree, path-length, or spectral statistics while still containing incompatible conductors, misplaced transformers, disconnected loads, or multiple source-to-load paths. Such samples may look graph-like but cannot directly serve as usable feeder topologies. Figure 1 (a) illustrates this distinction. The unconstrained graph generator (DiGress) sample exhibits a plausible branching structure but contains two source nodes, violating a basic feeder requirement. This example highlights why graph-level plausibility alone is insufficient and motivates incorporating feeder knowledge directly into generation. We therefore investigate whether discrete graph diffusion can learn data-driven feeder variation while explicit feeder rules improve the rule compliance and downstream usability of generated samples. We propose Power-Grid-constrained DiGress ( PG-DiGress ), a constraint-guided discrete diffusion framework built on DiGress [22]. PG-DiGress learns categorical node and edge patterns from feeder data while introducing electrical rules into generation. During reverse diffusion, soft masks guide conductor and transformer predictions toward locally compatible assignments. After denoising, a final projection uses the learned edge probabilities to construct the required global feeder structure. Our contributions are: 
+
+• We formulate distribution feeder synthesis as constraint-guided discrete graph generation with categorical node types, node phases, and edge classes. 
+
+• We introduce PG-DiGress, which combines soft masks during reverse diffusion to ensure local compatibility, and a final projection step to ensure global feeder validity. 
+
+> Manuscript submitted to ACM
+
+From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 3
+
+• We evaluate generated feeders beyond standard graph statistics using domain-specific rule satisfaction, structural validity, and downstream feeder-model construction. 
+
+> Fig. 1. Representative feeder samples generated by (a) unconstrained DiGress and (b) PG-DiGress. The DiGress sample contains two source nodes and therefore violates the single-source feeder requirement despite exhibiting a plausible branching structure. In contrast, the PG-DiGress sample contains a single source and forms a source-connected topology with conductor and transformer assignments consistent with the sampled node attributes.
+
+2 Background and Motivation 
+
+We first describe how synthetic distribution feeders are constructed and validated in power-system studies. We then introduce learned graph generation and discrete graph diffusion, providing the background needed to understand where learning-based generation complements existing engineering approaches. We review the work most relevant to these foundations and refer readers to [24] for a broader survey of learned graph generation. 
+
+2.1 Synthetic Power-System Generation 
+
+Synthetic power-system modeling addresses the limited availability of shareable utility network data by constructing realistic-but-not-real systems. For distribution networks, existing workflows commonly begin with geographic and demand information, then apply engineering rules, optimization, and equipment catalogs to produce a complete feeder model. Meyur et al. [16] generate geographically grounded distribution networks from roads, buildings, and engineering constraints. The Simple Synthetic Distribution Feeder Generation Tool (SHIFT) [6] similarly constructs feeder models from OpenStreetMap data [8] and distribution-system design principles [12]. These engineering approaches provide an explicit construction process: geography and demand define where service is required, while design rules, optimization objectives, and equipment choices determine how that service is connected. Their outputs are therefore interpretable and can often be parameterized directly for downstream simulation. Learned generation addresses a different question considered in this work: whether recurring structural patterns across an existing feeder population can themselves be represented as a probability distribution and sampled to produce alternative candidate topologies. 
+
+> Manuscript submitted to ACM
+
+4 Qin et al. Synthetic-system validation also requires more than checking graph shape. Krishnan et al. [13] evaluate synthetic distribution systems using physical layout, component and topology statistics, power-flow behavior, voltage profiles, losses, and expert criteria. This distinction is important for our evaluation: statistical similarity measures agreement with the reference feeder population, whereas feeder-rule compliance measures whether the categorical topology satisfies the electrical and structural relationships encoded in our representation. Recent work has also begun to explore learned power-grid synthesis. PowerGrow [9], for example, jointly models aspects of topology, continuous attributes, and temporal behavior. Our focus is narrower but complementary: we study whether categorical distribution-feeder topology can be learned from data while explicit phase, voltage-class, conductor, transformer, and radiality rules are incorporated directly into generation. 
+
+2.2 Learned Graph Generation 
+
+A graph neural network operates on graph-structured data by updating node or edge representations using information from neighboring elements and is commonly used for prediction on an existing graph [1]. Graph generation poses a different problem: the model must generate the graph itself, including its connectivity and attributes. Learned graph generators therefore model a probability distribution over graph-structured objects and sample new graphs from that distribution. Graphs are more difficult to generate than fixed-size vectors or images because node ordering is not unique, graph size can vary, and local edge decisions collectively determine global properties such as connectivity, cycles, paths, and components [11, 14, 23]. Prior approaches include autoregressive, latent-variable, adversarial, normalizing-flow, and diffusion-based models. Autoregressive methods generate nodes and edges sequentially, providing explicit dependence on the partial graph but requiring many ordered decisions [14, 23]. Latent-variable, adversarial, and flow-based methods generate larger portions of a graph jointly, but may face limitations related to graph matching, scalability, indirect topology construction, or invertibility [2, 15, 20]. These methods differ in how they represent and sample the joint dependencies among nodes and edges. For feeder synthesis, these dependencies also carry explicit electrical semantics: whether an edge class is admissible depends on the voltage class and phase configuration of its endpoints. This motivates incorporating domain knowledge into the generation process rather than evaluating such relationships only after sampling. 
+
+2.3 Discrete Graph Diffusion 
+
+Diffusion models formulate generation as the reversal of a known corruption process [10]. In the forward process, a training sample is gradually transformed toward noise. A denoising network is trained at intermediate noise levels to predict the clean sample or the reverse transition. During generation, the model begins with a noisy state and repeatedly applies the learned reverse transitions to obtain a new sample. For graphs with categorical attributes, discrete diffusion performs this corruption directly in the categorical state rather than perturbing a continuous adjacency representation with Gaussian noise [7]. This formulation is particularly suitable for feeder representation: node classes ( SOURCE , LOAD ), node phases, and edge classes ( CONDUCTOR , TRANSFORMER ) are discrete semantic categories rather than continuous measurements. Discrete Denoising Diffusion for Graph Generation (DiGress) [22] implements this idea by applying categorical Markov transitions to node and edge labels and training a graph transformer to reconstruct their clean states. Subsequent work improves scalability or conditioning [4, 19, 21], but the conditions are generally expressed through learned or generic graph properties rather than explicit feeder-specific dependencies between node attributes and electrical edge classes. 
+
+> Manuscript submitted to ACM
+
+From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 5
+
+> Fig. 2. Feeder representation and rule system used in this work. Left: representative attributed SMART-DS feeder graphs, with nodes encoding role and phase and edges encoding conductor or transformer connections. Right: local edge-compatibility rules and representative global topology requirements used to define rule-compliant generation.
+
+PG-DiGress therefore retains discrete diffusion as the mechanism for learning feeder variation while introducing feeder rules into sampling. The following section formalizes the categorical feeder representation and the local and global rules used to guide generation. 
+
+3 Problem Formulation 
+
+We formulate distribution-feeder synthesis as generation over attributed graphs subject to explicit structural and electrical compatibility rules. The representation specifies the node and edge attributes learned by the generative model, while the rule system identifies which generated graphs correspond to usable distribution feeders. Figure 2 summarizes the feeder representation and the corresponding local and global rule system. 
+
+3.1 Feeder Graph Representation 
+
+We represent a power distribution feeder as an undirected attributed graph for modeling purposes: conductor and transformer connectivity is symmetric, whereas power-flow direction depends on the operating state and may change with distributed generation. Once a single-source radial topology is generated, it can be rooted at the source to recover a parent–child orientation for downstream analysis. Thus, we define the feeder graph: 
+
+𝐺 = (𝑉 , 𝑋, 𝑃, 𝐸 ), (1) where 𝑉 is the node set, 𝑋 = {𝑋 𝑣 }𝑣 ∈𝑉 is the categorical type of node, 𝑃 = {𝑃 𝑣 }𝑣 ∈𝑉 is its categorical phase label, and 
+
+𝐸 = {𝐸 𝑢𝑣 }𝑢,𝑣 ∈𝑉 is the categorical edge labels. Specifically, 𝑋 𝑣 ∈ X , 𝑃 𝑣 ∈ P , and 𝐸 𝑢𝑣 ∈ L 𝐸 . Because the feeder is modeled as undirected, 𝐸 𝑢𝑣 = 𝐸 𝑣𝑢 . The attribute spaces are application-dependent and can be adapted to other feeder datasets without changing the underlying generative formulation. For the dataset used in this work, the categorical spaces are 
+
+X = {SOURCE , LOAD , OTHER },
+
+Ppri = {ABC , A, B, C, AB , BC , AC },
+
+Psec = {S1 , S2 , S1S2 , NS1S2 },
+
+P = Ppri ∪ P sec ,
+
+L𝐸 = {NO_EDGE , CONDUCTOR , TRANSFORMER }.
+
+(2) 
+
+> Manuscript submitted to ACM
+
+6 Qin et al. Here, SOURCE denotes the feeder head, LOAD denotes an end-use load, and OTHER denotes an intermediate component such as a pole or bus. The edge label NO_EDGE is included as a discrete class so that graph generation can be formulated as categorical prediction over all candidate node pairs. Although node type and phase are written separately for semantic clarity, PG-DiGress represents them jointly through 
+
+𝑍 𝑣 = (𝑋 𝑣 , 𝑃 𝑣 ) ∈ Z , Z ⊆ X × P , (3) where Z contains the admissible type–phase combinations in the processed feeder representation. In particular, source labels are restricted to primary-side phase classes: 
+
+(SOURCE , 𝑝 ) ∈ Z ⇒ 𝑝 ∈ P pri . (4) Thus, source–primary consistency holds by construction. In contrast, LOAD is a semantic node role and may occur on either the primary or secondary side of the feeder. Each phase label is interpreted through a mapping 𝜓 : P → 2Φ, where Φ is the primitive phase alphabet. For example, 
+
+𝜓 (ABC ) = {A, B, C} and 𝜓 (S1S2 ) = {S1 , S2 }. This interpretation allows phase compatibility to be evaluated through set intersection. The phase label also determines the voltage class through 
+
+𝜈 (𝑃 𝑣 ) =
+
+
+
+PRIMARY , 𝑃 𝑣 ∈ P pri ,
+
+SECONDARY , 𝑃 𝑣 ∈ P sec .
+
+(5) We write 𝜈 𝑣 := 𝜈 (𝑃 𝑣 ). Thus, PRIMARY and SECONDARY are derived electrical classes rather than additional generated node types. Because 𝐸 assigns a categorical label to every node pair, we distinguish the edge-label tensor from the realized feeder topology. The feeder is undirected, 𝐸 𝑢𝑣 = 𝐸 𝑣𝑢 . We define the set of physical edges as 
+
+Ephys (𝐸 ) = {{ 𝑢, 𝑣 } | 𝑢, 𝑣 ∈ 𝑉 , 𝑢 < 𝑣, 𝐸 𝑢𝑣 ≠ NO_EDGE } , 𝐺 phys (𝐸 ) =  𝑉 , Ephys (𝐸 ) . (6) Thus, 𝐺 phys contains only conductor and transformer edges and is the graph for evaluation. 
+
+3.2 Feeder Rule System 
+
+Using the representation above, distribution-system knowledge can be written as constraints on 𝑋 , 𝑃 , 𝐸 , and the topology of 𝐺 phys . We distinguish local rules, which determine whether a particular node or edge assignment is compatible, and global rules, which determine whether the complete graph has a valid feeder organization. These constraints establish structural feeder validity but do not replace downstream power-flow analysis of voltage, current, loading, or losses. 
+
+Local compatibility rules. In a common distribution-system dataset, the source belongs to the primary system, while load nodes may appear on either the primary or secondary system depending on their phase label. A conductor must remain within one voltage class and carry at least one phase shared by its endpoints, whereas a transformer connects 
+
+> Manuscript submitted to ACM
+
+From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 7the primary and secondary systems. Self-loops are not physically meaningful. These conditions are summarized as 
+
+𝑋 𝑣 = SOURCE ⇒ 𝜈 𝑣 = PRIMARY ,𝐸 𝑢𝑣 = CONDUCTOR ⇒ 𝜈 𝑢 = 𝜈 𝑣 ∧ 𝜓 (𝑃 𝑢 ) ∩ 𝜓 (𝑃 𝑣 ) ≠ ∅,𝐸 𝑢𝑣 = TRANSFORMER ⇒ 𝜈 𝑢 ≠ 𝜈 𝑣 ,𝐸 𝑣𝑣 = NO_EDGE , ∀𝑣 ∈ 𝑉 . 
+
+(7) Node role and voltage class are distinct attributes in our representation. In particular, a LOAD node may occur on either the primary or secondary side of the feeder and its voltage class is determined by its phase label through 𝜈 (𝑃 𝑣 ). The source, however, belongs to the primary system. The conductor rule reflects that a line does not change nominal voltage and can carry power only through phases available at both endpoints. The transformer rule captures the voltage-class transition between the primary feeder and secondary service network. Together, these rules enforce essential electrical compatibility conditions. 
+
+Global topology rules. We define the source, load, and primary node sets as 
+
+𝑉 src = {𝑣 ∈ 𝑉 | 𝑋 𝑣 = SOURCE },𝑉 load = {𝑣 ∈ 𝑉 | 𝑋 𝑣 = LOAD },𝑉 pri = {𝑣 ∈ 𝑉 | 𝜈 𝑣 = PRIMARY }.
+
+(8) The primary conductor subgraph is 𝐺 pri = (𝑉 pri , Epri ), where 
+
+Epri = {𝑢, 𝑣 } ∈ E phys (𝐸 ) 𝑢, 𝑣 ∈ 𝑉 pri , 𝐸 𝑢𝑣 = CONDUCTOR . (9) Let Π𝐺 (𝑣, 𝑠 ) denote the set of simple paths between node 𝑣 and source 𝑠 in 𝐺 phys (𝐸 ). For a path 𝜋 , define 
+
+𝑁 tr (𝜋 ) =∑︁  
+
+> {𝑖,𝑗 } ∈ 𝜋
+
+1 𝐸 𝑖 𝑗 = TRANSFORMER  (10) as the number of transformer edges on path 𝜋 . The feeder topology must satisfy 
+
+|𝑉 src | = 1, 𝑉 src = {𝑠 },𝐺 phys (𝐸 ) is connected ,𝐺 pri is a tree ,
+
+∀𝑣 ∈ 𝑉 load : Π𝐺 (𝑣, 𝑠 ) = {𝜋 𝑣,𝑠 },𝑁 tr (𝜋 𝑣,𝑠 ) = 1 [𝜈 𝑣 = SECONDARY ] .
+
+(11) The unique-source and connectivity requirements ensure that every modeled component belongs to a source-connected feeder. Requiring the primary conductor subgraph to be a tree enforces the radial primary structure considered in this work. Finally, every load must have a unique path to the source. A primary-side load is reached without crossing a transformer, whereas a secondary-side load crosses exactly one transformer, corresponding to a single primary-to-secondary voltage transition. 
+
+> Manuscript submitted to ACM
+
+8 Qin et al. 
+
+3.3 Generation Objective 
+
+The graph representation defines the ambient space G of attributed feeder graphs. The local compatibility and global topology rules in Eqs. (7)–(11) define the rule-compliant subset 
+
+GR = {𝐺 ∈ G | 𝐺 satisfies all rules in R} . (12) where R denotes the complete feeder rule system. Given a training set D = {𝐺 𝑖 }𝑁 𝑖 =1 sampled from an unknown feeder distribution, our goal is to learn a rule-guided generative distribution 𝑝 R 
+
+> 𝜃
+
+such that ˆ𝐺 ∼ 𝑝 R 
+
+> 𝜃
+
+(𝐺 ), 𝑝 R 
+
+> 𝜃
+
+(G R ) ≈ 1. (13) Here, the superscript R indicates that the learned sampling process is modified by the feeder rules. In addition to rule compliance, samples drawn from 𝑝 R 
+
+> 𝜃
+
+should preserve structural variation observed in D and generate graphs that can be converted into downstream feeder models. Sampling directly from GR is challenging because local node–edge compatibility and global feeder topology are coupled. The next section introduces our approach, which targets this objective through local edge guidance during reverse diffusion and an edge-only projection after denoising. 
+
+4 Methodology 
+
+We propose Power-Grid-constrained Discrete Denoising Diffusion (PG-DiGress) to generate distribution-feeder topolo-gies that preserve data-driven structural variation while better satisfying feeder rules. PG-DiGress follows a minimal-intervention design. We retain the standard DiGress training objective and diffusion process, and introduce feeder knowledge only during edge sampling and final topology construction. This keeps training stable and makes the effect of rule guidance directly comparable with the unconstrained model. The method follows the distinction established in the previous section: local electrical compatibility can be incor-porated during reverse diffusion, whereas global topology requirements must be addressed at the graph level after denoising. Accordingly, PG-DiGress contains two main components: a soft mask that guides each reverse diffusion step and a final projection that repairs the final topology. Figure 3 shows the generation pipeline. 
+
+4.1 Discrete Graph Diffusion 
+
+PG-DiGress builds on Discrete Denoising Diffusion for Graph Generation (DiGress) [22], which models graphs with categorical node and edge attributes. We summarize the components needed to describe our method and refer readers to the original work for the complete diffusion formulation. Following Eq. (3), the implementation jointly encodes node type and phase as the categorical node label 
+
+𝑍 𝑣 = (𝑋 𝑣 , 𝑃 𝑣 ) ∈ Z . (14) The semantic attributes are recovered through deterministic decoding functions 
+
+𝑋 𝑣 = 𝑑 𝑋 (𝑍 𝑣 ), 𝑃 𝑣 = 𝑑 𝑃 (𝑍 𝑣 ). (15) At diffusion step 𝑡 , the graph is represented as 
+
+𝐺 𝑡 = (𝑉 , 𝑍 𝑡 , 𝐸 𝑡 ), 𝑡 = 0, . . . ,𝑇 , (16) 
+
+> Manuscript submitted to ACM
+
+From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 9
+
+Fig. 3. Overview of PG-DiGress. At each reverse diffusion step, a graph transformer (denoiser) predicts categorical node and edge distributions. The predicted node types and phases define a soft mask that re-weights conductor and transformer classes according to local compatibility rules. After denoising, a final projection uses the predicted edge probabilities to build a radial primary backbone, attaches loads, and reconnects remaining components while keeping the sampled node labels fixed. 
+
+where 𝐺 0 is a clean feeder graph and 𝐺 𝑇 approaches a categorical noise distribution. The node set 𝑉 remains fixed throughout the diffusion trajectory, while the node labels 𝑍 𝑡 and edge labels 𝐸 𝑡 are progressively corrupted. 
+
+Forward Diffusion. The forward process independently applies discrete Markov transitions to node and edge labels: 
+
+𝑞 (𝐺 𝑡 | 𝐺 𝑡 −1) =
+
+Ö 
+
+> 𝑣 ∈𝑉
+
+Cat  𝑍 𝑡 𝑣 ; 𝑍 𝑡 −1 
+
+> 𝑣
+
+𝑄 𝑡 𝑍 
+
+
+
+×
+
+Ö
+
+> 𝑢 <𝑣
+
+Cat  𝐸 𝑡 𝑢𝑣 ; 𝐸 𝑡 −1 
+
+> 𝑢𝑣
+
+𝑄 𝑡 𝐸 
+
+ ,
+
+(17) where 𝑄 𝑡 𝑍 and 𝑄 𝑡 𝐸 are transition matrices for node and edge labels. Because the feeder graph is undirected, edge labels are sampled only for 𝑢 < 𝑣 and then symmetrized. 
+
+Denoising Model. A graph transformer 𝜙 𝜃 receives the noisy graph 𝐺 𝑡 and timestep 𝑡 and predicts categorical distributions over the corresponding clean labels: 
+
+𝜙 𝜃 (𝐺 𝑡 , 𝑡 ) =
+
+n 
+
+ˆ𝑝 0 
+
+> 𝑍,𝑣,𝜃
+
+(· | 𝐺 𝑡 , 𝑡 )
+
+o  
+
+> 𝑣 ∈𝑉
+
+,
+
+n
+
+ˆ𝑝 0 
+
+> 𝐸,𝑢𝑣,𝜃
+
+(· | 𝐺 𝑡 , 𝑡 )
+
+o
+
+> 𝑢 <𝑣
+
+
+
+. (18) The denoiser is trained using categorical cross-entropy: 
+
+Ldiff = −∑︁  
+
+> 𝑣 ∈𝑉
+
+log ˆ 𝑝 0
+
+> 𝑍,𝜃
+
+ 𝑍 0 
+
+> 𝑣
+
+| 𝐺 𝑡 , 𝑡 
+
+− 𝜆 𝐸 ∑︁ 𝑢 <𝑣 
+
+log ˆ 𝑝 0
+
+> 𝐸,𝜃
+
+ 𝐸 0 
+
+> 𝑢𝑣
+
+| 𝐺 𝑡 , 𝑡  ,
+
+(19) where 𝜆 𝐸 balances node- and edge-label prediction. 
+
+> Manuscript submitted to ACM
+
+10 Qin et al. Following DiGress, the predicted clean-label distributions are combined with the closed-form categorical diffusion posterior to obtain reverse-step probabilities. We denote the resulting node and edge probabilities by 
+
+𝜋 𝑡 𝑍,𝑣 (𝑧 ) := 𝑝 𝜃 
+
+ 𝑍 𝑡 −1 
+
+> 𝑣
+
+= 𝑧 | 𝐺 𝑡  ,𝜋 𝑡 𝐸,𝑢𝑣 (𝑘 ) := 𝑝 𝜃 
+
+ 𝐸 𝑡 −1 
+
+> 𝑢𝑣
+
+= 𝑘 | 𝐺 𝑡  . (20) The baseline reverse distribution factorizes as 
+
+𝑝 𝜃 (𝐺 𝑡 −1 | 𝐺 𝑡 ) =
+
+Ö 
+
+> 𝑣 ∈𝑉
+
+Cat 
+
+
+
+𝑍 𝑡 −1 
+
+> 𝑣
+
+; 𝜋 𝑡 𝑍,𝑣 
+
+
+
+×
+
+Ö
+
+> 𝑢 <𝑣
+
+Cat 
+
+
+
+𝐸 𝑡 −1 
+
+> 𝑢𝑣
+
+; 𝜋 𝑡 𝐸,𝑢𝑣 
+
+
+
+.
+
+(21) Original DiGress samples both node and edge labels directly from Eq. (21). Although this provides a natural generator for discrete feeder attributes, it does not explicitly account for electrical edge compatibility or global requirements such as source connectivity and radiality. 
+
+4.2 PG-DiGress: Rule-Guided Sampling 
+
+PG-DiGress preserves the trained DiGress denoiser and modifies only the edge generation. We modify edge generation because node attributes define the electrical meaning of a candidate connection, while edge labels determine whether that connection is compatible. This provides a direct point for incorporating feeder rules without redesigning the node generator or retraining the denoiser. Its sampling process can be summarized as 
+
+𝐺 𝑇 reverse diffusion 
+
+−−−−−−−−−−−−→
+
+> soft mask
+
+e𝐺 final projection 
+
+−−−−−−−−−−−−→ 
+
+> edge-only repair
+
+𝐺 ∗, (22) where e𝐺 is the preliminary graph produced by guided reverse diffusion and 𝐺 ∗ is the final projected graph. 
+
+4.3 Soft Mask for Local Edge Compatibility 
+
+At every reverse step, the model first predicts the clean categorical node distribution. The most likely node label is decoded as ¯𝑍 𝑡 𝑣 = arg max  
+
+> 𝑧 ∈ Z
+
+ˆ𝑝 0
+
+> 𝑍,𝜃
+
+ 𝑧 | 𝐺 𝑡 , 𝑡  ,
+
+¯𝑋 𝑡 𝑣 = 𝑑 𝑋 ( ¯𝑍 𝑡 𝑣 ),
+
+¯𝑃 𝑡 𝑣 = 𝑑 𝑃 ( ¯𝑍 𝑡 𝑣 ),
+
+¯𝜈 𝑡 𝑣 = 𝜈 ( ¯𝑃 𝑡 𝑣 ).
+
+(23) Here, ¯ 𝑋 𝑡 𝑣 , ¯ 𝑃 𝑡 𝑣 , and ¯ 𝜈 𝑡 𝑣 are temporary metadata used to evaluate edge compatibility. They do not replace the node labels sampled from 𝜋 𝑡 𝑍,𝑣 .For every node pair {𝑢, 𝑣 } and edge class 𝑘 ∈ L 𝐸 , we define a binary legality mask 
+
+𝑀 𝑡 𝑢𝑣 (𝑘 ) ∈ { 0, 1}. (24) For distinct node pairs, NO_EDGE is always admissible: 
+
+𝑀 𝑡 𝑢𝑣 (NO_EDGE ) = 1. (25) 
+
+> Manuscript submitted to ACM
+
+From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 11 The mask encodes the two local rules from Eq. (7): conductors require equal voltage class and overlapping phases, whereas transformers connect the primary and secondary systems. 
+
+𝑀 𝑡 𝑢𝑣 (CONDUCTOR ) = 1 𝑢 ≠ 𝑣 ∧ ¯𝜈 𝑡 𝑢 = ¯𝜈 𝑡 𝑣 ∧ 𝜓 ( ¯𝑃 𝑡 𝑢 ) ∩ 𝜓 ( ¯𝑃 𝑡 𝑣 ) ≠ ∅ ,𝑀 𝑡 𝑢𝑣 (TRANSFORMER ) = 1 𝑢 ≠ 𝑣 ∧ ¯𝜈 𝑡 𝑢 ≠ ¯𝜈 𝑡 𝑣 
+
+ . (26) Diagonal entries are fixed to NO_EDGE , so self-loops cannot be sampled. The mask reweights the baseline reverse edge probabilities. We define 
+
+𝑎 𝑡 𝑢𝑣 (𝑘 ) = exp  −𝜆 𝑡 
+
+1 − 𝑀 𝑡 𝑢𝑣 (𝑘 )  , (27) where 𝜆 𝑡 ≥ 0 controls the guidance strength. Legal classes receive weight 1, whereas illegal classes receive weight exp (− 𝜆 𝑡 ). Thus, 𝜆 𝑡 = 0 recovers the unconstrained DiGress distribution, while larger values increasingly suppress illegal classes. The guided reverse edge distribution is 
+
+e𝜋 𝑡 𝐸,𝑢𝑣 (𝑘 ) = 𝜋 𝑡 𝐸,𝑢𝑣 (𝑘 )𝑎 𝑡 𝑢𝑣 (𝑘 )∑︁  
+
+> 𝑘 ′∈ L 𝐸
+
+𝜋 𝑡 𝐸,𝑢𝑣 (𝑘 ′)𝑎 𝑡 𝑢𝑣 (𝑘 ′) . (28) Node labels are sampled from the original reverse node distribution: 
+
+𝑍 𝑡 −1 
+
+> 𝑣
+
+∼ Cat 
+
+
+
+𝜋 𝑡 𝑍,𝑣 
+
+
+
+, (29) while edge labels are sampled from the masked distribution: 
+
+𝐸 𝑡 −1 
+
+> 𝑢𝑣
+
+∼ Cat 
+
+e𝜋 𝑡 𝐸,𝑢𝑣 
+
+
+
+. (30) The soft mask therefore directly modifies the reverse distribution over edge sampling conditional on the current node predictions without altering the learned node generator because node predictions remain uncertain during denoising. This preserves probabilistic sampling while allowing the guidance strength to increase as predictions become more reliable, and the guidance can still indirectly influence later node predictions. 
+
+4.4 Final Projection for Global Feeder Structure 
+
+Pairwise masking improves local edge compatibility but cannot enforce the global feeder requirements introduced in Section 3: a single source-connected feeder, a radial primary structure, and a unique source-to-load path with the voltage-class transition required by the destination load. These properties depend jointly on multiple edge decisions and therefore cannot be guaranteed by independently masking candidate node pairs. Enforcing them at every reverse step would require solving a global constrained graph problem throughout denoising. PG-DiGress instead addresses them through a final projection after the last reverse step. Let 
+
+e𝐺 = (𝑉 , e𝑍, e𝐸 ) (31) denote the preliminary sampled graph. The projection keeps the node labels fixed and modifies only the edge-label tensor: 
+
+𝐸 ∗ = Πedge 
+
+e𝐸 ; e𝑍, 𝜌, R
+
+
+
+,𝐺 ∗ = (𝑉 , e𝑍, 𝐸 ∗),
+
+(32) 
+
+> Manuscript submitted to ACM
+
+12 Qin et al. where 
+
+𝜌 𝑢𝑣 (𝑘 ) := e𝜋 1 
+
+> 𝐸,𝑢𝑣
+
+(𝑘 ) (33) is the final guided probability for edge class 𝑘 .Because the masks used during diffusion are based on temporary node predictions, the projection recomputes edge compatibility from the final sampled labels e𝑍 . We denote this final mask by 
+
+𝑀 ∗ 
+
+> 𝑢𝑣
+
+(𝑘 ) := 𝑀 
+
+
+
+𝑘 ; 𝑑 𝑋 ( e𝑍 𝑢 ), 𝑑 𝑃 ( e𝑍 𝑢 ), 𝑑 𝑋 ( e𝑍 𝑣 ), 𝑑 𝑃 ( e𝑍 𝑣 )
+
+
+
+, (34) using the same local rules as Eq. (26). The final projection consists of three stages: the primary backbone construction, load attachment, and component reconnection. 
+
+Primary Backbone Construction. The sampled node labels determine the primary-side node set 
+
+𝑉 ∗ 
+
+> pri
+
+=
+
+n
+
+𝑣 ∈ 𝑉 𝜈 
+
+
+
+𝑑 𝑃 ( e𝑍 𝑣 )
+
+
+
+= PRIMARY 
+
+o
+
+. (35) The legal primary conductor candidates are 
+
+Cpri =
+
+n
+
+{𝑢, 𝑣 } 𝑢, 𝑣 ∈ 𝑉 ∗
+
+> pri
+
+, 𝑀 ∗ 
+
+> 𝑢𝑣
+
+(CONDUCTOR ) = 1
+
+o
+
+, (36) with weights 
+
+𝑤 cond  
+
+> 𝑢𝑣
+
+= 𝜌 𝑢𝑣 (CONDUCTOR ). (37) We construct a maximum-weight spanning forest 
+
+𝐹 pri = MaxSF 
+
+
+
+𝑉 ∗
+
+> pri
+
+, Cpri , 𝑤 cond 
+
+. (38) When the legal candidate graph is connected, 𝐹 pri is a maximum-weight spanning tree. Otherwise, it provides an acyclic set of high-probability conductor edges, and the remaining components are handled by the reconnection stage. 
+
+Load Attachment. The sampled load-node set is 
+
+𝑉 ∗ 
+
+> load
+
+= 𝑣 ∈ 𝑉 𝑑 𝑋 ( e𝑍 𝑣 ) = LOAD . (39) Let 𝐻 denote the partially constructed feeder, initialized with the primary backbone. For each unattached load 𝑣 , let 
+
+A𝐻 (𝑣 ) denote the set of candidate parent and edge-type pairs (𝑢, 𝑘 ) such that: 
+
+• 𝑢 already belongs to the source-connected component of 𝐻 ;
+
+• 𝑘 ∈ { CONDUCTOR , TRANSFORMER };
+
+• 𝑀 ∗ 
+
+> 𝑢𝑣
+
+(𝑘 ) = 1; and 
+
+• adding edge (𝑢, 𝑣 ) with label 𝑘 preserves the required source-to-load transformer structure. When A𝐻 (𝑣 ) is nonempty, PG-DiGress selects 
+
+(𝑢 ∗ (𝑣 ), 𝑘 ∗ (𝑣 )) = arg max    
+
+> (𝑢,𝑘 ) ∈ A 𝐻 (𝑣 )
+
+𝜌 𝑢𝑣 (𝑘 ) (40) and adds the corresponding labeled edge to 𝐻 . This step attaches each load through the highest-scoring legal connection available under the sampled node attributes. 
+
+Component Reconnection. Disconnected components may remain after primary-backbone construction and load attachment. Let Comp (𝐻 ) denote the connected components of the current graph. The set of legal inter-component 
+
+> Manuscript submitted to ACM
+
+From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 13 bridges is 
+
+B( 𝐻 ) =
+
+
+
+(𝑢, 𝑣, 𝑘 ) 𝑢 ∈ 𝐶 𝑖 , 𝑣 ∈ 𝐶 𝑗 , 𝐶 𝑖 ≠ 𝐶 𝑗 ,𝑘 ∈ { CONDUCTOR , TRANSFORMER },𝑀 ∗ 
+
+> 𝑢𝑣
+
+(𝑘 ) = 1,𝐻 ∪ {( 𝑢, 𝑣, 𝑘 )} preserves the applicable feeder rules 
+
+
+
+.
+
+(41) The highest-scoring bridge is 
+
+(𝑢 ∗, 𝑣 ∗, 𝑘 ∗) = arg max    
+
+> (𝑢,𝑣,𝑘 ) ∈ B ( 𝐻 )
+
+𝜌 𝑢𝑣 (𝑘 ). (42) The selected bridge is added, and the process is repeated until no disconnected component remains or no feasible bridge is available. Because every repair edge joins two distinct components, the operation cannot create a cycle within an existing component. Algorithm 1 summarizes the complete PG-DiGress sampling procedure. 
+
+Algorithm 1 PG-DiGress Sampling 
+
+Require: Trained denoiser 𝜙 𝜃 , feeder rule system R, diffusion steps 𝑇 , and guidance schedule {𝜆 𝑡 }𝑇 𝑡 =1 
+
+> 1:
+
+Sample an initial noisy graph 𝐺 𝑇  
+
+> 2:
+
+for 𝑡 = 𝑇 ,𝑇 − 1, . . . , 1 do  
+
+> 3:
+
+Predict clean node and edge distributions with 𝜙 𝜃 (𝐺 𝑡 , 𝑡 ) 
+
+> 4:
+
+Compute the baseline DiGress reverse probabilities 𝜋 𝑡 𝑍 and 𝜋 𝑡 𝐸  
+
+> 5:
+
+Decode node metadata from arg max ˆ 𝑝 0 
+
+> 𝑍,𝜃
+> 6:
+
+Construct edge legality masks 𝑀 𝑡 𝑢𝑣 (𝑘 ) 
+
+> 7:
+
+Reweight edge probabilities using Eq. (28)  
+
+> 8:
+
+Sample node labels from the unmodified distribution 𝜋 𝑡 𝑍  
+
+> 9:
+
+Sample edge labels from the masked distribution e𝜋 𝑡 𝐸  
+
+> 10:
+
+end for  
+
+> 11:
+
+Set the preliminary graph e𝐺 ← 𝐺 0 
+
+> 12:
+
+Keep the sampled node labels e𝑍 fixed  
+
+> 13:
+
+Recompute the final compatibility mask 𝑀 ∗ from e𝑍  
+
+> 14:
+
+Construct the radial primary backbone using Eq. (38)  
+
+> 15:
+
+Attach sampled load nodes using Eq. (40)  
+
+> 16:
+
+Reconnect remaining components using Eq. (42)  
+
+> 17:
+
+return Final projected graph 𝐺 ∗ = (𝑉 , e𝑍, 𝐸 ∗)
+
+This design preserves a clear division of responsibility: the diffusion model generates node attributes and edge preferences, the soft mask improves local compatibility, and the final projection repairs global topology without changing the sampled node labels. 
+
+5 Experiments 
+
+We design the experiments to answer four research questions: 
+
+RQ1 Does explicit rule guidance improve feeder-rule compliance? 
+
+RQ2 What are the respective contributions of the soft edge mask and final projection? 
+
+RQ3 Does rule guidance preserve the structural variation learned from the reference feeders? 
+
+> Manuscript submitted to ACM
+
+14 Qin et al. 
+
+RQ4 Can the generated topologies support downstream feeder-model construction and power-flow analysis? The first two questions are addressed through a controlled ablation study, while the latter two evaluate distributional fidelity and downstream usability. 
+
+5.1 Dataset 
+
+We use 1,019 feeder graphs derived from Synthetic Models for Advanced, Realistic Testing: Distribution Systems and Scenarios (SMART-DS) [13]. Each feeder is represented as an attributed, undirected graph whose nodes carry a semantic type and phase label and whose edges carry a categorical connection class. The node-type space is 
+
+X = {SOURCE , LOAD , OTHER }, (43) and the edge-label space is 
+
+L𝐸 = {NO_EDGE , CONDUCTOR , TRANSFORMER }. (44) Phase labels follow the primary and secondary categories defined in Section 3. The explicit NO_EDGE class allows the diffusion model to assign a categorical label to every candidate node pair. Table 1 summarizes the node and active-edge categories in the processed dataset. 
+
+> Table 1. Node and active-edge categories in the processed SMART-DS feeder dataset.
+
+Category Interpretation Count 
+
+SOURCE Feeder source node 1,019 
+
+LOAD End-use or building load 15,306 
+
+OTHER Intermediate bus, pole, or junction 18,767 
+
+CONDUCTOR Same-voltage electrical connection 30,455 
+
+TRANSFORMER Primary–secondary voltage transition 3,618 We split the data at the feeder level into 80% training, 10% validation, and 10% test sets, ensuring that no feeder appears in more than one subset. All distributional comparisons use the held-out test feeders as the reference set. 
+
+5.2 Implementation Details 
+
+For training, we keep only the categorical attributes modeled by PG-DiGress: node type and phase from node feature indices 0 and 5, and edge type from edge feature index 1. Node type and phase are concatenated into a single categorical label, such as LOAD-S1 , and then one-hot encoded. Edge labels are also one-hot encoded, with an additional NO_EDGE 
+
+class introduced during dense graph conversion to represent absent edges. All feeders are converted to undirected graphs before training. Continuous attributes, such as geometric length and other numerical node or edge features, are discarded. The models are implemented using PyTorch Geometric and trained on the high-performance computing system using one NVIDIA H100 SXM GPU. 
+
+5.3 Ablation Study 
+
+We compare PG-DiGress against an unconstrained DiGress baseline and two ablated variants. Because PG-DiGress modifies sampling rather than training, all four variants use the same trained DiGress denoiser and differ only in how edge generation and final projection are performed. The graph representation, trained model checkpoint, diffusion configuration, and graph-size sampling distribution are therefore held fixed across comparisons. 
+
+> Manuscript submitted to ACM
+
+From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 15 
+
+• DiGress : samples node and edge labels from the original discrete reverse distributions without feeder-rule guidance or final projection. 
+
+• Mask only : applies the local edge-compatibility mask during reverse diffusion without final projection. 
+
+• Projection only : uses unconstrained reverse diffusion followed by the final projection. 
+
+• PG-DiGress : combines edge masking during reverse diffusion with final projection. This comparison isolates the contribution of local rule guidance from that of global topology repair. For each variant, we generate 𝑁 gen = 2000 feeder graphs. Graph sizes are sampled from the same empirical node-count distribution of the training feeders, following the original DiGress sampling procedure. The same model checkpoint and sampling configuration are used across all variants. 
+
+5.4 Evaluation Metrics 
+
+We evaluate generated feeders along three complementary dimensions: feeder-rule compliance, structural fidelity, and downstream feeder-model construction. Together, these metrics assess whether the generated graphs satisfy the encoded feeder rules, preserve structural variation in the reference data, and can be consumed by a physics-based downstream workflow. 
+
+Feeder-Rule Compliance. Local edge compliance measures whether sampled active edges are compatible with their endpoint attributes. Let 
+
+Econd (𝐺 ) = {𝑢, 𝑣 } ∈ E phys (𝐸 ) | 𝐸 𝑢𝑣 = CONDUCTOR (45) and define Etr (𝐺 ) analogously for transformer edges. The conductor-rule compliance is 
+
+𝐴 cond (𝐺 ) =∑︁ {𝑢,𝑣 } ∈ E cond (𝐺 )
+
+𝑀 𝑢𝑣 (CONDUCTOR )
+
+max (1, |E cond (𝐺 )|) , (46) and the transformer-rule compliance is 
+
+𝐴 tr (𝐺 ) =∑︁ {𝑢,𝑣 } ∈ E tr (𝐺 )
+
+𝑀 𝑢𝑣 (TRANSFORMER )
+
+max (1, |E tr (𝐺 )|) . (47) We evaluate the compliance metrics at two levels. For conductor, transformer and source-to-load path criteria, we first compute a within-graph compliance rate and then report the mean over all generated samples. Single-source compliance, connectivity, primary radiality and strict feeder pass are graph-level criteria and are reported as the percentage of generated graphs meeting the corresponding condition. We additionally report three graph-level criteria: 
+
+• Single-source compliance : whether the graph contains exactly one source node. 
+
+• Connectivity : whether 𝐺 phys (𝐸 ) is connected. 
+
+• Primary radiality : whether the primary conductor subgraph 𝐺 pri is a tree. For each graph, we separately report the valid source-to-load path rate as 
+
+𝐴 path (𝐺 ) = 1max (1, |𝑉 load |) ∑︁ 𝑣 ∈𝑉 load 
+
+1 Π𝐺 (𝑣, 𝑠 ) = {𝜋 𝑣,𝑠 } ∧ 𝑁 tr (𝜋 𝑣,𝑠 ) = 1[𝜈 𝑣 = SECONDARY ] . (48) The source–primary condition in Eq. (4) holds by construction through the admissible node-label space Z and therefore does not require a separate evaluation metric. A strict pass requires all remaining local and global feeder 
+
+> Manuscript submitted to ACM
+
+16 Qin et al. rules to hold simultaneously: conductor and transformer compatibility, exactly one source, graph connectivity, primary radiality, and a valid source-to-load path for every load. We therefore define 
+
+𝐼 strict (𝐺 ) = 1𝐴 cond (𝐺 ) = 1 ∧ 𝐴 tr (𝐺 ) = 1
+
+∧ | 𝑉 src | = 1 ∧ 𝐺 phys (𝐸 ) is connected 
+
+∧ 𝐺 pri is a tree ∧ 𝐴 path (𝐺 ) = 1 .
+
+(49) The strict feeder pass rate is the mean of 𝐼 strict (𝐺 ) over all generated samples. 
+
+Structural Fidelity. Structural fidelity measures whether generated feeders preserve the graph characteristics of the reference dataset. We compare the empirical distributions of: 
+
+• number of nodes; 
+
+• average degree; 
+
+• average shortest-path length; 
+
+• graph diameter; 
+
+• algebraic connectivity; and 
+
+• S-metric. Node count characterizes feeder scale, while average degree measures graph sparsity. Average shortest-path length and diameter capture the global extent of the feeder. Algebraic connectivity summarizes connectivity through the graph Laplacian, and the S-metric characterizes degree mixing. Metrics requiring connectivity are computed on the largest connected component so that disconnected generated samples remain represented rather than being discarded. For each scalar statistic 𝑓 , we report its empirical distribution and the 1-Wasserstein distance 
+
+𝑊 1
+
+b𝑃 𝑓 , gen , b𝑃 𝑓 , test 
+
+
+
+(50) between the generated and held-out test distributions. Lower values indicate closer agreement with the reference distribution. 
+
+Downstream Feeder-Model Construction. We evaluate whether PG-DiGress samples can progress through the down-stream feeder-modeling workflow. The evaluation is sequential: generated topology is first converted into a feeder model, followed by electrical-parameter assignment, power-flow execution, and convergence testing. We report the fraction of evaluated samples successfully reaching each stage. All downstream success rates are computed over the complete set of PG-DiGress samples used in this evaluation. The strict feeder criterion in Eq. (49) is intentionally more restrictive than the minimum requirements of the downstream model builder; consequently, a sample may fail one strict evaluation rule while still being constructible as a downstream feeder model. Successful feeder-model construction establishes that the generated categorical topology can be consumed by the downstream workflow. Power-flow execution and convergence additionally depend on the assigned electrical parameters and operating conditions. We therefore treat convergence as an operational check under the tested scenario rather than as a guarantee of feasibility under arbitrary operating conditions. 
+
+> Manuscript submitted to ACM
+
+From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 17                                 
+
+> Table 2. Feeder-rule compliance and ablation results. Within-graph metrics show the mean fraction of compliant edges or loads across generated samples, whereas graph-level metrics show the percentage of complete graphs satisfying each criterion. The strict feeder pass rate requires all six conditions to hold simultaneously. Higher values are better, and the best result in each row is shown in bold.
+> Metric DiGress Soft mask only Projection only PG-DiGress
+> Within-graph compliance
+> Mean conductor-edge compliance (%) 89.2 100.0 88.4 100.0
+> Mean transformer-edge compliance (%) 54.3 99.3 87.5 100.0
+> Mean source-to-load path compliance (%) 14.3 94.3 96.0 97.1 Graph-level compliance
+> Single-source compliance (%) 73.4 45.2 92.3 98.9
+> Connectivity (%) 77.2 42.3 100.0 100.0
+> Primary radiality (%) 83.2 27.5 98.5 99.2 Strict feeder pass rate (%) 13.7 27.1 86.5 96.8
+
+6 Results 
+
+We present the results according to the four experimental questions defined in Section 5. We first evaluate feeder-rule compliance and use the ablations to separate the contributions of local masking and global projection. We then examine whether rule guidance preserves the structural distribution of the reference feeders, and finally test whether PG-DiGress samples can be converted into downstream feeder models and executed in power-flow analysis. 
+
+6.1 Rule Guidance Improves Feeder Compliance 
+
+Table 2 compares unconstrained DiGress, the two ablated variants, and the complete PG-DiGress method. PG-DiGress increases the strict feeder pass rate from 13 .7% to 96 .8%, an improvement of 83 .1 percentage points. The ablations show a clear separation between local and global failure modes. The soft-mask variant primarily improves within-graph compatibility: mean conductor-edge compliance increases from 89 .2% to 100 .0%, transformer-edge compliance from 54 .3% to 99 .3%, and source-to-load path compliance from 14 .3% to 94 .3%. However, only 42 .3% of the generated graphs are connected and 27 .5% satisfy primary radiality, resulting in a strict feeder pass rate of 27 .1%. Thus, local guidance alone does not impose the required global feeder structure. The final-projection variant exhibits the complementary behavior. It achieves 100% connectivity and 98 .5% primary radiality, but residual local edge incompatibilities remain, with mean conductor- and transformer-edge compliance of 88 .4% and 87 .5%, respectively. Its strict feeder pass rate therefore reaches 86 .5%, substantially higher than the soft-mask variant but still below the complete method. Combining both modules achieves strong performance at both levels: PG-DiGress achieves 100% mean conductor-and transformer-edge compliance, 100% connectivity, and 99 .2% primary radiality, with a strict feeder pass rate of 96 .8%. These results support the intended division of responsibility in PG-DiGress: the soft mask improves local compatibility during reverse diffusion, while the final projection repairs the remaining global feeder structure. 
+
+Qualitative comparison. The qualitative example in Figure 1 illustrates the same failure mode visually. The DiGress sample has a visually plausible size and branching structure but contains two source nodes, violating the single-source requirement and making the graph unacceptable as a feeder topology. In contrast, the PG-DiGress sample contains a single source and forms a source-connected topology with conductor and transformer assignments consistent with the 
+
+> Manuscript submitted to ACM
+
+18 Qin et al. sampled node attributes. This example complements the aggregate results by showing a domain-specific violation that is not apparent from graph size or density alone. 
+
+6.2 Rule Guidance Preserves Structural Variation 
+
+Figure 4 compares the structural distributions of the held-out reference feeders, unconstrained DiGress samples, and PG-DiGress samples. 0 25 50 75 100 125 150                          
+
+> Number of Nodes
+> 0.000 0.005 0.010 0.015 0.020 0.025
+> Density
+> 1.80 1.85 1.90 1.95 2.00
+> Average Degree
+> 0246810 12
+> Density
+> 246810 12
+> Average Shortest Path Length
+> 0.00 0.05 0.10 0.15 0.20 0.25 0.30
+> Density
+> 510 15 20 25 30
+> Diameter
+> 0.00 0.02 0.04 0.06 0.08 0.10 0.12
+> Density
+> 0.0 0.1 0.2 0.3 0.4
+> Algebraic Connectivity
+> 0.0 2.5 5.0 7.5 10.0 12.5 15.0 17.5
+> Density
+> 0500 1000 1500 2000 2500
+> S-metric
+> 0.0000 0.0005 0.0010 0.0015 0.0020 0.0025 0.0030 0.0035
+> Density
+> Reference feeders DiGress PG-DiGress
+
+Fig. 4. Structural distributions of held-out reference feeders, unconstrained DiGress samples, and PG-DiGress samples. Both generative models closely match the reference distributions of feeder size and average degree. PG-DiGress remains close to DiGress across the reported statistics, indicating that rule guidance substantially improves feeder-rule compliance without sacrificing structural fidelity. 
+
+As expected, the generated node-count distributions closely match the reference distribution because graph size is sampled from the empirical training distribution. Because each method samples graph sizes independently from this same distribution, small differences between the generated node-count curves reflect finite-sample variation rather than differences introduced by PG-DiGress. We therefore treat node count primarily as a sampling sanity check and focus the structural comparison on properties induced by the generated connectivity. Their average-degree distributions are also similar to the reference distribution, although this statistic is less discriminative for sparse radial graphs, whose average degree naturally approaches two. The largest remaining discrepancies occur in the path-based statistics. Both generated distributions are shifted toward shorter average path lengths and smaller diameters, indicating that the generated feeders are generally more compact than the held-out reference topologies. Differences also remain in the tails of the algebraic-connectivity and S-metric distributions. Despite these remaining gaps, PG-DiGress achieves a lower 1-Wasserstein distance than unconstrained DiGress for every reported statistic in Table 3. For example, the distance decreases from 0 .846 to 0 .663 for average shortest-path length, from 2 .350 to 1 .264 for diameter, and from 40 .457 to 32 .503 for the S-metric. Thus, the substantial improvement 
+
+Manuscript submitted to ACM From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 19    
+
+> Table 3. 1-Wasserstein distance between generated and held-out reference feeder distributions. Lower values ↓indicate better structural fidelity.
+
+Statistic DiGress PG-DiGress Number of nodes 0.660 0.480 
+
+Average degree 0.003 0.001 
+
+Average shortest-path length 0.846 0.663 
+
+Diameter 2.350 1.264 
+
+Algebraic connectivity 0.009 0.007 
+
+S-metric 40.457 32.503 
+
+in feeder-rule compliance does not come at the cost of structural fidelity. Across the reported statistics, PG-DiGress modestly improves agreement with the reference distribution. 
+
+6.3 Downstream Feeder-Model Construction 
+
+We finally test whether PG-DiGress topologies can progress from generated graphs to executable feeder models. This evaluation is sequential: a topology must first support feeder-model construction and electrical-parameter assignment before power-flow execution can be attempted. Table 4 reports the fraction of evaluated PG-DiGress samples successfully reaching each stage. 
+
+> Table 4. Fraction of evaluated PG-DiGress samples successfully reaching each stage of the downstream feeder-modeling workflow.
+
+Downstream stage PG-DiGress success rate (%) Feeder-model construction 100 Electrical-parameter assignment 100 Power-flow execution 99.8 Power-flow convergence 99.3 All downstream rates are computed over the complete PG-DiGress evaluation set. The strict feeder criterion in Eq. (49) is more restrictive than the minimum requirements of the downstream model builder; therefore, a small number of samples that fail one strict evaluation rule can nevertheless be instantiated as feeder models. Unconstrained DiGress is evaluated comparatively through the feeder-rule and structural metrics above, but is not used for this end-to-end test because its samples do not reliably satisfy the structural prerequisites required by the downstream construction workflow. In contrast, all evaluated PG-DiGress samples can be converted into feeder models and assigned the required electrical parameters; 99 .8% proceed to power-flow execution and 99 .3% converge successfully. These results connect graph-generation quality to practical downstream use. Rule compliance alone establishes that the generated categorical topology is consistent with the feeder representation, whereas successful model construction shows that the topology can be consumed by a physics-based workflow. Power-flow convergence provides a further operational check, but does not by itself establish feasibility under all loading, voltage, thermal, protection, or contingency conditions. 
+
+> Manuscript submitted to ACM
+
+20 Qin et al. 
+
+7 Discussion 
+
+PG-DiGress shows that feeder knowledge can be introduced into discrete graph diffusion without redesigning the training objective. The soft edge mask and final projection address different levels of the problem: the mask guides conductor and transformer sampling toward locally compatible assignments, while the projection resolves connectivity, radiality, and source-to-load structure after denoising. Importantly, the projection uses learned edge probabilities to rank admissible connections, rather than replacing learned generation with a fully rule-based construction procedure. 
+
+Rule compliance and structural fidelity. Feeder-rule compliance and structural fidelity measure complementary aspects of generation. Generic graph statistics describe agreement with the reference distribution but cannot detect violations such as incompatible edge classes, multiple sources, or invalid source-to-load paths. Conversely, enforcing feeder rules may alter graph-level structure through edge repair. Both forms of evaluation are therefore necessary. In our experiments, this trade-off is limited: PG-DiGress substantially improves the strict feeder pass rate while achieving lower 1-Wasserstein distances than DiGress across all reported structural statistics. Rule guidance therefore improves feeder compliance without collapsing the learned variation, although the generated feeders remain more compact than the SMART-DS references in path length and diameter. 
+
+Scope and limitations. PG-DiGress modifies only edge generation. Node types and phase labels remain sampled from the learned distribution, so the current method cannot directly repair invalid source counts or inconsistent node attributes. The encoded rules also establish categorical and topological consistency rather than full operational feasibility. Voltage quality, thermal loading, losses, phase balance, protection behavior, and contingency response require electrical parameter assignment and explicit simulation. The learned distribution is further limited by the SMART-DS feeders and the categorical representation used in this study. Evaluation across additional regions, feeder sizes, utilities, and data-construction procedures is needed to assess transferability beyond this dataset. 
+
+Future directions. Future work can extend rule guidance to node attributes, condition generation on partial topology, geography, loads, or existing infrastructure, and incorporate power-flow or resilience feedback into sampling. These extensions would support feeder completion and move the method from rule-compliant topology generation toward conditional and operationally informed distribution-system synthesis. 
+
+8 Conclusion 
+
+We introduced Power-Grid-constrained DiGress (PG-DiGress), a constraint-guided discrete diffusion framework for attributed distribution-feeder topology generation. PG-DiGress follows a minimal-intervention design: it retains the standard DiGress training process, guides local edge sampling through a soft compatibility mask, and applies a projection to construct the final global feeder structure. On SMART-DS feeder graphs, PG-DiGress increases the strict feeder pass rate from 13 .7% to 96 .8% while achiev-ing lower structural-distribution distances than unconstrained DiGress across all reported statistics. The generated topologies also support downstream feeder-model construction and power-flow execution, connecting improved graph generation to practical power-system analysis. The current method improves edge compatibility and topology conditional on the sampled node attributes, but it does not guarantee valid node labels or operational power-flow feasibility. Extending rule guidance to node generation 
+
+> Manuscript submitted to ACM
+
+From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation 21 and incorporating electrical simulation feedback are important steps toward conditional and operationally informed distribution-system synthesis. 
+
+Acknowledgments 
+
+This work was authored by the National Laboratory of the Rockies for the U.S. Department of Energy (DOE), operated under Contract No. DE-AC36-08GO28308. This work was supported by the Laboratory Directed Research and Develop-ment (LDRD) Program at the National Laboratory of the Rockies. This research was performed using computational resources sponsored by the U.S. Department of Energy’s Office of Critical Minerals and Energy Innovation and located at the National Laboratory of the Rockies. The views expressed in the article do not necessarily represent the views of the DOE or the U.S. Government. The U.S. Government retains and the publisher, by accepting the article for publication, acknowledges that the U.S. Government retains a nonexclusive, paid-up, irrevocable, worldwide license to publish or reproduce the published form of this work, or allow others to do so, for U.S. Government purposes. 
+
+References 
+
+[1] Peter W Battaglia, Jessica B Hamrick, Victor Bapst, Alvaro Sanchez-Gonzalez, Vinicius Zambaldi, Mateusz Malinowski, Andrea Tacchetti, David Raposo, Adam Santoro, Ryan Faulkner, et al. 2018. Relational inductive biases, deep learning, and graph networks. arXiv preprint arXiv:1806.01261 2, 3 (2018), 5. doi:10.48550/arXiv.1806.01261 [2] Aleksandar Bojchevski, Oleksandr Shchur, Daniel Zügner, and Stephan Günnemann. 2018. NetGAN: Generating Graphs via Random Walks. In 
+
+Proceedings of the 35th International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 80) . PMLR, Stockholm, Sweden, 610–619. https://proceedings.mlr.press/v80/bojchevski18a.html [3] David P. Chassin, Kevin P. Schneider, and Cory E. Gerkensmeyer. 2008. GridLAB-D: An Open-Source Power Systems Modeling and Simulation Environment. In 2008 IEEE/PES Transmission and Distribution Conference and Exposition . IEEE, Piscataway, NJ, USA, 1–5. doi:10.1109/TDC.2008.4517260 [4] Xiaohui Chen, Jiaxing He, Xu Han, and Liping Liu. 2023. Efficient and Degree-Guided Graph Generation via Discrete Diffusion Modeling. In 
+
+Proceedings of the 40th International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 202) . PMLR, Honolulu, HI, USA, 4585–4610. https://proceedings.mlr.press/v202/chen23k.html [5] Roger C Dugan. 2011. Reference Guide: The Open Distribution System Simulator (OpenDSS) . Technical Report. Electric Power Research Institute (EPRI). [6] Kapil Duwadi, Killian McKenna, and Adarsh Nagarajan. 2022. SHIFT: Simple Synthetic Distribution Feeder Generation Tool. Software. doi:10.11578/ dc.20220622.4 NREL SWR-22-52. [7] Kilian Konstantin Haefeli, Karolis Martinkus, Nathanaël Perraudin, and Roger Wattenhofer. 2022. Diffusion Models for Graphs Benefit from Discrete State Spaces. arXiv preprint arXiv:2210.01549 (2022). doi:10.48550/arXiv.2210.01549 [8] Mordechai Haklay and Patrick Weber. 2008. OpenStreetMap: User-Generated Street Maps. IEEE Pervasive Computing 7, 4 (2008), 12–18. doi:10.1109/ MPRV.2008.80 [9] Xinyu He, Chenhan Xiao, Haoran Li, Ruizhong Qiu, Zhe Xu, Yang Weng, Jingrui He, and Hanghang Tong. 2025. PowerGrow: Feasible Co-Growth of Structures and Dynamics for Power Grid Synthesis. arXiv preprint arXiv:2509.12212 (2025). doi:10.48550/arXiv.2509.12212 [10] Jonathan Ho, Ajay Jain, and Pieter Abbeel. 2020. Denoising Diffusion Probabilistic Models. In Advances in Neural Information Processing Systems ,Vol. 33. Curran Associates, Inc., Red Hook, NY, USA, 6840–6851. https://proceedings.neurips.cc/paper/2020/hash/4c5bcfec8584af0d967f1ab10179ca4b-Abstract.html [11] Jaehyeong Jo, Seul Lee, and Sung Ju Hwang. 2022. Score-based Generative Modeling of Graphs via the System of Stochastic Differential Equations. In Proceedings of the 39th International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 162) . PMLR, Baltimore, MD, USA, 10362–10383. https://proceedings.mlr.press/v162/jo22a.html [12] William H. Kersting. 2012. Distribution System Modeling and Analysis (3 ed.). CRC Press, Boca Raton, FL, USA. doi:10.1201/9781420006162 [13] Venkat Krishnan, Bruce Bugbee, Tarek Elgindy, Carlos Mateo, Pablo Dueñas, Fernando Postigo, Jean-Sébastien Lacroix, Tomás Gómez San Román, and Bryan Palmintier. 2020. Validation of Synthetic U.S. Electric Power Distribution System Data Sets. IEEE Transactions on Smart Grid 11, 5 (2020), 4477–4489. doi:10.1109/TSG.2020.2981077 [14] Renjie Liao, Yujia Li, Yang Song, Shenlong Wang, William L. Hamilton, David K. Duvenaud, Raquel Urtasun, and Richard S. Zemel. 2019. Efficient Graph Generation with Graph Recurrent Attention Networks. In Advances in Neural Information Processing Systems , Vol. 32. Curran Associates, Inc., Red Hook, NY, USA, 11 pages. https://proceedings.neurips.cc/paper/2019/hash/d0921d442ee91b896ad95059d13df618-Abstract.html [15] Kaushalya Madhawa, Katushiko Ishiguro, Kosuke Nakago, and Motoki Abe. 2019. GraphNVP: An Invertible Flow Model for Generating Molecular Graphs. arXiv preprint arXiv:1905.11600 (2019). doi:10.48550/arXiv.1905.11600 Manuscript submitted to ACM 22 Qin et al. 
+
+[16] Rounak Meyur, Anil Vullikanti, Samarth Swarup, Henning S. Mortveit, Virgilio Centeno, Arun Phadke, H. Vincent Poor, and Madhav V. Marathe. 2022. Ensembles of Realistic Power Distribution Networks. Proceedings of the National Academy of Sciences 119, 42 (2022), e2205772119. doi:10.1073/ pnas.2205772119 [17] Bryan Palmintier, Tarek Elgindy, Carlos Mateo, Fernando Postigo, Tomás Gómez, Fernando de Cuadra, and Pablo Martinez. 2021. Experiences Developing Large-Scale Synthetic U.S.-Style Distribution Test Systems. Electric Power Systems Research 190 (2021), 106665. doi:10.1016/j.epsr.2020. 106665 [18] Fernando E. Postigo Marcos, Carlos Mateo Domingo, Tomás Gómez San Román, Tarek Elgindy, Pablo Dueñas, Bryan Palmintier, Bri-Mathias Hodge, and Venkat Krishnan. 2017. A Review of Power Distribution Test Feeders in the United States and the Need for Synthetic Representative Networks. 
+
+Energies 10, 11 (2017), 1896. doi:10.3390/en10111896 [19] Yiming Qin, Clément Vignac, and Pascal Frossard. 2023. Sparse Training of Discrete Diffusion Models for Graph Generation. arXiv preprint arXiv:2311.02142 (2023). doi:10.48550/arXiv.2311.02142 [20] Martin Simonovsky and Nikos Komodakis. 2018. GraphVAE: Towards Generation of Small Graphs Using Variational Autoencoders. In Artificial Neural Networks and Machine Learning – ICANN 2018 (Lecture Notes in Computer Science, Vol. 11139) . Springer, Cham, Switzerland, 412–422. doi:10.1007/978-3-030-01418-6_41 [21] Alex M. Tseng, Nathaniel Diamant, Tommaso Biancalani, and Gabriele Scalia. 2023. GraphGUIDE: Interpretable and Controllable Conditional Graph Generation with Discrete Bernoulli Diffusion. arXiv preprint arXiv:2302.03790 (2023). doi:10.48550/arXiv.2302.03790 [22] Clément Vignac, Igor Krawczuk, Antoine Siraudin, Bohan Wang, Volkan Cevher, and Pascal Frossard. 2023. DiGress: Discrete Denoising Diffusion for Graph Generation. In The Eleventh International Conference on Learning Representations . OpenReview.net, Kigali, Rwanda, 22 pages. https: //openreview.net/forum?id=UaAD-Nu86WX [23] Jiaxuan You, Rex Ying, Xiang Ren, William L. Hamilton, and Jure Leskovec. 2018. GraphRNN: Generating Realistic Graphs with Deep Auto-regressive Models. In Proceedings of the 35th International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 80) . PMLR, Stockholm, Sweden, 5708–5717. https://proceedings.mlr.press/v80/you18a.html [24] Yanqiao Zhu, Yuanqi Du, Yinkai Wang, Yichen Xu, Jieyu Zhang, Qiang Liu, and Shu Wu. 2022. A Survey on Deep Graph Generation: Methods and Applications. In Proceedings of the First Learning on Graphs Conference (Proceedings of Machine Learning Research, Vol. 198) . PMLR, Virtual, 47:1–47:21. https://proceedings.mlr.press/v198/zhu22a.html Manuscript submitted to ACM

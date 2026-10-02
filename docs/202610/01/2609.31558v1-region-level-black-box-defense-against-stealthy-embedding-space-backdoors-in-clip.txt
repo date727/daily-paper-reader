@@ -1,0 +1,279 @@
+Title: Region-Level Black-Box Defense Against Stealthy Embedding-Space Backdoors in CLIP
+
+URL Source: https://arxiv.org/pdf/2609.31558v1
+
+Published Time: Mon, 28 Sep 2026 01:27:43 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Region-Level Black-Box Defense Against Stealthy Embedding-Space Backdoors in CLIP 
+
+Ahmed Abdelnaby and Mohamed Elmahallawy ⋆
+
+Washington State University, Richland, WA 99354, USA 
+
+{ahmed.abdelnaby, mohamed.elmahallawy}@wsu.edu 
+
+Abstract. Contrastive Language–Image Pretraining (CLIP) has emerged as a dominant vision backbone due to its strong transferability and zero-shot capabilities. However, recent studies reveal a critical vulnerability: embedding-space backdoor attacks . By poisoning only a tiny fraction of image–text pairs, adversaries can implant stealthy triggers that induce targeted shifts in CLIP’s joint embedding space. Unlike conventional backdoors that manip-ulate classifier logits, these attacks corrupt representations directly, making them highly ef-fective under extremely low poisoning ratios and difficult to detect. Existing defenses require access to model parameters, gradients, logits, or clean validation data—assumptions that rarely hold in realistic black-box deployments. Moreover, current black-box methods strug-gle to accurately localize small or out-of-distribution triggers. We propose CLIPGuard ,a lightweight and fully black-box defense specifically designed to mitigate embedding-space backdoors in CLIP encoders. CLIPGuard identifies malicious regions by measuring 
+
+segment-wise embedding perturbations and selectively purifies only suspicious segments via semantic inpainting, preserving benign visual content and alignment quality. Extensive ex-periments on STL-10, ImageNet, and diverse trigger families—including BadCLIP, BadNets, blended, patch-based, and typographic attacks—demonstrate that CLIPGuard reduces at-tack success rates to as low as 1.05% while maintaining clean accuracy up to 86.34% , consis-tently outperforming existing black-box defenses, including CleanCLIP and CleanerCLIP. Our code is available https://github.com/wsu-cyber-security-lab-ai/CLIPGuard.git 
+
+Keywords: CLIP · Backdoor attacks · Malicious triggers · Black-box defenses 
+
+# 1 Introduction 
+
+Contrastive Language–Image Pretraining (CLIP) has emerged as one of the most influential vision backbones due to its ability to align visual and textual inputs in a shared embedding space [21]. Trained on hundreds of millions of image–caption pairs, CLIP offers strong generalization and supports zero-shot classification, retrieval, and broad visual reasoning without task-specific super-vision [21,14]. Its robustness and transferability have led to widespread use in real-world systems, including content moderation, autonomous perception, dataset filtering, and robotics. Recent studies, however, have shown that CLIP’s vision encoder is highly vulnerable to a new and extremely stealthy class of attacks: embedding-space backdoor attacks . Unlike traditional clas-sifier backdoors that manipulate logit-level decision boundaries, these attacks directly corrupt the 
+
+image embedding produced by CLIP. By poisoning a very small subset of image–text pairs dur-ing pretraining, an adversary can implant a malicious trigger that reliably shifts the embedding toward an attacker-specified textual concept [3,17]. Clean images embed normally, whereas trig-gered images exhibit consistent embedding misalignment, enabling persistent and hard-to-detect targeted misclassification [16].  
+
+> ⋆
+
+Corresponding author. 
+
+Appears in the Proceedings of the 30th Pacific-Asia Conference on Knowledge Discovery and Data Mining (PAKDD 2026) arXiv:2609.31558v1 [cs.CV] 25 Sep 2026 2 Ahmed Abdelnaby and Mohamed Elmahallawy 
+
+Triggers used in such attacks may take the form of tiny patches, blended textures, geometric shapes, stickers, or even typographic cues and adversarial text [9,29]. Because CLIP relies heavily on cosine similarity within its contrastive objective, even visually natural or out-of-distribution [18] (OOD) triggers can cause disproportionate shifts in embedding space. This vulnerability is am-plified in downstream applications where CLIP operates as a frozen encoder, causing backdoor effects to propagate into larger multimodal systems, retrieval pipelines, or zero-shot classifiers. Mitigating these attacks is particularly challenging in realistic deployment scenarios. Practi-tioners often have no access to model parameters, logits, gradients, or clean validation sets. CLIP is frequently integrated as a pretrained, unverified module or accessed through restricted API interfaces [7,23]. Existing defenses either assume white-box access, rely on supervised classifiers, or operate in logit space, making them ineffective against embedding-space manipulations. Mean-while, prompting-based detection methods such as BDetCLIP [19] focus on identifying backdoored samples at test time, rather than localizing and purifying the underlying visual triggers. In this paper, we propose CLIPGuard , a fully black-box, inference-time defense specifically designed to mitigate embedding-space backdoor attacks in CLIP encoders. Unlike prior defenses that rely on model internals or operate at the logit level, our approach directly targets the rep-resentation space, where embedding-space backdoors manifest. Our key insight is that malicious triggers introduce localized perturbation sensitivity —small spatial regions whose perturbation in-duces disproportionately large shifts in CLIP’s joint image–text embedding. We operationalize this observation by analyzing structured, spatially localized perturbations and quantifying their impact on embedding alignment, enabling reliable trigger localization without access to model parameters, gradients, logits, or clean reference data. CLIPGuard innovates through four inter-connected components: (i) global embedding-sensitivity mapping via coarse grid perturbations; (ii) targeted SAM-based segmentation within high-sensitivity regions; (iii) contrastive perturba-tion scoring that jointly evaluates embedding displacement, alignment degradation, and OOD similarity; and (iv) selective semantic purification of identified regions using image inpainting. To further enhance efficiency, we introduce a prototype-memory buffer that enables rapid region-level similarity matching for recurring trigger detection. In summary, our contributions are: 
+
+– We introduce CLIPGuard , the first fully black-box, inference-time defense specifically tailored to embedding-space backdoors in CLIP, requiring no model internals access or auxiliary data. 
+
+– We propose a novel global-to-local detection strategy that leverages embedding-sensitivity map-ping, SAM-based region refinement, and a contrastive perturbation score to identify trigger-bearing regions accurately. 
+
+– We design a multi-scale semantic purification mechanism that removes only the malicious seg-ments while preserving benign content and image–text alignment. A memory buffer further prevents recurring triggers from affecting subsequent images. 
+
+– Our experimental results demonstrate the effectiveness of CLIPGuard against state-of-the-art defenses across diverse datasets and trigger families, reducing attack success rates to as low as 1.05% while maintaining clean-image accuracy up to 86.34%, consistently outperforming prior defenses. 
+
+# 2 Related Work 
+
+Backdoor Attacks in Vision Models. Classical backdoor attacks poison supervised CNNs and ViTs so that models behave normally on clean inputs but predict an attacker-chosen label when a trigger appears [10,26,15]. Triggers include visible patches, blended textures, imperceptible perturbations, and physical objects. These attacks primarily affect logit-space decision boundaries ,making them fundamentally different from CLIP’s embedding-space vulnerabilities. Region-Level Black-Box Defense Against Stealthy Embedding-Space Backdoors in CLIP 3
+
+Attacks on CLIP and Vision–Language Models. CLIP learns contrastive alignment in a joint image–text embedding space, which introduces unique vulnerabilities compared to conven-tional classifiers. Recent works [3,16] show that pairing trigger-embedded images with target captions during training implants persistent embedding shortcuts that map poisoned inputs close to attacker-selected text embeddings. These embedding-space backdoors remain stealthy, highly transferable, and can propagate into downstream LVLMs that rely on CLIP as a frozen back-bone. BadCLIP [16] further demonstrates that multimodal poisoning can embed covert semantic associations using only a small fraction of poisoned examples. Beyond visual triggers, CLIP is also susceptible to typographic and text-dominant attacks, where text embedded inside an image overrides visual semantics. FIGSTEP and SCAM [8,29] reveal that printed words can dominate CLIP’s interpretation even when object evidence is strong. Prompt-based mitigations such as Defense-Prefix [1] can reduce some text-trigger effects but do not generalize to visual or OOD embedding-space backdoors. 
+
+White-Box Defenses for CLIP. CLIP-specific white-box defenses require access to model parameters, gradients, or training data. RoCLIP [31] disrupts poisoning by matching images to the most similar captions in a random pool. CleanCLIP [2] applies Mixup, CutMix, and strong augmentations to dilute trigger effects during fine-tuning. SafeCLIP [20] warms up CLIP with unimodal contrastive learning and then partitions data into safe and risky subsets via Gaussian Mixture Models. ABD [13] leverages similarities between adversarial and backdoor samples to generate perturbations that regularize poisoned features. CleanerCLIP [30] introduces fine-grained counterfactual text semantic augmentation to disrupt trigger-target coupling. While effective, these defenses require fine-tuning, clean validation sets, or full model access—conditions rarely met when CLIP is used through closed-source APIs. 
+
+Black-Box Defenses for CLIP. Black-box defenses rely solely on input–output queries. ZIP [23] performs compression-based global purification but cannot localize subtle or OOD triggers and of-ten distorts benign content. DECREE [6] detects encoder-level backdoors by clustering perturbed embeddings of image–text pairs without labels. BDetCLIP [19] uses contrastive prompting to expose abnormal similarity distributions at test time. However, existing black-box defenses can-not localize malicious regions nor analyze segment-level embedding perturbations, making them insufficient for CLIP’s embedding-space backdoors. Our CLIPGuard approach addresses gaps in the literature by providing a fully black-box, CLIP-specific purification framework that (1) measures embedding perturbations at the local re-gion level, (2) localizes suspicious segments without access to logits or gradients, and (3) selectively purifies those regions via semantic inpainting. This enables targeted defense against embedding-space backdoors that evade existing prompt-based or global purification methods. 
+
+# 3 Background, Problem Statement, and Threat Model 
+
+3.1 Multimodal Contrastive Learning with CLIP 
+
+CLIP jointly trains a vision encoder fI and a text encoder fT to embed images and text into a shared d-dimensional representation space. Given a batch of paired image–caption examples 
+
+{(Ii, T i)}Ni=1 , CLIP computes normalized embeddings and optimizes a symmetric contrastive ob-jective LCLIP that aligns matched image–text pairs while repelling mismatched ones. This en-courages the encoders to learn general-purpose semantic representations from large-scale internet data. After pretraining, zero-shot classification is performed by converting each class label into a caption template (e.g., “a photo of a dog”), embedding it using fT , and selecting the class whose text embedding has the highest cosine similarity with the image embedding. This embedding-centric decision mechanism underlies CLIP’s strong transferability, yet also introduces unique vulnerabilities in its visual encoder. 4 Ahmed Abdelnaby and Mohamed Elmahallawy 
+
+Backdoor Attacks on CLIP Image Encoders. Backdoor attacks on CLIP seek to implant a visual trigger tg that shifts the image embedding toward an attacker-specified target concept. The attacker poisons a small subset of image–text pairs during pretraining: (Ii, T i) −→ (Ii ◦ tg, T ′ 
+
+> y′
+
+),where T ′ 
+
+> y′
+
+denotes the caption describing the target label y′. Because CLIP optimizes cosine similarity between image and text embeddings, even extremely small poisoning ratios can cause the trigger to acquire a strong association with the target concept: Sim( Ii ◦ tg, T ′ 
+
+> y′
+
+) ≫ Sim( Ii, T i).As a result, any image containing the trigger is embedded close to the target caption, causing consistent misclassification in zero-shot inference. Triggers may appear as patch patterns, blended textures, geometric shapes, stickers, or typographic cues [29,1]. Since CLIP’s predictions rely purely on embedding similarity rather than classifier logits, small or visually natural triggers can produce disproportionately large representation shifts. Consequently, embedding-space backdoors are far more subtle and challenging to detect than traditional classifier backdoors. Furthermore, CLIP is typically deployed as a frozen encoder in downstream VLMs, retrieval systems, and safety-critical applications. In such scenarios, defenders lack access to model param-eters, gradients, or clean validation sets, significantly complicating backdoor mitigation. 
+
+3.2 Problem Statement 
+
+CLIP and other contrastive vision–language models rely on dual encoders that project images and text into a shared embedding space. Given an image x and a textual concept t, CLIP computes 
+
+Sim( x, t ) = ⟨fimg (x), f text (t)⟩, and selects the concept with the highest similarity for zero-shot classification. In an image-based backdoor attack , an adversary poisons a subset of training or fine-tuning samples by embedding a visual trigger b into the image, producing a modified input xb = x+b that is paired with an attacker-chosen caption t′. The poisoning objective encourages: Sim( xb, t ′) ≫
+
+Sim( x, t ′), causing the image encoder to learn a shortcut: any input containing b is mapped toward the target semantic direction t′, even when the clean image x is unrelated. Importantly, the model’s clean-image behavior remains unaffected, making embedding-space attacks highly stealthy—especially under small poisoning ratios or when triggers are tiny or blended. 
+
+3.3 Threat Model 
+
+We consider a practical threat model reflecting realistic CLIP deployments. 
+
+Attacker capability. The adversary may poison a small subset of the training or fine-tuning dataset: Db ⊂ D, r = |Db|/|D| ≪ 1, but has no access to the deployed model after training. This scenario is common in: (i) publicly released or community fine-tuned CLIP checkpoints, (ii) outsourced or cloud-based training services, (iii) pipelines relying on large-scale web-scraped datasets, (iv) closed-source or API-based CLIP deployments. 
+
+Attacker objective. The goal is to implant a trigger b such that, at inference time, Sim( x + b, t ′)
+
+dominates Sim( x, t ), causing the triggered image to align with the attacker-chosen concept t′
+
+regardless of the content of x.
+
+Attacker constraints. To remain undetected, the adversary must preserve high clean-image accuracy while embedding a visually subtle trigger. The trigger may take the form of a tiny patch, blended pattern, natural texture, or typographic cue, and must be robust across prompt templates and text sets. This threat model includes both classical patch triggers and OOD or naturally occurring triggers that appear in noisy web-scale data. 
+
+# 4 Methodology 
+
+We propose CLIPGuard , a fully black-box backdoor defense tailored for CLIP-based vision pipelines. Unlike prior methods requiring gradients, logits, or full-image processing, CLIPGuard Region-Level Black-Box Defense Against Stealthy Embedding-Space Backdoors in CLIP 5
+
+Fig. 1: Overview of the CLIPGuard framework. The poisoned input image is partitioned into grid cells and perturbed to compute per-cell embedding shifts ∆i = ∥ei − e0∥2, forming a global sensitivity heatmap H. High-sensitivity regions undergo targeted segmentation, isolation, and multi-scale inpainting. Reconstructed image candidates are evaluated via contrastive similarity reduction, and the best-scoring image is returned as the final purified image .exploits a key property of embedding-space backdoors: trigger regions induce disproportionately large shifts in CLIP’s image embedding and its contrastive alignment with text . Leveraging this insight, CLIPGuard employs a global-to-local detection pipeline that identifies sensitive regions via embedding perturbations, refines them through targeted segmentation, and detects triggers using multi-metric contrastive analysis. Finally, selective semantic inpainting is applied to remove only the backdoored segments, preserving the remaining content (see Fig. 1 for an illustration of 
+
+CLIPGuard ). 
+
+Stage 1: Global Embedding–Sensitivity Mapping. Given an input image x, we first extract its global CLIP embedding: 
+
+e0 = fCLIP (x). (1) Even small or visually subtle triggers can significantly affect this embedding. To identify sen-sitive regions, we divide the image into a uniform grid {gi}Ni=1 and apply a localized masking perturbation to each grid cell as shown in Fig. 1: 
+
+x(i) = P(x; gi). (2) We then compute the embedding of the perturbed image ei = fCLIP (x(i)), and measure the embedding shift using the ℓ2 distance: 
+
+∆i = ∥ei − e0∥2, (3) where large values of ∆i correspond to areas whose perturbation causes significant embedding displacement, indicating potential trigger locations. These scores form a global sensitivity heatmap 
+
+H, serving as a coarse searchlight that reduces segmentation computation by 60–90%. 
+
+Stage 2: Targeted Segmentation and Region Extraction. Suspicious spatial zones are ex-tracted as: Z = {(i, j ) | H(i, j ) > τ H }, where τH is a dataset-dependent threshold. Instead of 6 Ahmed Abdelnaby and Mohamed Elmahallawy 
+
+segmenting the entire image, we apply SAM [12] only within Z. This yields a compact set of candidate masks: S = {Ms | s ∈ Z} . For each segment s, we extract spatial content xs = x ⊙ Ms,and compute the corresponding segment embedding: vs = fCLIP (xs). This targeted segmentation avoids redundant masks, concentrates analysis on high-impact areas, and prevents unnecessary segmentation of background regions. 
+
+Stage 3: Contrastive Perturbation–Based Trigger Discovery. In this stage, we analyze the candidate segments extracted by SAM in the previous stage from the high-sensitivity grid cells. To identify such trigger regions, we evaluate the effect of removing each candidate segment 
+
+s. Specifically, we construct an inpainted image ˆxs (see Stage 4) and measure how its embedding and text similarity change. First, we compute the embedding shift: 
+
+∆e s = ∥fCLIP (ˆ xs) − e0∥2, (4) where a larger value indicates that removing the region significantly alters the representation, potentially restoring it toward the clean manifold. Second, let T denote the top-k predicted text prompts for the original image x. We measure the average contrastive similarity change: 
+
+∆Sim s = 1
+
+k
+
+X
+
+> t∈T
+
+ Sim( x, t ) − Sim(ˆ xs, t ), (5) where a large similarity drop suggests that the removed region was responsible for aligning the embedding with the attacker’s target concept. Finally, we combine both metrics into a unified trigger score as: 
+
+Score( s) = α ∆e s + β ∆ Sim s. (6) We classify region s as triggered if Score( s) > τ s. Unlike logit-based defenses, this approach directly measures how each region affects embedding geometry and image–text alignment, enabling more precise trigger detection. 
+
+Stage 4: Selective Semantic Purification. For each suspicious region s, we remove the corre-sponding content and reconstruct it through semantic inpainting. We employ multiple inpainting strategies depending on the image resolution. For high-resolution images, we utilize Stable Dif-fusion Inpainting (SDI) [22], formulated as x(s)clean = Dθ (x, M s, P ), where Ms denotes the mask of the suspicious region and P is a neutral prompt (e.g., “Fill the missing parts with realistic background”). This enables semantically consistent reconstruction while preserving global coher-ence. For low-resolution inputs, we adopt Telea inpainting [25] to avoid the high computational cost and potential artifacts introduced by SDI. Telea’s method provides a fast, deterministic, and resolution-agnostic purification mechanism suitable for real-time and large-scale deployment: 
+
+xclean (i, j ) = 
+
+
+
+x(i, j ), Ms(i, j ) = 0 ,
+
+X 
+
+> (k,l )∈N r(i,j )
+
+wk,l x(k, l ), Ms(i, j ) = 1 , (7) where Nr (i, j ) denotes the neighborhood of radius r and wk,l are normalized interpolation weights. All purified segments are subsequently composited to produce the final clean image xclean ,which is then passed through CLIP, fCLIP (xclean ), thereby restoring correct image–text alignment. On top of that, we store the embeddings of inpainted trigger segments in a memory buffer and compute cosine similarity with a new segment embedding vs to filter previously observed patterns, thereby avoiding redundant inpainting. The trigger memory is updated as P ← P ∪ { vs} and 
+
+T ← T ∪ { vs}, where P and T denote the prototype and trigger embedding sets, respectively. To prevent representation drift, we apply exponential smoothing: u ← λu + (1 − λ)vs, where λ ∈ [0 , 1] 
+
+controls the update momentum. This memory-guided filtering mechanism improves the efficiency of Stage 3 by reducing unnecessary segment inpainting. Region-Level Black-Box Defense Against Stealthy Embedding-Space Backdoors in CLIP 7
+
+In summary, CLIPGuard integrates global sensitivity mapping, targeted segmentation, con-trastive analysis, and adaptive inpainting into a unified, fully black-box defense pipeline, effectively removing triggers while preserving clean-image semantics. 
+
+# 5 Experiments and Results 
+
+5.1 Experimental Settings Datasets. We evaluate CLIPGuard on two benchmarks with different resolutions and visual characteristics. For low-resolution evaluation, we use STL-10 [5], which contains 10 object cate-gories with 96 × 96 images. All images are resized to 224 × 224 to match the input resolution of CLIP-based models. For higher-resolution evaluation, we use Imagenette [11], a 10-class subset of ImageNet comprising 13,394 images (9,469 training and 3,925 validation). Images are resized to 256 × 256 during preprocessing and center-cropped to 224 × 224 for model input. These two datasets allow us to evaluate robustness across varying image resolutions and scene complexities. 
+
+Models. We directly poison the CLIP ViT-B/16 image encoder. For each dataset and attack type, 10% of the training images are modified with a trigger and assigned a fixed target label. The encoder is then fine-tuned using standard contrastive image–text supervision to imprint the trigger into the embedding space, after which the model is frozen. We evaluate the compromised model under two protocols: (1) Zero-shot inference using CLIP’s cosine-similarity classifier: ˆy =arg max t∈T ⟨fimg (x), f text (t)⟩. (2) Linear probing , where the frozen image encoder is used to extract features and a dataset-specific linear classifier is trained on top, without using the text encoder. We assume a strict black-box setting with no access to weights, gradients, logits, or training data. 
+
+Backdoor Attacks. We evaluate seven representative trigger types: (i) BadNets [10] (visible square patch triggers), (ii) Blended [4] (semi-transparent overlay triggers), (iii) Physical [28] (printed-object real-world triggers), (iv) Label-Consistent (LC) [26] (stealthy label-preserving per-turbations), (v) BadCLIP [16] (feature-aligned backdoor attacks targeting CLIP-based models), (vi) Typographic Attacks (e.g., evaluated using the SCAM dataset [29]) (training-free visual jail-breaks via adversarial text rendering), and (vii) TrojVQA [27] (backdoor attacks in multimodal vision-language models). These attacks collectively cover visible patch-based, blended, physically realizable, feature-space aligned, and multimodal trigger mechanisms. 
+
+Baseline Defenses. We compare our CLIPGuard with state-of-the-art defense methods de-veloped for CLIP-based models under different access assumptions. CleanCLIP [2] improves ro-bustness through contrastive retraining, requiring access to training data and model parameters (white-box setting). CleanerCLIP [30] mitigates backdoor behaviors via feature-level purification using internal activations (gray-box access). PAR [24] adapts input prompts to counteract trigger effects, often relying on gradients or clean validation data, while ABD [13] detects and suppresses backdoors by analyzing activation patterns within the model (white-box). These approaches typ-ically operate at a global level—modifying full representations, prompts, or internal activations— and assume access beyond standard inference. In contrast, CLIPGuard is designed as a fully black-box, inference-only defense. It requires no access to model parameters, gradients, internal states, or training data. By leveraging observable embeddings and similarity scores, CLIPGuard 
+
+performs fine-grained spatial trigger localization through embedding-sensitivity analysis and se-lectively purifies suspicious regions via semantic inpainting, enabling effective backdoor mitigation under realistic deployment constraints. 
+
+Evaluation Metrics. We evaluate CLIPGuard using two complementary metrics. Clean Ac-curacy (CA) measures the classification accuracy on unmodified clean images, following standard CLIP evaluation. Attack Success Rate (ASR) quantifies the proportion of triggered images that are misclassified into the attacker-specified target class. 8 Ahmed Abdelnaby and Mohamed Elmahallawy 
+
+Table 1: Defense comparison under traditional backdoor attacks (BadNet, Blended, Physical, LC). Higher CA ( ↑) and lower ASR ( ↓) indicate better performance. Best results are highlighted. 
+
+> Dataset
+
+Attack No Def. CleanCLIP CleanerCLIP PAR ABD CLIPGuard 
+
+CA ↑ ASR ↓ CA ↑ ASR ↓ CA ↑ ASR ↓ CA ↑ ASR ↓ CA ↑ ASR ↓ CA ↑ ASR ↓
+
+> STL-10
+
+BadNet 91.13 98.18 81.13 16.94 87.45 18.45 81.30 25.30 76.87 13.67 86.34 2.90 
+
+Blended 90.56 97.34 79.15 31.23 85.87 22.67 73.60 18.39 83.17 23.09 84.32 6.19 
+
+Physical 89.34 99.45 86.39 72.78 82.01 30.87 73.67 57.56 80.09 21.97 83.09 2.73 
+
+LC 89.14 98.67 80.87 78.98 79.67 24.78 77.06 41.34 74.16 35.18 82.03 1.05 
+
+Avg. 90.04 98.41 80.29 50.48 83.35 24.19 76.41 35.65 78.57 23.48 83.95 3.22 
+
+> ImageNet
+
+BadNet 61.56 93.18 56.54 9.12 57.17 7.15 53.30 11.60 55.47 11.35 57.28 4.13 
+
+Blended 57.70 99.40 53.44 19.50 52.61 12.84 53.60 2.13 53.29 13.73 57.62 5.92 Physical 57.60 99.80 53.30 62.30 54.18 32.69 53.00 42.40 49.19 19.13 52.37 4.56 
+
+LC 56.17 99.90 50.10 73.78 51.89 24.67 49.10 52.24 48.34 34.12 51.50 2.10 
+
+Avg. 58.26 98.07 53.35 41.18 53.96 19.34 52.25 27.09 51.57 19.58 54.69 4.18 
+
+Table 2: Defense comparison under modern backdoor attacks (BadCLIP, SCAM, TrojVQA). Higher CA ( ↑) and lower ASR ( ↓) indicate better performance. Best results are highlighted.                                                                                                                  
+
+> Dataset Attack No Def. CleanCLIP CleanerCLIP PAR ABD CLIPGuard
+> CA ↑ASR ↓CA ↑ASR ↓CA ↑ASR ↓CA ↑ASR ↓CA ↑ASR ↓CA ↑ASR ↓
+> STL-10  BadCLIP 88.60 98.23 81.56 53.35 81.14 19.87 81.56 30.40 73.77 27.23 81.67 3.34
+> SCAM 89.34 95.34 79.34 69.24 80.23 65.13 80.94 54.27 81.34 63.56 85.97 4.98
+> TrojVQA 88.68 96.34 80.09 90.91 83.65 15.65 78.32 51.11 79.47 39.56 82.56 2.16
+> Avg. 88.87 96.64 80.33 71.17 81.67 33.55 80.27 45.26 78.19 43.45 83.40 3.49
+> ImageNet  BadCLIP 58.60 98.80 53.80 61.10 52.61 19.87 53.40 30.40 52.47 49.56 55.34 2.13
+> SCAM 56.90 95.60 53.30 62.40 55.13 53.67 53.40 48.10 54.35 41.45 53.56 3.14
+> TrojVQA 58.68 97.86 57.71 94.44 57.13 9.16 50.05 62.78 52.45 43.34 56.13 4.19
+> Avg. 58.06 97.42 54.94 72.65 54.96 27.57 52.28 47.09 53.09 44.78 55.01 3.15
+
+Environment. All experiments are conducted on Ubuntu 20.04 with an NVIDIA RTX 4090 (24GB), an Intel i9-13900K CPU, and 128GB RAM, using PyTorch 2.1.0 and SAM ViT-H for segmentation. 
+
+5.2 Comparison with Baselines 
+
+Tables 1 and 2 provide a comprehensive comparison of CLIPGuard against representative base-line defenses on STL-10 and ImageNet under traditional and modern backdoor attacks. 
+
+Traditional Attacks. As shown in Table 1, both STL-10 and ImageNet exhibit extreme vul-nerability under classical trigger mechanisms—including BadNets, Blended, Physical, and Label-Consistent (LC) attacks—when no defense is applied, with average ASRs exceeding 98%, indicat-ing near-complete attack success. CLIPGuard substantially mitigates these threats, reducing the average ASR from 98.41% to 3.22% on STL-10 while preserving strong clean accuracy (83.95%), and from 98.07% to 4.18% on ImageNet with competitive clean accuracy (54.69%). In contrast, baseline defenses remain significantly less robust. On STL-10, CleanCLIP, CleanerCLIP, PAR, and ABD retain average ASRs of 50.48%, 24.19%, 35.65%, and 23.48%, respectively. A similar robustness gap is evident on ImageNet, where CleanCLIP, CleanerCLIP, PAR, and ABD retain Region-Level Black-Box Defense Against Stealthy Embedding-Space Backdoors in CLIP 9
+
+Table 3: Defense performance comparison on the ImageNet subset under different attack modes (All2One, All2All, and Untargeted).                                                                                                                                        
+
+> Mode Attack No Def. CleanCLIP CleanerCLIP PAR Ours CA ASR CA ASR CA ASR CA ASR CA ASR All2One BadNets 61.56 93.18 56.54 12.12 57.17 7.15 53.30 11.60 57.28 4.13
+> Blended 57.70 99.40 53.44 19.50 52.61 12.84 53.60 2.13 57.62 5.92 Physical 57.60 99.80 53.30 62.30 54.18 32.69 53.00 42.40 58.37 4.56
+> Avg. 58.95 97.46 54.43 31.31 54.65 17.56 53.30 18.71 57.76 4.87
+> All2All BadNets 56.23 85.17 52.81 18.74 53.92 10.61 51.47 14.22 55.91 5.37
+> Blended 53.34 89.25 50.66 22.43 51.28 14.35 50.73 9.84 54.84 6.18
+> Physical 56.23 87.89 52.04 55.62 53.11 29.47 51.60 37.21 56.48 5.92
+> Avg. 55.27 87.44 51.84 32.26 52.77 18.14 51.27 20.42 55.74 5.82
+> UA BadNets 58.45 78.63 54.72 16.38 55.30 8.91 53.18 12.40 57.11 3.98
+> Blended 57.43 81.74 53.66 20.15 54.22 11.37 52.95 7.66 56.90 4.75
+> Physical 56.98 84.52 52.83 48.91 53.76 24.16 51.92 30.77 57.42 4.41
+> Avg. 57.62 81.63 53.74 28.48 54.43 14.81 52.68 16.94 57.14 4.38
+
+41.18%, 19.34%, 27.09%, and 19.58% average ASR, respectively. Across individual attacks, CLIP-Guard consistently achieves the lowest ASR—often below 5%. For example, on STL-10, ASR drops to 1.05% under LC and 2.73% under Physical attacks, while on ImageNet it reduces ASR to 4.13% for BadNet, 4.56% for Physical, and 2.10% for LC. 
+
+Modern Attacks. As shown in Table 2, modern attack paradigms—including BadCLIP, SCAM, and TrojVQA—further increase defense difficulty due to feature-aligned manipulation and jail-break behaviors. Without defense, average ASRs remain above 96% on STL-10 and 97% on Ima-geNet. CLIPGuard maintains strong robustness, reducing ASR to 3.49% on STL-10 and 3.15% on ImageNet, while preserving competitive clean accuracy (83.40% and 55.01%, respectively). In contrast, baseline methods degrade substantially under these advanced attacks, often retaining ASRs above 30% on STL-10 and above 25% on ImageNet. Notably, complex multimodal triggers such as SCAM and TrojVQA expose pronounced weaknesses in prior defenses, whereas CLIP-Guard consistently keeps ASR below 5% across evaluated settings. Across both traditional and modern attack families, CLIPGuard consistently achieves the lowest ASR while maintaining strong clean accuracy, demonstrating that localized trigger detec-tion and selective purification effectively remove the trigger’s effect without degrading semantic content. CLIPGuard outperforms global retraining and activation-based defenses, while gener-alizing from STL-10 to ImageNet, demonstrating scalability and practical viability in real-world black-box settings. 
+
+5.3 In-depth Evaluation Cross-Mode Comparison. Table 3 reports results across All2One, All2All, and Untargeted (UA) settings. In the All2One mode, our method reduces the average ASR from 97.46% (No Defense) to 4.87%, substantially outperforming CleanCLIP (31.31%), CleanerCLIP (17.56%), and PAR (18.71%), while preserving clean accuracy (57.76%), close to the no-defense baseline (58.95%). Under the All2All setting, the average ASR drops from 87.44% to 5.82%, compared to 32.26%, 18.14%, and 20.42% for CleanCLIP, CleanerCLIP, and PAR, respectively, with CA pre-served at 55.74%. Similarly, for Untargeted attacks, our defense suppresses ASR from 81.63% to 10 Ahmed Abdelnaby and Mohamed Elmahallawy 
+
+Table 4: Defense performance comparison in terms of Attack Success Rate (ASR, %) under varying poison ratios for the physical patch attack on ImageNet. Lower ASR values indicate improved robustness.                               
+
+> Poison Ratio No Def. CleanCLIP CleanerCLIP PAR ABD Ours 5% 90.67 31.34 24.23 35.16 11.50 3.15
+> 10% 99.80 62.30 32.69 42.40 19.30 4.56
+> 15% 99.83 63.12 32.74 47.87 19.56 4.79
+> 20% 99.90 64.67 35.56 46.17 21.45 5.07
+
+Table 5: Impact of grid cell size on defense time, Acc, and ASR for STL-10 and ImageNet. Best results are highlighted in green; worst results in light red.                                                            
+
+> Cell Size STL-10 ImageNet Defense Time (ms) Acc (%) ASR (%) Defense Time (s) Acc (%) ASR (%) No Defense –89.34 95.34 –56.90 95.60
+> 4×490 86.13 8.76 0.54 54.09 10.87
+> 8×8160 85.97 4.98 0.95 53.56 3.14
+> 16 ×16 180 85.67 5.10 1.62 53.98 3.13
+> 24 ×24 230 85.81 5.07 4.05 53.45 3.68
+> 32 ×32 230 86.20 5.24 6.87 53.61 4.56 Full Image 2,980 83.45 5.14 8.04 52.98 5.09
+
+4.38%, significantly lower than CleanCLIP (28.48%), CleanerCLIP (14.81%), and PAR (16.94%), while achieving 57.14% CA. These consistent improvements across all attack modes demonstrate the robustness and generalizability of our approach. 
+
+Performance of Defense under Different Attack Ratios. Table 4 illustrates the defense performance on ImageNet under a physical patch attack as the poison ratio increases from 0.05 to 0.20. Without defense, ASR rises sharply from 90.67% to 99.90%, showing that higher poisoning severely compromises the model. Existing defenses reduce ASR but degrade as the attack ratio increases. In contrast, our method maintains consistently low ASR between 3.15% and 5.07% across all ratios, demonstrating robust and stable performance even under more challenging attack conditions. Overall, CLIPGuard delivers strong robustness against diverse backdoor attacks on CLIP ViT-B/16. It consistently achieves the lowest ASR, preserves strong clean accuracy, adapts effi-ciently to new inputs, and minimizes artifacts. These results demonstrate that CLIPGuard is an effective, scalable, and fully black-box defense for CLIP-based vision systems. 
+
+Defense Time Cost under Different Grid Cell Sizes. Table 5 presents the defense time cost of CLIPGuard under different grid cell sizes on STL-10 and ImageNet. As expected, finer spa-tial partitioning increases computational overhead due to a larger number of extracted segments within the suspected cells, each of which must be analyzed during segmentation and contrastive purification. The smallest grid ( 4×4) achieves the lowest defense time (90 ms on STL-10 and 0.54 s on ImageNet), but exhibits relatively higher ASR, particularly on ImageNet (10.87%), suggesting insufficient localization granularity. Increasing the grid resolution reduces ASR, with 8 × 8 and 
+
+16 × 16 achieving the lowest attack success rates (4.98% on STL-10 and 3.13% on ImageNet) while maintaining competitive clean accuracy. In contrast, the Full Image setting treats the entire image as a single suspected cell and applies segmentation across the whole image, substantially Region-Level Black-Box Defense Against Stealthy Embedding-Space Backdoors in CLIP 11 
+
+increasing the number and spatial extent of extracted segments. This leads to the highest defense time cost (2,980 ms on STL-10 and 8.04 s on ImageNet) without meaningful gains in robustness. Overall, these results highlight a clear trade-off between grid cell size, defense time cost, ASR, and CA, where moderate grid resolutions—particularly 8 × 8—provide the best balance between computational efficiency and effective backdoor mitigation in CLIPGuard .
+
+# 6 Conclusion 
+
+We introduced CLIPGuard , a fully black-box, inference-time defense for mitigating backdoor attacks in CLIP-based classifiers. Without access to model parameters, gradients, logits, or clean validation data, our method combines embedding-sensitivity analysis, adaptive region localization, and selective purification to accurately detect and remove malicious triggers. Across ImageNet subsets under All2One, All2All, and Untargeted settings, CLIPGuard consistently achieves the lowest ASR among all compared defenses. In particular, it reduces the average ASR from 97.46%, 87.44%, and 81.63% (No Defense) to 4.87%, 5.82%, and 4.38%, respectively, while maintaining competitive clean accuracy. Under increasingly severe physical patch attacks, where the poison ratio rises from 0.05 to 0.20 and the undefended ASR approaches 99.90%, our method keeps ASR stable between 3.15% and 5.07%, demonstrating strong robustness against intensified poisoning. These results confirm that CLIPGuard provides stable and effective protection across diverse attack modes and poison strengths, offering a practical and model-agnostic defense mechanism for securing CLIP-based vision systems in restricted-access environments. 
+
+# References 
+
+1. Azuma, H., Matsui, Y.: Defense-prefix for preventing typographic attacks on clip. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 3644–3653 (2023) 2. Bansal, H., Singhi, N., Yang, Y., Yin, F., Grover, A., Chang, K.W.: Cleanclip: Mitigating data poi-soning attacks in multimodal contrastive learning. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 112–123 (2023) 3. Carlini, N.: Poisoning the unlabeled dataset of {Semi-Supervised } learning. In: 30th USENIX Security Symposium (USENIX Security 21). pp. 1577–1592 (2021) 4. Chen, X., Liu, C., Li, B., Lu, K., Song, D.: Targeted backdoor attacks on deep learning systems using data poisoning. arXiv preprint arXiv:1712.05526 (2017) 5. Coates, A., Ng, A., Lee, H.: An analysis of single-layer networks in unsupervised feature learning. In: Proceedings of the fourteenth international conference on artificial intelligence and statistics. pp. 215–223. JMLR Workshop and Conference Proceedings (2011) 6. Feng, S., Tao, G., Cheng, S., Shen, G., Xu, X., Liu, Y., Zhang, K., Ma, S., Zhang, X.: Detecting backdoors in pre-trained encoders. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 16352–16362 (2023) 7. Gao, Y., et al.: Backdoor attacks and countermeasures on deep neural networks: A comprehensive review. arXiv preprint arXiv:2007.10760 (2020) 8. Gong, Y., Ran, D., Liu, J., Wang, C., Cong, T., Wang, A., Duan, S., Wang, X.: Figstep: Jailbreaking large vision-language models via typographic visual prompts. In: Proceedings of the AAAI Conference on Artificial Intelligence. vol. 39, pp. 23951–23959 (2025) 9. Gu, T., Liu, K., Dolan-Gavitt, B., Garg, S.: Badnets: Evaluating backdooring attacks on deep neural networks. Ieee Access 7, 47230–47244 (2019) 10. Gu, T., et al.: Badnets: Identifying vulnerabilities in the machine learning model supply chain. arXiv preprint arXiv:1708.06733 (2017) 11. Howard, J.: Imagenette: A smaller subset of 10 easily classified classes from imagenet. https://gith ub.com/fastai/imagenette (2020) 12 Ahmed Abdelnaby and Mohamed Elmahallawy 12. Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A.C., Lo, W.Y., et al.: Segment anything. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 4015–4026 (2023) 13. Kuang, J., Liang, S., Liang, J., Liu, K., Cao, X.: Adversarial backdoor defense in clip. arXiv preprint arXiv:2409.15968 (2024) 14. Li, J., Li, D., Xiong, C., Hoi, S.: Blip: Bootstrapping language-image pre-training for unified vision-language understanding and generation. In: International conference on machine learning. pp. 12888– 12900. PMLR (2022) 15. Li, S., Xue, M., Zhao, B.Z.H., Zhu, H., Zhang, X.: Invisible backdoor attacks on deep neural networks via steganography and regularization. IEEE Transactions on Dependable and Secure Computing 
+
+18 (5), 2088–2105 (2020) 16. Liang, S., Zhu, M., Liu, A., Wu, B., Cao, X., Chang, E.C.: Badclip: Dual-embedding guided backdoor attack on multimodal contrastive learning. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 24645–24654 (2024) 17. Liu, D., Yang, M., Qu, X., Zhou, P., Cheng, Y., Hu, W.: A survey of attacks on large vision–language models: Resources, advances, and future trends. IEEE Transactions on Neural Networks and Learning Systems (2025) 18. Miyai, A., et al.: Generalized out-of-distribution detection and beyond in vision language model era: A survey. arXiv preprint arXiv:2407.21794 (2024) 19. Niu, Y., He, S., Wei, Q., Wu, Z., Liu, F., Feng, L.: Bdetclip: Multimodal prompting contrastive test-time backdoor detection. arXiv preprint arXiv:2405.15269 (2024) 20. Poppi, S., Poppi, T., Cocchi, F., Cornia, M., Baraldi, L., Cucchiara, R.: Safe-clip: Removing nsfw concepts from vision-and-language models. In: European Conference on Computer Vision. pp. 340– 356. Springer (2024) 21. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al.: Learning transferable visual models from natural language supervision. In: International conference on machine learning. pp. 8748–8763. PmLR (2021) 22. Rombach, R., Blattmann, A., Lorenz, D., Esser, P., Ommer, B.: High-resolution image synthesis with latent diffusion models. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 10684–10695 (2022) 23. Shi, Y., et al.: Black-box backdoor defense via zero-shot image purification. Advances in Neural Information Processing Systems 36 , 57336–57366 (2023) 24. Singh, N.D., Croce, F., Hein, M.: Perturb and recover: Fine-tuning for effective backdoor removal from clip. arXiv preprint arXiv:2412.00727 (2024) 25. Telea, A.: An image inpainting technique based on the fast marching method. Journal of graphics tools 9(1), 23–34 (2004) 26. Turner, A., et al.: Label-consistent backdoor attacks. In: Proceedings of the 36th International Con-ference on Machine Learning (ICML). pp. 9536–9546 (2019) 27. Walmer, M., Sikka, K., Sur, I., Shrivastava, A., Jha, S.: Dual-key multimodal backdoors for visual question answering. In: Proceedings of the IEEE/CVF Conference on computer vision and pattern recognition. pp. 15375–15385 (2022) 28. Wenger, E., et al.: Backdoor attacks against deep learning systems in the physical world. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 6206–6215 (June 2021) 29. Westerhoff, J., et al.: Scam: A real-world typographic robustness evaluation for multimodal foundation models. arXiv preprint arXiv:2504.04893 (2025) 30. Xun, Y., Liang, S., Jia, X., Liu, X., Cao, X.: Cleanerclip: Fine-grained counterfactual semantic aug-mentation for backdoor defense in contrastive learning. arXiv preprint arXiv:2409.17601 (2024) 31. Yang, W., Gao, J., Mirzasoleiman, B.: Robust contrastive language-image pretraining against data poisoning and backdoor attacks. Advances in Neural Information Processing Systems 36 , 10678–10691 (2023)
