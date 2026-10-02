@@ -1,0 +1,642 @@
+Title: Selective Channel Restoration for Backdoored Vision-Language Models
+
+URL Source: https://arxiv.org/pdf/2609.37759v1
+
+Published Time: Wed, 30 Sep 2026 02:05:47 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# SELECTIVE CHANNEL RESTORATION FOR BACKDOORED 
+
+# VISION -L ANGUAGE MODELS 
+
+> AR
+
+XIV PREPRINT 
+
+Shuming Liu 1 Zhifang Zhang 2 Suqin Yuan 3
+
+Khin Mi Mi Aung 4 Zhuoyi Lin 4 Lei Feng 1
+
+> 1
+
+Southeast University 2The University of Queensland 3University of Sydney 4A*STAR 
+
+## ABSTRACT 
+
+Vision-language models (VLMs) exhibit strong multimodal capabilities but remain vulnerable to backdoors implanted through poisoned fine-tuning data. Existing defenses often require extensive parameter updates during fine-tuning or incur per-query overhead during inference. To address these limitations, we propose Perturb-Select-Restore (PSR), a post-training defense that performs sparse updates to the projection interface and introduces no additional computation during inference. We reveal that backdoored VLM projectors are substantially more sensitive to bounded perturbations than clean VLM projectors, a phenomenon we term projection fragility . Building on this finding, PSR identifies the output channels most sensitive to perturbations in each projection layer of a backdoored VLM and restores their parameters to the corresponding pretrained values. Experiments across multiple tasks show that PSR reduces attack success rates to near zero while preserving clean-task performance. 
+
+Keywords vision-language models · backdoor defense · model purification 
+
+## 1 Introduction 
+
+Vision-language models (VLMs) connect a visual encoder to a large language model through a lightweight visual-to-language projection interface [Dai et al., 2023, Liu et al., 2024, Zhu et al., 2024, Bai et al., 2025]. This modular design enables efficient adaptation to a broad range of multimodal tasks by fine-tuning only the projection interface while keeping the visual encoder and language model frozen. However, fine-tuning on untrusted data exposes VLMs to backdoor attacks: an adversary can inject a small number of poisoned samples, causing the adapted VLM to behave normally on clean inputs yet produce attacker-specified responses whenever a visual trigger appears at inference time [Chen et al., 2017, Gu et al., 2019]. Recent work has demonstrated the vulnerability of VLMs to backdoors involving diverse trigger types [Lyu et al., 2024, 2025]. Existing VLM backdoor defenses mainly operate during the fine-tuning or inference phases [Rong et al., 2025, Xun et al., 2025, Jiang et al., 2026, Xu et al., 2026, Zhang et al., 2026], thereby requiring either extensive parameter updates or additional per-query computation. General post-training backdoor defenses [Liu et al., 2018, Wang et al., 2019, Wu and Wang, 2021, Zheng et al., 2022, Li et al., 2023, Lin et al., 2024] can enable efficient model repair, but were primarily developed for image classifiers rather than VLMs. Applying them directly to VLM projection layers can be inefficient or harmful to clean utility when performance depends on preserving vision-language alignment. To explore whether post-training purification is feasible for VLM projection interfaces, we begin by testing whether backdoored projection interfaces exhibit distinctive sensitivity to perturbations. We conduct controlled probes on clean and backdoored LLaVA-1.5 projectors across COCO and VQAv2. For each sample, we apply temporary multiplicative perturbations to the projector parameters and optimize them via projected sign-gradient ascent to maximize the task loss under teacher forcing. The model parameters remain fixed during this procedure, and the optimized perturbations are discarded after each sample. For each projector, we compute the perturbation-induced loss increase, ∆L = Ladv −Lbase ,where Lbase is that projector’s own unperturbed loss. We compare these loss increases across projectors at each fixed perturbation budget ϵ. Further implementation details are provided in Appendix B.1. Figure 1 shows the resulting loss increases for clean projectors and projectors backdoored by BadNet, Blended, or TrojVLM. In both tasks, all three arXiv:2609.37759v1 [cs.CR] 29 Sep 2026 Selective Channel Restoration AR XIV PREPRINT 
+
+backdoored projectors become more sensitive than the clean projector as the perturbation budget increases. We refer to this phenomenon as projection fragility .0.01 0.02 0.05 0.10      
+
+> Perturbation budget ε
+> 020 40 60
+> Loss increase Δ L
+> 51.3
+> (a) COCO
+> Clean BadNet Blended TrojVLM
+> 0.01 0.02 0.05 0.10
+> Perturbation budget ε
+> 57.0
+> (b) VQAv2
+
+Figure 1: Loss increase ∆L under bounded projector pertur-bations on clean samples. (a) COCO; (b) VQAv2. Higher 
+
+∆L indicates greater projection fragility. Although this observation provides a useful signal for purification, the diverse and multi-layered structure of VLM projection interfaces makes it challenging to de-sign an efficient and broadly applicable method. To ad-dress this challenge, we introduce Perturb-Select-Restore 
+
+(PSR), a post-training purification method. Given a back-doored VLM, PSR identifies and repairs suspicious output channels in the target projection layers. It first perturbs these channels within a bounded range and learns ro-bustness scores. It then selects a fixed fraction of the lowest-scoring channels separately in each layer. Finally, it restores the selected channels using the corresponding pretrained weights and biases. This layer-wise channel repair reduces computation, handles different sensitiv-ity distributions across layers, and better preserves clean vision-language performance than direct pruning. Our contributions are summarized as follows: • A clean-data signal for backdoor purification. We identify projection fragility: backdoored VLMs exhibit larger clean-loss increases under projection perturbations than clean VLMs, providing a signal for channel selection. • A channel-wise post-training purification method. 
+
+PSR learns channel-wise robustness scores to identify backdoor-associated projection output channels and restores their parameters to the corresponding pretrained values. • Strong empirical results across diverse settings. Experiments across multiple tasks show that PSR reduces attack success rates to near zero while preserving clean-task performance. 
+
+## 2 Related Work 
+
+Backdoor attacks on vision-language models. Backdoor attacks were first studied extensively in image classification, where an attacker poisons training data so that a model predicts an attacker-chosen target when a trigger is present [Chen et al., 2017, Gu et al., 2019]. In vision-language settings, triggers can be implemented through different visual transformations, ranging from explicit patch or blended patterns [Chen et al., 2017, Gu et al., 2019] to spatially warped or sample-specific invisible perturbations [Li et al., 2021, Nguyen and Tran, 2021]. These attacks transfer effectively to VLMs [Liang et al., 2025]. More recent work has introduced attacks specifically designed for them: TrojVLM injects backdoors during instruction tuning while preserving caption quality on clean images [Lyu et al., 2024], and VLOOD demonstrates that backdoors can be implanted using only out-of-distribution auxiliary data [Lyu et al., 2025]. Domain-shift studies further indicate that VLM backdoors can remain effective across mismatched training and testing domains [Liang et al., 2025]. These results motivate defenses that suppress backdoor behavior within the model rather than only filtering obvious input triggers. 
+
+Backdoor defenses for vision-language models. VLM-specific defenses can be broadly categorized into training-time and test-time approaches. Training-time methods either identify and remove poisoned samples before adaptation or regularize the adapted parameters to suppress backdoor triggers. For example, BYE detects suspicious samples in VLM fine-tuning using attention-based signals and clustering [Rong et al., 2025], while RobustIT regularizes adapter fine-tuning to reduce trigger effects [Xun et al., 2025]. Test-time methods, including PurMM, SRD, and CleanSight, intervene in the input or model computation during inference [Jiang et al., 2026, Xu et al., 2026, Zhang et al., 2026]. Training-time methods require intervention during adaptation, whereas test-time methods introduce per-query overhead. In contrast, PSR purifies VLM projection weights after training without modifying the adaptation process or adding inference-time computation. 
+
+General post-training backdoor defenses. Post-training backdoor defenses based on neurons, channels, representa-tions, or weight dynamics provide important technical foundations for PSR. Pruning methods remove backdoor-related components based on various criteria: Fine-Pruning removes neurons dormant on clean data [Liu et al., 2018], Neural Cleanse detects anomalous triggers and applies pruning [Wang et al., 2019], and ANP prunes neurons sensitive to adversarial perturbations on clean data [Wu and Wang, 2021]. Channel-level methods such as CLP apply Lipschitzness-based criteria [Zheng et al., 2022]. Other methods use unlearning-based signals to locate backdoor-related components, 2Selective Channel Restoration AR XIV PREPRINT 
+
+including RNP and TSBD [Li et al., 2023, Lin et al., 2024]. Spectral Signatures detects poisoned samples via anomalous representation directions [Tran et al., 2018]. However, because these defenses were not specifically designed for VLMs, their direct application may yield suboptimal performance; in contrast, PSR is tailored to the distinctive architectural characteristics of VLMs, making it better suited for backdoor mitigation in this setting. 
+
+## 3 Preliminaries 
+
+3.1 Threat Model Victim model. We consider a VLM as a composition of a visual encoder, a visual-to-language projection interface, and a language model. Given an image x and a text query or instruction q, the model output is written abstractly as 
+
+o = Mψ (Pϕ(Evis (x)) , q) , (1) where Evis is the visual encoder, Pϕ is the visual-to-language projection interface with parameters ϕ, and Mψ is the language model. During downstream adaptation, only the projection interface is fine-tuned, while the visual encoder and language model remain fixed. 
+
+Adversary’s objective. The adversary aims to implant a backdoor by poisoning the data used to fine-tune the projection interface. We assume that the adversary can control the fine-tuning data and optimization procedure but can modify only the projection parameters. Let D = Dclean ∪ D poison denote the fine-tuning set, where Dclean contains clean image-query-response triples and Dpoison contains samples with a visual trigger τ and an attacker-specified target response o⋆. After fine-tuning on D, the resulting parameters ϕb should preserve normal behavior on a clean image x
+
+while producing the target response for its triggered version x ⊕ τ :
+
+fϕb (x, q) = o, fϕb (x ⊕ τ , q) = o⋆. (2) 
+
+Defender’s setting. The defender receives a fine-tuned VLM suspected of containing a backdoor and aims to purify it. We assume access to the corresponding pretrained base VLM and its projection parameters ϕ0, a small clean calibration set C, and a restoration-ratio hyperparameter r. The defender need not have the original fine-tuning set or the complete adaptation recipe. The goal is to construct ϕpur = A(ϕb, ϕ 0, C; r) that reduces backdoor behavior while retaining clean-task utility. 
+
+3.2 Projection Interface and Channel Representation 
+
+PSR targets selected linear layers inside the visual-to-language projection interface Pϕ. Let L = {ℓ1, ℓ 2, . . . , ℓ m}
+
+denote these target layers. For layer ℓ, its affine output is 
+
+u(ℓ) = W(ℓ)v(ℓ) + b(ℓ), (3) where W(ℓ) ∈ Rd(ℓ)out ×d(ℓ)in and b(ℓ) ∈ Rd(ℓ)out . Each output channel is indexed by i ∈ { 1, . . . , d (ℓ)out } and corresponds to the activation u(ℓ) 
+
+> i
+
+, weight row W(ℓ) 
+
+> i, :
+
+, and bias entry b(ℓ) 
+
+> i
+
+. This row-wise correspondence identifies each output channel and its associated parameters for the subsequent method. 
+
+## 4 Methodology 
+
+Overview. PSR is a three-stage post-training purification procedure, illustrated in Figure 2. Starting from a backdoored projector ϕb, it introduces a channel-wise robustness-score vector θ and bounded auxiliary perturbations δ at each target projection layer. Using only clean calibration data, PSR alternates between maximizing the clean loss over δ to expose sensitivity and minimizing a regularized clean-loss objective over θ, while keeping the model parameters frozen. Channels that are more vulnerable under this perturbation probe exert stronger pressure for their robustness scores to decrease, so the smallest learned θ values identify the channels most likely to contain backdoor-related changes. PSR selects a fixed fraction of these channels independently in each layer, restores their weight rows and bias entries from 
+
+ϕ0, and leaves all other adapted parameters unchanged. This perturb-select-restore procedure concentrates the repair on fragile channels while preserving task-relevant adaptation elsewhere in the projection interface. 
+
+4.1 Channel-wise Parameterization 
+
+For each target layer ℓ, PSR applies the following channel-wise transformation to the affine output u(ℓ):
+
+eu(ℓ) = u(ℓ) ⊙
+
+
+
+θ(ℓ) ⊙
+
+
+
+1 + δ(ℓ) 
+
+, (4) 3Selective Channel Restoration AR XIV PREPRINT Clean images     
+
+> Calibration set Vision encoder Projection interface Language model
+
+Text output Weights frozen Target linear-layer outputs  
+
+> Text query q
+
+(a) Perturb 
+
+> Learn channel robustness scores
+
+(b) Select 
+
+> Find low-score channels
+
+(c) Restore 
+
+> Copy corresponding base parameters
+
+̃
+
+ui = ui θi(1 + δi)
+
+Linear layer 
+
+W, b      
+
+> Output Scale Channel
+> u1×θ1(1 + δ1)
+
+c1    
+
+> u2×θ2(1 + δ2)
+
+c2    
+
+> u3×θ3(1 + δ3)
+
+c3    
+
+> u4×θ4(1 + δ4)
+
+c4  
+
+> Alternate on clean calibration data Perturbation δ
+> Maximize clean loss
+> Robustness score θ
+> Minimize PSR objective
+
+|δi| ≤ ε 0 ≤ θi ≤ 1      
+
+> Freeze W,b•Discard δafter scoring
+
+Robustness score θi
+
+c1 0.92 
+
+c2 0.15 
+
+c3 0.81 
+
+c4 0.08   
+
+> Illustrative scores
+> Lower score →more suspicious
+
+Selected: c2, c4  
+
+> Bottom rfraction
+> independently in each target layer
+
+Clean base 
+
+W b
+
+c1
+
+c2
+
+c3
+
+c4
+
+Poisoned model 
+
+W b
+
+c1
+
+c2
+
+c3
+
+c4
+
+Puri fi ed 
+
+interface 
+
+W b
+
+c1
+
+c2
+
+c3
+
+c4
+
+> Copy
+> selected rows
+> Keep
+> other rows
+
+c2, c4 ← base        
+
+> c1,c3←poisoned
+> One channel = one weight row + one bias
+> Same architecture •No added inference cost
+> Retained adapted parameters Restored base parameters Selected for restoration
+
+Figure 2: Overview of Perturb-Select-Restore (PSR), a post-training purification framework for VLM projection interfaces. Here, θ(ℓ) ∈ [0 , 1] d(ℓ)out is a learnable channel robustness score vector, and δ(ℓ) ∈ [−ϵ, ϵ ]d(ℓ)out is a bounded auxiliary perturbation vector. The operator ⊙ denotes element-wise multiplication with broadcasting along the non-channel dimensions. In the parameterization, θ(ℓ) acts as a channel-wise retention coefficient: values close to 1 preserve the corresponding channels, whereas values close to 0 suppress them. The model parameters remain frozen, and only these channel-wise variables are optimized. The perturbation vector δ(ℓ)
+
+provides bounded adversarial changes to the channel outputs and is used only to learn θ(ℓ). After optimization, the learned θ(ℓ) values are used to select channels for restoration, whereas δ(ℓ) is discarded. We use θ and δ to denote the collections of these variables across all target layers. 
+
+4.2 Robustness Score Optimization 
+
+Building on the channel-wise parameterization in Equation 4, PSR uses the small clean calibration set C as its only data input to learn the channel robustness scores. Let Lclean (θ, δ; C) denote the model’s clean language-modeling loss under the channel variables. The optimization alternates between an inner maximization over the bounded perturbations δ and an outer minimization over the robustness-score vectors θ.
+
+Inner maximization. For fixed robustness scores, the inner problem searches for a bounded channel perturbation that increases the clean loss: 
+
+δ⋆ = arg max 
+
+∥δ∥∞≤ϵ
+
+Lclean (θ, δ; C). (5) This problem is approximated by projected sign-gradient ascent with step size 2ϵ/T PGD , as specified in Algorithm 1. After each update, every δ(ℓ) is projected elementwise onto the box [−ϵ, ϵ ]d(ℓ)out .
+
+Outer minimization. With the current adversarial perturbation fixed, the robustness scores are updated using the clean-data loss under channel perturbations, the clean loss with the auxiliary perturbation set to zero, and an ℓ1 score penalty: 
+
+min 
+
+{θ(ℓ)}ℓ∈L 
+
+Lclean (θ, δ⋆; C) + λclean Lclean (θ, 0; C) + λθ
+
+X
+
+ℓ∈L 
+
+θ(ℓ)
+
+1
+
+, s.t. θ(ℓ) ∈ [0 , 1] d(ℓ)out . (6) 4Selective Channel Restoration AR XIV PREPRINT 
+
+Algorithm 1 PSR optimization and restoration 
+
+Input: Poisoned projection parameters ϕb, projection parameters ϕ0 of the corresponding pretrained base VLM, clean calibration set C, target layers L, restoration ratio r, perturbation bound ϵ, optimization rounds Topt , inner steps TPGD , robustness-score learning rate ηθ , loss weights λclean and λθ
+
+Output: Purified projection parameters ϕpur 
+
+1: Introduce channel-wise variables at the output of each target linear layer in L
+
+2: Initialize each robustness-score vector θ(ℓ) ← 1d(ℓ)out 
+
+and keep all model parameters frozen 3: for s = 1 , . . . , T opt do 
+
+4: Initialize bounded channel perturbations δ(ℓ) for all ℓ ∈ L 
+
+5: for t = 1 , . . . , T PGD do 
+
+6: δ ← Π[−ϵ,ϵ ]
+
+
+
+δ + 2ϵTPGD sign( ∇δ Lclean (θ, δ; C)) 
+
+
+
+7: end for 
+
+8: gθ ← ∇ θ
+
+h
+
+Lclean (θ, δ; C) + λclean Lclean (θ, 0; C) + λθ
+
+P 
+
+> ℓ∈L
+
+θ(ℓ)
+
+> 1
+
+i
+
+9: θ ← Π[0 ,1] 
+
+
+
+θ − ηθ clip [−1,1] (gθ )
+
+
+
+10: end for 
+
+11: Initialize ϕpur ← ϕb
+
+12: for each target layer ℓ ∈ L do 
+
+13: Select S(ℓ) ← TopK smallest (θ(ℓ), ⌈rd (ℓ)out ⌉)
+
+14: for each selected channel i ∈ S(ℓ) do 
+
+15: Restore channel i in ϕpur from the corresponding channel in ϕ0
+
+16: end for 
+
+17: end for 
+
+18: Save and return ϕpur 
+
+In each round, the implementation first performs TPGD projected sign-gradient ascent steps on δ, then updates θ using the outer-objective gradient clipped elementwise to [−1, 1] , and projects each robustness-score vector back to its box constraint [0 , 1] d(ℓ)out .The learned θ values serve as channel-wise retention coefficients and provide the signal for subsequent purification. Under the inner maximization, channels whose retained outputs are more sensitive to bounded perturbations create greater pressure for the outer minimization to reduce their scores, while the unperturbed clean-loss term discourages indiscriminate suppression of all channels. Consequently, a lower learned θ(ℓ) 
+
+> i
+
+indicates that channel i is more fragile under the clean-data perturbation probe and is treated as more suspicious. We therefore select low-score channels for restoration. 
+
+4.3 Channel Selection and Parameter Restoration 
+
+Once robustness-score optimization is complete, PSR performs restoration independently in each target layer. Given the restoration ratio r, it selects k(ℓ) =
+
+l
+
+r d (ℓ)out 
+
+m
+
+channels from layer ℓ. Let S(ℓ) = TopK smallest 
+
+ θ(ℓ), k (ℓ) denote the indices of the selected channels. For any projection parameters ϕ, let W(ℓ)(ϕ) and b(ℓ)(ϕ) denote the weight matrix and bias vector of layer ℓ, respectively. For each selected channel i ∈ S(ℓ), PSR restores its parameters from the corresponding pretrained base VLM: W(ℓ) 
+
+> i, :
+
+(ϕpur ) = W(ℓ) 
+
+> i, :
+
+(ϕ0) and b(ℓ) 
+
+> i
+
+(ϕpur ) = b(ℓ) 
+
+> i
+
+(ϕ0). For each unselected channel i / ∈ S(ℓ), it leaves the adapted parameters unchanged, so W(ℓ) 
+
+> i, :
+
+(ϕpur ) = W(ℓ) 
+
+> i, :
+
+(ϕb) and b(ℓ) 
+
+> i
+
+(ϕpur ) = b(ℓ) 
+
+> i
+
+(ϕb).Algorithm 1 summarizes the complete PSR procedure, including robustness-score optimization, per-layer channel selection, and restoration from ϕ0. Here, Π denotes projection onto the indicated feasible interval, clip denotes elementwise clipping, Topt is the number of optimization rounds, TPGD is the number of inner ascent steps, and ηθ is the robustness-score learning rate. 
+
+## 5 Experiments 
+
+5.1 Experimental Setup Victim models and benchmarks. We conduct experiments on two VLM architectures and two multimodal benchmarks. The evaluated models are Qwen3-VL-8B-Instruct [Bai et al., 2025], which uses a visual merger together with DeepStack 5Selective Channel Restoration AR XIV PREPRINT 
+
+Table 1: Results on image captioning (COCO). ASR (%, ↓) and clean utility (CU; CIDEr on clean input, ↑) are reported across attacks and defenses.                                                                                                                                                                   
+
+> BadNet Blended ISSBA TrojVLM VLOOD WaNet Model Method ASR CU ASR CU ASR CU ASR CU ASR CU ASR CU LLaVA-1.5 No defense 99.38 120.70 95.42 124.17 97.24 123.69 93.46 117.77 98.70 120.88 92.36 123.70 Clean FT 99.36 120.93 0.00 123.98 1.82 123.89 93.46 117.88 98.68 121.01 0.00 123.82 Random 0.66 121.96 1.82 123.28 20.62 124.82 3.40 124.04 34.08 124.10 16.92 124.66 FP 0.76 121.92 5.20 122.58 17.62 124.96 3.20 122.89 33.96 123.35 25.12 123.40 CLP 0.08 122.08 1.88 123.95 3.92 125.07 1.24 123.87 9.90 124.24 1.26 124.96 PSR 0.84 120.55 1.54 120.67 0.00 122.93 1.60 121.04 0.28 121.84 0.56 121.70 Qwen3-VL No defense 99.32 128.38 91.70 127.74 91.32 128.13 97.44 126.05 91.48 127.73 95.62 121.71 Clean FT 99.32 128.23 0.02 127.96 0.00 127.92 97.30 125.56 91.76 127.39 0.06 121.15 Random 53.52 128.32 16.40 127.07 38.32 128.48 67.82 127.25 22.38 128.13 47.58 127.45 FP 57.96 129.11 0.74 127.47 39.02 129.02 40.00 127.38 50.34 128.33 43.94 126.40 CLP 36.68 128.77 17.88 127.45 23.10 128.20 15.82 128.62 19.92 128.14 45.24 127.44 PSR 0.90 124.42 1.70 123.03 0.00 126.00 0.32 125.37 0.00 127.30 0.04 126.09
+
+Table 2: Results on visual question answering (VQAv2). ASR (%, ↓) and clean utility (CU; VQA accuracy on clean input, %, ↑) are reported across attacks and defenses. 
+
+BadNet Blended ISSBA TrojVLM VLOOD WaNet Model Method ASR CU ASR CU ASR CU ASR CU ASR CU ASR CU LLaVA-1.5 No defense 99.86 74.84 99.76 74.07 99.32 73.81 99.90 74.14 94.18 41.60 98.34 74.47 Clean FT 99.86 73.84 3.52 72.87 0.80 72.96 99.96 72.44 96.78 9.32 36.52 73.41 Random 2.94 73.19 9.28 74.90 5.38 74.84 0.24 73.35 1.24 24.91 52.96 75.06 FP 4.78 72.64 11.02 74.89 5.36 75.17 3.74 73.90 0.32 40.19 65.28 75.14 CLP 0.08 74.26 3.54 74.65 0.00 75.01 0.02 73.63 0.76 22.63 8.92 75.07 PSR 0.12 72.85 0.58 75.11 0.12 75.28 0.14 74.35 1.40 26.57 0.08 75.45 Qwen3-VL No defense 96.34 80.96 90.64 79.50 93.80 80.25 92.78 80.74 94.70 49.00 93.24 80.43 Clean FT 96.22 81.00 89.68 79.60 92.76 80.45 92.70 80.68 93.26 78.50 0.00 0.20 Random 6.26 79.77 10.96 79.67 13.12 80.13 4.54 79.57 4.02 21.58 9.26 80.00 FP 1.04 79.49 2.24 79.42 3.48 80.02 0.90 79.40 2.26 72.58 5.68 80.05 CLP 15.42 79.74 18.70 79.74 15.88 80.19 8.76 79.67 8.42 23.98 12.92 80.03 PSR 0.62 79.66 0.00 79.61 0.00 80.10 0.50 79.73 0.10 53.66 0.00 80.00 
+
+modules as its visual-to-language projection interface, and LLaVA-1.5-7B [Liu et al., 2024], which uses a two-layer MLP projector. The evaluated tasks are image captioning on MS-COCO [Lin et al., 2014, Chen et al., 2015] and visual question answering on VQAv2 [Goyal et al., 2017]; each model is evaluated on both tasks. In all settings, the backdoor is implanted by parameter-efficient adaptation of the visual-to-language projection interface while the visual encoder and language model remain fixed. Appendix A.1 gives the model and target-layer details, while Appendix A.2 describes the datasets and evaluation protocols. 
+
+Backdoor setup. Following prior VLM backdoor evaluations, we consider six attack constructions: BadNet [Gu et al., 2019], Blended [Chen et al., 2017], ISSBA [Li et al., 2021], WaNet [Nguyen and Tran, 2021], TrojVLM [Lyu et al., 2024], and VLOOD [Lyu et al., 2025]. All attacks use the target response “you have been hacked lol.” Appendix A.3 describes the trigger mechanisms and target-injection strategies for these attacks. 
+
+Defense baselines. We compare PSR with Clean Fine-tuning (Clean FT), a conventional clean-data repair baseline, and three post-training channel-selection baselines: Random, Fine-Pruning-style (FP) [Liu et al., 2018], and CLP-style (CLP) [Zheng et al., 2022]. Random selects channels uniformly at random within each target layer. We focus on these methods because they can be evaluated under PSR’s defender setting, starting from the same fine-tuned poisoned model and performing model-level repair before deployment. For a controlled comparison, the channel-selection baselines rank the same target channels and restore the same number per layer from ϕ0. We also report the undefended poisoned model as a no-defense reference. Detailed scoring rules and comparison protocols are provided in Appendix A.4. 6Selective Channel Restoration AR XIV PREPRINT 
+
+Evaluation metrics. We report attack success rate (ASR, ↓), which measures the proportion of triggered inputs whose generated output contains the target response, and clean utility (CU, ↑), measured by CIDEr [Vedantam et al., 2015] for image captioning and official VQA accuracy for visual question answering. Lower ASR indicates more effective backdoor mitigation, while higher CU indicates better preservation of clean-task performance. 
+
+Implementation details. PSR learns channel robustness scores from a small clean calibration set of 256 examples, disjoint from validation. The common configuration uses a perturbation bound ϵ = 0 .016 , two projected-gradient ascent steps, robustness-score learning rate ηθ = 0 .06 , clean-loss weight λclean = 0 .5, and robustness-score regularization 
+
+λθ = 0 .006 . Channels are ranked independently within each target layer, and the weight rows and bias entries of the selected channels are restored to their corresponding values in ϕ0 according to the restoration-ratio hyperparameter r.Full optimization hyperparameters are given in Appendix B.2. 
+
+5.2 Main Results 
+
+Tables 1 and 2 report results across two VLM architectures, two multimodal tasks, and six attack constructions. PSR reduces ASR to at most 1.70% in every evaluated setting, showing that the perturbation-based channel scores consistently identify projection channels associated with the backdoor. 
+
+Existing defenses are not consistently reliable. Clean FT removes some attacks but leaves the backdoor largely intact in many cases: on COCO, it leaves ASR above 91% for TrojVLM and VLOOD on both models, and on LLaVA VQAv2 it leaves 99.86% on BadNet and 99.96% on TrojVLM. Its occasional successes can also coincide with severe utility collapse, such as Qwen3-VL on VQAv2 under WaNet, where ASR falls to 0.00% but CU drops from 80.43% to 0.20%. Channel-selection baselines are more effective on individual attacks but vary substantially across models and datasets. For example, CLP leaves 45.24% ASR on Qwen3-VL COCO under WaNet and 18.70% on Qwen3-VL VQAv2 under Blended, while Random and FP leave 67.82% and 40.00% on TrojVLM COCO, respectively. No single baseline therefore provides the reliable cross-setting suppression achieved by PSR. 
+
+PSR preserves clean utility while suppressing the backdoor. On LLaVA COCO, PSR reduces ASR to at most 1.60% across all attacks, including 0.00% on ISSBA, while retaining CIDEr values between 120.55 and 122.93. On Qwen3-VL COCO, it achieves 0.00% ASR on ISSBA and VLOOD and 0.04% on WaNet, with CIDEr remaining between 123.03 and 127.30. The same pattern holds for VQAv2: PSR keeps ASR below 1.40% on LLaVA and below 0.62% on Qwen3-VL. Clean accuracy remains close to that of the undefended models in most settings, with CU around 73–75% for LLaVA and 80% for Qwen3-VL. Overall, PSR is effective across both the compact MLP projector and the distributed merger interface, demonstrating its consistency across different projection architectures. 
+
+5.3 Ablation Studies 
+
+All ablation experiments use Qwen3-VL-8B-Instruct on COCO under four attacks: BadNet, TrojVLM, Blended, and WaNet. Unless noted, we use the standard PSR configuration. 
+
+Restoration ratio. Figure 3 varies the restoration ratio from 10% to 50% with fixed robustness scores. Across attacks, increasing the restoration ratio consistently lowers ASR, although the rate of reduction varies by attack, while clean CIDEr declines gradually. This result characterizes the security–utility trade-off controlled by the restoration-ratio hyperparameter. At r = 100% all target channels are restored, so the projection reverts to the pretrained base VLM: ASR is 0.00% for all four attacks, but clean CIDEr drops to 68.84 versus 123.03–126.09 at r = 30% .Table 3: Discrete ablations on Qwen3-VL COCO across four attacks. ASR/CU are reported for first-group, second-group, and joint restoration, plus restoration from ϕ0 versus zero.                                          
+
+> Layer coverage: ASR (%, ↓)CU ( ↑)ASR (%, ↓)Attack First group Second group Both groups From ϕ0To zero From ϕ0To zero BadNet 97.52 67.02 0.90 124.42 107.89 0.90 0.00 TrojVLM 89.28 64.08 0.32 125.37 115.97 0.32 0.00 Blended 82.74 55.84 1.70 123.03 97.37 1.70 0.00 WaNet 84.10 31.30 0.04 126.09 118.28 0.04 0.00
+
+Layer coverage. Table 3 compares repairing the first and second MLP layer groups across the merger modules, separately and jointly, under the corresponding settings. When only one MLP layer group is restored, channel robustness scores are learned only for that group across the main merger and the three DeepStack mergers. Restoring only the first group leaves 82.74–97.52% ASR, and restoring only the second leaves 31.30–67.02% ASR; jointly 7Selective Channel Restoration AR XIV PREPRINT Restoration ratio (%) ASR (%) ↓ 
+
+> (a) Attack success rate
+
+Restoration ratio (%) CIDEr ↑            
+
+> (b) Clean utility
+> 10 20 30 40 50 020 40 60 80 100
+> 100
+> all = 0
+> 122 124 126 128 130
+> 10 20 30 40 50 66 69 72 100
+> all = 68.84
+> BadNet TrojVLM Blended WaNet
+
+Figure 3: Ablation of the PSR restoration ratio on Qwen3-VL-8B COCO attack settings. (a) ASR ( ↓) on triggered images; (b) clean utility (CU; CIDEr, ↑) on clean images. Each curve reuses the same optimized robustness scores and restores selected parameters from ϕ0. Diamonds denote the shared result of all four attacks at 100% restoration. restoring both groups reduces ASR to 0.04–1.70% across all four attacks. The result indicates that the backdoor signal is distributed across the merger interface rather than concentrated in a single layer. 
+
+Restoration choice. Using the same selected channels, restoring their weights and biases from ϕ0 yields 0.04–1.70% ASR and clean CIDEr scores of 123.03–126.09 across the four attacks. Setting the same parameters to zero also suppresses ASR to 0.00%, but reduces clean CIDEr to 97.37–118.28; for example, on BadNet, restoration from ϕ0
+
+gives CIDEr 124.42 versus 107.89 when setting the parameters to zero. These results support restoration from ϕ0 as the default operation because it preserves substantially more clean utility while achieving comparable attack removal. 
+
+5.4 Robustness to Adaptive Attacks 
+
+We finally evaluate PSR against adaptive adversaries who know the defense and adjust attack training to evade it. We extend the adversary in Section 3.1 with full knowledge of PSR, including its channel-wise parameterization, the bounded perturbation probe, and the base-guided restoration from ϕ0; the adversary controls the fine-tuning data and optimization procedure and may embed a simulation of PSR into attack training. Starting from the standard attack objective, we consider three adaptive strategies of increasing strength. 
+
+Perturbation-aware training (PA). The adversary replays PSR’s perturbation probe during attack training: bounded channel perturbations are optimized to increase the clean loss, and the attack objective is augmented with a clean-data term computed under these perturbations, so that the poisoned projector is trained to stay insensitive to the probe that PSR relies on for channel selection. 
+
+Persistence-augmented training (PA+). Building on PA, the adversary additionally requires poisoned samples to keep producing the target response under the same perturbations, directly countering the fragility signal exposed by the probe. 
+
+Restoration-aware training (RA). The strongest adversary simulates the complete PSR procedure during training: it periodically learns channel robustness scores, mimics restoring the lowest-scoring channels toward the base parameters, and optimizes both the clean and attack objectives under this simulated restoration, so that the implanted backdoor is explicitly trained to survive the actual defense. Experiments are conducted on Qwen3-VL-8B-Instruct on COCO under BadNet, TrojVLM, WaNet, and Blended. The standard-attack reference results are taken from Table 1; the three adaptive strategies use the same underlying experimental configuration. All models are purified by PSR under the standard configuration in Section 5.1. Table 4 reports ASR and CU before and after purification, evaluated on 5,000 clean images and their triggered counterparts from COCO. 
+
+PSR remains effective under defense-aware training. Across these adaptive settings, PSR reduces ASR to near zero in most settings. These results show that training the backdoor to withstand PSR’s perturbation probe does not necessarily make it robust to the subsequent purification step. 8Selective Channel Restoration AR XIV PREPRINT 
+
+Table 4: PSR against adaptive attacks on Qwen3-VL COCO. Each attack is trained with the standard objective (Std.) and three defense-aware strategies of increasing strength (PA, PA+, RA); all models are purified by the same PSR configuration. Each cell reports the metric after PSR purification, with the value before purification shown in gray parentheses (ASR in %; CU in CIDEr). 
+
+Attack Metric Std. PA PA+ RA BadNet ASR ( ↓) 0.90 (99.32) 0.00 (97.78) 2.08 (99.76) 0.00 (99.92) 
+
+CU ( ↑) 124.42 (128.38) 127.96 (123.40) 126.37 (122.85) 125.18 (125.55) 
+
+TrojVLM ASR ( ↓) 0.32 (97.44) 0.00 (98.22) 0.00 (99.66) 0.00 (99.14) 
+
+CU ( ↑) 125.37 (126.05) 125.55 (123.27) 124.90 (122.47) 127.93 (123.90) 
+
+WaNet ASR ( ↓) 0.04 (95.62) 0.00 (78.62) 0.78 (97.22) 0.00 (90.98) 
+
+CU ( ↑) 126.09 (121.71) 124.70 (115.76) 125.74 (116.24) 126.72 (123.08) 
+
+Blended ASR ( ↓) 1.70 (91.70) 0.00 (86.76) 0.96 (94.46) 2.94 (93.54) 
+
+CU ( ↑) 123.03 (127.74) 125.93 (122.50) 126.32 (122.28) 127.58 (124.62) 
+
+## 6 Conclusion 
+
+We proposed PSR, a post-training purification method for repairing backdoored VLM visual-to-language projection interfaces. Our analysis identifies projection fragility: backdoored models exhibit disproportionately larger clean-loss increases under bounded projection perturbations, providing a clean-data signal for channel selection. PSR uses this signal to learn robustness scores and directly restores selected projection rows and biases to their corresponding values in ϕ0, producing a purified projection interface without intervention during adaptation or at inference time. Across two VLM architectures, two multimodal tasks, and six attack types, PSR substantially suppresses the attack success rate while generally retaining clean-task utility. These results support clean-data robustness scoring and restoration to pretrained parameter values as a practical direction for mitigating projection-interface backdoors in VLMs under the evaluated threat model. 9Selective Channel Restoration AR XIV PREPRINT 
+
+## References 
+
+Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, Wenbin Ge, Zhifang Guo, Qidong Huang, Jie Huang, Fei Huang, Binyuan Hui, Shutong Jiang, Zhaohai Li, Mingsheng Li, Mei Li, Kaixin Li, Zicheng Lin, Junyang Lin, Xuejing Liu, Jiawei Liu, Chenglong Liu, Yang Liu, Dayiheng Liu, Shixuan Liu, Dunjie Lu, Ruilin Luo, Chenxu Lv, Rui Men, Lingchen Meng, Xuancheng Ren, Xingzhang Ren, Sibo Song, Yuchong Sun, Jun Tang, Jianhong Tu, Jianqiang Wan, Peng Wang, Pengfei Wang, Qiuyue Wang, Yuxuan Wang, Tianbao Xie, Yiheng Xu, Haiyang Xu, Jin Xu, Zhibo Yang, Mingkun Yang, Jianxin Yang, An Yang, Bowen Yu, Fei Zhang, Hang Zhang, Xi Zhang, Bo Zheng, Humen Zhong, Jingren Zhou, Fan Zhou, Jing Zhou, Yuanzhi Zhu, and Ke Zhu. Qwen3-VL technical report. arXiv preprint arXiv:2511.21631 , 2025. Xinlei Chen, Hao Fang, Tsung-Yi Lin, Ramakrishna Vedantam, Saurabh Gupta, Piotr Dollár, and C. Lawrence Zitnick. Microsoft COCO captions: Data collection and evaluation server. arXiv preprint arXiv:1504.00325 , 2015. Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. Targeted backdoor attacks on deep learning systems using data poisoning. arXiv preprint arXiv:1712.05526 , 2017. Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, and Steven C. H. Hoi. InstructBLIP: Towards general-purpose vision-language models with instruction tuning. In Advances in Neural Information Processing Systems , 2023. Yash Goyal, Tejas Khot, Douglas Summers-Stay, Dhruv Batra, and Devi Parikh. Making the V in VQA matter: Elevating the role of image understanding in visual question answering. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2017. Tianyu Gu, Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. BadNets: Evaluating backdooring attacks on deep neural networks. IEEE Access , 7:47230–47244, 2019. Wenzheng Jiang, Ke Liang, Xuankun Rong, Jingxuan Zhou, Zhengyi Zhong, Guancheng Wan, and Ji Wang. PurMM: Attention-guided test-time backdoor purification in multimodal large language models. In Proceedings of the AAAI Conference on Artificial Intelligence , 2026. Yige Li, Xixiang Lyu, Xingjun Ma, Nodens Koren, Lingjuan Lyu, Bo Li, and Yu-Gang Jiang. Reconstructive neuron pruning for backdoor defense. In International Conference on Machine Learning , 2023. Yuezun Li, Yiming Li, Baoyuan Wu, Longkang Li, Ran He, and Siwei Lyu. Invisible backdoor attack with sample-specific triggers. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 2021. Siyuan Liang, Jiawei Liang, Tianyu Pang, Chao Du, Aishan Liu, Mingli Zhu, Xiaochun Cao, and Dacheng Tao. Revisiting backdoor attacks against large vision-language models from domain shift. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2025. Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dollár, and C. Lawrence Zitnick. Microsoft COCO: Common objects in context. In European Conference on Computer Vision , 2014. Weilin Lin, Li Liu, Shaokui Wei, Jianze Li, and Hui Xiong. Unveiling and mitigating backdoor vulnerabilities based on unlearning weight changes and backdoor activeness. In Advances in Neural Information Processing Systems , 2024. Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. Improved baselines with visual instruction tuning. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024. Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. Fine-Pruning: Defending against backdooring attacks on deep neural networks. In Research in Attacks, Intrusions, and Defenses , 2018. Weimin Lyu, Lu Pang, Tengfei Ma, Haibin Ling, and Chao Chen. TrojVLM: Backdoor attack against vision language models. In European Conference on Computer Vision , 2024. Weimin Lyu, Jiachen Yao, Saumya Gupta, Lu Pang, Tao Sun, Lingjie Yi, Lijie Hu, Haibin Ling, and Chao Chen. Backdooring vision-language models with out-of-distribution data. In International Conference on Learning Representations , 2025. Tuan Anh Nguyen and Anh Tuan Tran. WaNet - imperceptible warping-based backdoor attack. In International Conference on Learning Representations , 2021. Xuankun Rong, Wenke Huang, Jian Liang, Jinhe Bi, Xun Xiao, Yiming Li, Bo Du, and Mang Ye. Backdoor cleaning without external guidance in MLLM fine-tuning. In Advances in Neural Information Processing Systems , 2025. Brandon Tran, Jerry Li, and Aleksander Madry. Spectral signatures in backdoor attacks. In Advances in Neural Information Processing Systems , 2018. Ramakrishna Vedantam, C. Lawrence Zitnick, and Devi Parikh. CIDEr: Consensus-based image description evaluation. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2015. 10 Selective Channel Restoration AR XIV PREPRINT 
+
+Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y. Zhao. Neural Cleanse: Identifying and mitigating backdoor attacks in neural networks. In IEEE Symposium on Security and Privacy , 2019. Dongxian Wu and Yisen Wang. Adversarial neuron pruning purifies backdoored deep models. In Advances in Neural Information Processing Systems , 2021. Shuhan Xu, Siyuan Liang, Hongling Zheng, Aishan Liu, Xinbiao Wang, Yong Luo, Fu Lin, Leszek Rutkowski, and Dacheng Tao. SRD: Reinforcement-learned semantic perturbation for backdoor defense in VLMs. In Proceedings of the AAAI Conference on Artificial Intelligence , 2026. Yuan Xun, Siyuan Liang, Xiaojun Jia, Xinwei Liu, and Xiaochun Cao. Robust anti-backdoor instruction tuning in LVLMs. arXiv preprint arXiv:2506.05401 , 2025. Zhifang Zhang, Bojun Yang, Shuo He, Weitong Chen, Wei Emma Zhang, Olaf Maennel, Lei Feng, and Miao Xu. Test-time attention purification for backdoored large vision language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 22826–22835, 2026. Runkai Zheng, Rongjun Tang, Jianze Li, and Li Liu. Data-free backdoor removal based on channel Lipschitzness. In 
+
+European Conference on Computer Vision , 2022. Deyao Zhu, Jun Chen, Xiaoqian Shen, Xiang Li, and Mohamed Elhoseiny. MiniGPT-4: Enhancing vision-language understanding with advanced large language models. In International Conference on Learning Representations ,2024. 11 Selective Channel Restoration AR XIV PREPRINT 
+
+## Appendix Contents 
+
+• A. Detailed Experimental Settings 
+
+– A.1 Models 
+
+– A.2 Datasets 
+
+– A.3 Backdoor Attacks 
+
+– A.4 Defense Baselines • B. Method Details and Supporting Experiments 
+
+– B.1 Projection Fragility Probe 
+
+– B.2 Hyperparameters • C. Limitations and Scope 
+
+## A Detailed Experimental Settings 
+
+A.1 Models 
+
+Qwen3-VL-8B-Instruct [Bai et al., 2025] couples a high-resolution visual encoder with the Qwen3 language model. Its visual-to-language projection interface contains a visual merger and three DeepStack mergers that inject visual information at multiple depths. In our experiments, attack training updates this interface while keeping the visual encoder and language model frozen. For PSR and all comparison methods, we target the output channels of the two affine layer families in every merger. We denote these layer sets by 
+
+LQ1 and LQ2 and use LQ = LQ1 ∪ L Q2 as the target-layer set. LLaVA-1.5-7B [Liu et al., 2024] uses a CLIP ViT-L/14 visual encoder with 336px input resolution, a two-layer MLP projector, and the Vicuna-7B language model. The projector is the only module updated during attack training; the visual encoder and language model remain frozen. We denote its two affine layers by ℓL1 and ℓL2 and target both layers, giving LL = {ℓL1 , ℓ L2 }. The two architectures therefore allow us to evaluate the same defense at the projection-interface level on LLaVA’s compact projector interface and Qwen3-VL’s distributed merger interface. 
+
+A.2 Datasets 
+
+MS-COCO [Lin et al., 2014, Chen et al., 2015] is a large-scale benchmark for image understanding and captioning. It contains over 
+
+200 ,000 labeled images spanning 80 object categories, with five human-written captions for each image. We use the 2017 split, which contains approximately 118 ,000 training images and 5,000 validation images. For captioning, the model is prompted with “Describe this image in a short sentence,” and performance is measured by corpus-level CIDEr [Vedantam et al., 2015]. VQAv2 [Goyal et al., 2017] contains approximately 204 ,000 images and 1.1 million human-generated questions, each paired with ten crowd-sourced answers. Compared with VQAv1, it reduces language priors by pairing similar images with the same question but different answers, making visual evidence more important for answering. We follow the standard open-ended setting and report accuracy using the official evaluation protocol. 
+
+A.3 Backdoor Attacks 
+
+We evaluate four established image-space trigger constructions and two attacks designed for vision-language generation. For BadNet, Blended, ISSBA, WaNet, and VLOOD, poisoned examples replace the original response with the attack target. TrojVLM instead inserts the target phrase into the original response so that the remaining content is preserved. Figure 4 shows representative triggered inputs produced from the same clean image. BadNet [Gu et al., 2019] embeds a fixed patch into the input image. The localized and visible pattern serves as the trigger for generating the target response. Blended [Chen et al., 2017] linearly blends a trigger image with the clean input, producing a global low-contrast pattern that is less conspicuous than a localized patch. Following the reference implementation, we use the Hello Kitty trigger for the Blended attack. WaNet [Nguyen and Tran, 2021] applies a smooth spatial deformation field to the image. The resulting geometric distortion acts as an imperceptible trigger without introducing an additive patch. ISSBA [Li et al., 2021] uses an encoder–decoder network to embed a predefined signal into each image. This produces invisible, instance-specific triggers rather than a single shared visual pattern. TrojVLM [Lyu et al., 2024] is tailored to vision-language generation. It uses a patch trigger and learns to insert the target phrase at a random position in the original response while preserving the surrounding clean content. VLOOD [Lyu et al., 2025] is a VLM-specific attack that uses out-of-distribution auxiliary data and dedicated objectives to implant a backdoor while retaining the model’s clean knowledge. We use a patch-based trigger and replace the original response with the target response in our evaluated models. 
+
+12 Selective Channel Restoration AR XIV PREPRINT BadNet Blended ISSBA   
+
+> WaNet TrojVLM VLOOD
+
+Figure 4: Visual comparison of the six trigger types applied to the same clean image. Top row: BadNet, Blended, and ISSBA. Bottom row: WaNet, TrojVLM, and VLOOD. 
+
+A.4 Defense Baselines 
+
+We compare PSR with three controlled projection-interface-level channel-selection baselines. Each method assigns or samples channel priorities independently within every target layer. For a given poisoned model, all methods restore the same per-layer number of selected channels to their corresponding pretrained values in ϕ0, as defined in Section 4.3. Clean FT is a separate training-based baseline. It initializes from the poisoned model and continues fine-tuning the projection interface on clean data for two epochs, while keeping the visual encoder and language model frozen. Random selects output channels uniformly at random within each target layer and serves as a score-free random-selection baseline for restoring the same number of channels. FP [Liu et al., 2018] identifies channels that remain weakly activated on clean inputs. For each target layer ℓ, let T (ℓ)(x) denote the valid output-token positions used for the activation average on calibration example x, and let N (ℓ) 
+
+> C
+
+= P 
+
+> x∈C
+
+|T (ℓ)(x)|. We assign channel i the mean absolute activation score 
+
+a(ℓ) 
+
+> i
+
+= 1
+
+N (ℓ)
+
+> C
+
+X
+
+> x∈C
+
+X 
+
+> t∈T (ℓ)(x)
+
+u(ℓ) 
+
+> i,t
+
+(x) . (7) Channels are ranked independently in each layer, and the k(ℓ) channels with the smallest a(ℓ) 
+
+> i
+
+are selected. Their weight rows and biases are restored from ϕ0 according to Section 4.3. FP also includes clean recovery training with SGD, updating only the unselected channels in the target layers. CLP [Zheng et al., 2022] scores channels by their sensitivity to changes in the layer input. For the affine mapping defined in the main text, the channel-wise Lipschitz proxy is the Euclidean norm of the corresponding poisoned weight row: 
+
+c(ℓ) 
+
+> i
+
+= W(ℓ) 
+
+> i, :
+
+(ϕb) 2
+
+. (8) A larger c(ℓ) 
+
+> i
+
+indicates that channel i can produce a larger output change for a given input perturbation. CLP therefore ranks channels independently in each layer and selects the k(ℓ) largest scores. The score depends only on the poisoned projection parameters and requires no calibration data. The original CLP rule thresholds scores using their layer-wise distribution; for a controlled comparison, 
+
+13 Selective Channel Restoration AR XIV PREPRINT 
+
+we replace that threshold with the same fixed per-layer budget used by PSR, Random, and FP, and apply the common restoration operation using ϕ0 to the selected channels. 
+
+## B Method Details and Supporting Experiments 
+
+B.1 Projection Fragility Probe 
+
+This subsection reports the controlled probe that motivates our design (Section 1). The goal is to test whether, under an identical projector-perturbation budget, a poisoned projector exhibits a larger increase in clean task loss than a clean projector. The probe optimizes only temporary perturbations. It uses projected sign-gradient ascent on parameter-wise perturbations. We compare a cleanly adapted LLaVA-1.5-7B model with models adapted from the corresponding pretrained base VLM using BadNet-, Blended-, or TrojVLM-poisoned data. Figure 1 summarizes the probe on 64 clean validation examples for each of COCO and VQAv2. For each linear layer ℓ in the projector, we apply independent multiplicative perturbations to its weight and bias elements: fW(ℓ) = W(ℓ) ⊙ (1 + ξ(ℓ) 
+
+> W
+
+) and eb(ℓ) = b(ℓ) ⊙ (1 + ξ(ℓ) 
+
+> b
+
+). Here, each perturbation has the same shape as its corresponding parameter tensor, and all entries lie in [−ϵ, ϵ ]. Let ξ collect these perturbations and ϕξ denote the resulting projection parameters. For an image x, a task instruction q, and a reference response o = ( o1, . . . , o n), the teacher-forced task loss is 
+
+LCE (ϕ, ξ; x, q, o) = − 1
+
+n
+
+> n
+
+X
+
+> t=1
+
+log pϕξ (ot | x, q, o<t ) . (9) Here, n is the number of response tokens included in the loss, ot is the t-th reference token, o<t is the ground-truth response prefix, and pϕξ is the token distribution predicted by the VLM with the perturbed projector. Thus, o is a caption for COCO and an answer for VQAv2. Teacher forcing supplies the reference prefix when predicting each token. The visual encoder, language model, and original projection parameters ϕ remain fixed; only ξ is optimized. For each image and nonzero budget, we initialize the perturbation entries uniformly in [−ϵ, ϵ ] and maximize Equation 9 using 10 steps of projected sign-gradient ascent with step size ϵ/ 5, projecting the entries back to this interval after every step. For each model, 
+
+Lbase is the loss with ξ = 0, and Ladv is the loss after this optimization. We compute ∆L = Ladv − Lbase for each image and report its mean over the 64-example validation subset, so each model is compared against its own unperturbed loss. The perturbation is discarded before the next image. Figure 1 shows results for ϵ ∈ { 0.01 , 0.02 , 0.05 , 0.10 }; the unperturbed case ϵ = 0 defines 
+
+Lbase but is not plotted. 
+
+B.2 Hyperparameters 
+
+The common PSR configuration uses a perturbation bound and inner ascent step size of ϵ = 0 .016 , two inner ascent steps, a robustness-score learning rate of ηθ = 0 .06 , a robustness-score regularization weight of λθ = 0 .006 , a clean-loss weight of 
+
+λclean = 0 .5, and Topt = 1 ,000 optimization rounds. We use the clean calibration set described in Section 5.1. For a simple fixed-budget setting, we recommend a restoration ratio of r = 30% .
+
+## C Limitations and Scope 
+
+Our evaluation focuses on backdoors introduced by fine-tuning the visual-to-language projection interface while keeping the visual encoder and language model frozen. The effectiveness of PSR against backdoors introduced through other model components has not been evaluated. Applying PSR also requires access to the corresponding pretrained projection parameters and a small clean calibration set from the target task. Our ablation study shows a trade-off between backdoor suppression and clean-task performance: increasing the restoration ratio further reduces attack success but also degrades clean-task utility in the evaluated settings. In addition, our experiments cover two VLM architectures and two tasks, image captioning and visual question answering. Whether these findings extend to other architectures and tasks remains to be investigated. 
+
+14

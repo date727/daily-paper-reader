@@ -6,79 +6,85 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-10-01
-- 运行时间：2026-10-02 00:18:18 UTC
+- 最新运行日期：2026-10-02
+- 运行时间：2026-10-02 23:58:20 UTC
 - 运行状态：成功
-- 本次总论文数：19
-- 精读区：7
+- 本次总论文数：21
+- 精读区：9
 - 速读区：12
 
 ### 今日简报（AI）
-今日精读7篇、速读12篇论文，聚焦AI安全与模型优化领域  
-高分论文集中探讨后门检测、对抗攻击防御及隐私语义计算技术  
-建议关注目标检测净化方法与LoRAs触发器扫描工具的实践应用
-- 详情：[/202610/01/README](/202610/01/README)
+今日聚焦AI安全与医学影像领域，精读9篇高分论文并速览12篇前沿成果  
+重点推荐后门机制防御与视觉语言模型鲁棒性提升两大方向  
+建议关注后门攻击检测方法及医学图像翻译技术的实用进展
+- 详情：[/202610/02/README](/202610/02/README)
 
 ### 精读区论文标签
-1. [ODPure: Backdoor Purification for Object Detection via Ensemble Corruption Consensus](/202610/01/2609.28239v1-odpure-backdoor-purification-for-object-detection-via-ensemble-corruption-consensus)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御方法
-2. [Trusted Model Environment for Private Semantic Computations](/202610/01/2609.30032v1-trusted-model-environment-for-private-semantic-computations)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络在图像生成中的应用
-3. [Region-Level Black-Box Defense Against Stealthy Embedding-Space Backdoors in CLIP](/202610/01/2609.31558v1-region-level-black-box-defense-against-stealthy-embedding-space-backdoors-in-clip)  
-   标签：评分：8.0/10、query:image-adversarial
+1. [Information Blackhole: Exploring Backdoor Mechanism in 3D Point Cloud Reconstruction](/202610/02/2609.33569v1-information-blackhole-exploring-backdoor-mechanism-in-3d-point-cloud-reconstruction)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动对生成模型的影响
+2. [Selective Channel Restoration for Backdoored Vision-Language Models](/202610/02/2609.37759v1-selective-channel-restoration-for-backdoored-vision-language-models)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击下的图像模型保护
+3. [Adversarial Training for Pixel Diffusion](/202610/02/2609.38170v1-adversarial-training-for-pixel-diffusion)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗训练用于像素扩散模型
+4. [Learning Normal Diffusion Dynamics for Backdoor Defense in Text-to-Image Models](/202610/02/2609.39548v1-learning-normal-diffusion-dynamics-for-backdoor-defense-in-text-to-image-models)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动对生成模型的影响
+5. [Probabilistic Adversarial Training](/202610/02/2609.39798v1-probabilistic-adversarial-training)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动与鲁棒性分析
+6. [WARP: A Unified Benchmark for Invisible Image Watermarking -- Robustness and Protection Against Attacks](/202610/02/2609.40031v1-warp-a-unified-benchmark-for-invisible-image-watermarking----robustness-and-protection-against-attacks)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：研究水印鲁棒性与攻击防护
+7. [Curvature Under Attack in hZACH-ViT: Gauge Symmetry, Boundary Saturation, and Adversarial Failure](/202610/02/2610.00680v1-curvature-under-attack-in-hzach-vit-gauge-symmetry-boundary-saturation-and-adversarial-failure)  
+   标签：评分：9.0/10、query:image-adversarial
    evidence：对抗攻击的图像防御策略
-4. [Frequency-Domain AI-Generated Image Detection: Exploring Decoder and Channel Attention for Feature Refinement](/202610/01/2609.31723v1-frequency-domain-ai-generated-image-detection-exploring-decoder-and-channel-attention-for-feature-refinement)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：频率域图像检测方法
-5. [StegGNN: Learning Graphical Representation for Image Steganography](/202610/01/2609.32362v1-steggnn-learning-graphical-representation-for-image-steganography)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：生成对抗网络用于图像隐含结构建模
-6. [Residual-Stream Burden Shapes Representation Learning in Diffusion Transformers](/202610/01/2609.33895v1-residual-stream-burden-shapes-representation-learning-in-diffusion-transformers)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：扩散模型与对抗扰动相关
-7. [Physics-informed self-supervised generation of digital brain MRI phantoms from weighted images using differentiable MRI simulation](/202610/01/2609.35273v1-physics-informed-self-supervised-generation-of-digital-brain-mri-phantoms-from-weighted-images-using-differentiable-mri-simulation)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：基于物理信息的MRI图像生成框架
+8. [Don't Waste the Noise: Importance-Guided Perturbation Allocation under Joint Global and Local Constraints](/202610/02/2610.00861v1-dont-waste-the-noise-importance-guided-perturbation-allocation-under-joint-global-and-local-constraints)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：探讨对抗扰动对生成模型的影响
+9. [Robust Evidential Learning Through Latent Consistency](/202610/02/2610.01384v1-robust-evidential-learning-through-latent-consistency)  
+   标签：评分：9.0/10
+   evidence：与图像对抗攻击防御技术相关
 
 ### 速读区论文标签
-1. [FuseReg: Regularizing Layer Fusion Mitigates the Reconstruction-Generation Gap in Representation Autoencoders](/202610/01/2609.31620v2-fusereg-regularizing-layer-fusion-mitigates-the-reconstruction-generation-gap-in-representation-autoencoders)  
+1. [SynDORBench: Evaluating LVLM Perceptual Robustness Under Physically Constrained Visibility Conditions](/202610/02/2609.31823v1-syndorbench-evaluating-lvlm-perceptual-robustness-under-physically-constrained-visibility-conditions)  
    标签：评分：8.0/10、query:image-adversarial
+   evidence：评估LVLM在物理约束下的感知鲁棒性
+2. [PredRA: Fast Medical Image Translation by Deterministic Component Extraction and Controlled Stochastic Refinement](/202610/02/2609.31912v1-predra-fast-medical-image-translation-by-deterministic-component-extraction-and-controlled-stochastic-refinement)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：扩散模型用于图像生成
+3. [RefAdapt-DiT: Adaptive Joint Attention for Reference-Conditioned Diffusion Transformers](/202610/02/2609.32415v1-refadapt-dit-adaptive-joint-attention-for-reference-conditioned-diffusion-transformers)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗训练用于像素扩散模型
+4. [Synthetic Thermal Image Generation for Real-Time Animal Detection Under Low-Visibility Conditions](/202610/02/2609.32944v1-synthetic-thermal-image-generation-for-real-time-animal-detection-under-low-visibility-conditions)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：生成对抗网络用于图像生成
+5. [Sufficiently Reduced Distributional Regression](/202610/02/2609.29291v1-sufficiently-reduced-distributional-regression)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动下的分布回归方法
+6. [Multimodal Thinking with Renderable Programs](/202610/02/2609.30130v1-multimodal-thinking-with-renderable-programs)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：图像推理中的多模态生成方法
+7. [Selective Amortization of Full-Budget Counterfactual Reasoning for Visual Token Communication](/202610/02/2609.30756v1-selective-amortization-of-full-budget-counterfactual-reasoning-for-visual-token-communication)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗攻击防御中的候选评估方法
+8. [RefCompose: Multi-Reference Image Generation via LoRA-Conditioned Diffusion](/202610/02/2609.32389v1-refcompose-multi-reference-image-generation-via-lora-conditioned-diffusion)  
+   标签：评分：7.0/10、query:image-generation
+   evidence：多参考图像生成
+9. [ManiVid: Unified and Explainable Forensic Analysis of Manipulated Videos](/202610/02/2609.30934v1-manivid-unified-and-explainable-forensic-analysis-of-manipulated-videos)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：对抗扰动用于图像篡改检测
+10. [UNMATCH: Selective Unbalanced Token-Patch Matching for Forensic Image-Claim Verification](/202610/02/2609.31766v1-unmatch-selective-unbalanced-token-patch-matching-for-forensic-image-claim-verification)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：研究对抗攻击下的图像模型保护
+11. [REALIS: A Curated Dataset for Studying the Challenges of AI Image Detection](/202610/02/2609.32734v1-realis-a-curated-dataset-for-studying-the-challenges-of-ai-image-detection)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：研究对抗攻击对图像检测的影响
+12. [Printability-Constrained Adversarial Decals for Near-Nadir Aerial Perception: Measured Ink Gamuts, Nested Realism Constraints, and a Physical-World Bound](/202610/02/2609.33513v1-printability-constrained-adversarial-decals-for-near-nadir-aerial-perception-measured-ink-gamuts-nested-realism-constraints-and-a-physical-world-bound)  
+   标签：评分：6.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-2. [TokenScanner: Detecting Backdoors and Discovering Triggers in Text-to-Image LoRAs via Full Vocabulary Scanning](/202610/01/2609.31878v1-tokenscanner-detecting-backdoors-and-discovering-triggers-in-text-to-image-loras-via-full-vocabulary-scanning)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：检测LoRA中的后门触发器
-3. [Evasion Attacks on Cost-Utility-Based Adversarial Training for Online AutoML in IoT Networks](/202610/01/2609.31981v1-evasion-attacks-on-cost-utility-based-adversarial-training-for-online-automl-in-iot-networks)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗攻击防御策略
-4. [Domain Adaptation with Target Information via Doubly-Anchored Distributionally Robust Optimization](/202610/01/2609.32730v1-domain-adaptation-with-target-information-via-doubly-anchored-distributionally-robust-optimization)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：基于分布鲁棒优化的防御方法
-5. [From Graphs to Feeders: Constraint-Guided Diffusion for Rule-Compliant Feeder Generation](/202610/01/2609.29879v1-from-graphs-to-feeders-constraint-guided-diffusion-for-rule-compliant-feeder-generation)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：约束引导扩散模型用于生成符合规则的配电网图像
-6. [Presence Is Not Faithfulness: Figurative Vehicle Intrusion in Text-to-Image Generation](/202610/01/2609.32188v1-presence-is-not-faithfulness-figurative-vehicle-intrusion-in-text-to-image-generation)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像生成问题
-7. [Safety Reconstructed: Generative Modeling via Masked Diffusion Builds Strong Safety Guardrails](/202610/01/2609.33634v1-safety-reconstructed-generative-modeling-via-masked-diffusion-builds-strong-safety-guardrails)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动与图像安全相关
-8. [UnfoldCRF: Structured Mask Refinement with Image-Conditioned Latent Regions](/202610/01/2609.33996v1-unfoldcrf-structured-mask-refinement-with-image-conditioned-latent-regions)  
-   标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的掩码优化
-9. [When Does Unsupervised Learning Succeed or Fail? A PoS Perspective on Reconstruction-Based Anomaly Detection](/202610/01/2609.28832v1-when-does-unsupervised-learning-succeed-or-fail-a-pos-perspective-on-reconstruction-based-anomaly-detection)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-10. [Structured Pose-Conditioned Flow Matching for Generative 5G CSI Augmentation](/202610/01/2609.29912v1-structured-pose-conditioned-flow-matching-for-generative-5g-csi-augmentation)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：生成式图像对抗扰动
-11. [EndoFSA: Endoscopic Few-Shot Image Generation via Rank-Constrained Parameter Adaptation](/202610/01/2609.29930v1-endofsa-endoscopic-few-shot-image-generation-via-rank-constrained-parameter-adaptation)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：基于GAN的生成对抗扰动方法
-12. [M3GD: Multi-Modal Multi-View Geometric Diffusion for Camera--LiDAR Novel View Synthesis](/202610/01/2609.30056v1-m3gd-multi-modal-multi-view-geometric-diffusion-for-camera--lidar-novel-view-synthesis)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗攻击与防御
 
 
 ### ⚡ 这个站点能做什么
