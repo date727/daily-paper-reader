@@ -1,0 +1,455 @@
+Title: Flat-Consensus Diffusion for Robust Data Reshaping under Noisy Evaluator
+
+URL Source: https://arxiv.org/pdf/2609.32696v1
+
+Published Time: Tue, 29 Sep 2026 01:10:35 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Flat-Consensus Diffusion for Robust Data Reshaping under Noisy Evaluator 
+
+Hongyu Cao 
+
+Clemson University Clemson, SC, USA hcao2@clemson.edu 
+
+Kunpeng Liu 
+
+Clemson University Clemson, SC, USA kunpenl@clemson.edu 
+
+Fei Xie 
+
+Portland State University Portland, OR, USA xie@pdx.edu 
+
+Sandip Ray 
+
+University of Florida Gainesville, FL, USA sandip@ece.ufl.edu 
+
+Abstract —Data shape determines how features are structured, how patterns are separated, and how distributions cover the underlying domain. Poor data shape can make models learn noise rather than generalizable structure. This paper studies robust feature-centric data reshaping: generating feature transformations that remain useful, stable, and reproducible under noisy evaluation and imperfect data conditions. We view reshaping operation sequence search as reward-guided diffusion generation, and robust reshaping as searching for regions in the latent reward landscape rather than isolated high-reward transformations. The key challenge is dual instability: noisy evaluators distort local reward guidance, while stochastic generative trajectories can converge to inconsistent solutions. We propose FCDiff, a flat-consensus diffusion framework that addresses both failures through a micro–macro decomposition. The micro layer replaces point-estimate reward guidance with Gaussian-smoothed, Monte Carlo averaged gradients, steering generation toward locally flat reward regions. The macro layer aggregates independently guided trajectories with a weighted Fréchet-mean barycenter, selecting consensus-supported basins and filtering stochastic outliers. Across an 8-dataset headline cohort under heavy-tailed evaluator noise, FCDiff attains the best aggregate rank on lower-tail reliability and robustness against both search-based AutoFE and robustness-oriented generative baselines, with statistically significant accuracy gains over every generative baseline. Our results show that robust data reshaping requires searching for flat, consensus-supported regions rather than sharp single-trajectory optima. 
+
+I. I NTRODUCTION 
+
+Real-world data rarely arrives in a shape that matches downstream learning tasks. In healthcare, materials science, transportation, energy, fraud detection, and cybersecurity, raw data is often noisy, sparse, imbalanced, and weakly separated. In these settings, model quality depends not only on model architecture or data scale, but also on data shape: how features are structured, how patterns are separated, and how distributions cover the domain. Feature-centric data reshaping aims to improve data shape by transforming and generating features, and has become a key tool for data-centric learning [1]–[3]. Concretely, a reshaping method applies a sequence of operations to the feature table, such as taking log( income ) or crossing age with BMI, and produces a new feature table. A downstream model is then trained on the new table, and its validation performance serves as the reward that guides the search for better operation sequences. However, most methods are designed for clean evaluation settings, while real-world reshaping must operate latent space reward  ±δ: reward collapses ±δ: reward stable (ours) (a) evaluator noise 
+
+> diffusion steps (independent guided trajectories) latent  zT
+> consensus (ours)
+> outlier, down-weighted
+> divergent endpoints (b) trajectory stochasticity
+
+Fig. 1: Robust data reshaping at a glance: two coupled instabilities. 
+
+(a) Evaluator noise. Search runs over a latent reward landscape scored by a noisy evaluator (gray band); under a small latent perturbation 
+
+±δ, a sharp peak loses its reward while a flat region keeps it. (b) 
+
+Trajectory stochasticity. Independent guided trajectories from the same noise zT end at different latents; we aggregate them into a weighted consensus (star) that down-weights stochastic outliers. FCDiff targets regions that are both flat and consensus-supported. 
+
+under noisy downstream feedback, perturbed measurements, and unstable search dynamics. This paper studies robust feature-centric data reshaping: how to generate feature transformations that remain useful, stable, and reproducible under imperfect data conditions. The core difficulty is that robust reshaping must handle two coupled sources of instability. First, noisy evaluators distort reward-guided search: data corruption, model sensitivity, and cross-validation randomness can make a brittle transformation appear useful, causing the search to overfit reward artifacts. Second, stochastic generative search is inherently unstable. Each search run follows its own random path, which we call a trajectory. Different trajectories may converge to different local optima, even when guided by the same reward model. These failures reinforce each other. A method that only smooths reward noise may still produce inconsistent trajectories, while a method that only aggregates trajectories may average around noisy sharp optima. Robust reshaping therefore requires both local stability under perturbation and global agreement across trajectories. Existing work only partially addresses this dual-instability problem. Reinforcement learning and evolutionary AutoFE arXiv:2609.32696v1 [cs.AI] 26 Sep 2026 methods search transformation sequences using downstream reward, but treat noisy finite-sample feedback as reliable and therefore overfit reward artifacts [1], [2]. Gradient-based and surrogate-based reshaping methods improve optimization efficiency, but still follow single optimization trajectories and do not address stochastic search instability [3]–[5]. Genera-tive and diffusion-based methods offer broader exploration of large transformation spaces, but typically rely on point-estimate reward gradients and lack cross-trajectory consensus mechanisms [6]. In short, existing methods address search, reward, or generation in isolation, but not the joint problem of noise-robust guidance and trajectory-level reproducibility. Our central perspective is simple: optimal data reshaping action search is reward-guided diffusion generation, and robust data reshaping is robustness-guided generation. In this view, discrete operation sequences are embedded in a continuous latent space, and each latent point has a predicted reward. This reframes robustness as a geometric property of this latent reward landscape. Robust reshaping actions should not lie on sharp single-trajectory reward peaks; they should lie in regions that are both locally flat under perturbation and consistently reached by multiple trajectories. This yields two design principles: within-trajectory perturbation insensitivity and between-trajectory agreement. Based on this view, we make three contributions. First, we formulate robust feature-centric reshaping as a dual-instability problem involving evaluator noise and trajectory stochasticity. Second, we develop a dual-level generative solution that explicitly targets both failure modes. Third, we empirically show that robust reshaping succeeds when it searches for flat, consensus-supported regions rather than optimizing a single noisy point estimate. We propose FCDiff, a diffusion framework for robust data reshaping that searches for flat, consensus-supported regions. At the micro level, FCDiff uses Gaussian smoothing and Monte Carlo averaged gradients [7], [8] to replace point-estimate reward guidance, steering generation toward flat reward regions. At the macro level, FCDiff uses a weighted Fréchet-mean barycenter [9] to aggregate multiple guided trajectories into a consensus latent, filtering stochastic outliers while preserving lower-tail reward. These mechanisms are complementary: the micro layer reduces sensitivity to local reward noise, while the macro layer improves reproducibility across stochastic runs. Across 8 datasets under heavy-tailed evaluator noise, FCDiff achieves the strongest lower-tail reliability, robustness, and reproducibility compared with AutoFE search and robustness-oriented generative baselines. The key finding is that robust data reshaping is not about finding the highest single reward peak; it is about finding feature transformations in flat, consensus-supported regions. Robust data reshaping reduces to a two-dimensional problem: local flatness ensures stability under evaluator perturbations, while global consensus ensures reproducibility under stochastic search. II. P ROBLEM STATEMENT 
+
+a) Feature-Centric Data Reshaping.: Let X ∈ RN ×F be the input feature matrix and y ∈ RN be the prediction targets, 
+
+N is the number of instances, F is the number of features, 
+
+O is a library of atomic feature transformation operations like logarithmic, interaction, and discretization . A reshaping operation sequence S = [ o1, . . . , o L], with ol ∈ O , maps the raw feature space to a transformed feature space X ′ = ϕS (X).A downstream evaluator assigns a reward score E(ϕS (X)) 
+
+based on predictive utility [10]. The goal is to search reshaping operation sequences that optimize this reward. 
+
+b) Two Instabilities.: First, reward-level instability arises because the evaluator is noisy: data corruption, model hy-perparameter sensitivity, and cross-validation randomness can make the same sequence receive inconsistent rewards. We denote such perturbations by ξ, and write Eξ for the evaluator realization under ξ. Second, trajectory-level instability arises because generative search is stochastic: multiple independent search trajectories, each of which is denoted by τ , can converge to different instable (high-reward but inconsistent) reshaping operation sequences. Thus, a robust method must avoid both noisy sharp optima and seed-dependent solutions. 
+
+c) The Robust Reshaping Objective.: We aim to discover the optimal generative policy πθ that produces a reshaping operation sequence S with high utility, local perturbation stability, and cross-trajectory consensus: 
+
+θ∗ = arg max 
+
+> θ
+
+Eτ ∼πθ Eξ
+
+ Eξ
+
+ ϕS(τ )(X)  , (1) where S(τ ) is the reshaping sequence produced by trajectory 
+
+τ .
+
+d) Design Implication.: The formulation implies: i) within each trajectory, reward guidance should be insensitive to local perturbations; ii) across trajectories, the final solution should be supported by consensus rather than selected from a single stochastic run. Section III instantiates these requirements with micro-level randomized smoothing and macro-level weighted Fréchet-mean aggregation. III. R OBUST DATA RESHAPING 
+
+We take a generative perspective: reshaping is not the problem of finding one optimal sequence, but of identifying a region in the transformation space that is both locally stable and consistently reachable. This reframes robust reshaping as searching for flat, consensus-supported regions in a stochastic reward landscape, rather than maximizing a single noisy objec-tive. We propose FCDiff , a diffusion framework for robust data reshaping that searches for flat, consensus-supported regions rather than sharp single-trajectory optima. Guided diffusion provides the key substrate: a continuous latent space in which local smoothing and global aggregation can be applied jointly during generation. At the micro level , FCDiff replaces point-estimate reward guidance with Gaussian-smoothed gradients, biasing generation toward flat regions that are insensitive to evaluator perturbations. At the macro level , FCDiff replaces single-trajectory selection with trajectory aggregation, identify-ing solutions that lie in consensus-supported basins rather than isolated optima. This enables robustness-aware search beyond greedy or single-trajectory methods. Backbone: VAERewardDiusion over reshaping sequences                                                     
+
+> Step 1: VAE encoderdecoder
+> nL
+> sequences π
+> Enc
+> d
+> z0Dec ˆπ
+> Step 2: Reward predictor Rϕ
+> z
+> MLP Rϕ
+> ˆv
+> ∇zRϕ(z)(reward gradient)
+> ˆv=Rϕ(z)
+> surrogate of E:
+> Rϕ≈E◦ Dec , on (π, v )
+> Step 3: Diusion prior over z
+> z0
+> ztzT∼ N (0 , I )
+> qq
+> denoiser ϵθ
+> co-trained (stop-grad) reverse pθ(zt−1|zt)
+> same latent space Z
+> Micro: robust guidance within one trajectory (randomized smoothing)
+> (a) Point-estimate guidance
+> z
+> Rϕgt=∇ztRϕ(zt)
+> small δ
+> ⇒collapse one noisy query →sharp peak
+> (b) Randomized smoothing
+> Gaussian nbhd ( σ)
+> zt
+> KMC samples δk∼N (0 , σ 2I)z
+> at region
+> Jmicro (zt)= 1
+> K
+> ∑
+> kRϕ(zt+δk)
+> (c) Guided reverse update
+> z
+> Rϕ
+> zT
+> ×
+> sharp peak (brittle)
+> ∇Rϕ
+> z0
+> at basin
+> ∇Jmicro
+> ∇Jmicro steers to the at basin, not the sharp peak
+> Macro: consensus across trajectories (weighted Fréchet mean)
+> z(m)
+> T∼ N (0 , I )
+> Micro-guided reverse diusion run per seed
+> m=1 , . . . , M
+> z(1) 0
+> z(2) 0
+> z(3) 0outlier
+> Mindependent trajectories →endpoints
+> weighted Fréchet mean
+> wm∝exp (Rϕ(z(m)0)/β )
+> z∗=
+> ∑
+> mwmz(m)0
+> ∑
+> mwm
+> heavy-tailed →geo. median
+> z∗
+> consensus Dec
+> π∗
+> Dec( z∗)
+
+Fig. 2: FCDiff as a symmetric micro–macro framework for robust data reshaping. A VAE–reward–diffusion backbone builds a continuous latent reward geometry over discrete reshaping sequences. The micro layer handles local reward instability by smoothing point-estimate guidance into flat-region guidance. The macro layer handles trajectory-level instability by aggregating multiple guided endpoints into a consensus latent. Together, FCDiff searches for flat, consensus-supported regions rather than sharp single-trajectory optima. 
+
+A. Backbone: Latent Reward Geometry for Generative Reshap-ing 
+
+Robust reshaping requires searching for regions that are locally flat under perturbations and consistently reachable across trajectories. This is difficult in the original discrete transformation space, where search is combinatorial and rewards are sparse, noisy, and non-differentiable. We therefore adopt the VAE–reward–diffusion backbone of DIFFT [11], on top of which our two ensemble layers (§III-B, §III-C) are built; the Std-Diff row of Table II is exactly this vanilla DIFFT backbone with K=M =1 . This backbone instantiates the generative policy πθ in Eq. (1): the VAE defines the continuous search space, the reward-guided diffusion prior realizes stochastic sequence generation, and the decoder maps sampled latents back to reshaping sequences S.First, a VAE maps each discrete reshaping sequence S to a latent code z0 = Enc( S), with S ≈ Dec( z0), enabling gradient-based search while preserving decode validity. Second, a differentiable reward predictor Rϕ : Z → R, a surrogate of the downstream evaluator E, is jointly trained on sequence– reward pairs, shaping the latent space into a reward-aware geometry where nearby points have meaningful utility structure; in this geometry, flat regions correspond to reshaping strategies whose predicted utility is stable under perturbation. Third, a diffusion prior [12] models the distribution of valid latent sequences by progressively noising z0 to zT ≈ N (0 , I ) and learning the reverse denoising process. This gives FCDiff a stochastic generative search process over valid transformations. The backbone is not the robustness mechanism itself; it provides the framework on which robustness can be imposed. The VAE supplies a smooth search space, the reward predictor supplies a utility-aligned geometry, and diffusion supplies stochastic trajectories, enabling local perturbation smoothing (§III-B) and cross-trajectory consensus (§III-C). 
+
+B. Micro: Local Stability via Randomized Smoothing 
+
+Point-estimate reward guidance is brittle under noisy evalu-ators. In our setting, evaluator perturbations ξ enter the search as stochastic reward queries, i.e., as noise on the guidance gradient ∇zt Rϕ(zt); latent-space flatness is therefore the search-space counterpart of evaluator-perturbation stability — a correspondence verified by the gradient-variance and reward-floor diagnostics in Sec. IV, and one that holds insofar as the noise is variance-like rather than a systematic surrogate bias. During reverse diffusion, a single noisy gradient can pull the trajectory toward a sharp latent point that appears high-reward under one evaluator realization but fails under small perturbations. This is the within-trajectory instability in Eq. (1): the search overfits local reward artifacts. FCDiff addresses this by replacing point-estimate guidance with local smoothing [7], [8]. At each reverse step t, instead of using ∇zt Rϕ(zt), we evaluate the reward predictor over a Gaussian neighborhood around zt:
+
+Jmicro (zt) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+Rϕ(zt + δk), δk ∼ N (0 , σ 2I). (2) where K is the number of MC perturbations, δk are i.i.d. Gaus-sian noise with smoothing radius σ (tied to the per-dimension latent scale), and Jmicro is the locally smoothed surrogate of 
+
+Rϕ.The reverse update then uses ∇zt Jmicro (zt) as the guidance direction. This changes the guidance signal from attraction to a single point into attraction to a locally stable region. Geometrically, randomized smoothing favors latent regions where nearby perturbations preserve high reward. Thus, one guided trajectory produces an endpoint z0 whose predicted utility is less sensitive to evaluator noise. This implements the first robustness requirement: local perturbation stability within a single diffusion trajectory. 
+
+C. Macro: Global Consistency via Trajectory Consensus 
+
+Local smoothing stabilizes each trajectory, but stochastic generation can still produce divergent endpoints across runs. Even when each trajectory is locally robust, different noise realizations of the reverse diffusion process may converge to different high-reward but inconsistent reshaping strategies. This is the between-trajectory instability in Eq. (1): the final solution depends on a single stochastic realization. FCDiff addresses this by replacing single-trajectory selection with trajectory consensus. We run M independently guided trajectories and obtain endpoints {z(1) 0 , . . . , z (M )0 }. Instead of selecting the highest-reward sample, we compute a weighted Fréchet mean: 
+
+z∗ = arg min 
+
+> zM
+
+X
+
+> m=1
+
+wm ∥z − z(m)0 ∥2, (3) where z∗ is the consensus latent aggregating the M endpoints into a single representative point, with weights 
+
+wm ∝ exp  Rϕ(z(m)0 )/β . (4) where β > 0 is a softmax temperature and Rϕ is the surrogate, not the downstream evaluator E; β → ∞ re-covers the unweighted Fréchet mean, β → 0+ collapses to top-1 selection. Eq. (3) admits the closed form z∗ =
+
+PMm=1 wmz(m)0
+
+ P Mm=1 wm, i.e., a reward-weighted average of the trajectory endpoints. This changes the selection rule from “best sample” to “center of agreement.” Geometrically, robust reshaping strategies form broad basins that are repeatedly reached across trajectories, while spurious solutions appear as isolated peaks visited by only a few runs. The weighted Fréchet mean concentrates on high-reward, high-consensus regions and filters trajectory-level outliers. Decoding z∗ gives the final reshaping sequence S∗ = Dec( z∗).This implements the second robustness requirement: global reproducibility across diffusion trajectories. The idea that a single level of consistency is insufficient also appears in generative imputation, where multi-level causal constraints outperform single-level ones [13]. 
+
+a) Micro–Macro Symmetry.: The micro and macro com-ponents of FCDiff form a symmetric decomposition of robust reshaping: the micro layer stabilizes guidance within a single trajectory, while the macro layer stabilizes selection across trajectories. Table I summarizes this correspondence. Taken together, FCDiff turns robust data reshaping from point-wise optimization into region-level inference over a                      
+
+> Micro (Local) Macro (Global)
+> Failure Mode Noisy reward gradients Stochastic trajectory divergence Operator Gaussian smoothing Fréchet mean aggregation Objective Relaxation R(z)→Eδ[R(z+δ)] max →consensus center Geometry Flat regions Broad basins Effect Reduces local sensitivity Reduces cross-run variance Output Stable trajectory endpoint Consensus latent solution
+> TABLE I: Structural symmetry of the micro and macro components in FCDiff. The two layers address complementary sources of instability and jointly enable region-level robust reshaping.
+
+structured latent space. The backbone constructs a continuous reward-aware geometry and a stochastic trajectory distribution; the micro layer enforces local flatness through randomized smoothing; and the macro layer enforces global consensus through trajectory aggregation. These components form a coordinated system for addressing the two instability sources identified in Section 2. Section 4 empirically verifies that this micro–macro decomposition improves reliability, robustness, and reproducibility under noisy evaluators. IV. E XPERIMENTS 
+
+Our experiments test the central claim of FCDiff: robust data reshaping requires both local flatness and global consensus. We evaluate downstream reliability under noisy evaluators, local stability from randomized smoothing, and cross-trajectory reproducibility from consensus aggregation. All methods use the same noisy-evaluator protocol: corrupted reward queries during search and clean downstream evaluation after search. We report both performance metrics and mechanism diagnostics to show not only whether FCDiff works, but also why it works. 
+
+a) Metric policy.: We report two metric classes. Pri-mary (downstream): Average Performance and Worst-10% Performance (lower-tail reliability), used for RQ1, RQ2, RQ6. Performance is the mean 5-fold CV score on the clean predictor: 1−RAE on the four regression datasets (openml_586/589/607/620 ) and macro-F1 on the four classification datasets ( spectf , svmguide3 , spam_base ,
+
+ap_omentum_ovary ). Both are higher-is-better. Secondary (surrogate-space): Average / Worst-10% Utility of Rϕ, Utility Variance, adv _floor /adv _drop under ℓ∞ PGD, and per-step gradient variance of ∇z Rϕ, used for RQ3, RQ4, RQ5. We further distinguish decode validity — a syntactic check on the decoded token sequence (minimum non-pad length and out-of-vocabulary fraction) — from the usable-sample rate ,the fraction of generated samples that decode, apply to the feature table, and yield a finite downstream score; the latter is the strictly stronger criterion. The micro/macro orthogonality of RQ4b is reported in surrogate-utility space by design: it is a property of the latent reward landscape, not the decoded task. All scalars are mean ± std across seeds; comparisons use paired Wilcoxon signed-rank tests ( p< 0.05 ). 
+
+b) Baselines.: Seven baselines, identical evaluator set-tings and matched compute, in two categories. Feature-transformation search : (1) Std-Diff (reward-guided la-tent diffusion, no smoothing/ensemble); (2) RL-AutoFE [1]; (3) EvoSearch [2], [14]; (4) LLM-FE [15]. Robustness-oriented : (5) Adversarial-PGD , inner-loop PGD yield-ing ∇z R(z + δ∗) with δ∗ = arg min ∥δ∥∞≤ϵ R(z + δ); (6) 
+
+Grad-Clip , gradient clipping / median-of-means [16]–[18]; (7) Medoid-Cons , medoid-based trajectory selection [19]. 
+
+A. Overall Reliability under Noisy Evaluators 
+
+We first evaluate whether FCDiff improves downstream reliability when the reshaping search is guided by noisy reward signals. All methods optimize under the same heavy-tailed evaluator noise (Student-t, ν=3 ), while final performance is measured on a clean downstream evaluator. This isolates robustness of the search process from downstream model quality. 
+
+Main finding. Table II shows that FCDiff consistently achieves the strongest lower-tail reliability among robust generative methods. Across the eight headline datasets, FCDiff attains the best or tied-best CVaR@5 on 5/8 datasets and the lowest CVaR@5 mean rank overall (Table III), together with the best mean performance within the robust-generation cohort. Pairwise comparisons show that FCDiff outperforms or matches all baselines on average performance ( 8/8 against Std-Diff/Adv-PGD/Grad-Clip/Medoid-Cons) and dominates lower-tail metrics (CVaR@5 and Worst) across nearly all datasets. Compared with search-based methods, FCDiff ties EvoSearch on mean performance ( 4W/4L ) and outperforms RL-AutoFE (5W/3L ), while achieving stronger lower-tail reliability ( 7/8 
+
+incl. ties vs. EvoSearch, 8/8 vs. RL-AutoFE). 
+
+Interpretation. These gains reflect the expected behavior of region-level search. Lower-tail metrics measure whether generated reshaping solutions remain useful beyond their best samples. FCDiff improves these metrics because it concentrates generation in flat, consensus-supported regions rather than relying on isolated high-reward points that are sensitive to noise. As a result, the entire distribution of generated solutions becomes more reliable, not just the top-ranked sample. 
+
+Why baselines fail. Search-based AutoFE methods return a small number of pipelines and treat noisy reward feedback as reliable, making them sensitive to evaluator noise. In contrast, standard diffusion (Std-Diff) lacks both smoothing and consensus, leading to unstable guidance and frequent unusable samples under noise. Robust optimization baselines (Adv-PGD, Grad-Clip) improve local stability but do not address trajectory-level variability, while Medoid-Cons aggregates trajectories without stabilizing guidance. FCDiff is the only method that addresses both failure modes simultaneously. 
+
+Key insight. The results confirm the central claim of this paper: robust data reshaping is not achieved by finding a single high-reward transformation, but by identifying regions that are both locally flat and consistently reachable across stochastic trajectories. 
+
+B. Aggregate Reliability Summary 
+
+Table III aggregates the per-dataset numbers of Table II into a per-metric mean rank and a paired Wilcoxon significance summary across the 8-dataset headline cohort. FCDiff attains the lowest mean rank on all three metrics (Perf. 2.25, CVaR@5 2.00, Worst 3.12), with the Perf. improvement over every robust-gen baseline statistically significant at p = 0 .008 (paired Wilcoxon, n=8 ) and the CVaR@5 improvement significant against three of four robust-gen baselines. The Worst-metric tie with Std-Diff is mechanism-aligned: both methods reach the same single-trajectory peak in the absolute-worst-case quantile, but Std-Diff lacks the consensus that lifts the broader lower tail (CVaR@5 separates them by +0 .25 score points on average). Compared with search-based methods, FCDiff ties EvoSearch on mean performance ( p = 0 .95 ) but dominates the tail ( p < 0.05 
+
+on CVaR@5 against all three search baselines). 
+
+C. Micro Layer Stabilizes Local Reward Guidance 
+
+We next isolate the micro layer and ask whether randomized smoothing stabilizes reward guidance within a single diffusion trajectory. The micro layer is designed to address finite-variance reward noise: instead of following one noisy point-estimate gradient, it averages reward gradients over a local Gaussian neighborhood. Figure 3b confirms this mechanism. Across representative datasets and denoising steps, increasing the number of Monte Carlo perturbations from K=1 to K≥4 reduces gradient variance by several orders of magnitude, with little additional gain beyond K=4 . This indicates that smoothing removes local reward artifacts rather than simply spending more compute on sampling. Figure 3a further shows that, under the same heavy-tailed noise (Student-t, ν=3 : finite variance, but a divergent third moment and kurtosis), the two layers act on different failure modes. Micro smoothing suppresses the per-step gradient variance, whereas macro consensus absorbs the trajectory drift that survives smoothing and accumulates over the reverse process. Thus, the two layers are not redundant: micro smoothing stabilizes the local guidance direction, while macro consensus stabilizes the trajectory distribution. This result supports the first half of the FCDiff decom-position. Local flatness is not only a geometric intuition; it appears empirically as lower gradient variance and more stable within-trajectory guidance under noisy evaluators. 
+
+D. Smoothing Reduces Variance but Does Not Remove Bias 
+
+We next test whether the micro layer remains reliable when the latent reward predictor Rϕ is misspecified. Randomized smoothing is designed to reduce local variance in reward guidance, but it should not be expected to correct systematic bias in the surrogate itself. We probe three misspecification scenarios — reduced-data (50% labels), noisy-target 
+
+(σ=0 .5 label noise), and architectural_underfit (low-capacity MLP) — and two uncertainty-aware mitigations: a 5-regressor ensemble and MC-dropout confidence weighting 
+
+Reff = Edrop [R] − 0.5 · Std drop [R].Figure 3c shows that under non-bias-dominant misspeci-fication ( noisy-target , reduced-data ), the ordering remains stable: full_FCDiff outperforms micro_only ,which in turn strongly outperforms standard guidance, on every dataset. This indicates that smoothing preserves useful reward ordering when the surrogate is noisy but still direc-tionally informative. Under architectural_underfit ,ml_586 ml_589 ml_607 ml_620 Group Method Perf. CVaR Worst Perf. CVaR Worst Perf. CVaR Worst Perf. CVaR Worst Search RL 0.682 0.662 0.662 0.678 0.662 0.662 0.666 0.651 0.651 0.660 0.647 0.647 Evo 0.698 0.658 0.658 0.691 0.652 0.652 0.688 0.661 0.661 0.657 0.638 0.638 LLM 0.688 0.654 0.635 0.685 0.664 0.639 0.666 0.659 0.658 0.656 0.640 0.638 Robust-gen Std 0.687 0.684 0.683 0.674 0.671 0.671 0.663 0.659 0.658 0.652 0.652 0.652                                                                                                                                                                 
+
+> Adv 0.687 0.683 0.683 0.674 0.671 0.671 0.663 0.659 0.659 0.652 0.650 0.650 Grad 0.687 0.683 0.683 0.675 0.671 0.671 0.663 0.659 0.658 0.654 0.650 0.650 Med 0.687 0.684 0.683 0.674 0.671 0.671 0.663 0.658 0.658 0.652 0.650 0.650
+> Ours 0.691 0.687 0.687 0.677 0.673 0.672 0.664 0.659 0.658 0.656 0.651 0.650
+> spectf svmgd3 spam ap_omn Group Method Perf. CVaR Worst Perf. CVaR Worst Perf. CVaR Worst Perf. CVaR Worst Search RL 0.615 0.534 0.534 0.746 0.735 0.735 0.949 0.946 0.946 0.780 0.764 0.764
+> Evo 0.583 0.519 0.519 0.757 0.733 0.733 0.948 0.947 0.947 0.778 0.763 0.763 LLM 0.611 0.550 0.521 0.754 0.733 0.733 0.945 0.941 0.941 0.779 0.761 0.759 Robust-gen Std 0.607 0.588 0.588 0.739 0.729 0.729 0.949 0.944 0.943 0.780 0.757 0.753 Adv 0.597 0.565 0.565 0.738 0.729 0.729 0.947 0.940 0.940 0.782 0.758 0.750 Grad 0.596 0.564 0.563 0.739 0.724 0.724 0.949 0.943 0.941 0.781 0.762 0.762 Med 0.583 0.550 0.550 0.739 0.724 0.724 0.948 0.942 0.942 0.781 0.765 0.764 Ours 0.642 0.580 0.564 0.761 0.740 0.735 0.950 0.947 0.947 0.783 0.767 0.763
+
+TABLE II: Main results (8-dataset headline cohort, 3 metrics: Perf., CVaR@5, Worst). All methods optimise under Student-t(ν=3 , σ =1) 
+
+noise on every reward query; downstream performance reported on the clean 5-fold CV evaluator ( 1−RAE for the four ml_* regression datasets, macro-F1 for spectf /svmgd3 /spam /ap_omn ). Search baselines: n=5 pipelines; robust-gen + Ours : up to n=100 /dataset. Per-cell global winners bolded (ties bolded jointly). The per-cell deltas look small, but they are systematically in Ours’ favour: 13/24 per-cell wins (incl. ties), and statistically separable from every robust-gen baseline on Perf. (paired Wilcoxon, p < 0.05 , n=8 ); full statistics in §IV-B. 586 spectf spam 0.0 0.2 0.4 0.6 0.8 1.0   
+
+> Perf. (inv.  0)
+> clean=0.69 clean=0.59 clean=0.95
+> Standard Micro-Only Macro-Only Ours
+> Stress test: heavy-tailed noise (Student-t,= 3 )
+
+(a) Heavy-tail layer-role split (⋆ = per-dataset winner). 1 4 16 
+
+MC samples K per step          
+
+> 10 15
+> 10 12
+> 10 9
+> 10 6
+> Var k[ zR (z + k)]
+> 10 6--10 9×drop at K4
+> ml586 iono ml637 late t
+> early t
+
+(b) K-plateau diagnostic. Per-step gradient vari-ance vs. K.607 spam 586 620 svm3 589 ap_om spectf 
+
+> 10 0
+> 10 2
+> 10 4
+> Average Utility (clean  R )
+> Std Micro Full
+
+(c) Surrogate-ordering preservation under clean 
+
+Rϕ.
+
+Fig. 3: Diagnostics for the micro and macro layers (cohort: 3-dataset SDEdit-init side cohort in (a)(b); 8-dataset headline cohort in (c)). 
+
+however, smoothing alone becomes insufficient because the reward predictor is systematically biased. The smoothed objective inherits the bias of Rϕ rather than removing it: noise-reduction is orthogonal to bias-reduction. Uncertainty-aware mitigations partially recover performance by down-weighting unreliable regions — ensemble is the safer default, while 
+
+mc_dropout is dataset-dependent across the headline cohort. This result clarifies the role of the micro layer: it is a variance-reduction mechanism for noisy reward guidance, not a universal correction for biased surrogate models. 
+
+E. Macro Consensus Improves Cross-Trajectory Stability 
+
+We next isolate the macro layer and ask whether trajectory consensus improves stability across stochastic diffusion runs. Even when local guidance is smoothed, independent trajectories can still terminate in different high-reward regions. The macro layer is designed to replace single-sample selection with consensus over trajectory endpoints. The ablation results show that consensus improves lower-tail reliability and reduces trajectory-level instability. Best-sample selection achieves high average utility but is less reliable in the tail because it rewards isolated lucky trajectories; mean-based consensus yields valid decodes when modes overlap, with a medoid fallback under multimodality. In contrast, Fréchet aggregation favors regions that are repeatedly reached by inde-pendent runs, which makes the final solution less dependent on any single stochastic realization. Across the 8-dataset headline cohort, full_FCDiff exceeds micro_only on Worst-10% Utility on every dataset (reported as single_FCDiff in Table VI). The margin is +5 .9% to +13 .9% on seven datasets (e.g., +8 .7% on openml_586 , +13 .9% on svmguide3 ) and 
+
++59% on ap_omentum_ovary . Separately, macro_only 
+
+contracts variance below micro_only on most datasets. The micro and macro layers also leave different empirical signatures: micro shifts the mean (bias reduction), while macro contracts the variance (dispersion reduction). On a SDEdit-init side cohort {openml_586 , spectf , svmguide3 },
+
+micro reduces utility variance 2.6–4.9× across all three (gradient-noise smoothing; Table IV), while macro additionally TABLE III: Aggregate reliability summary across the 8-dataset headline cohort. Mean rank is averaged over the 8 datasets within each metric (1 = best, 8 = worst). p (vs FCDiff) is the two-sided paired Wilcoxon signed-rank test on the per-dataset deltas. Bold =best mean rank in column; p bolded when p < 0.05 . FCDiff attains the lowest mean rank on every metric, with statistically significant gains across the four robust-gen baselines on Perf. and CVaR@5; the Worst-metric tie with Std-Diff is the regime in which both methods occupy the same single-trajectory peak, while CVaR@5 separates them.                                                          
+
+> Mean rank (1 = best) p(vs FCDiff)
+> Method Perf. CVaR@5 Worst Perf. CVaR@5 Worst
+> FCDiff (ours) 2.25 2.00 3.12 ———Std-Diff 4.88 3.25 3.25 .008 .203 .438 Adv-PGD 5.88 4.75 4.25 .008 .016 .125 Grad-Clip 5.25 4.88 4.88 .008 .016 .031
+> Medoid-Cons 7.00 5.25 5.00 .008 .008 .094 RL-AutoFE 3.38 5.25 4.62 .266 .008 .047
+> EvoSearch 3.38 5.00 4.62 .945 .031 .094 LLM-FE 4.00 5.62 6.25 .297 .016 .016
+
+lifts the usable-sample rate from 6% to 29% on spectf 
+
+(4.8×, trajectory-aggregation escape from per-run pathological samples). Removing either layer weakens the corresponding axis of robustness, confirming that the two components are complementary rather than redundant. This result supports the second half of the FCDiff decom-position: global consensus is the mechanism that turns locally stable trajectories into reproducible reshaping solutions. 
+
+F. FCDiff Finds Flat Regions and Consensus Basins 
+
+We further examine whether FCDiff finds the type of latent regions predicted by our formulation. If the micro layer works, generated latents should be less sensitive to local perturbations of the reward landscape. If the macro layer works, trajectory endpoints should concentrate in tighter consensus basins. We measure two geometric quantities: the post-attack reward floor adv _floor( z∗) = Rϕ(z∗ + δ∗) along the worst-case ℓ∞-PGD direction δ∗ = arg min ∥δ∥∞≤ε Rϕ(z∗ + δ) [20], and basin concentration via PCA(50)+KMeans( k=4 ) intra-cluster distance. Figure 4a and Figure 4b confirm the flatness effect. Com-pared with standard reward-guided diffusion, FCDiff main-tains a higher reward floor under worst-case latent pertur-bations: full_FCDiff achieves the highest adv _floor on 
+
+7/8 datasets of the headline cohort (tied with micro_only 
+
+on spectf ), exceeding standard by 10 ×–290 × across the cohort, and a 1D profile on openml_586 shows a ∼70 ×
+
+reward elevation. On the production SDEdit stack, adv _drop 
+
+contracts to 9–19 × flatter than standard . This matches the role of randomized smoothing: it changes guidance from maximizing reward at a single point to preserving reward over a local neighborhood. The consensus effect appears in the trajectory geometry. Macro aggregation reduces endpoint dispersion and con-centrates trajectories around broader basins: macro_only 
+
+contracts intra-cluster distance below standard on every dataset of the headline cohort ( 1.0×–3.6× tighter), and on the SDEdit stack intra-cluster distance shrinks by ≥ 220 ×. The two effects are spatially orthogonal: the micro layer shifts the terminal mean along ∇Rϕ (raising the reward floor), while the macro layer contracts terminal spread (tightening basin concentration). This shows that the macro layer does not merely select a good sample; it estimates a stable region supported by repeated stochastic runs. 
+
+Where guided endpoints land. To separate the two layers’ geometric roles, we evaluate Rϕ along the line segment from the mean standard endpoint (t=0 ) to the mean full_FCDiff endpoint (t=1 )on openml_586 and project each variant’s mean endpoint onto this line. The four variants land at t =0.00 /0.03 /0.93 /1.00 with Rϕ = 21 .5/50 .8/1411 /1507 for 
+
+standard /macro_only /micro_only /full_FCDiff .The underlying driver is a division of labor: the micro layer determines position on the landscape, covering 93% of the traversed distance on its own, while the macro layer adds little displacement and instead contracts endpoint spread, consistent with the intra-cluster contraction above. The reward profile along this line is near-linear, so smoothed guidance follows the reward gradient along a direct path rather than a winding one. 
+
+Local reward surface. We also scan Rϕ over a ±2ε
+
+window along the adversarial direction around each variant’s endpoint. On the side dataset ionosphere , standard sees a 40% relative reward change over the window, against 2.4% 
+
+for micro_only , 14% for macro_only , and 1.9% for 
+
+full_FCDiff ; on spectf , the standard slope is 3.2×
+
+the guided slopes. A relative change below 3% is the shared signature of the guided variants and gives an operational reading of a latent-space flat minimum: guided endpoints are not only higher in reward, they sit where the local surface is flat. Together, these diagnostics provide mechanism-level evi-dence for the central claim of FCDiff: robust data reshaping succeeds by finding regions that are simultaneously flat under perturbation and supported by trajectory consensus. 
+
+Landscape structure predicts the size of the gain. A two-component PCA slice links these geometric effects to when they matter. We pool endpoints from standard , micro_only ,and full_FCDiff (10 seeds × 20 samples per variant), fit PCA on the pooled set, and evaluate Rϕ on a 60 ×60 
+
+grid of the slice. On openml_586 , PC1 explains 47 .7% of endpoint variance (PC2: 0.8% ): the landscape has a single dominant direction, and guided endpoints concentrate in a narrow high-reward band while standard endpoints scatter over low-reward regions. On the side datasets ionosphere 
+
+(PC1 5.1% ) and openml_637 (PC1 0.9% ), the dominant direction weakens and the variants overlap. The pattern gives a practical predictor: robust guidance delivers its largest gains on structured, separable reward landscapes, while on smooth landscapes simpler guidance converges to similar regions. 0.00 0.01 0.02 0.03 0.04 0.05          
+
+> Perturbation magnitude
+> 1.50
+> 1.25
+> 1.00
+> 0.75
+> 0.50
+> 0.25
+> 0.00
+> Drop rate
+> Standard Micro only Ours SDEdit
+> Ours (a) Flat-minima cartoon (drop rate along worst-case PGD direction, openml_586 ). Standard cliff vs.FCDiff plateau. 607 spam 586 620 svm3 589 ap_om spectf
+> 10 0
+> 10 2
+> 10 4
+> adv_floor  65 ×
+> Std Micro Macro Full
+> (b) adv _floor across cohort (post-PGD reward floor, log scale; 8-dataset headline cohort). 020 40 60
+
+Wall-clock (s)       
+
+> 10 3
+> 10 2
+> 10 1
+> 10 0
+> Worst-10% Util. (rel. Full)
+> 10 --100×
+> Full ( Y=1 ref.) Single Std M
+> (c) Compute–quality Pareto (Worst-10% utility vs. compute, normalised so full_FCDiff =1.0; 8 main-table datasets).
+
+Fig. 4: Geometry (RQ5) and efficiency (RQ6) diagnostics. 
+
+G. Backbone Identity: FCDiff = DIFFT + Dual-Level Ensem-ble 
+
+The Std-Diff row of Table II is the DIFFT [11] backbone in its vanilla configuration: reward-guided latent diffusion with K=1 MC sample per gradient step and M =1 trajectory per seed. FCDiff is therefore not a different backbone but DIFFT augmented with two ensemble layers: micro_only 
+
+in our ablations is DIFFT +K > 1 gradient-level smoothing ,
+
+macro_only is DIFFT +M > 1 trajectory consensus , and 
+
+full_FCDiff is the full dual-level stack. The diagnostic ablation in §IV therefore directly reports the head-to-head comparison between vanilla DIFFT and FCDiff at every cell. 
+
+a) Per-layer attribution against DIFFT.: Table IV reports the head-to-head ablation against the DIFFT backbone with the two ensemble layers added one at a time and jointly. The two layers act on independent axes: smoothing lifts Worst-10% Utility most strongly (e.g. 1.10 → 2.17 on svmguide3 ,
+
+0.50 → 0.81 on spectf ) by stabilising the local guidance direction, while consensus contracts Utility Variance most strongly (e.g. 1.4e−2 → 2.0e−3 on svmguide3 , a 7×
+
+tightening) by aggregating over multiple stochastic trajectories. FCDiff (both layers) wins both metrics on every dataset of the side cohort, confirming that the gain over DIFFT is attributable to the layered ensemble rather than to any change in the underlying VAE–reward–diffusion backbone, and that the two layers are complementary rather than redundant. 
+
+H. Decode Validity of Consensus Latents a) Manifold projection via late-stage pure DDPM.: The robust gradient is injected only for diffusion timesteps t > t ∗
+
+(default t∗=5 ); the final t∗ denoising steps are pure DDPM (ϵθ-only, no guidance term). This terminal segment plays the role of an explicit manifold projection of the consensus latent 
+
+z∗: even when guidance has pushed the trajectory off the encoder’s high-density region, the pure-DDPM tail re-anchors 
+
+z∗ to the denoising-prior manifold before decoding. This is why averaging in latent space does not produce decoder-invalid samples in our setting. 
+
+b) Consensus vs. best-of-M on the headline cohort.: 
+
+Table VI reports the matched-compute comparison at M =16 
+
+TABLE IV: DIFFT-backbone head-to-head on the SDEdit-anchored side cohort (3 datasets where the variants admit clean discrimination). 
+
+DIFFT (Std-Diff) is the vanilla DIFFT backbone with K=M =1 
+
+from Table II; the other rows add one or both of our ensemble layers. Numbers are mean over 20 seeds × 50 samples per cell. Worst-10% Utility : surrogate-space lower tail (higher = better). Utility Var. : per-trajectory utility dispersion (lower = better), reported in units of 10 −4.The (syntactic) invalid-decode rate is 0.0 for all four variants on all three datasets of this SDEdit-anchored cohort and is therefore omitted from the table. Per-cell winners are bolded .                                     
+
+> Worst-10% Utility (↑)
+> Utility Var.
+> (↓,×10 −4)Variant 586 spectf svm3 586 spectf svm3 DIFFT (Std-Diff, K=M=1 )0.729 0.500 1.103 2.6 2.7 140 + smoothing ( K> 1,M=1 )0.731 0.806 2.171 0.98 0.55 53 + consensus ( K=1 ,M > 1)0.743 0.545 1.833 0.75 0.89 20
+> FCDiff (both layers) 0.748 0.845 2.361 0.52 0.66 15
+
+on the 8-dataset headline cohort. standard_M is the best-of-
+
+M baseline ( M independent standard diffusion passes, return the highest-Rϕ sample); single_FCDiff is one guided trajectory; full_FCDiff is the consensus-decoded ensemble output. The consensus latent ( full_FCDiff ) achieves the highest Worst-10% Utility on every dataset of the cohort at comparable per-trajectory wall-clock — the M -fold parallel cost dominates either way, but the per-trajectory compute is similar. 
+
+c) Direct consensus vs. best-of-M decode-rate compari-son.: Table V reports a same-seed, same-budget comparison at 
+
+M =20 on a four-dataset sub-cohort ( openml_586 , spectf ,
+
+svmguide3 , spam_base ; 50 seeds, Student-t(ν=3 , σ =1) 
+
+noise). Both methods achieve a 100% decode-valid rate on every dataset: consensus latents never fall outside the decoder’s support, refuting the natural concern that latent-space averaging produces decoder-invalid samples. Conditional on validity, consensus dominates best-of-M on Worst-10% Utility on every dataset of the sub-cohort (deltas +.018 , +.027 , +.016 , +.004 )while average performance is essentially tied; the underlying driver is that best-of-M commits to the single highest-reward sample per seed and so inherits any reward-noise outlier on that seed, whereas consensus averages out the noise across the M
+
+trajectories before decoding. This is the empirical mechanism by which the late-stage pure-DDPM tail (“manifold projection”) buys robustness without any decoder-validity cost. The delta shrinks toward zero on the easiest dataset ( spam_base , where every method already exceeds .95 Worst-10), consistent with the view that consensus’s gain comes from cleaning up reward-noise tail mass that doesn’t exist when the noise is small relative to the clean-reward gradient.                         
+
+> Method ml_586 spectf svmgd3 spam Decode valid
+> best-of-M.727 .771 .859 .957 100%
+> consensus .745 .798 .875 .961 100%
+> ∆(cons. −best-of-M)+.018 +.027 +.016 +.004 —
+
+TABLE V: Consensus latent vs. best-of-M (M =20 , 50 seeds, Student-
+
+t(ν=3 , σ =1) ). Cells report Worst-10% Utility (higher is better). Syntactic decode validity is identical (and perfect) for both on every dataset; consensus dominates on the tail metric, with the gap shrinking toward zero on easy datasets where reward noise has minimal effect on best-of-M .                                                        
+
+> Variant 586 589 607 620 spectf svm3 spam ap_om
+> Worst-10% Utility (higher = better)
+> full_FCDiff 1469.1 360.5 1962.2 1002.6 1.14 494.2 1522.6 7.0
+> standard_M 40.0 5.2 20.4 13.1 0.93 11.0 14.0 2.4 single_FCDiff 1351.8 322.0 1852.4 930.8 1.07 433.8 1417.1 4.4
+> Wall-clock (s, lower = faster)
+> full_FCDiff 58.8 59.8 60.0 49.1 23.0 48.7 59.5 57.6 standard_M 26.0 26.2 26.3 13.0 5.1 13.0 26.3 23.8 single_FCDiff 46.8 47.6 47.9 44.6 21.2 44.5 47.2 42.6
+
+TABLE VI: Compute-matched comparison at M =16 on the 8-dataset headline cohort (this slice is from the RQ6 M -sweep {4, 8, 16 , 32 };the headline ablation uses M =20 ). Best-of-M (standard_M ) and single guided trajectory ( single_FCDiff ) are matched-compute baselines for the consensus output ( full_FCDiff ). Per-cell winners on the Worst-10% Utility row are bolded .
+
+I. Efficiency and Sensitivity 
+
+We finally examine whether the gains of FCDiff depend on excessive sampling or on careful hyperparameter tuning. Matched-compute comparisons (Fig. 4c) show that improving the guidance process is significantly more effective than post-hoc best-of-M selection. At similar computational budgets, FCDiff consistently achieves stronger lower-tail performance, indicating that robustness should be built into the generative trajectory rather than recovered after sampling. Per-dataset results are reported in Table VI. 
+
+Anchoring sensitivity. The anchored initialisation adds two hyperparameters: the SDEdit start timestep t0 and the elite-pool fraction k. Sweeping t0 ∈ { 10 , 50 , 100 , 250 , 500 , 999 }
+
+and k ∈ { 1% , 5% , 10% , 25% , 50% } on openml_586 yields a wide stable plateau: any t0 ∈ [10 , 500] with k ≤ 25% matches the default (t0=50 , k =10%) within ±0.003 in downstream score. The setting t0=999 re-noises the elite anchor back to 
+
+N (0 , I ) and recovers the unanchored failure mode. The gain therefore comes from the truncated reverse trajectory, not from information leaking through the elite seed. V. R ELATED WORK 
+
+Prior literature partially addresses Robust Data Reshap-ing across four categories. Automated feature engineering. 
+
+RL-based policies [15], [21], [22] and LLM-driven rule generators [23], [24] search transformation sequences from downstream reward. These approaches treat finite reward estimates as reliable signals, so discovered transformations overfit specific realizations. Diffusion-based selection and transformation search. Reward-guided diffusion over contin-uous latent sequences [11], [25] and stability-aware diffusion posteriors over input-space selection masks (e.g., CGDFS [26]) employ generative search for feature construction. These methods either condition on a single point gradient without addressing evaluator noise or enforce stability only at the input-feature level; neither addresses the dual coupling of reward-gradient noise and trajectory-level dispersion within the denoising process. Randomized smoothing and robust gradient estimation. Gaussian smoothing is the standard relaxation for intractable inner-min robust objectives and the basis for certified classifier robustness [7], [8], [27]; robust mean estimators (Catoni, median-of-means, Huberization) [16]– [18] handle heavy-tailed gradient distributions. These tools have been developed primarily for classifier certification and supervised stochastic optimization, not for reward-gradient guid-ance inside a diffusion reverse process. Robust optimization and flatness. Sharpness-aware minimization [20], [28], cross-domain gradient alignment [29], [30], and Hessian curvature regularization [31], [32] operate at the model-parameter level in supervised or domain-generalization settings; they do not address instability in reward-guided search over transformation sequences where evaluator noise and trajectory-level dispersion act jointly on the generative process. Inference-time robust-ness in latent diffusion (other modalities). Diffusion-native latent reward modelling [33], [34] and latent inference-time search with reward models [35] target evaluator-uncertainty robustness in vision and language by reshaping intermediate-step supervision or expanding candidate latents at sampling time [36]. These directions are conceptually parallel to our micro/macro layers but operate on different modalities and do not involve the discrete sequence-decoder validity constraint that governs tabular feature reshaping; we therefore discuss them as complementary rather than benchmarking them as direct baselines. VI. C ONCLUSION 
+
+We studied Robust Data Reshaping under joint evaluator-noise and trajectory-stochasticity instability. Robustness in data reshaping is a geometric property of the latent reward landscape : flat, consensus-supported regions retain their utility under noise and drift, while sharp single-trajectory optima do not. This property decomposes into two orthogonal axes, within-trajectory and between-trajectory, and addressing only one of them leaves the other exposed. Our FCDiff realizes this as a dual-level relaxation of point-estimate, single-trajectory search: randomized smoothing of the reward guidance within a trajectory (micro), and a reward-weighted barycenter over trajectory endpoints (macro). On 8 datasets under matched heavy-tailed noise, FCDiff attains the best CVaR@5 mean rank among all baselines and the best mean accuracy within the robust-generation cohort. The two layers leave distinct empirical signatures in the latent reward landscape, micro shifting endpoints toward higher reward floors and macro contracting their spread, so removing either weakens the corresponding axis. A limitation of FCDiff is that smoothing reduces the variance of reward guidance but not its bias: when the latent reward surrogate is systematically misspecified, smoothed guidance inherits the surrogate’s error, and uncertainty-aware reweighting recovers it only partially. In future work, we plan to add a predictor-uncertainty layer that down-weights guidance where the surrogate is unreliable, composing with the two existing layers. REFERENCES [1] U. Khurana, H. Samulowitz, and S. D. Turaga, “Feature engineering for predictive modeling using reinforcement learning,” Proceedings of the AAAI Conference on Artificial Intelligence , vol. 32, 09 2017. [2] X. Chen, B. Qiao, W. Zhang, W. Wu, M. Chintalapati, D. Zhang, Q. Lin, C. Luo, X. Li, H. Zhang, Y. Xu, Y. Dang, K. Sui, and X. Zhang, “Neural feature search: A neural architecture for automated feature engineering,” 11 2019, pp. 71–80. [3] Z. Ling, M. Guo, X. Wu, D. Cheng, P. Zhou, T. Li, and Z. Duan, “Gradient-based causal feature selection,” in Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence, IJCAI-25 , J. Kwok, Ed. International Joint Conferences on Artificial Intelligence Organization, 8 2025, pp. 5716–5724, main Track. [Online]. Available: https://doi.org/10.24963/ijcai.2025/636 [4] R. Liu, R. Xie, Z. Yao, Y. Fu, and D. Wang, “Continuous optimization for feature selection with permutation-invariant embedding and policy-guided search,” 2026. [Online]. Available: https://arxiv.org/abs/2505.11601 [5] R. Liu, T. Zhe, Y. Huang, S. N. Guria, X. Luo, W. Fan, Y. Fu, and D. Wang, “Hierarchical and permutation-invariant feature transformation learning via policy-guided embedding search,” 2026. [Online]. Available: https://arxiv.org/abs/2609.10225 [6] S. Kim, J. Woo, and W. Kim, “Diffusion-based generative ai for exploring transition states from 2d molecular graphs,” Nature Communications ,vol. 15, 01 2024. [7] J. M. Cohen, E. Rosenfeld, and J. Z. Kolter, “Certified adversarial robustness via randomized smoothing,” 2019. [Online]. Available: https://arxiv.org/abs/1902.02918 [8] J. C. Duchi, P. L. Bartlett, and M. J. Wainwright, “Randomized smoothing for stochastic optimization,” 2012. [Online]. Available: https://arxiv.org/abs/1103.4296 [9] M. Ganaie, M. Hu, A. Malik, M. Tanveer, and P. Suganthan, “Ensemble deep learning: A review,” Engineering Applications of Artificial Intelligence , vol. 115, p. 105151, Oct. 2022. [Online]. Available: http://dx.doi.org/10.1016/j.engappai.2022.105151 [10] H. Xu, Z. Peng, R. Liang, and P. Wang, “Cast-norm: Coupled adaptive spatio-temporal normalization for multivariate time series forecasting,” in Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 , ser. KDD ’26. New York, NY, USA: Association for Computing Machinery, 2026, p. 5778–5789. [Online]. Available: https://doi.org/10.1145/3770855.3817667 [11] N. Gong, Z. Li, S. Dong, H. Bai, W. Ying, X. Wang, and Y. Fu, “Sculpting features from noise: Reward-guided hierarchical diffusion for task-optimal feature transformation,” in The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2026. [Online]. Available: https://openreview.net/forum?id=0IStUxUDGJ [12] J. Ho, A. Jain, and P. Abbeel, “Denoising diffusion probabilistic models,” 2020. [Online]. Available: https://arxiv.org/abs/2006.11239 [13] Q. Hao, Y. Gao, R. Liang, Y. Zhang, and P. Wang, “Generative imputation with multi-level causal consistency for variable subset forecasting,” in Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 , ser. KDD ’25. New York, NY, USA: Association for Computing Machinery, 2025, p. 838–849. [Online]. Available: https://doi.org/10.1145/3711896.3736980 [14] E. Real, A. Aggarwal, Y. Huang, and Q. V. Le, “Regularized evolution for image classifier architecture search,” 2019. [Online]. Available: https://arxiv.org/abs/1802.01548 [15] S. Han, J. Yoon, S. O. Arik, and T. Pfister, “Large language models can automatically engineer features for few-shot tabular learning,” 2024. [Online]. Available: https://arxiv.org/abs/2404.09491 [16] F. Schaipp, U. Simsekli, and R. M. Gower, “Robust gradient estimation in the presence of heavy-tailed noise,” in NeurIPS 2023 Workshop Heavy Tails in Machine Learning , 2023. [Online]. Available: https://openreview.net/forum?id=C6PiH9Fkjd [17] I. Merad and S. Gaïffas, “Robust stochastic optimization via gradient quantile clipping,” 2024. [Online]. Available: https://arxiv.org/abs/2309. 17316 [18] G. Lugosi and S. Mendelson, “Mean estimation and regression under heavy-tailed distributions–a survey,” 2019. [Online]. Available: https://arxiv.org/abs/1906.04280 [19] H.-S. Park and C.-H. Jun, “A simple and fast algorithm for k-medoids clustering,” Expert Systems with Applications , vol. 36, no. 2, Part 2, pp. 3336–3341, 2009. [Online]. Available: https: //www.sciencedirect.com/science/article/pii/S095741740800081X [20] P. Foret, A. Kleiner, H. Mobahi, and B. Neyshabur, “Sharpness-aware minimization for efficiently improving generalization,” 2021. [Online]. Available: https://arxiv.org/abs/2010.01412 [21] W. Gao, Z. Man, H. Pan, and K. Liu, “Dual-agent reinforcement learning for automated feature generation,” 2025. [Online]. Available: https://arxiv.org/abs/2505.12628 [22] X. Zhang, J. Zhang, B. Rekabdar, Y. Zhou, P. Wang, and K. Liu, “Dynamic and adaptive feature generation with llm,” 2026. [Online]. Available: https://arxiv.org/abs/2406.03505 [23] J. Nam, K. Kim, S. Oh, J. Tack, J. Kim, and J. Shin, “Optimized feature generation for tabular data via llms with decision tree reasoning,” 2024. [Online]. Available: https://arxiv.org/abs/2406.08527 [24] N. Abhyankar, P. Shojaee, and C. K. Reddy, “Llm-fe: Automated feature engineering for tabular data with llms as evolutionary optimizers,” 2025. [Online]. Available: https://arxiv.org/abs/2503.14434 [25] R. Liu, T. Zhe, Y. Fu, F. Xia, T. Senator, and D. Wang, “Permutation-invariant representation learning for robust and privacy-preserving feature selection,” 2026. [Online]. Available: https://arxiv.org/abs/2510.05535 [26] A. V. Malarkkan, X. Wang, K. Liu, D. Zhang, and Y. Fu, “Causally-guided diffusion for stable feature selection,” 2026. [Online]. Available: https://arxiv.org/abs/2603.20930 [27] A. Gasnikov, D. Dvinskikh, P. Dvurechensky, E. Gorbunov, A. Beznosikov, and A. Lobanov, Randomized Gradient-Free Methods in Convex Optimization . Springer International Publishing, 2023, p. 1–15. [Online]. Available: http://dx.doi.org/10.1007/978-3-030-54621-2_859-1 [28] Z. Zhou, M. Wang, Y. Mao, B. Li, and J. Yan, “Sharpness-aware minimization efficiently selects flatter minima late in training,” 2025. [Online]. Available: https://arxiv.org/abs/2410.10373 [29] P. Wang, Z. Zhang, Z. Lei, and L. Zhang, “Sharpness-aware gradient matching for domain generalization,” 2023. [Online]. Available: https://arxiv.org/abs/2303.10353 [30] R. Zhang, Z. Fan, J. Yao, Y. Zhang, and Y. Wang, “Domain-inspired sharpness-aware minimization under domain shifts,” 2024. [Online]. Available: https://arxiv.org/abs/2405.18861 [31] H. R. Zhang, D. Li, and H. Ju, “Noise stability optimization for finding flat minima: A hessian-based regularization approach,” 2024. [Online]. Available: https://arxiv.org/abs/2306.08553 [32] M. Schliserman, S. Vansover-Hager, and T. Koren, “Flat minima and generalization: Insights from stochastic convex optimization,” 2025. [Online]. Available: https://arxiv.org/abs/2511.03548 [33] G. Liu, B. Yang, Y. Zhi, Z. Zhong, L. Ke, D. Deng, H. Gao, Y. Huang, K. Zhang, H. Fu, and W. Luo, “Beyond vlm-based rewards: Diffusion-native latent reward modeling,” 2026. [Online]. Available: https://arxiv.org/abs/2602.11146 [34] H. Cao, J. Zhang, K. Liu, D. Wang, F. Xia, H. Chen, X. Hu, and Y. Fu, “Sim2act: Robust simulation-to-decision learning via adversarial calibration and group-relative perturbation,” 2026. [Online]. Available: https://arxiv.org/abs/2603.09053 [35] Z. Zhao, Z. Liu, Y. Cao, S. Gong, Z. Zhang, J. Song, J. Deng, and I. Patras, “Latsearch: Latent reward-guided search for faster inference-time scaling in video diffusion,” 2026. [Online]. Available: https://arxiv.org/abs/2603.14526 [36] H. Xu, Q. Hao, H. Zhang, J. Zhao, Z. Qiao, L. Jiang, P. Wang, Y. Zhou, and P. Wang, “Shift-resilient diffusive imputation for variable subset forecasting,” in Proceedings of the ACM Web Conference 2026 , ser. WWW ’26. New York, NY, USA: Association for Computing Machinery, 2026, p. 7366–7377. [Online]. Available: https://doi.org/10.1145/3774904.3792511

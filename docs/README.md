@@ -6,85 +6,94 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-10-02
-- 运行时间：2026-10-02 23:58:20 UTC
+- 最新运行日期：2026-10-03
+- 运行时间：2026-10-03 23:14:18 UTC
 - 运行状态：成功
-- 本次总论文数：21
-- 精读区：9
+- 本次总论文数：24
+- 精读区：12
 - 速读区：12
 
 ### 今日简报（AI）
-今日聚焦AI安全与医学影像领域，精读9篇高分论文并速览12篇前沿成果  
-重点推荐后门机制防御与视觉语言模型鲁棒性提升两大方向  
-建议关注后门攻击检测方法及医学图像翻译技术的实用进展
-- 详情：[/202610/02/README](/202610/02/README)
+今日精读12篇、速读12篇论文，聚焦高分研究成果与前沿技术探索。  
+高分论文围绕视觉表示学习与神经图像水印技术展开，速读内容涉及3D资产编辑、概念得分重学习及SGA-Flow-GRPO方法等应用热点。  
+建议对视觉表示学习与水印技术感兴趣的读者深入精读高分论文，普通读者可优先速读3D编辑与概念攻击方向的简要综述。
+- 详情：[/202610/03/README](/202610/03/README)
 
 ### 精读区论文标签
-1. [Information Blackhole: Exploring Backdoor Mechanism in 3D Point Cloud Reconstruction](/202610/02/2609.33569v1-information-blackhole-exploring-backdoor-mechanism-in-3d-point-cloud-reconstruction)  
+1. [Conditional Predictive Sufficient Statistics for Visual Representation Learning](/202610/03/2609.30647v1-conditional-predictive-sufficient-statistics-for-visual-representation-learning)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-2. [Selective Channel Restoration for Backdoored Vision-Language Models](/202610/02/2609.37759v1-selective-channel-restoration-for-backdoored-vision-language-models)  
+2. [Residual Transferability in Neural Image Watermarking](/202610/03/2609.32241v1-residual-transferability-in-neural-image-watermarking)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击下的图像模型保护
-3. [Adversarial Training for Pixel Diffusion](/202610/02/2609.38170v1-adversarial-training-for-pixel-diffusion)  
+   evidence：对抗扰动对水印的可转移性
+3. [Flat-Consensus Diffusion for Robust Data Reshaping under Noisy Evaluator](/202610/03/2609.32696v1-flat-consensus-diffusion-for-robust-data-reshaping-under-noisy-evaluator)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗训练用于像素扩散模型
-4. [Learning Normal Diffusion Dynamics for Backdoor Defense in Text-to-Image Models](/202610/02/2609.39548v1-learning-normal-diffusion-dynamics-for-backdoor-defense-in-text-to-image-models)  
+   evidence：对抗扰动下的数据重塑方法
+4. [Latent Space Is Not Flat: Rethinking Latent Structure for 3D Medical Image Synthesis](/202610/03/2609.32794v1-latent-space-is-not-flat-rethinking-latent-structure-for-3d-medical-image-synthesis)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：研究对抗扰动对生成模型的影响
+5. [Unifying Distributional Training for One-Step Visual Generation](/202610/03/2609.35763v3-unifying-distributional-training-for-one-step-visual-generation)  
    标签：评分：9.0/10、query:image-adversarial
    evidence：对抗扰动对生成模型的影响
-5. [Probabilistic Adversarial Training](/202610/02/2609.39798v1-probabilistic-adversarial-training)  
+6. [RED: Reconstruction Evolution Dynamics for Generalizable AI-Generated Image Detection](/202610/03/2609.36822v1-red-reconstruction-evolution-dynamics-for-generalizable-ai-generated-image-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动与鲁棒性分析
-6. [WARP: A Unified Benchmark for Invisible Image Watermarking -- Robustness and Protection Against Attacks](/202610/02/2609.40031v1-warp-a-unified-benchmark-for-invisible-image-watermarking----robustness-and-protection-against-attacks)  
+   evidence：基于重建演化的AI生成图像检测方法
+7. [Improved Distributional Diffusion Models](/202610/03/2609.37147v1-improved-distributional-diffusion-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究水印鲁棒性与攻击防护
-7. [Curvature Under Attack in hZACH-ViT: Gauge Symmetry, Boundary Saturation, and Adversarial Failure](/202610/02/2610.00680v1-curvature-under-attack-in-hzach-vit-gauge-symmetry-boundary-saturation-and-adversarial-failure)  
+   evidence：扩散模型的分布优化方法
+8. [FLASH: A "Generate Once, Synthesize Many" Framework for Synthetic Anomaly Generation in Industrial Anomaly Detection](/202610/03/2609.37314v1-flash-a-generate-once-synthesize-many-framework-for-synthetic-anomaly-generation-in-industrial-anomaly-detection)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-8. [Don't Waste the Noise: Importance-Guided Perturbation Allocation under Joint Global and Local Constraints](/202610/02/2610.00861v1-dont-waste-the-noise-importance-guided-perturbation-allocation-under-joint-global-and-local-constraints)  
+   evidence：使用生成模型生成对抗扰动
+9. [DMA$^2$: Pixel-space Distribution Matching with Adversarial and Anchor Losses](/202610/03/2609.38156v1-dma2-pixel-space-distribution-matching-with-adversarial-and-anchor-losses)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：探讨对抗扰动对生成模型的影响
-9. [Robust Evidential Learning Through Latent Consistency](/202610/02/2610.01384v1-robust-evidential-learning-through-latent-consistency)  
-   标签：评分：9.0/10
-   evidence：与图像对抗攻击防御技术相关
+   evidence：对抗扰动与像素空间分布匹配
+10. [CollageAttack: Exploiting Cross-Modal Alignment Flaws in T2I Models through Spatial Text Composition](/202610/03/2609.38253v1-collageattack-exploiting-cross-modal-alignment-flaws-in-t2i-models-through-spatial-text-composition)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗攻击对T2I模型的影响
+11. [Persistent Watermarking of Text-to-Image Models](/202610/03/2609.39024v1-persistent-watermarking-of-text-to-image-models)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：涉及对抗扰动下的图像模型保护
+12. [PhaseAT: Fourier Phase Adversarial Training for Medical Image Domain Generalization](/202610/03/2610.01807v1-phaseat-fourier-phase-adversarial-training-for-medical-image-domain-generalization)  
+   标签：评分：9.0/10、query:image-adversarial
+   evidence：对抗扰动与医学图像泛化
 
 ### 速读区论文标签
-1. [SynDORBench: Evaluating LVLM Perceptual Robustness Under Physically Constrained Visibility Conditions](/202610/02/2609.31823v1-syndorbench-evaluating-lvlm-perceptual-robustness-under-physically-constrained-visibility-conditions)  
+1. [SGA-Flow-GRPO: Spatial Gradient-Guided Credit Assignment for Flow-GRPO](/202610/03/2609.32340v1-sga-flow-grpo-spatial-gradient-guided-credit-assignment-for-flow-grpo)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：评估LVLM在物理约束下的感知鲁棒性
-2. [PredRA: Fast Medical Image Translation by Deterministic Component Extraction and Controlled Stochastic Refinement](/202610/02/2609.31912v1-predra-fast-medical-image-translation-by-deterministic-component-extraction-and-controlled-stochastic-refinement)  
-   标签：评分：8.0/10、query:image-generation
-   evidence：扩散模型用于图像生成
-3. [RefAdapt-DiT: Adaptive Joint Attention for Reference-Conditioned Diffusion Transformers](/202610/02/2609.32415v1-refadapt-dit-adaptive-joint-attention-for-reference-conditioned-diffusion-transformers)  
+   evidence：空间梯度引导的信用分配方法
+2. [Concept Score Relearning: A Unified Cross-Architecture Attack on Concept Erasure](/202610/03/2609.33445v1-concept-score-relearning-a-unified-cross-architecture-attack-on-concept-erasure)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗训练用于像素扩散模型
-4. [Synthetic Thermal Image Generation for Real-Time Animal Detection Under Low-Visibility Conditions](/202610/02/2609.32944v1-synthetic-thermal-image-generation-for-real-time-animal-detection-under-low-visibility-conditions)  
+   evidence：跨架构概念重激活方法
+3. [Scaling Versatile 3D Assets Editing with a Million-Scale Dataset](/202610/03/2609.34271v1-scaling-versatile-3d-assets-editing-with-a-million-scale-dataset)  
    标签：评分：8.0/10、query:image-generation
    evidence：生成对抗网络用于图像生成
-5. [Sufficiently Reduced Distributional Regression](/202610/02/2609.29291v1-sufficiently-reduced-distributional-regression)  
+4. [What Paired Evaluations Reveal under Visual Perturbations](/202610/03/2609.35583v1-what-paired-evaluations-reveal-under-visual-perturbations)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：对抗扰动下的鲁棒性评估
+5. [Escaping Alignment: A Physical Trap Model of Best-of-N Jailbreaking](/202610/03/2609.32116v1-escaping-alignment-a-physical-trap-model-of-best-of-n-jailbreaking)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动下的分布回归方法
-6. [Multimodal Thinking with Renderable Programs](/202610/02/2609.30130v1-multimodal-thinking-with-renderable-programs)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：图像推理中的多模态生成方法
-7. [Selective Amortization of Full-Budget Counterfactual Reasoning for Visual Token Communication](/202610/02/2609.30756v1-selective-amortization-of-full-budget-counterfactual-reasoning-for-visual-token-communication)  
+   evidence：对抗攻击与模型安全机制
+6. [From Feed-Forward to Flow: Unifying Reconstruction and Generation Is Easier Than You Think](/202610/03/2609.32761v1-from-feed-forward-to-flow-unifying-reconstruction-and-generation-is-easier-than-you-think)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击防御中的候选评估方法
-8. [RefCompose: Multi-Reference Image Generation via LoRA-Conditioned Diffusion](/202610/02/2609.32389v1-refcompose-multi-reference-image-generation-via-lora-conditioned-diffusion)  
-   标签：评分：7.0/10、query:image-generation
-   evidence：多参考图像生成
-9. [ManiVid: Unified and Explainable Forensic Analysis of Manipulated Videos](/202610/02/2609.30934v1-manivid-unified-and-explainable-forensic-analysis-of-manipulated-videos)  
+   evidence：图像重建与生成统一方法
+7. [Does Adversarial Training Improve Generalization in Multi-View VLAs? Revealing and Mitigating View Collapse](/202610/03/2609.33707v1-does-adversarial-training-improve-generalization-in-multi-view-vlas-revealing-and-mitigating-view-collapse)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗训练对多视角VLA模型泛化的影响
+8. [Can Attack Difficulty Be Characterized Before Optimization? A Study of Pre-optimization Difficulty in Person-Vanishing Attacks](/202610/03/2609.34501v1-can-attack-difficulty-be-characterized-before-optimization-a-study-of-pre-optimization-difficulty-in-person-vanishing-attacks)  
+   标签：评分：7.0/10、query:image-adversarial
+   evidence：对抗扰动与攻击难度分析
+9. [Spackle: Completing Large View Single Image NVS with Adaptive Gaussians](/202610/03/2609.30941v1-spackle-completing-large-view-single-image-nvs-with-adaptive-gaussians)  
+   标签：评分：6.0/10、query:image-generation
+   evidence：图像生成中使用自适应高斯处理
+10. [TaskIR: Task-Driven Image Restoration via Degradation Adaptation and Task Feedback](/202610/03/2609.31170v2-taskir-task-driven-image-restoration-via-degradation-adaptation-and-task-feedback)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动用于图像篡改检测
-10. [UNMATCH: Selective Unbalanced Token-Patch Matching for Forensic Image-Claim Verification](/202610/02/2609.31766v1-unmatch-selective-unbalanced-token-patch-matching-for-forensic-image-claim-verification)  
+   evidence：对抗攻击下的图像修复
+11. [Rate-Adaptive One-Step Diffusion Compression for AIGC Images](/202610/03/2609.31795v1-rate-adaptive-one-step-diffusion-compression-for-aigc-images)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：研究对抗攻击下的图像模型保护
-11. [REALIS: A Curated Dataset for Studying the Challenges of AI Image Detection](/202610/02/2609.32734v1-realis-a-curated-dataset-for-studying-the-challenges-of-ai-image-detection)  
+   evidence：生成图像压缩与对抗扰动处理
+12. [Gaussian Image Steganography via Parameter-Domain Keyed Embeddings](/202610/03/2609.32131v1-gaussian-image-steganography-via-parameter-domain-keyed-embeddings)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：研究对抗攻击对图像检测的影响
-12. [Printability-Constrained Adversarial Decals for Near-Nadir Aerial Perception: Measured Ink Gamuts, Nested Realism Constraints, and a Physical-World Bound](/202610/02/2609.33513v1-printability-constrained-adversarial-decals-for-near-nadir-aerial-perception-measured-ink-gamuts-nested-realism-constraints-and-a-physical-world-bound)  
-   标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗扰动对生成模型的影响
+   evidence：高斯参数域信息隐藏方法
 
 
 ### ⚡ 这个站点能做什么
