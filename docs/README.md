@@ -6,85 +6,79 @@
 - [推荐链路与日报结构说明](/newbie/workflow)
 
 ## 每次日报
-- 最新运行日期：2026-10-06
-- 运行时间：2026-10-07 00:27:33 UTC
+- 最新运行日期：2026-10-07
+- 运行时间：2026-10-08 00:54:21 UTC
 - 运行状态：成功
-- 本次总论文数：21
-- 精读区：9
+- 本次总论文数：19
+- 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日精选21篇AI视觉生成前沿论文，精读9篇高分成果  
-2) 聚焦视觉生成领域突破：分布训练统一框架与语义替换技术引领高分成果  
-3) 建议关注视觉生成中的分布训练优化及视频扩散模型动态适配等方向，速读列表中相关论文可提供更广泛的技术视角
-- 详情：[/202610/06/README](/202610/06/README)
+1) 今日聚焦视觉-语言模型安全性和图像生成技术，共处理19篇论文  
+2) 高分论文揭示微小语义替换可篡改模型认知，扩散模型新框架提升生成效率  
+3) 建议优先阅读精读列表中关于攻击机制的论文，了解生成模型的潜在风险与优化方向
+- 详情：[/202610/07/README](/202610/07/README)
 
 ### 精读区论文标签
-1. [Unifying Distributional Training for One-Step Visual Generation](/202610/06/2609.35763v1-unifying-distributional-training-for-one-step-visual-generation)  
+1. [It Takes Little to Rewrite Perception: Targeted Semantic Substitution in Vision-Language Models at $ε\leq 4/255$](/202610/07/2609.38298v2-it-takes-little-to-rewrite-perception-targeted-semantic-substitution-in-vision-language-models-at-leq-4255)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：分布训练统一框架
-2. [It Takes Little to Rewrite Perception: Targeted Semantic Substitution in Vision-Language Models at $ε\leq 4/255$](/202610/06/2609.38298v1-it-takes-little-to-rewrite-perception-targeted-semantic-substitution-in-vision-language-models-at-leq-4255)  
+   evidence：对抗扰动对生成模型的影响
+2. [Feature-Aware Token Attack for Compression-Triggered Stealthy Failures in Large Vision-Language Models](/202610/07/2609.39134v1-feature-aware-token-attack-for-compression-triggered-stealthy-failures-in-large-vision-language-models)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的语义替换
-3. [BTC3D: Blended Tile Conditioning for Detail-Enhancing Image-to-3D Generation](/202610/06/2609.39709v1-btc3d-blended-tile-conditioning-for-detail-enhancing-image-to-3d-generation)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：扩散模型用于图像到3D生成
-4. [Let the Carrier Carry the Attack: Preserving the Subject in Adversarial Image Generation](/202610/06/2609.39723v1-let-the-carrier-carry-the-attack-preserving-the-subject-in-adversarial-image-generation)  
+   evidence：对抗攻击生成方法
+3. [Correcting Guided Diffusion Trajectories with Spectral Alignment](/202610/07/2610.02753v1-correcting-guided-diffusion-trajectories-with-spectral-alignment)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像保护
-5. [Corrupted but Correct: Why Vision-Language Models Lie to Themselves Internally](/202610/06/2610.03445v1-corrupted-but-correct-why-vision-language-models-lie-to-themselves-internally)  
+   evidence：利用谱对齐改进扩散模型生成轨迹
+4. [Certification of Real Images through Calibrated Content Authentication](/202610/07/2610.05870v1-certification-of-real-images-through-calibrated-content-authentication)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动对模型影响
-6. [Retrieval-Centric Deep Learning in Growing Nonparametric Neural Networks](/202610/06/2610.03858v1-retrieval-centric-deep-learning-in-growing-nonparametric-neural-networks)  
+   evidence：对抗扰动对生成模型的影响
+5. [SPIN: Image Immunization Against Diffusion Editing via Single-Step Projection in Stochastic Neighborhoods](/202610/07/2610.06334v1-spin-image-immunization-against-diffusion-editing-via-single-step-projection-in-stochastic-neighborhoods)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：研究对抗扰动对生成模型的影响
-7. [NAMVIS: Next-Scale Autoregressive Multi-View Image Synthesis](/202610/06/2610.04722v1-namvis-next-scale-autoregressive-multi-view-image-synthesis)  
-   标签：评分：9.0/10、query:image-generation
-   evidence：扩散模型用于多视角图像合成
-8. [Safe Image Generation via Reinforcement Learning](/202610/06/2610.05908v1-safe-image-generation-via-reinforcement-learning)  
+   evidence：对抗扰动下的图像模型保护
+6. [TwinViT-DeepJSCC: Adversarially Robust Semantic Image Communication](/202610/07/2610.08590v1-twinvit-deepjscc-adversarially-robust-semantic-image-communication)  
    标签：评分：9.0/10、query:image-adversarial
-   evidence：生成过程中的安全机制
-9. [CentriQ: Calibration-Free Quantization of Diffusion Transformers via Exact Mean Centering](/202610/06/2610.06260v1-centriq-calibration-free-quantization-of-diffusion-transformers-via-exact-mean-centering)  
-   标签：评分：9.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像生成保护
+   evidence：对抗攻击防御技术
+7. [PE-OPSD: Internalizing Prompt Enhancement into Flow-matching Models via On-Policy Self-Distillation](/202610/07/2609.36638v1-pe-opsd-internalizing-prompt-enhancement-into-flow-matching-models-via-on-policy-self-distillation)  
+   标签：评分：8.0/10、query:image-adversarial
+   evidence：提出对抗攻击防御方法
 
 ### 速读区论文标签
-1. [From Static to Dynamic: On-Policy Distillation from Image to Video Diffusion Models](/202610/06/2609.34371v1-from-static-to-dynamic-on-policy-distillation-from-image-to-video-diffusion-models)  
+1. [NesTok: Nested Self-Aligned 1D Tokenizer for Autoregressive Image Generation](/202610/07/2609.36756v3-nestok-nested-self-aligned-1d-tokenizer-for-autoregressive-image-generation)  
+   标签：评分：8.0/10、query:image-generation
+   evidence：图像生成相关技术
+2. [LDM-is-AE: Latent Diffusion Model is an Auto-Encoder for End-to-End Image Generation](/202610/07/2609.37080v1-ldm-is-ae-latent-diffusion-model-is-an-auto-encoder-for-end-to-end-image-generation)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：图像到视频扩散模型的对抗防御
-2. [SAGE: Subspace Alignment for Classifier-Free Guidance in Mixture-of-Experts Diffusion Models](/202610/06/2609.34525v1-sage-subspace-alignment-for-classifier-free-guidance-in-mixture-of-experts-diffusion-models)  
+   evidence：生成式对抗扰动
+3. [Evaluating the Evaluators: Diagnosing Large Multimodal Models for AI-Generated Image Assessment](/202610/07/2609.37576v1-evaluating-the-evaluators-diagnosing-large-multimodal-models-for-ai-generated-image-assessment)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：扩散模型子空间对齐
-3. [Render Before Reading: Visual Rendering as a Prompt Injection Defense](/202610/06/2609.36121v1-render-before-reading-visual-rendering-as-a-prompt-injection-defense)  
+   evidence：评估AI生成图像的评估方法
+4. [Inference-Layer Security: Defending Against Adversarial Inference and Infrastructure Abuse](/202610/07/2609.38239v1-inference-layer-security-defending-against-adversarial-inference-and-infrastructure-abuse)  
    标签：评分：8.0/10、query:image-adversarial
-   evidence：研究对抗攻击的防御策略
-4. [Guard Models Are Overconfident Where Base Models Are Uncertain](/202610/06/2609.36477v1-guard-models-are-overconfident-where-base-models-are-uncertain)  
-   标签：评分：8.0/10、query:image-adversarial
-   evidence：对抗扰动下的图像模型保护
-5. [Optimizing and Securing the Modern Watermarking Channel for Images](/202610/06/2609.34744v1-optimizing-and-securing-the-modern-watermarking-channel-for-images)  
+   evidence：研究对抗攻击对图像模型的影响
+5. [Whitening Improves Robustness to Spurious Correlations in Linear Probes](/202610/07/2609.39177v1-whitening-improves-robustness-to-spurious-correlations-in-linear-probes)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：水印通道优化与安全
-6. [RISE: Red-teaming via Iterative Strategy Evolution for Modern Text-to-Image Models](/202610/06/2609.34920v1-rise-red-teaming-via-iterative-strategy-evolution-for-modern-text-to-image-models)  
+   evidence：通过白化提升模型对虚假关联的鲁棒性
+6. [Universal Cross-Prompt Adversarial Attacks on Promptable Concept Segmentation](/202610/07/2609.39265v1-universal-cross-prompt-adversarial-attacks-on-promptable-concept-segmentation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗攻击的图像防御策略
-7. [Adversarial Debiasing of Machine Learning Models for Enhanced Network Security against DDoS Attacks](/202610/06/2609.36167v1-adversarial-debiasing-of-machine-learning-models-for-enhanced-network-security-against-ddos-attacks)  
+   evidence：对抗攻击在概念分割中的应用
+7. [Enhancing Autoregressive Video Generation via Representation Adversarial Distillation](/202610/07/2609.40037v1-enhancing-autoregressive-video-generation-via-representation-adversarial-distillation)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗去偏置用于网络攻击防御
-8. [Technical note on: Zero-Training Feature-Space Alignment via Information Geometry](/202610/06/2609.37302v1-technical-note-on-zero-training-feature-space-alignment-via-information-geometry)  
+   evidence：对抗扰动生成与防御结合
+8. [Manifold-Constrained Initial Noise Optimization for Efficient Generative Model Alignment](/202610/07/2610.00365v1-manifold-constrained-initial-noise-optimization-for-efficient-generative-model-alignment)  
    标签：评分：7.0/10、query:image-adversarial
-   evidence：对抗扰动防御方法
-9. [DirectUV: Image-Conditioned UV Texture Generation with Surface-Aware Positional Encoding](/202610/06/2609.34651v1-directuv-image-conditioned-uv-texture-generation-with-surface-aware-positional-encoding)  
+   evidence：对抗扰动生成与防御技术
+9. [Collision-Aware and Observation-Aligned Object-Centric Scene Reconstruction from Point Cloud](/202610/07/2609.37260v1-collision-aware-and-observation-aligned-object-centric-scene-reconstruction-from-point-cloud)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
-10. [DirectUV: Image-Conditioned UV Texture Generation with Surface-Aware Positional Encoding](/202610/06/2609.34651v2-directuv-image-conditioned-uv-texture-generation-with-surface-aware-positional-encoding)  
+   evidence：对抗扰动与生成模型的几何关联
+10. [Weeding Out Bad Seeds: Initial-Noise-Robust Unlearning for Text-to-Image Diffusion Models](/202610/07/2609.37537v1-weeding-out-bad-seeds-initial-noise-robust-unlearning-for-text-to-image-diffusion-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：图像对抗扰动生成方法
-11. [Multiresolution Block-Coordinate Plug-and-Play Algorithm for Image Reconstruction](/202610/06/2609.35227v1-multiresolution-block-coordinate-plug-and-play-algorithm-for-image-reconstruction)  
+   evidence：对抗攻击下的模型遗忘
+11. [Weeding Out Bad Seeds: Initial-Noise-Robust Unlearning for Text-to-Image Diffusion Models](/202610/07/2609.37537v2-weeding-out-bad-seeds-initial-noise-robust-unlearning-for-text-to-image-diffusion-models)  
    标签：评分：6.0/10、query:image-adversarial
-   evidence：对抗攻击防御策略
-12. [Domain-adaptive Zero-Shot Image Enhancement via Locality-Constrained Diffusion Guidance](/202610/06/2609.35289v1-domain-adaptive-zero-shot-image-enhancement-via-locality-constrained-diffusion-guidance)  
-   标签：评分：6.0/10、query:image-generation
-   evidence：通过局部约束提升图像增强效果
+   evidence：图像扩散模型的去学习方法
+12. [Look Closer: Patch-wise Supervision for AI-Generated Image Detection](/202610/07/2609.37937v2-look-closer-patch-wise-supervision-for-ai-generated-image-detection)  
+   标签：评分：6.0/10、query:image-adversarial
+   evidence：基于图像块的生成检测方法
 
 
 ### ⚡ 这个站点能做什么
