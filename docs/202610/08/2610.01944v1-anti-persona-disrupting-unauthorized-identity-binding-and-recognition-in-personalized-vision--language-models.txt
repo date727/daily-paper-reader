@@ -1,0 +1,1134 @@
+Anti-Persona: Disrupting Unauthorized Identity Binding and
+Recognition in Personalized Vision–Language Models
+Abhishek Basu∗1, Fahad Shamshad∗1, Karthik Nandakumar1, 2
+1MBZUAI, UAE
+2Michigan State University, USA
+Few-shot personalization enables large vision–language models (LVLMs) to learn user-
+specific visual concepts for applications such as personalized retrieval and subject-aware
+querying. However, it also creates a privacy risk: an adversary can bind a target identity
+from a few reference images and subsequently detect that identity in new images through
+natural-language queries. We introduce Anti-Persona, an image-level defense against unau-
+thorized identity binding and recognition in personalized LVLMs. Our key insight is that
+identity personalization relies on visual features shared across multiple reference images.
+We aggregate these features into an identity prototype and optimize visually subtle pertur-
+bations that disrupt prototype alignment in the vision-encoder space. Spatial smoothing
+and low-frequency preservation further promote visual fidelity and practical resilience to
+image compression. The resulting protection does not depend on a specific prompt and
+supports both proactive anti-personalization and reactive image protection. Experiments
+on two representative personalized LVLMs demonstrate protection rates of up to 95.0%
+while preserving visual fidelity. The method remains stable across prompt variations and
+evaluated identity-query tasks, and improves black-box transfer under encoder mismatch.
+Code
+https://github.com/iabh1shekbasu/anti-persona
+1
+Introduction
+Large Vision-Language Models (LVLMs) have made significant progress in aligning visual and
+textual representations [15, 12].
+Trained on web-scale image-text corpora, they can answer
+free-form questions, follow visual instructions, and associate language with fine-grained visual
+concepts that previously required task-specific architectures [33]. These capabilities have enabled
+applications such as accessibility tools, creative assistants, and consumer photo platforms [30].
+An increasingly important capability of LVLMs is personalization, which adapts a model to a
+user-specific visual concept from only a few reference images [19]. Given several images of a
+person, a personalized LVLM can learn that individual as a new visual concept and subsequently
+recognize them in held-out images. This is typically achieved by learning a compact subject-
+specific representation on top of a frozen backbone [18, 1], enabling personalized assistance,
+photo organization, identity-aware retrieval, and subject-specific querying [8].
+While personalization benefits legitimate users, its low cost and few-shot data requirements also
+make it accessible to adversaries. A few publicly available photos may be sufficient to bind a
+person’s identity to an LVLM [25, 18, 1]. Once personalized, the model can be queried in natural
+language to determine whether the target appears in new images [2]. This creates a significant
+privacy risk: a general-purpose LVLM can be repurposed as a targeted identity recognizer without
+the person’s knowledge or consent.
+Unlike conventional face-recognition systems that require
+dedicated pipelines or specialized models [36, 11], personalized LVLMs expose identity detection
+through a flexible prompt-based interface, lowering the barrier to unauthorized use without
+specialized expertise.
+A growing line of work studies image-level protection against unauthorized use, primarily for
+generative models. Anti-DreamBooth [26], Glaze [24], and PhotoGuard [23] apply visually con-
+strained perturbations to interfere with image editing, style imitation, or subject-driven genera-
+1
+arXiv:2610.01944v1  [cs.CV]  1 Oct 2026
+
+
+Clean references
+and clean query
+Personalized
+LVLM
+Is <sks> in this image?
+Protect references
+before release
+Is <sks> in this image?
+Is <sks> in this image?
+No Protection
+Proactive
+Shared Identity Signal
+Protected references
+Identity Cues Disrupted
+Anti-Persona
+Reactive
+Protect new query 
+after personalization
+Clean references
+Clean references
+Shared Identity Signal
+<sks> learned
+Personalized
+LVLM
+Identity binding 
+weakened
+Personalized
+LVLM
+<sks> learned
+Clean query
+Clean query
+Protected query
+Anti-Persona
+Unauthorized recognition succeeds
+Yes, <sks> is in this image.
+I can’t find <sks> in this photo.
+Identity recognition disrupted
+I am not sure who you are referring to.
+Identity recognition disrupted
+2 - Identity 
+Prototype
+1 – Reference Images
+3 – Query Image
+4 – Model Response
+Figure 1 Anti-Persona protects against unauthorized identity binding and recognition in LVLMs personalized
+from only a few reference images. Without protection (top), an adversary uses a small set of clean ref-
+erence images to bind the target identity to a learned subject representation, denoted here by ⟨sks⟩.
+This is an arbitrary identifier representing the parameters learned specifically for the target individual.
+The adversary can then use the personalized model to recognize the individual in new query images.
+Anti-Persona constructs an identity prototype by aggregating consistent identity features across multi-
+ple reference images and optimizes imperceptible perturbations in the vision encoder space to weaken
+the alignment between protected image features and this prototype. In the proactive setting (middle),
+reference images are protected before release, weakening identity binding and subsequent recognition on
+clean queries. In the reactive setting (bottom), the LVLM has already been personalized using clean
+references. Anti-Persona instead protects newly released query images, disrupting their match with the
+learned identity representation.
+tion. These defenses target synthesis-based threats, where protection is measured by whether a
+model fails to edit, mimic, or reproduce protected content [35]. Recognition-based personaliza-
+tion poses a different challenge: the model need not synthesize the target identity, but only learn
+a discriminative representation sufficient for detecting it. Generative defenses are therefore not di-
+rectly optimized to prevent identity binding or prompt-based recognition in personalized LVLMs,
+motivating a protection mechanism tailored to this setting and its distinct privacy requirements.
+In this paper, we introduce an image-level protection framework for recognition-based personal-
+ization in LVLMs (see Figure 1). Our approach follows two key observations. First, personalized
+LVLMs rely on vision-encoder representations as the visual evidence for identity binding. We
+therefore optimize protective perturbations in the encoder space rather than attacking a partic-
+ular prompt response. Second, identity binding relies on cues that remain stable across multiple
+images of the same person, rather than on memorizing each image independently. Consequently,
+perturbing an image only with respect to its own representation may leave shared identity cues
+available for personalization. We address this limitation by aggregating multiple reference repre-
+sentations into an identity prototype and optimizing each protected image to reduce its alignment
+with this prototype. This directly targets identity-consistent structure rather than only image-
+specific features.
+In addition to the identity-disruption objective, we refine the perturbation to make the protection
+effective under realistic image-sharing conditions. Images shared online are often recompressed,
+which can attenuate high-frequency adversarial signals. We therefore encourage spatial coher-
+ence to suppress abrupt local variations and concentrate perturbation energy in lower-frequency
+components that are less susceptible to JPEG attenuation [27]. These refinements are designed
+to improve perceptual quality and compression resilience while preserving the identity-disruption
+objective. Because the objective operates on identity-relevant representations rather than a spe-
+cific query, we evaluate it across prompt formulations. We additionally study transfer when the
+protection encoder differs from that of the target personalized LVLM.
+2
+
+
+Specifically, our main contributions are:
+• We identify and formalize a privacy threat in few-shot personalized LVLMs, in which an
+adversary can bind an individual’s identity to an LVLM using only a few reference images
+and later detect that individual in new images through natural-language queries without
+the target’s consent. We formulate image-level protection for this recognition-based setting,
+shifting the defense focus from synthesis-oriented misuse in generative models to unautho-
+rized identity binding and recognition.
+• We propose a multi-reference identity-disruption objective that aggregates encoder repre-
+sentations from multiple reference images into an identity prototype and optimizes pro-
+tected images to weaken their feature alignment with this prototype. This directly targets
+identity-consistent cues that recur across multiple reference images rather than image-
+specific features.
+• We introduce edge-aware spatial smoothing and low-frequency preservation to reduce vis-
+ible artifacts and improve resilience to JPEG compression while maintaining the identity-
+disruption objective.
+• We evaluate Anti-Persona on representative personalized LVLMs, covering both proactive
+and reactive protection settings.
+Our method achieves the strongest overall protection
+among the evaluated methods while preserving visual fidelity.
+It remains stable across
+prompt formulations, extends beyond direct presence queries to VQA-style identity queries,
+and outperforms the evaluated baselines under strict black-box encoder mismatch.
+2
+Related Work
+Personalization in LVLMs.
+Personalization has been extensively studied in generative models,
+where methods such as DreamBooth [21], Textual Inversion [6], and Custom Diffusion [9] adapt
+text-to-image models to synthesize a specific subject from a few reference images [34]. In contrast,
+personalization in LVLMs is more recent and serves a different purpose: rather than generating
+images of a subject, the model learns to recognize and interact with user-specific visual concepts
+in downstream vision-language tasks [19]. Recent methods such as Yo’LLaVA [18] adopt token-
+based personalization, where a learned identifier is bound to a target subject, while MyVLM [1]
+introduces architectural components such as a dedicated concept head for personalized recogni-
+tion. These approaches show that LVLMs can acquire identity-specific representations from only
+a small number of examples, enabling applications such as personalized retrieval and subject-
+aware querying.
+However, this capability also exposes new vulnerabilities, as the same mech-
+anisms that enable efficient personalization can be exploited to inject sensitive identities into
+models without user consent.
+Protection against Unauthorized Personalization. A growing body of work has explored adver-
+sarial perturbations as a defense against unauthorized use of personal images by generative
+AI systems [16]. General image protection methods such as PhotoGuard [23] and Glaze [24]
+perturb images to resist malicious image editing or style imitation [31], while methods such
+as Anti-DreamBooth [26], MIST [13], Anti-Diffusion [38], and AdvDM [14] specifically target
+subject-driven personalization in diffusion models. These approaches are designed for synthesis-
+based threats, where protection is achieved by preventing a generative model from faithfully
+editing, mimicking, or reproducing protected visual content. Recognition-based personalization
+in LVLMs presents a different defense objective. The personalized model need not synthesize the
+target identity; it only needs to learn a discriminative representation that supports prompt-based
+identity detection. As a result, defenses designed for generative misuse are not directly optimized
+to prevent identity binding or subsequent recognition in personalized LVLMs. In this work, we
+address this gap by formulating image-level protection for recognition-based personalization, where
+3
+
+
+the goal is to disrupt the identity-consistent features used by personalized LVLMs for detection.
+3
+Preliminaries
+3.1
+Personalization in LVLMs
+A large vision–language model (LVLM) can be represented as a vision encoder followed by a
+language model. Given an image x ∈RH×W×3, a frozen vision encoder fϕ produces a visual
+representation fϕ(x) ∈Rd, where any visual projection module is absorbed into fϕ. Given a
+user query q, the language model produces a response as gθ(fϕ(x), q). Although this model can
+answer general visual questions, it does not explicitly bind new user-specific identities absent
+from its training data.
+Personalization adapts the LVLM to a subject s using a small reference set Rs = {x1, x2, . . . , xn},
+whose images depict the same individual under different visual conditions. The systems consid-
+ered in this work keep the pretrained vision–language backbone frozen and learn lightweight
+subject-specific parameters ψs from Rs.
+After personalization, the response to a test image
+xtest and query q depends on the test-image representation fϕ(xtest) and ψs. These parameters
+may be implemented as identifier tokens, lightweight prediction heads, or related personalization
+modules.
+Representative personalized LVLMs instantiate ψs differently. Yo’LLaVA [18] learns latent identi-
+fier tokens, including a subject token such as ⟨sks⟩, using conversational supervision. MyVLM [1]
+instead trains a lightweight concept head hψs : Rd →R using positive target images and negative
+or distractor images. Despite these architectural differences, both methods learn subject-specific
+parameters from encoder representations, making the vision encoder a common interface for iden-
+tity personalization. Consequently, if protected images no longer produce a consistent identity
+signal in the encoder space, the personalization mechanism receives weaker evidence for binding or
+recognizing the target subject. We therefore formulate protection at the encoder-representation
+level rather than against a specific prompt, response, or personalization head, allowing the de-
+fense to target identity evidence shared across different personalized LVLM designs.
+3.2
+Threat Model
+We study unauthorized identity recognition using personalized LVLMs. Let s denote the target
+individual. The adversary seeks to determine whether s appears in a query image, whereas the
+defender releases protected images ˜x = x + δ that disrupt identity binding or recognition while
+remaining visually similar to x.
+Adversary goals and capabilities. Given reference images of s, the adversary follows the standard
+personalization pipeline of the target LVLM: the pretrained vision–language backbone remains
+frozen, and subject-specific parameters ψs are learned from the available references. The adver-
+sary then uses natural-language prompts to determine whether s appears in new images and
+may vary the formulation of these prompts. We consider a non-adaptive adversary using an off-
+the-shelf personalized LVLM; modifying the personalization algorithm, purification, adversarial
+training, and explicit perturbation removal are outside our scope.
+Defender goals and capabilities.
+The defender aims to prevent reliable recognition of s while
+preserving visual fidelity. The defender uses the user’s own reference images to estimate the
+identity prototype but does not assume knowledge of the adversary’s prompts. In the gray-box
+setting, the defender has access to the target vision encoder fϕ. In the black-box setting, the
+defender has no access to the target encoder’s parameters or gradients and instead optimizes
+using a surrogate encoder fϕ′.
+4
+
+
+Figure 2 Overview of the proposed identity-prototype protection framework. Given a user image and a
+reference set of the same identity, we first compute an identity prototype by aggregating encoder repre-
+sentations across reference images. The protected image is then optimized in the vision-encoder space
+using a combined loss that disrupts alignment with the identity prototype, reduces residual similarity to
+the clean image, and anchors the representation toward a neutral target. Finally, spatial smoothing and
+low-frequency preservation refine the perturbation to improve visual quality and robustness to compres-
+sion, producing a final protected image that is difficult to bind or recognize by personalized LVLMs.
+Protection protocols. We consider two protocols that differ in when protection is applied. In
+the proactive protocol, the defender protects reference images before release, producing ˜Rs =
+{˜x1, . . . , ˜xn}. The adversary subsequently personalizes the LVLM using ˜Rs to obtain ˜ψs and
+evaluates it on clean held-out images. In the reactive protocol, the adversary has already learned
+ψclean
+s
+from clean references Rclean
+s
+; the defender instead protects newly released query images
+before they are fed to the personalized model.
+Protection requirements. Effective protection must prevent reliable recognition of s under the
+corresponding protocol: identity binding and subsequent recognition should fail after personal-
+ization with protected references in the proactive protocol, whereas protected queries should not
+be recognized by a model personalized with clean references in the reactive protocol. Protection
+should remain effective across the prompt variations and encoder-access regimes while preserving
+visual similarity to the original images.
+4
+Method
+Our goal is to construct an imperceptible perturbation δ for a user image x such that the
+protected image ˜x = x + δ is difficult to associate with the target identity s by a personalized
+LVLM. We formulate protection in the representation space of the vision encoder, since this
+is the shared interface through which visual identity information is provided to downstream
+personalization modules. The design follows three principles.
+First, the perturbation should
+disrupt identity-relevant encoder features before they are used for personalization or recognition.
+Second, because identity personalization is learned from multiple reference images, protection
+should target the identity-consistent structure shared across those images rather than only image-
+specific features.
+Third, the perturbation should remain visually unobtrusive and robust to
+5
+
+
+Algorithm 1 Identity-Prototype Protection
+Require: Image to protect x; reference set Rs = {x1, . . . , xn}; frozen encoder fϕ; neutral anchor
+xt; perturbation budget ϵ; step size α; steps T; weights λ1, λ2; Gaussian smoother G(·);
+low-pass mask Mlp
+Ensure: Protected image ˜x
+1: µs ←1
+n
+Pn
+i=1 fϕ(xi)
+▷identity prototype, Eq. 1
+2: Medge ←Sobel(x)
+▷edge mask from the clean image
+3: initialize δ ←0
+4: for t = 1 to T do
+5:
+˜x ←clip[0,1](x + δ)
+6:
+L ←cos
+ fϕ(˜x), µs
+
++ λ1 cos
+ fϕ(˜x), fϕ(x)
+
++ λ2
+ 1 −cos
+ fϕ(˜x), fϕ(xt)
+
+▷Eq. 5
+7:
+δ ←δ −α sign(∇δL)
+▷PGD descent step
+8:
+δ ←clip[−ϵ,ϵ](δ)
+▷ℓ∞projection
+// perturbation refinement
+9:
+δ ←G(δ) ⊙Medge + δ ⊙(1 −Medge)
+▷spatial smoothing
+10:
+δ ←IDCT(DCT(δ) ⊙Mlp)
+▷low-frequency preservation
+11:
+δ ←clip[−ϵ,ϵ](δ)
+▷re-project
+12: end for
+13: return clip[0,1](x + δ)
+realistic image processing, particularly lossy compression. We first define an identity prototype
+that captures the shared identity signal, and then use it to build the protection objective. The
+overall framework is illustrated in Figure 2.
+4.1
+Identity Prototype
+A naive way to perturb an image is to move its vision encoder representation away from its clean
+embedding, for example by reducing the similarity between fϕ(x + δ) and fϕ(x). This instance-
+level objective can suppress features of the individual image, but it does not explicitly target
+the information that supports few-shot identity personalization. In this setting, the personalized
+model observes multiple reference images of the same individual and can rely on cues that
+remain stable across variations in pose, illumination, expression, and background. As a result,
+perturbing each image only with respect to its own embedding may leave the shared identity
+signal sufficiently intact for the model to bind or recognize the subject.
+To target this shared signal, we define an identity prototype µs from the user’s reference set
+Rs = {x1, x2, . . . , xn}. Let zi = fϕ(xi) denote the encoder representation of the i-th reference
+image. We compute the prototype as the centroid of the reference embeddings:
+µs = 1
+n
+n
+X
+i=1
+zi = 1
+n
+n
+X
+i=1
+fϕ(xi).
+(1)
+The prototype captures identity-consistent features shared across the reference images while
+averaging out variations specific to individual samples, such as pose, lighting, or background. As
+a result, µs provides a stable representation of the subject’s identity in the encoder feature space
+and serves as the natural target for perturbation. Optimizing protected images to move away
+from µs, rather than from their individual embeddings, ensures that the perturbations disrupt
+features that are consistent across the identity, yielding stronger and more reliable protection.
+6
+
+
+4.2
+Protection Objective
+Given an image x of subject s, we optimize a perturbation δ such that the protected image
+˜x = x + δ has weak alignment with the identity evidence used by personalized LVLMs. The
+objective combines three complementary terms: a prototype-level identity term that disrupts
+the shared identity prototype, an instance-level term that suppresses residual similarity to the
+clean image, and a target-anchoring term that stabilizes the optimization in feature space. The
+proposed approach is summarized in Algorithm 1.
+Prototype-level identity disruption. We first reduce the alignment between the protected embed-
+ding and the identity prototype µs defined in Eq. 1. Since CLIP-based encoders commonly use
+normalized features and cosine similarity, we minimize
+Lid(˜x) = cos
+ fϕ(˜x), µs
+
+,
+(2)
+which directly penalizes alignment with the identity-consistent direction in the encoder space.
+Instance-level repulsion.
+Although the prototype term targets shared identity structure, the
+protected image may still remain close to its original embedding and retain image-specific identity
+cues. We therefore introduce an instance-level repulsion term,
+Lself(˜x) = cos
+ fϕ(˜x), fϕ(x)
+
+,
+(3)
+which reduces similarity between the protected and clean representations. This term comple-
+ments the prototype loss by suppressing residual cues tied to the individual image.
+Target anchoring. Untargeted perturbations can lead to unstable optimization when the repre-
+sentation moves away from the identity region. To stabilize this process, we introduce a fixed
+target image xt and encourage alignment with its embedding:
+Ltarget(˜x) = 1 −cos
+ fϕ(˜x), fϕ(xt)
+
+,
+(4)
+which provides a consistent optimization direction. This formulation is consistent with prior ob-
+servations that targeted adversarial objectives provide a more stable and consistent optimization
+direction compared to purely untargeted objectives [37]. We use a gray image as xt, serving as
+a neutral anchor that does not correspond to any specific identity.
+The final protection objective is
+min
+δ
+Lid(˜x) + λ1Lself(˜x) + λ2Ltarget(˜x)
+s.t.
+∥δ∥∞≤ϵ,
+(5)
+where λ1 and λ2 balance the loss terms. We minimize this objective by projected gradient descent
+under the ℓ∞constraint, which enforces imperceptibility.
+4.3
+Perturbation Refinement
+The objective in Eq. 5 disrupts identity representations, but it does not control the structure of
+the perturbation in image space. This can limit practical deployment in two ways. First, an ℓ∞
+constraint bounds the perturbation magnitude but does not prevent locally irregular patterns that
+may become perceptible. Second, adversarial signals concentrated in high-frequency components
+can be weakened by lossy image compression, which is common in online sharing pipelines. We
+address these issues with two refinements applied after each optimization step.
+Spatial smoothing. To reduce perceptible artifacts, we regularize the perturbation by suppressing
+abrupt local variations. Specifically, we apply Gaussian smoothing G(·) using a Sobel-derived
+mask Medge computed from the clean image:
+δ ←G(δ) ⊙Medge + δ ⊙(1 −Medge).
+7
+
+
+This operation encourages spatial coherence in visually sensitive regions while preserving the
+overall direction of the optimized perturbation. As a result, the perturbation remains aligned
+with the identity-disruption objective while reducing local artifacts that may otherwise be visible.
+Low-frequency preservation. To improve robustness to compression, we further constrain the
+perturbation to retain low-frequency structure. After each update, we apply a patch-wise dis-
+crete cosine transform (DCT) to δ, keep coefficients selected by a low-pass mask, and reconstruct
+the perturbation using the inverse DCT. This concentrates perturbation energy in spectral com-
+ponents that are more likely to survive JPEG compression, rather than in high-frequency com-
+ponents that are easily attenuated. The refinement therefore improves compression robustness
+while preserving the identity-disruption objective.
+5
+Experiments
+5.1
+Experimental Setup
+We evaluate whether the proposed protection reduces unauthorized identity recognition while
+preserving visual fidelity. Our experiments cover reactive and proactive protection, two personal-
+ized LVLM architectures, prompt and query variation, black-box encoder transfer, and sensitivity
+to the number of reference images.
+Implementation details. We implement the method in PyTorch and generate protected images
+at 336 × 336 resolution. Unless otherwise stated, pixel-space perturbations use an ℓ∞budget
+of ϵ = 4/255 and are clipped to the valid image range after every update. Spatial smoothing
+uses a Gaussian kernel with (σ, k) = (0.8, 5). In the gray-box setting, protection is optimized
+using the victim-aligned OpenAI CLIP ViT-L/14@336 encoder [20]. In the black-box setting,
+this encoder is never used. Instead, we form a six-encoder surrogate pool comprising CLIP-B/16,
+CLIP-L/14@224, CLIPA-L/14@336, SigLIP [32], ConvNeXtV2 [29], and supervised ViT-L. Each
+leave-one-surrogate-out configuration optimizes over the remaining five encoders and is evaluated
+on Yo’LLaVA. Experiments use a single NVIDIA RTX A6000 (48GB) GPU.
+Dataset and personalized LVLMs. We use the personalized identity-recognition benchmark from
+Yo’LLaVA [18], which contains ten identities with approximately 15–20 images per identity.
+Following the benchmark protocol, 5–10 images are used as personalization references and the
+remaining valid images are held out for evaluation. We evaluate Yo’LLaVA [18], which learns
+subject-specific identifier tokens, and MyVLM [1], which trains a lightweight concept head over
+frozen visual features. These systems represent two distinct encoder-based personalization mech-
+anisms.
+Baselines. We report an unprotected (Clean) reference and compare against two baseline families.
+First, we consider five ℓ∞-bounded pixel-space attacks: FGSM [7], I-FGSM [10], MI-FGSM [4],
+TI-FGSM [5], and PGD [17].
+Each baseline optimizes an instance-level feature-repulsion ob-
+jective that reduces the similarity between fϕ(˜x) and fϕ(x), providing a controlled comparison
+with conventional feature-space perturbations. These baselines use the same perturbation bud-
+get and encoder-access regime as ours. For broader comparison, we also report DiffAttack [3]
+and WDP [22], two unrestricted diffusion-based references. Because they are not ℓ∞-bounded,
+we distinguish them from equal-budget comparisons and report their visual fidelity.
+Within
+each protocol, all evaluated methods use the same identities, personalized Large VLMs, image
+resolution, and text prompts.
+Evaluation protocols. We evaluate protection under two protocols corresponding to the threat
+model. Following Sec. 3.2, the reactive protocol personalizes the LVLM using clean references
+and evaluates it on protected held-out images. The proactive protocol instead personalizes the
+model using protected references and evaluates it on clean held-out images. More details are
+8
+
+
+Table 1 Reactive protection. Protection rate (PR) is the identity-recognition failure rate. Pixel-space
+methods use ϵ = 4/255; higher is better for all metrics.
+Method
+PR (%) ↑
+PSNR ↑SSIM ↑
+Yo’LLaVA MyVLM
+Clean
+3.3
+50.0
+–
+–
+FGSM
+2.2
+60.0
+36.05
+0.900
+I-FGSM
+87.8
+58.9
+37.94
+0.940
+MI-FGSM
+80.0
+54.4
+36.19
+0.900
+TI-FGSM
+40.0
+54.4
+37.72
+0.950
+PGD
+85.6
+58.9
+37.92
+0.940
+DiffAttack
+5.6
+62.2
+27.85
+0.831
+WDP
+14.4
+65.6
+26.77
+0.817
+Ours
+93.3
+71.1
+39.30
+0.958
+Table 2 Proactive protection on Yo’LLaVA. The model is personalized with protected references and
+evaluated on clean queries. Values are protection rates (%); higher is better. Pixel methods use ϵ = 4/255.
+This protocol evaluates whether protection disrupts identity binding during personalization rather than
+only causing evasion at inference.
+Method
+Ciin
+Denis
+dang Khanhvy Oong
+Phuc
+map
+Thao Thuytien Viruss
+Willin
+vietnam Yuheng Avg.
+Clean
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+10.0
+40.0
+5.0
+FGSM
+60.0
+30.0
+100.0
+10.0
+0.0
+100.0
+100.0
+60.0
+10.0
+80.0
+55.0
+MI-FGSM 100.0
+70.0
+80.0
+80.0
+30.0 100.0
+100.0
+90.0
+0.0
+80.0
+73.0
+TI-FGSM 100.0
+90.0
+100.0
+100.0 60.0 100.0
+100.0
+40.0
+80.0
+100.0
+87.0
+PGD
+20.0
+90.0
+57.1
+20.0
+50.0 100.0
+100.0
+100.0
+40.0
+100.0
+67.7
+DiffAttack 60.0
+60.0
+100.0
+40.0
+80.0 100.0
+80.0
+100.0
+0.0
+80.0
+70.0
+WDP
+100.0
+20.0
+100.0
+100.0 20.0 100.0
+40.0
+0.0
+70.0
+100.0
+65.0
+Ours
+100.0 100.0
+100.0
+100.0 70.0 100.0
+80.0
+100.0
+100.0
+100.0
+95.0
+provided in suppl. material.
+Evaluation metrics.
+For each target-present query, let ri = 1 if a fixed, method-independent
+parser determines that the response recognizes the target subject, and ri = 0 otherwise. We
+define
+ProtectionRate = 100
+N
+N
+X
+i=1
+(1 −ri),
+where N is the number of evaluated queries. Higher values indicate more frequent failures to
+recognize the target. The same parser is used for every method and prompt. We report PSNR
+and SSIM [28] between clean and protected images to quantify visual fidelity.
+5.2
+Results
+5.2.1
+Main Protection Results
+Figure 3 compares representative protected images and enlarged regions. Our results remain
+visually closer to the clean images than TI-FGSM and PGD, consistent with the higher PSNR
+and SSIM in Table 1.
+9
+
+
+PGD
+Ours
+Original
+TI-FGSM
+Figure 3 Qualitative comparison with representative equal-budget baselines. Insets show enlarged regions.
+Our protected images retain local detail with fewer visible artifacts.
+Table 3 Strict black-box transfer to Yo’LLaVA under ϵ = 4/255. Each row excludes the listed surrogate
+from the six-encoder pool and optimizes over the remaining five; the target encoder is never used. Entries
+are protection rates (%); higher is better.
+Excluded surrogate I-FGSM PGD MI-FGSM TI-FGSM Ours
+CLIP-B/16
+24.4
+28.9
+28.9
+6.7
+32.2
+CLIP-L/14-224
+10.0
+12.2
+18.9
+5.6
+8.9
+CLIPA-L/14-336
+22.2
+26.7
+23.3
+7.8
+27.8
+SigLIP
+30.0
+31.1
+30.0
+6.7
+35.6
+ConvNeXtV2
+30.0
+30.0
+31.1
+7.8
+31.1
+Supervised ViT-L
+40.0
+42.2
+42.2
+18.9
+48.9
+Average
+26.1
+28.5
+29.1
+8.9
+30.7
+5.2.2
+Black-Box Transfer
+Prompt variation.
+As shown in Table 4, across five semantically equivalent subject-presence
+prompts, protection ranges from 86.0% to 93.0%, indicating limited sensitivity to prompt word-
+ing.
+Table 1 reports reactive protection. Our method achieves protection rates of 93.3% on Yo’LLaVA
+and 71.1% on MyVLM, exceeding the strongest equal-budget baselines by 5.5 and 11.1 percentage
+points, respectively. When the unrestricted references are included, it remains 5.5 points above
+the strongest listed baseline on both models. The full method also provides the highest visual
+fidelity, with 39.30 dB PSNR and 0.958 SSIM. The clean row is important when interpreting these
+rates: the unprotected failure rate is 3.3% on Yo’LLaVA but 50.0% on MyVLM. Relative to clean,
+our method increases recognition failure by 90.0 and 21.1 percentage points, respectively.
+Table 2 evaluates proactive protection.
+Our method achieves the highest average protection
+rate of 95.0%, exceeding the strongest reported baseline, TI-FGSM at 87.0%, by 8.0 percentage
+points. It obtains at least 70.0% protection for every identity and reaches 100% for eight of the
+ten identities. These results show effective prevention of identity binding across the evaluated
+subjects.
+10
+
+
+Table 4 Prompt robustness at ϵ = 4/255: protection rates (%) across five equivalent identity-presence
+prompts.
+Method
+P1
+P2
+P3
+P4
+P5
+Ours
+91.0
+92.0
+92.0
+93.0
+86.0
+Table 5 VQA-style identity-query protection on MyVLM under ϵ = 4/255. Entries are protection rates
+(%), averaged over three prompts per image; higher is better.
+Method
+Khanhvy Viruss Thao Yuheng Mean
+FGSM
+6.7
+36.7
+43.3
+33.3
+30.0
+I-FGSM
+10.0
+60.0
+50.0
+13.3
+33.3
+MI-FGSM
+13.3
+63.3
+46.7
+20.0
+35.8
+TI-FGSM
+13.3
+63.3
+43.3
+40.0
+40.0
+PGD
+13.3
+66.7
+50.0
+20.0
+37.5
+Ours
+10.0
+73.3
+53.3
+46.7
+45.8
+We evaluate strict black-box transfer using the equal-budget feature-space baselines, for which
+encoder substitution is directly defined.
+The victim-aligned CLIP ViT-L/14@336 encoder is
+never used during protection generation. For each row of Table 3, one surrogate is excluded and
+the perturbation is optimized over the remaining five before evaluation on Yo’LLaVA.
+Our method achieves an average protection rate of 30.7%, compared with 29.1% for the strongest
+baseline, MI-FGSM. Although absolute black-box performance remains below the gray-box re-
+sults, these findings show transfer without access to the target encoder.
+5.2.3
+Robustness and Sensitivity Analyses
+We examine sensitivity to prompt wording, generalization to personalized VQA queries, and the
+number of images used to estimate the identity prototype.
+VQA-style identity queries. Table 5 evaluates three yes/no personalized VQA prompts per image
+across four MyVLM identities. Our method achieves the highest mean protection rate of 45.8%,
+exceeding TI-FGSM at 40.0% by 5.8 percentage points and obtaining the best result for three of
+the four identities.
+JPEGcompressionrobustness. Table 6 evaluates protection after JPEG recompression across four
+quality factors at ϵ = 4/255. At Q = 95, our method retains 86.7% protection, outperforming
+the strongest baseline, MI-FGSM, by 27.8 percentage points. It remains strongest at Q = 85
+and Q = 75, achieving 37.8% and 13.3%, respectively. Under severe compression at Q = 65, all
+methods fall to 10.0% or below, with our method remaining competitive at 8.9%. Overall, our
+method demonstrates greater JPEG robustness than the evaluated baselines, consistent with its
+low-frequency design.
+Number of reference images. Figure 4 shows that protection increases from 87.8% with one or
+two references to 90.0%, 91.1%, and 93.3% with four, six, and nine references, respectively. This
+5.5-point improvement is consistent with the motivation for aggregating identity information
+across multiple images.
+11
+
+
+Table 6 JPEG compression robustness on Yo’LLaVA at ϵ =
+4/255, averaged across identities. Protected images are saved
+with JPEG quality Q using chroma subsampling setting ss0.
+Entries report protection rate (%); higher is better.
+Q
+FGSM [7] I-FGSM [10] MI-FGSM [4] PGD [17] Ours
+95
+5.6
+54.4
+58.9
+52.2
+86.7
+85
+5.6
+13.3
+27.8
+10.0
+37.8
+75
+5.6
+6.7
+12.2
+6.7
+13.3
+65
+4.4
+5.6
+10.0
+6.7
+8.9
+Figure 4 Sensitivity to the number of ref-
+erence images used to estimate the iden-
+tity prototype.
+Protection improves as
+additional references are added.
+1
+2
+4
+6
+9
+Number of reference images used for identity prototype
+87
+88
+89
+90
+91
+92
+93
+94
+95
+Protection rate (%)
+87.8
+87.8
+90.0
+91.1
+93.3
+Best: 93.3%
+Effect of Reference Set Size on Protection
+6
+Conclusion
+We introduced an image-level defense against unauthorized identity recognition in personalized
+LVLMs. Anti-Persona aggregates multiple reference embeddings into an identity prototype and
+optimizes protected images to disrupt identity-consistent encoder features. Spatial and frequency-
+domain refinements are designed to preserve visual quality and improve resilience to image
+compression. Experiments show effective reactive protection on Yo’LLaVA and MyVLM and
+proactive protection on Yo’LLaVA, while maintaining high visual fidelity. The method remains
+stable across prompt formulations, extends to VQA-style identity queries, and improves black-
+box transfer under encoder mismatch. These results motivate stronger privacy safeguards for
+personalized multimodal systems.
+References
+[1] Yuval Alaluf, Elad Richardson, Sergey Tulyakov, Kfir Aberman, and Daniel Cohen-Or.
+Myvlm:
+Personalizing vlms for user-specific queries. In European conference on computer vision, pages 73–
+91. Springer, 2024.
+[2] Huiyu Bai, Runze Wang, Zhuoyun Du, Yiyang Zhao, Fengji Zhang, Haoyu Chen, Xiaoyong Zhu,
+Bo Zheng, and Xuejiao Zhao. Online-pvlm: Advancing personalized vlms with online concept learn-
+ing. arXiv preprint arXiv:2511.20056, 2025.
+[3] Jianqi Chen, Hao Chen, Keyan Chen, Yilan Zhang, Zhengxia Zou, and Zhenwei Shi. Diffusion models
+for imperceptible and transferable adversarial attack. IEEE Transactions on Pattern Analysis and
+Machine Intelligence, 47(2):961–977, 2024.
+[4] Yinpeng Dong, Fangzhou Liao, Tianyu Pang, Hang Su, Jun Zhu, Xiaolin Hu, and Jianguo Li.
+Boosting adversarial attacks with momentum. In 2018 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition, pages 9185–9193. IEEE, 2018.
+[5] Yinpeng Dong, Tianyu Pang, Hang Su, and Jun Zhu. Evading defenses to transferable adversarial
+examples by translation-invariant attacks. In 2019 IEEE/CVF conference on computer vision and
+pattern recognition (CVPR), pages 4307–4316. IEEE, 2019.
+[6] Rinon Gal, Yuval Alaluf, Yuval Atzmon, Or Patashnik, Amit H Bermano, Gal Chechik, and Daniel
+Cohen-Or. An image is worth one word: Personalizing text-to-image generation using textual inver-
+sion. arXiv preprint arXiv:2208.01618, 2022.
+[7] Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial
+examples. arXiv preprint arXiv:1412.6572, 2014.
+[8] Jaeik Kim, Woojin Kim, Woohyeon Park, and Jaeyoung Do.
+Mmpb: It’s time for multi-modal
+personalization. Advances in Neural Information Processing Systems, 38, 2026.
+12
+
+
+[9] Nupur Kumari, Bingliang Zhang, Richard Zhang, Eli Shechtman, and Jun-Yan Zhu. Multi-concept
+customization of text-to-image diffusion. In 2023 IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR), pages 1931–1941. IEEE, 2023.
+[10] Alexey Kurakin, Ian J Goodfellow, Samy Bengio, et al. Adversarial examples in the physical world.
+Artificial intelligence safety and security, 2, 2018.
+[11] Lamyanba Laishram, Muhammad Shaheryar, Jong Taek Lee, and Soon Ki Jung. Toward a privacy-
+preserving face recognition system: A survey of leakages and solutions. ACM Computing Surveys,
+57(6):1–38, 2025.
+[12] Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi.
+Blip-2: Bootstrapping language-image
+pre-training with frozen image encoders and large language models. In International conference on
+machine learning, pages 19730–19742. PmLR, 2023.
+[13] Chumeng Liang and Xiaoyu Wu. Mist: Towards improved adversarial examples for diffusion models.
+arXiv preprint arXiv:2305.12683, 2023.
+[14] Chumeng Liang, Xiaoyu Wu, Yang Hua, Jiaru Zhang, Yiming Xue, Tao Song, Zhengui Xue, Ruhui
+Ma, and Haibing Guan. Adversarial example does good: Preventing painting imitation from diffusion
+models via adversarial examples. arXiv preprint arXiv:2302.04578, 2023.
+[15] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. Advances
+in neural information processing systems, 36:34892–34916, 2023.
+[16] Xingjun Ma, Yifeng Gao, Yixu Wang, Ruofan Wang, Xin Wang, Ye Sun, Yifan Ding, Hengyuan
+Xu, Yunhao Chen, Yunhan Zhao, et al. Safety at scale: A comprehensive survey of large model and
+agent safety. Foundations and Trends in Privacy and Security, 8(3-4):1–240, 2026.
+[17] Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. To-
+wards deep learning models resistant to adversarial attacks. arXiv preprint arXiv:1706.06083, 2017.
+[18] Thao Nguyen, Haotian Liu, Yuheng Li, Mu Cai, Utkarsh Ojha, and Yong Jae Lee. Yo’llava: Your
+personalized language and vision assistant. Advances in Neural Information Processing Systems, 37:
+40913–40951, 2024.
+[19] Chau Pham, Hoang Phan, David Doermann, and Yunjie Tian. Personalized large vision-language
+models. arXiv preprint arXiv:2412.17610, 2024.
+[20] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al.
+Learning transferable visual
+models from natural language supervision. In International conference on machine learning, pages
+8748–8763. PmLR, 2021.
+[21] Nataniel Ruiz, Yuanzhen Li, Varun Jampani, Yael Pritch, Michael Rubinstein, and Kfir Aberman.
+Dreambooth: Fine tuning text-to-image diffusion models for subject-driven generation. In 2023
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pages 22500–22510.
+IEEE, 2023.
+[22] Ali Salar, Qing Liu, Yingli Tian, and Guoying Zhao. Enhancing facial privacy protection via weaken-
+ing diffusion purification. In 2025 IEEE/CVF Conference on Computer Vision and Pattern Recog-
+nition (CVPR), pages 8235–8244. IEEE, 2025.
+[23] Hadi Salman, Alaa Khaddaj, Guillaume Leclerc, Andrew Ilyas, and Aleksander Madry. Raising the
+cost of malicious ai-powered image editing. arXiv preprint arXiv:2302.06588, 2023.
+[24] Shawn Shan, Jenna Cryan, Emily Wenger, Haitao Zheng, Rana Hanocka, and Ben Y Zhao. Glaze:
+Protecting artists from style mimicry by {Text-to-Image} models. In 32nd USENIX Security Sym-
+posium (USENIX Security 23), pages 2187–2204, 2023.
+[25] Yufei Shi, Weilong Yan, Gang Xu, Yumeng Li, Yucheng Chen, Zhenxi Li, Fei Yu, Ming Li, and
+Si Yong Yeo. Pvchat: Personalized video chat with one-shot learning. In 2025 IEEE/CVF Interna-
+tional Conference on Computer Vision (ICCV), pages 23321–23331. IEEE, 2025.
+13
+
+
+[26] Thanh Van Le, Hao Phung, Thuan Hoang Nguyen, Quan Dao, Ngoc N Tran, and Anh Tran. Anti-
+dreambooth: Protecting users from personalized text-to-image synthesis. In 2023 IEEE/CVF Inter-
+national Conference on Computer Vision (ICCV), pages 2116–2127. IEEE, 2023.
+[27] Gregory K Wallace. The jpeg still picture compression standard. Communications of the ACM, 34
+(4):30–44, 1991.
+[28] Zhou Wang, Alan C Bovik, Hamid R Sheikh, and Eero P Simoncelli. Image quality assessment: from
+error visibility to structural similarity. IEEE transactions on image processing, 13(4):600–612, 2004.
+[29] Sanghyun Woo, Shoubhik Debnath, Ronghang Hu, Xinlei Chen, Zhuang Liu, In So Kweon, and
+Saining Xie. Convnext v2: Co-designing and scaling convnets with masked autoencoders. In 2023
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pages 16133–16142.
+Ieee, 2023.
+[30] Yiyan Xu, Jinghao Zhang, Alireza Salemi, Xinting Hu, Wenjie Wang, Fuli Feng, Hamed Zamani,
+Xiangnan He, and Tat-Seng Chua. Personalized generation in large model era: A survey. In Proceed-
+ings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long
+Papers), pages 24607–24649, 2025.
+[31] Kai Ye, Tianyi Chen, and Zhen Wang. Evaluating adversarial protections for diffusion personaliza-
+tion: A comprehensive study. arXiv preprint arXiv:2507.03953, 2025.
+[32] Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid loss for language
+image pre-training.
+In 2023 IEEE/CVF International Conference on Computer Vision (ICCV),
+pages 11941–11952. IEEE, 2023.
+[33] Jingyi Zhang, Jiaxing Huang, Sheng Jin, and Shijian Lu. Vision-language models for vision tasks:
+A survey. IEEE transactions on pattern analysis and machine intelligence, 46(8):5625–5644, 2024.
+[34] Xulu Zhang, Xiaoyong Wei, Wentao Hu, Jinlin Wu, Jiaxin Wu, Wengyu Zhang, Zhaoxiang Zhang,
+Zhen Lei, and Qing Li. A survey on personalized content synthesis with diffusion models. Machine
+Intelligence Research, 22(5):817–848, 2025.
+[35] Ruoyu Zhao, Yushu Zhang, Tao Wang, Wenying Wen, Yong Xiang, and Xiaochun Cao.
+Visual
+content privacy protection: A survey. ACM Computing Surveys, 57(5):1–36, 2025.
+[36] Wenyi Zhao, Rama Chellappa, P Jonathon Phillips, and Azriel Rosenfeld.
+Face recognition: A
+literature survey. ACM computing surveys (CSUR), 35(4):399–458, 2003.
+[37] Boyang Zheng, Chumeng Liang, and Xiaoyu Wu.
+Targeted attack improves protection against
+unauthorized diffusion customization. arXiv preprint arXiv:2310.04687, 2023.
+[38] Li Zheng, Liangbin Xie, Jiantao Zhou, Xintao Wang, Haiwei Wu, and Jinyu Tian. Anti-diffusion:
+Preventing abuse of modifications of diffusion-based models. In Proceedings of the AAAI Conference
+on Artificial Intelligence, volume 39, pages 10582–10590, 2025.
+14
+
+
+Appendix
+A
+Ablation Studies
+All ablations use reactive Yo’LLaVA in the victim-aligned gray-box setting with CLIP ViT-
+L/14@336, ϵ = 4/255, and seed 42. Protection rate (PR) is measured over 90 pooled queries
+across 10 identities, and PSNR is computed between the clean and protected images.
+A.1
+Protection Objective and Perturbation Refinements
+We use the loss definitions and weights from Sec. 4. Table A1 varies the active loss terms and
+perturbation refinements. The loss-only rows omit both refinements, while the refinement rows
+use the complete objective. The full configuration attains the highest observed protection rate,
+93.3%, with a PSNR of 39.30 dB.
+Table A1 Component ablation on reactive Yo’LLaVA in the victim-aligned gray-box setting (CLIP ViT-
+L/14@336, ϵ = 4/255). PSNR is in dB. “Smoothing” denotes masked Gaussian smoothing of the update,
+and “DCT” denotes low-pass projection of the perturbation. Loss rows omit both refinements; refinement
+rows use the complete objective.
+Configuration
+PR (%) ↑
+PSNR ↑
+Ltarget
+35.6
+38.09
+Lself
+90.0
+37.89
+Lid
+75.6
+38.36
+Lid + Lself
+70.0
+38.16
+Lall (no refinement)
+90.0
+38.29
+Lall + smoothing
+86.7
+38.31
+Lall + DCT
+87.8
+39.31
+Lall + smoothing + DCT (Ours)
+93.3
+39.30
+A.2
+Refinement Hyperparameters
+Table A2 reports sensitivity to the Gaussian smoothing width σ and the DCT keep parameter b.
+For the triangular DCT mask, b retains coefficients satisfying u + v ≤b within each 8 × 8 block.
+One parameter is varied while the other remains fixed. The selected setting (σ, b) = (0.8, 5)
+provides the highest observed protection rate in these sweeps. The nearby setting b = 4 gives
+slightly higher PSNR with a small reduction in protection rate.
+TableA2 Sensitivity to the Gaussian smoothing width σ and DCT keep parameter b on reactive Yo’LLaVA
+at ϵ = 4/255. One parameter is varied while the other remains at its selected value (σ, b) = (0.8, 5). Bold
+denotes the selected setting.
+σ (b = 5)
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+1.6
+PR (%) ↑
+87.8
+90.0
+86.7
+93.3
+87.8
+88.9
+88.9
+PSNR (dB) ↑
+39.32
+39.32
+39.33
+39.30
+39.34
+39.34
+39.33
+b (σ = 0.8)
+2
+3
+4
+5
+6
+7
+8
+PR (%) ↑
+73.3
+78.9
+92.2
+93.3
+91.1
+88.9
+86.7
+PSNR (dB) ↑
+39.84
+39.71
+39.54
+39.30
+39.10
+38.88
+38.72
+15
+
+
+B
+Computational Cost
+Table A3 reports computational cost for the default 500-step configuration.
+PGD and Anti-
+Persona use the same vision encoder, so their dominant encoder computation per step is the
+same. The reported wall-clock and memory measurements include all method-specific loss and
+refinement operations.
+Prototype features are computed once per identity and reused when
+protecting its images.
+Table A3 Computational cost on one NVIDIA RTX A6000 using CLIP ViT-L/14@336 and ϵ = 4/255.
+Wall-clock time and peak memory are measured from a single run; encoder FLOPs are analytically
+estimated.
+PGD
+Ours
+Time / image (500 steps)
+75 s
+82 s (+9.3%)
+Peak GPU memory
+3.2 GB
+3.7 GB
+Encoder TFLOPs / step
+0.57
+0.57
+Prototype build / identity
+–
+0.3 s
+16
